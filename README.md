@@ -167,3 +167,6 @@ That would add foreign-key relationships, stronger validation, employee IDs inst
 Never commit a Supabase **service-role key** to GitHub.
 
 Only the public Supabase URL and publishable/anon key belong in `supabase-config.js`.
+
+## Authentication fix
+After running `supabase/schema.sql`, also run `supabase/fix-auth.sql`. This adds the secure username-to-email lookup used by the GitHub Pages/Vercel login screen.

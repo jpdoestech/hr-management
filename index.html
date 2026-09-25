@@ -538,9 +538,10 @@ async function doLogin(ev){
   if(!login||!p){ authErr('Please enter your email/username and password.'); return false; }
   let email=login;
   if(!login.includes('@')){
-    const {data,error}=await supabase.from('profiles').select('email').eq('username',login.toLowerCase()).maybeSingle();
-    if(error||!data?.email){ authErr('Username not found.'); return false; }
-    email=data.email;
+    const {data,error}=await supabase.rpc('get_login_email_by_username',{p_username:login.toLowerCase()});
+    if(error){ authErr('Username lookup failed. Please use your email address or run supabase/fix-auth.sql.'); return false; }
+    if(!data){ authErr('Username not found.'); return false; }
+    email=data;
   }
   const {data,error}=await supabase.auth.signInWithPassword({email,password:p});
   if(error){ authErr(error.message); return false; }
