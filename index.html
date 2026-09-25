@@ -1,0 +1,2389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SCPA HR Management — Supabase</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1C2333; --ink-2:#2A3348; --paper:#F2F1EC; --panel:#FFFFFF;
+  --brass:#B8863B; --brass-dk:#96702E; --forest:#3C6E52; --rust:#A6432F;
+  --amber:#C08D2E; --slate:#5B6472; --line:#E3E0D6; --line-2:#D8D4C7;
+  --shadow: 0 1px 2px rgba(28,35,51,.06), 0 6px 20px rgba(28,35,51,.06);
+  --radius:10px;
+  font-family:'IBM Plex Sans',system-ui,sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--paper);color:var(--ink);min-height:100%;}
+h1,h2,h3,.serif{font-family:'Source Serif 4',Georgia,serif;}
+.mono{font-family:'IBM Plex Mono',monospace;}
+button{font-family:inherit;cursor:pointer;}
+input,select,textarea{font-family:inherit;}
+a{color:inherit;}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:8px;}
+
+/* ---------- Auth Screen ---------- */
+#auth-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+  background:
+    radial-gradient(1200px 600px at 15% -10%, rgba(184,134,59,.14), transparent 60%),
+    linear-gradient(180deg,var(--ink) 0%, var(--ink-2) 100%);
+}
+.auth-card{width:100%;max-width:430px;background:var(--panel);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;}
+.auth-head{padding:30px 34px 22px;background:var(--ink);color:#fff;position:relative;}
+.auth-head .badge{width:44px;height:44px;border-radius:9px;background:linear-gradient(135deg,var(--brass),var(--brass-dk));display:flex;align-items:center;justify-content:center;font-family:'Source Serif 4',serif;font-weight:700;font-size:19px;color:#fff;margin-bottom:14px;}
+.auth-head h1{margin:0;font-size:22px;font-weight:600;letter-spacing:.2px;}
+.auth-head p{margin:6px 0 0;color:#C9CCD6;font-size:13px;}
+.auth-body{padding:28px 34px 32px;}
+.auth-tabs{display:flex;gap:4px;background:var(--paper);border-radius:8px;padding:4px;margin-bottom:22px;}
+.auth-tab{flex:1;text-align:center;padding:9px 0;border:none;background:transparent;border-radius:6px;font-size:13.5px;font-weight:600;color:var(--slate);}
+.auth-tab.active{background:var(--panel);color:var(--ink);box-shadow:var(--shadow);}
+.field{margin-bottom:15px;}
+.field label{display:block;font-size:12.5px;font-weight:600;color:var(--slate);margin-bottom:6px;}
+.field input,.field select,.field textarea{width:100%;padding:10px 12px;border:1px solid var(--line-2);border-radius:7px;font-size:14px;background:#fff;color:var(--ink);}
+.field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--brass);outline-offset:1px;border-color:var(--brass);}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 16px;border-radius:7px;border:1px solid transparent;font-size:13.5px;font-weight:600;transition:transform .06s ease;}
+.btn:active{transform:translateY(1px);}
+.btn-primary{background:var(--ink);color:#fff;}
+.btn-primary:hover{background:var(--ink-2);}
+.btn-brass{background:var(--brass);color:#fff;}
+.btn-brass:hover{background:var(--brass-dk);}
+.btn-ghost{background:transparent;color:var(--ink);border-color:var(--line-2);}
+.btn-ghost:hover{background:var(--paper);}
+.btn-danger{background:#fff;color:var(--rust);border-color:#E7C9C2;}
+.btn-danger:hover{background:#FBF0EE;}
+.btn-block{width:100%;}
+.btn-sm{padding:6px 10px;font-size:12.5px;border-radius:6px;}
+.auth-error{background:#FBF0EE;border:1px solid #E7C9C2;color:var(--rust);font-size:13px;padding:9px 12px;border-radius:7px;margin-bottom:14px;}
+.auth-hint{margin-top:18px;padding-top:16px;border-top:1px dashed var(--line-2);font-size:12px;color:var(--slate);line-height:1.6;}
+.auth-hint b{color:var(--ink);}
+
+/* ---------- App Shell ---------- */
+#app{display:none;min-height:100vh;grid-template-columns:230px 1fr;}
+#app.on{display:grid;}
+#sidebar{background:var(--ink);color:#EDEBE3;padding:20px 14px;position:sticky;top:0;height:100vh;overflow-y:auto;padding-top:calc(20px + env(safe-area-inset-top,0px));}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 8px 20px;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:14px;}
+.brand .badge{width:34px;height:34px;flex:none;border-radius:8px;background:linear-gradient(135deg,var(--brass),var(--brass-dk));display:flex;align-items:center;justify-content:center;font-family:'Source Serif 4',serif;font-weight:700;font-size:14px;}
+.brand-txt{line-height:1.25;}
+.brand-txt .t1{font-size:13px;font-weight:700;letter-spacing:.3px;}
+.brand-txt .t2{font-size:10.5px;color:#9DA3B4;}
+.navgroup{margin-bottom:4px;}
+.navlabel{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:#767E93;padding:14px 10px 6px;}
+.navitem{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:7px;font-size:13.5px;color:#C7CAD6;margin-bottom:2px;border:none;background:transparent;width:100%;text-align:left;}
+.navitem svg{flex:none;opacity:.85;}
+.navitem:hover{background:rgba(255,255,255,.06);color:#fff;}
+.navitem.active{background:rgba(184,134,59,.18);color:#fff;box-shadow:inset 2px 0 0 var(--brass);}
+.navitem .cnt{margin-left:auto;font-size:10.5px;background:rgba(255,255,255,.09);padding:1px 7px;border-radius:20px;color:#D7D9E2;}
+#sidebar .logout{margin-top:18px;width:100%;}
+
+#main{min-width:0;}
+#topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 26px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20;padding-top:calc(16px + env(safe-area-inset-top,0px));}
+#topbar h2{margin:0;font-size:19px;}
+#topbar .sub{font-size:12px;color:var(--slate);margin-top:2px;}
+.who{display:flex;align-items:center;gap:10px;}
+.who .av{width:32px;height:32px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;}
+.who .name{font-size:13px;font-weight:600;}
+.who .role{font-size:10.5px;color:var(--slate);}
+#content{padding:24px 26px 60px;}
+
+/* ---------- cards / stats ---------- */
+.grid{display:grid;gap:16px;}
+.cols-4{grid-template-columns:repeat(4,1fr);}
+.cols-5{grid-template-columns:repeat(5,1fr);}
+.cols-3{grid-template-columns:repeat(3,1fr);}
+.cols-2{grid-template-columns:1fr 1fr;}
+@media (max-width:1000px){.cols-4{grid-template-columns:repeat(2,1fr);}.cols-5{grid-template-columns:repeat(2,1fr);}.cols-3{grid-template-columns:repeat(2,1fr);}.cols-2{grid-template-columns:1fr;}}
+@media (max-width:640px){.cols-4{grid-template-columns:1fr;}.cols-5{grid-template-columns:1fr;}#app.on{grid-template-columns:1fr;}#sidebar{position:relative;height:auto;}}
+
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden;}
+.stat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent,var(--brass));}
+.stat .lbl{font-size:11.5px;color:var(--slate);font-weight:600;text-transform:uppercase;letter-spacing:.04em;}
+.stat .val{font-size:28px;font-weight:700;font-family:'Source Serif 4',serif;margin-top:4px;}
+.stat .sub{font-size:11.5px;color:var(--slate);margin-top:3px;}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;}
+.panel h3{margin:0 0 4px;font-size:15.5px;}
+.panel .desc{font-size:12px;color:var(--slate);margin-bottom:14px;}
+
+/* donut */
+.donut-wrap{display:flex;align-items:center;gap:20px;}
+.donut{width:130px;height:130px;border-radius:50%;flex:none;}
+.legend{font-size:12.5px;}
+.legend .row{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
+.legend .dot{width:9px;height:9px;border-radius:50%;flex:none;}
+.legend .amt{margin-left:auto;font-weight:600;}
+
+/* bars */
+.barrow{display:grid;grid-template-columns:110px 1fr 34px;align-items:center;gap:10px;margin-bottom:9px;font-size:12.5px;}
+.barrow .name{color:var(--slate);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.bartrack{height:9px;background:var(--paper);border-radius:6px;overflow:hidden;}
+.barfill{height:100%;background:linear-gradient(90deg,var(--brass),var(--brass-dk));border-radius:6px;}
+.barrow .amt{text-align:right;font-weight:600;}
+
+/* ---------- toolbar / tables ---------- */
+.toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+.toolbar .search{position:relative;flex:1;min-width:180px;max-width:320px;}
+.toolbar .search input{width:100%;padding:9px 12px 9px 32px;border:1px solid var(--line-2);border-radius:7px;font-size:13px;background:#fff;}
+.toolbar .search svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);opacity:.5;}
+.toolbar select{padding:9px 10px;border:1px solid var(--line-2);border-radius:7px;font-size:13px;background:#fff;}
+.toolbar .spacer{flex:1;}
+
+.tablewrap{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px;}
+thead th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);font-weight:600;padding:12px 14px;border-bottom:1px solid var(--line);white-space:nowrap;background:#FAFAF7;}
+tbody td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:middle;}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:hover{background:#FAF9F5;}
+.rowactions{display:flex;gap:6px;justify-content:flex-end;}
+.iconbtn{border:1px solid var(--line-2);background:#fff;border-radius:6px;padding:5px 7px;display:flex;}
+.iconbtn:hover{background:var(--paper);}
+.empty{padding:44px 20px;text-align:center;color:var(--slate);font-size:13px;}
+.empty b{display:block;color:var(--ink);font-family:'Source Serif 4',serif;font-size:16px;margin-bottom:5px;font-weight:600;}
+
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap;}
+.badge .dot{width:6px;height:6px;border-radius:50%;}
+.b-green{background:#E8F2EC;color:var(--forest);} .b-green .dot{background:var(--forest);}
+.b-red{background:#FBECE8;color:var(--rust);} .b-red .dot{background:var(--rust);}
+.b-amber{background:#FBF1E1;color:var(--amber);} .b-amber .dot{background:var(--amber);}
+.b-grey{background:#EEEDE7;color:var(--slate);} .b-grey .dot{background:var(--slate);}
+.b-blue{background:#E9EDF6;color:#3A5B9A;} .b-blue .dot{background:#3A5B9A;}
+
+.pill{font-size:11px;background:var(--paper);border:1px solid var(--line-2);padding:2px 8px;border-radius:20px;color:var(--slate);}
+
+/* ---------- modal ---------- */
+.overlay{position:fixed;inset:0;background:rgba(20,24,36,.55);display:none;align-items:flex-start;justify-content:center;z-index:100;padding:5vh 16px;overflow-y:auto;}
+.overlay.on{display:flex;}
+.modal{background:var(--panel);border-radius:12px;width:100%;max-width:560px;box-shadow:0 30px 80px rgba(0,0,0,.35);margin-bottom:5vh;}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line);}
+.modal-head h3{margin:0;font-size:16.5px;}
+.modal-head button{background:none;border:none;font-size:20px;color:var(--slate);line-height:1;padding:4px;}
+.modal-body{padding:20px 22px;}
+.modal-foot{padding:16px 22px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;}
+.formgrid .full{grid-column:1/-1;}
+.computed-note{font-size:11.5px;color:var(--slate);background:var(--paper);border:1px dashed var(--line-2);padding:8px 10px;border-radius:7px;margin-top:4px;}
+.readonly-chip{display:inline-block;padding:7px 10px;border:1px solid var(--line-2);border-radius:7px;background:var(--paper);font-size:13px;font-weight:600;}
+
+/* ---------- calendar ---------- */
+.cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.cal-head .mo{font-family:'Source Serif 4',serif;font-size:16.5px;font-weight:600;}
+.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+.caldow{font-size:10.5px;text-transform:uppercase;color:var(--slate);text-align:center;padding-bottom:4px;font-weight:600;}
+.calday{min-height:64px;border:1px solid var(--line);border-radius:8px;padding:6px;font-size:11.5px;background:#fff;cursor:pointer;}
+.calday.out{background:var(--paper);color:#B8B6AC;}
+.calday.today{border-color:var(--brass);box-shadow:0 0 0 1px var(--brass) inset;}
+.calday .dn{font-weight:700;margin-bottom:4px;}
+.calday .dots{display:flex;gap:3px;flex-wrap:wrap;}
+.calday .dots span{width:6px;height:6px;border-radius:50%;background:var(--brass);}
+.calday.sel{outline:2px solid var(--ink);outline-offset:-2px;}
+.cal-panel{margin-top:16px;padding-top:16px;border-top:1px dashed var(--line-2);}
+.cal-list-item{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;}
+.cal-list-item:last-child{border-bottom:none;}
+
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:18px;}
+.tabbtn{padding:9px 15px;font-size:13px;font-weight:600;color:var(--slate);border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-1px;}
+.tabbtn.active{color:var(--ink);border-color:var(--brass);}
+
+.small{font-size:12px;color:var(--slate);}
+.notice{background:#FBF1E1;border:1px solid #EBD7AE;color:#7A5A16;font-size:12.5px;padding:10px 13px;border-radius:8px;margin-bottom:16px;line-height:1.55;}
+.notice b{color:#5D440E;}
+.sectionhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;}
+.sectionhead h2{margin:0;font-size:19px;}
+.sectionhead p{margin:3px 0 0;font-size:12.5px;color:var(--slate);}
+.toast{position:fixed;bottom:22px;right:22px;background:var(--ink);color:#fff;padding:11px 18px;border-radius:8px;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.3);z-index:200;opacity:0;transform:translateY(8px);transition:.25s;pointer-events:none;}
+.toast.on{opacity:1;transform:translateY(0);}
+.toast.err{background:var(--rust);}
+.attach-preview{display:flex;align-items:center;gap:7px;margin-top:7px;padding:6px 9px;background:var(--paper);border:1px solid var(--line-2);border-radius:7px;}
+.attach-preview span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.attach-cell{display:flex;align-items:center;gap:6px;font-size:12.5px;}
+.attach-cell .iconbtn{flex:none;}
+.checklist{display:flex;flex-direction:column;gap:7px;max-height:190px;overflow-y:auto;border:1px solid var(--line-2);border-radius:7px;padding:10px 12px;background:#fff;}
+.checkrow{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;}
+.checkrow input{width:auto;margin:0;}
+label.opt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--slate);font-weight:500;margin-top:6px;}
+</style>
+</head>
+<body>
+
+<!-- ============ AUTH SCREEN ============ -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-head">
+      <div class="badge">S</div>
+      <h1>SCPA HR Management</h1>
+      <p>&amp; Disciplinary Dashboard</p>
+    </div>
+    <div class="auth-body">
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Log In</button>
+        <button class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Register</button>
+      </div>
+
+      <div id="auth-error" class="auth-error" style="display:none;"></div>
+
+      <form id="login-form" onsubmit="return doLogin(event)">
+        <div class="field"><label>Email or Username</label><input id="li-user" type="text" placeholder="name@company.com or username" autocomplete="username" required></div>
+        <div class="field"><label>Password</label><input id="li-pass" type="password" placeholder="••••••••" autocomplete="current-password" required></div>
+        <button type="submit" class="btn btn-primary btn-block">Log In</button>
+      </form>
+
+      <form id="register-form" style="display:none;" onsubmit="return doRegister(event)">
+        <div class="field"><label>Complete Name</label><input id="rg-name" type="text" placeholder="Juan Dela Cruz" required></div>
+        <div class="field"><label>Username</label><input id="rg-user" type="text" placeholder="jdelacruz" required></div>
+        <div class="field"><label>Password</label><input id="rg-pass" type="password" required></div>
+        <div class="field"><label>Confirm Password</label><input id="rg-pass2" type="password" required></div>
+        <button type="submit" class="btn btn-brass btn-block">Create Account</button>
+      </form>
+
+      <div class="auth-hint">
+         <b>Supabase authentication:</b> use your organization email and password. New registrations start as <b>HR Staff</b>; an Administrator can change roles after setup.<br>
+         Records are shared through Supabase, so authorized users see the same HR data across devices.
+       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ APP SHELL ============ -->
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="badge">S</div>
+      <div class="brand-txt"><div class="t1">SCPA HR</div><div class="t2">Disciplinary Dashboard</div></div>
+    </div>
+    <nav id="nav"></nav>
+    <button class="btn btn-ghost btn-block logout" onclick="doLogout()">Log Out</button>
+  </aside>
+
+  <main id="main">
+    <div id="topbar">
+      <div>
+        <h2 id="tb-title">Dashboard</h2>
+        <div class="sub" id="tb-sub">Overview of all HR &amp; disciplinary records</div>
+      </div>
+      <div class="who">
+        <div>
+          <div class="name" id="tb-name" style="text-align:right;"></div>
+          <div class="role" id="tb-role" style="text-align:right;"></div>
+        </div>
+        <div class="av" id="tb-av"></div>
+      </div>
+    </div>
+    <div id="content"></div>
+  </main>
+</div>
+
+<div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase-config.js';
+
+if(!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL.includes('YOUR_PROJECT_REF')){
+  document.body.innerHTML = '<div style="font-family:system-ui;padding:40px;max-width:760px;margin:auto"><h2>Supabase configuration missing</h2><p>Edit <b>supabase-config.js</b> with your Supabase project URL and publishable/anon key.</p></div>';
+  throw new Error('Supabase configuration missing');
+}
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* =========================================================================
+   SCPA HR MANAGEMENT & DISCIPLINARY DASHBOARD — GitHub Pages + Vercel + Supabase
+   Phase 2: record-level Postgres persistence, Supabase Auth, and private Storage.
+   ========================================================================= */
+
+const RECORD_MODULES = ['employees','leaves','disciplinary','nte','memos','nod','oncall','transfers','offenseCatalog','cvr','incidents','prf','evaluations','atd'];
+let DB_SNAPSHOT = null;
+let SAVE_QUEUE = Promise.resolve();
+
+function blankDB(){
+  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],settings:{orgName:'SCPA',probationDays:180},audit:[],users:[]};
+}
+
+async function loadDB(){
+  const empty = blankDB();
+  const {data:rows,error} = await supabase.from('hr_records').select('module,record_id,data,updated_at').order('updated_at',{ascending:true});
+  if(error) throw error;
+  (rows||[]).forEach(r=>{ if(RECORD_MODULES.includes(r.module)) (empty[r.module]||(empty[r.module]=[])).push(r.data); });
+
+  const {data:settings,error:settingsError}=await supabase.from('hr_settings').select('data').eq('id','singleton').maybeSingle();
+  if(settingsError) throw settingsError;
+  if(settings?.data) empty.settings=settings.data;
+
+  const {data:audit,error:auditError}=await supabase.from('hr_audit_logs').select('created_at,user_name,action').order('created_at',{ascending:false}).limit(200);
+  if(auditError) throw auditError;
+  empty.audit=(audit||[]).map(a=>({ts:a.created_at,user:a.user_name||'System',action:a.action}));
+
+  const hasRecords = (rows||[]).length>0;
+  if(!hasRecords){
+    // Phase 1 migration: if the old singleton exists, import it once.
+    const {data:legacy,error:legacyError}=await supabase.from('hr_app_state').select('data').eq('id','singleton').maybeSingle();
+    if(legacyError && legacyError.code!=='PGRST116') throw legacyError;
+    if(legacy?.data){
+      const migrated={...empty,...legacy.data};
+      delete migrated.users;
+      await saveDBInternal(migrated);
+      return migrated;
+    }
+  }
+  DB_SNAPSHOT=JSON.parse(JSON.stringify(empty));
+  return empty;
+}
+
+async function saveDBInternal(state){
+  const now=new Date().toISOString();
+  for(const module of RECORD_MODULES){
+    const rows=(state[module]||[]).map(r=>({module,record_id:String(r.id),data:r,updated_at:now,updated_by:SESSION?.id||null}));
+    if(rows.length){
+      const {error}=await supabase.from('hr_records').upsert(rows,{onConflict:'module,record_id'});
+      if(error) throw error;
+    }
+    const previous=(DB_SNAPSHOT?.[module]||[]).map(r=>String(r.id));
+    const current=new Set((state[module]||[]).map(r=>String(r.id)));
+    const removed=previous.filter(id=>!current.has(id));
+    if(removed.length){
+      const {error}=await supabase.from('hr_records').delete().eq('module',module).in('record_id',removed);
+      if(error) throw error;
+    }
+  }
+  const {error:settingsError}=await supabase.from('hr_settings').upsert({id:'singleton',data:state.settings||{orgName:'SCPA',probationDays:180},updated_at:now,updated_by:SESSION?.id||null},{onConflict:'id'});
+  if(settingsError) throw settingsError;
+  DB_SNAPSHOT=JSON.parse(JSON.stringify(state));
+}
+
+function saveDB(){
+  const snapshot=JSON.parse(JSON.stringify(DB));
+  SAVE_QUEUE=SAVE_QUEUE.then(async()=>{
+    try{ await saveDBInternal(snapshot); return true; }
+    catch(error){ toast('Database save failed: '+error.message,true); return false; }
+  });
+  return SAVE_QUEUE;
+}
+
+async function loadProfiles(){
+  const {data,error}=await supabase.from('profiles').select('id,full_name,username,email,role,created_at').order('created_at');
+  if(error) throw error;
+  DB.users=(data||[]).map(p=>({id:p.id,fullName:p.full_name,username:p.username,email:p.email,role:p.role,createdAt:p.created_at?.slice(0,10)||todayISO()}));
+}
+
+async function persistStateAndProfiles(){ await saveDB(); await loadProfiles(); }
+
+/* ---------------- attachments (Supabase Storage) ---------------- */
+const MAX_ATTACH_BYTES = 10*1024*1024;
+const STORAGE_BUCKET = 'hr-documents';
+
+async function uploadAttachment(file){
+  if(!file) return {path:'',name:''};
+  if(file.size > MAX_ATTACH_BYTES){ toast(`"${file.name}" is too large (max ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB per file).`, true); throw new Error('File too large'); }
+  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+  const path = `${SESSION.id}/${Date.now()}-${uid()}-${safe}`;
+  const {error}=await supabase.storage.from(STORAGE_BUCKET).upload(path,file,{upsert:false,contentType:file.type||'application/octet-stream'});
+  if(error){ toast('Upload failed: '+error.message,true); throw error; }
+  return {path,name:file.name};
+}
+
+async function downloadAttachment(path, filename){
+  if(!path){ toast('No stored file for this attachment.'); return; }
+  const {data,error}=await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(path,120);
+  if(error){ toast('Could not create download link: '+error.message,true); return; }
+  const a=document.createElement('a'); a.href=data.signedUrl; a.target='_blank'; a.rel='noopener'; a.download=filename||'attachment'; document.body.appendChild(a); a.click(); a.remove();
+}
+
+async function handleFileInput(key, inputEl){
+  const file=inputEl.files && inputEl.files[0]; if(!file) return;
+  try{
+    const uploaded=await uploadAttachment(file);
+    document.getElementById('f_'+key).value=uploaded.name;
+    document.getElementById('f_'+key+'_data').value=uploaded.path;
+    const prev=document.getElementById('f_'+key+'_preview'); if(prev) prev.innerHTML=attachPreviewHTML(key,uploaded.name,uploaded.path);
+  }catch(e){ inputEl.value=''; }
+}
+function clearFileField(key){
+  document.getElementById('f_'+key).value=''; document.getElementById('f_'+key+'_data').value='';
+  const prev=document.getElementById('f_'+key+'_preview'); if(prev) prev.innerHTML='';
+}
+function attachPreviewHTML(key,name,path){
+  if(!name) return '';
+  return `<div class="attach-preview">${iDoc(14)}<span class="mono" style="font-size:12px;">${esc(name)}</span>${path?`<button type="button" class="iconbtn" title="Download" onclick="downloadAttachment('${esc(path)}','${esc(name).replace(/'/g,"\\'")}')">${iDownload(13)}</button>`:''}<button type="button" class="iconbtn" title="Remove" onclick="clearFileField('${key}')">${iTrash(13)}</button></div>`;
+}
+
+const DEPT_OPTIONS = ['LOGISTICS','WAREHOUSE','UTILITY','MAINTENANCE','PRODUCTION','ADMIN','SALES'];
+const EMP_STATUS = ['Active','AWOL','Resigned','Transferred to Another Department','Separated','Returned to Agency','Newly Hired'];
+const LEAVE_TYPES = ['Vacation Leave','Sick Leave','Emergency Leave','Maternity Leave','Paternity Leave','Bereavement Leave','Others'];
+const LEAVE_STATUS = ['Pending','Approved','Ongoing','Completed','Disapproved'];
+const NTE_STATUS = ['Pending Explanation','Explanation Submitted','Under Review','Resolved'];
+const ONCALL_STATUS = ['Active','Completed','Cancelled'];
+const OFFENSE_LEVELS = ['1st Offense','2nd Offense','3rd Offense','4th Offense+'];
+const CVR_STATUS = ['Pending Review','Acknowledged','Escalated to NTE','Resolved'];
+const CVR_STATUS_MAP = {'Pending Review':'b-amber','Acknowledged':'b-blue','Escalated to NTE':'b-red','Resolved':'b-green'};
+const INCIDENT_TYPES = ['Workplace Accident','Property Damage / Loss','Safety Violation','Equipment Malfunction','Altercation / Conflict','Theft','Near Miss'];
+const INCIDENT_SEVERITY = ['Minor','Moderate','Major','Critical'];
+const INCIDENT_SEVERITY_MAP = {'Minor':'b-grey','Moderate':'b-amber','Major':'b-red','Critical':'b-red'};
+const INCIDENT_STATUS = ['Reported','Under Investigation','Resolved','Closed'];
+const INCIDENT_STATUS_MAP = {'Reported':'b-amber','Under Investigation':'b-blue','Resolved':'b-green','Closed':'b-grey'};
+const PRF_CLASS = ['Replacement for Resigned Personnel','Replacement for AWOL Personnel','Replacement for Separated Personnel','Replacement for Other Reasons','Additional Manpower (Add-On)'];
+const EVAL_MILESTONES = [{key:'1st', label:'1st Month', days:30},{key:'3rd', label:'3rd Month', days:90},{key:'6th', label:'6th Month', days:180}];
+const ATD_CATEGORIES = ['Uniforms/Expenses','Charges'];
+const ATD_STATUS_MAP = {'Pending':'b-amber','Ongoing':'b-blue','Paid':'b-green'};
+const ATD_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const ATD_CUTOFFS = ['1st Cut-Off','2nd Cut-Off'];
+function defaultOffenseCatalog(){
+  return [
+    {id:uid(), offense:'Tardiness', consequence1:'Verbal Reminder', consequence2:'Written Warning', consequence3:'Suspension (3 days)', consequence4:'Termination'},
+    {id:uid(), offense:'Unauthorized Absence (AWOL)', consequence1:'Written Warning', consequence2:'Suspension (5 days)', consequence3:'Suspension (10 days)', consequence4:'Termination'},
+    {id:uid(), offense:'Insubordination', consequence1:'Written Warning', consequence2:'Suspension (3 days)', consequence3:'Termination', consequence4:'Termination'},
+    {id:uid(), offense:'Sleeping on Duty', consequence1:'Verbal Reminder', consequence2:'Written Warning', consequence3:'Suspension (3 days)', consequence4:'Termination'},
+    {id:uid(), offense:'Negligence of Duty', consequence1:'Written Warning', consequence2:'Suspension (5 days)', consequence3:'Termination', consequence4:'Termination'},
+  ];
+}
+
+function uid(){ return 'r' + Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4); }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function fmtDate(d){ if(!d) return '—'; const dt=new Date(d+'T00:00:00'); if(isNaN(dt)) return d; return dt.toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}); }
+function daysBetweenInclusive(a,b){ if(!a||!b) return ''; const d1=new Date(a+'T00:00:00'), d2=new Date(b+'T00:00:00'); const diff=Math.round((d2-d1)/86400000)+1; return diff>0?diff:''; }
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ---------------- seed data ---------------- */
+function seedDB(){
+  const users = [
+  ];
+  const employees = [
+    {id:uid(), name:'Ramon Dizon', position:'Warehouse Supervisor', department:'WAREHOUSE', dateHired:'2019-03-11', gender:'Male', status:'Active', classOverride:'Auto'},
+    {id:uid(), name:'Liza Fernandez', position:'HR Officer', department:'ADMIN', dateHired:'2023-01-16', gender:'Female', status:'Active', classOverride:'Auto'},
+    {id:uid(), name:'Carlo Mendoza', position:'Maintenance Technician', department:'MAINTENANCE', dateHired:'2026-06-01', gender:'Male', status:'Newly Hired', classOverride:'Auto'},
+    {id:uid(), name:'Angela Reyes', position:'Accounting Clerk', department:'ADMIN', dateHired:'2021-09-20', gender:'Female', status:'Active', classOverride:'Auto'},
+    {id:uid(), name:'Bryan Torres', position:'Utility Worker', department:'UTILITY', dateHired:'2024-11-04', gender:'Male', status:'AWOL', classOverride:'Auto'},
+    {id:uid(), name:'Kristine Uy', position:'Production Analyst', department:'PRODUCTION', dateHired:'2020-05-18', gender:'Female', status:'Transferred to Another Department', classOverride:'Auto'},
+    {id:uid(), name:'Noel Bautista', position:'Logistics Coordinator', department:'LOGISTICS', dateHired:'2018-02-09', gender:'Male', status:'Active', classOverride:'Auto'},
+    {id:uid(), name:'Fatima Castillo', position:'Sales Associate', department:'SALES', dateHired:'2026-07-15', gender:'Female', status:'Newly Hired', classOverride:'Auto'},
+  ];
+  const byName = n => employees.find(e=>e.name===n);
+  const leaves = [
+    {id:uid(), employeeName:'Ramon Dizon', position:byName('Ramon Dizon').position, department:'WAREHOUSE', leaveType:'Vacation Leave', startDate: shiftDate(3), endDate: shiftDate(6), reason:'Family trip', dateApplied: shiftDate(-4), dateReceived: shiftDate(-4), attachment:'ramon_leaveform.pdf', status:'Approved', remarks:''},
+    {id:uid(), employeeName:'Angela Reyes', position:byName('Angela Reyes').position, department:'ADMIN', leaveType:'Sick Leave', startDate: shiftDate(-2), endDate: shiftDate(0), reason:'Flu', dateApplied: shiftDate(-3), dateReceived: shiftDate(-2), attachment:'angela_sickleave.pdf', status:'Ongoing', remarks:'Medical certificate on file'},
+    {id:uid(), employeeName:'Kristine Uy', position:byName('Kristine Uy').position, department:'PRODUCTION', leaveType:'Emergency Leave', startDate: shiftDate(-10), endDate: shiftDate(-9), reason:'Family emergency', dateApplied: shiftDate(-11), dateReceived: shiftDate(-10), attachment:'', status:'Completed', remarks:''},
+  ];
+  const disciplinary = [
+    {id:uid(), employeeName:'Bryan Torres', department:'UTILITY', violation:'Unauthorized absence (AWOL)', dateOfIncident: shiftDate(-20), action:'Written Warning', remarks:'Referred to NTE'},
+    {id:uid(), employeeName:'Bryan Torres', department:'UTILITY', violation:'Tardiness', dateOfIncident: shiftDate(-40), action:'Verbal Reminder', remarks:''},
+    {id:uid(), employeeName:'Carlo Mendoza', department:'MAINTENANCE', violation:'Improper use of safety equipment', dateOfIncident: shiftDate(-15), action:'Verbal Reminder', remarks:'Coaching conducted'},
+  ];
+  const nte = [
+    {id:uid(), employeeName:'Bryan Torres', department:'UTILITY', violation:'Unauthorized absence (AWOL)', dateIssued: shiftDate(-18), dateReceived: shiftDate(-17), attachment:'nte_btorres.pdf', explanation:'Family matter, will submit medical proof.', status:'Explanation Submitted', remarks:''},
+  ];
+  const memos = [
+    {id:uid(), employeeName:'Bryan Torres', department:'UTILITY', offenseType:'AWOL', action:'Written Warning', dateOfMemo: shiftDate(-10), dateReceived: shiftDate(-9), attachment:'memo_btorres.pdf', remarks:''},
+  ];
+  const nod = [];
+  const transfers = [
+    {id:uid(), employeeName:'Kristine Uy', fromDepartment:'WAREHOUSE', fromDate: shiftDate(-95), toDepartment:'PRODUCTION', toDate: shiftDate(-90), remarks:'Reassigned due to staffing need.'},
+  ];
+  const offenseCatalog = defaultOffenseCatalog();
+  const cvr = [
+    {id:uid(), employeeName:'Bryan Torres', department:'UTILITY', dateOfCVR: shiftDate(-19), offenses:['Unauthorized Absence (AWOL)'], otherOffense:'', attachment:'cvr_btorres.pdf', attachmentData:'', status:'Escalated to NTE', remarks:'Basis for NTE issuance.'},
+  ];
+  const incidents = [
+    {id:uid(), employeeName:'Carlo Mendoza', department:'MAINTENANCE', dateOfIncident: shiftDate(-15), incidentTypes:['Safety Violation'], otherType:'', severity:'Moderate', description:'Employee observed not wearing required PPE while operating machinery.', attachment:'incident_cmendoza.pdf', attachmentData:'', status:'Resolved', remarks:'Coaching conducted; related Disciplinary Action record on file.'},
+  ];
+  const prf = [];
+  const evaluations = [];
+  const oncall = [
+    {id:uid(), employeeName:'Jonalyn Perez', department:'WAREHOUSE', prfNumber:'PRF-2026-0142', reason:'Replacement for employee on Vacation Leave', employeeReplaced:'Ramon Dizon', startDate: shiftDate(3), endDate: shiftDate(6), status:'Active', remarks:''},
+    {id:uid(), employeeName:'Mark Villanueva', department:'ADMIN', prfNumber:'PRF-2026-0139', reason:'Manpower requirement — month-end closing', employeeReplaced:'—', startDate: shiftDate(-6), endDate: shiftDate(-2), status:'Completed', remarks:''},
+  ];
+  const atd = [
+    {id:uid(), employeeName:'Bryan Torres', department:'UTILITY', position:'Utility Worker', category:'Charges', atdDate: shiftDate(-18), deductionType:'Damaged equipment — negligence', totalAmount:4500, paymentTerms:'3 cut-offs', atdForm:'atd_btorres.pdf', atdFormData:'', incidentReport:'incident_btorres.pdf', incidentReportData:'', quotation:'quotation_repair.pdf', quotationData:'', soaAmount:4500, status:'Ongoing', remarks:'Linked to Incident Report on file.',
+      payments:[{id:uid(), month:ATD_MONTHS[new Date().getMonth()], cutoff:'1st Cut-Off', amountPaid:1500, payslip:'payslip_btorres_c1.pdf', payslipData:'', dateRecorded: shiftDate(-4)}]},
+  ];
+  return {
+    users, employees, leaves, disciplinary, nte, memos, nod, oncall, transfers, offenseCatalog, cvr, incidents, prf, evaluations, atd,
+    settings:{orgName:'SCPA', probationDays:180},
+    audit:[{ts:new Date().toISOString(), user:'System', action:'Seeded initial demo data'}]
+  };
+}
+function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); }
+
+let DB = seedDB();
+
+let SESSION = null; // current user
+let STATE = { view:'dashboard', search:'', filter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null };
+
+/* ---------------- toast ---------------- */
+let toastT;
+function toast(msg, isError){
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('on');
+  t.classList.toggle('err', !!isError);
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('on'), isError?3400:2200);
+}
+
+/* ---------------- auth ---------------- */
+function switchAuthTab(tab){
+  document.getElementById('tab-login').classList.toggle('active', tab==='login');
+  document.getElementById('tab-register').classList.toggle('active', tab==='register');
+  document.getElementById('login-form').style.display = tab==='login'?'block':'none';
+  document.getElementById('register-form').style.display = tab==='register'?'block':'none';
+  document.getElementById('auth-error').style.display='none';
+}
+function authErr(msg){ const e=document.getElementById('auth-error'); e.textContent=msg; e.style.display='block'; }
+
+async function doLogin(ev){
+  ev.preventDefault();
+  const login=document.getElementById('li-user').value.trim();
+  const p=document.getElementById('li-pass').value;
+  if(!login||!p){ authErr('Please enter your email/username and password.'); return false; }
+  let email=login;
+  if(!login.includes('@')){
+    const {data,error}=await supabase.from('profiles').select('email').eq('username',login.toLowerCase()).maybeSingle();
+    if(error||!data?.email){ authErr('Username not found.'); return false; }
+    email=data.email;
+  }
+  const {data,error}=await supabase.auth.signInWithPassword({email,password:p});
+  if(error){ authErr(error.message); return false; }
+  await bootAuthenticated(data.user);
+  return false;
+}
+async function doRegister(ev){
+  ev.preventDefault();
+  const name=document.getElementById('rg-name').value.trim();
+  const user=document.getElementById('rg-user').value.trim().toLowerCase();
+  const email=document.getElementById('rg-email').value.trim().toLowerCase();
+  const pass=document.getElementById('rg-pass').value;
+  const pass2=document.getElementById('rg-pass2').value;
+  if(!name||!user||!email||!pass){ authErr('Please complete all fields.'); return false; }
+  if(pass!==pass2){ authErr('Passwords do not match.'); return false; }
+  const {data:existingUsername}=await supabase.from('profiles').select('id').eq('username',user).maybeSingle();
+  const {data:existingEmail}=await supabase.from('profiles').select('id').eq('email',email).maybeSingle();
+  if(existingUsername || existingEmail){ authErr('That username or email is already registered.'); return false; }
+  const {data,error}=await supabase.auth.signUp({email,password:pass,options:{data:{full_name:name,username:user}}});
+  if(error){ authErr(error.message); return false; }
+  if(!data.session){ authErr('Account created. Check your email to confirm the account, then log in.'); switchAuthTab('login'); return false; }
+  await bootAuthenticated(data.user);
+  return false;
+}
+async function bootAuthenticated(user){
+  try{
+    let state=await loadDB();
+    const hasAny=RECORD_MODULES.some(k=>(state[k]||[]).length);
+    if(!hasAny){ DB=seedDB(); await saveDB(); } else DB=state;
+    if(!DB.audit) DB.audit=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];});
+    DB_SNAPSHOT=JSON.parse(JSON.stringify(DB));
+    await loadProfiles();
+    const profile=DB.users.find(x=>x.id===user.id);
+    SESSION=profile || {id:user.id,fullName:user.user_metadata?.full_name||user.email,username:user.user_metadata?.username||'',email:user.email,role:'HR Staff'};
+    enterApp();
+  }catch(e){ authErr('Could not load the HR database: '+e.message); await supabase.auth.signOut(); }
+}
+
+async function doLogout(){
+  await supabase.auth.signOut();
+  SESSION=null;
+  document.getElementById('app').classList.remove('on');
+  document.getElementById('auth-screen').style.display='flex';
+  document.getElementById('li-user').value=''; document.getElementById('li-pass').value='';
+}
+function enterApp(){
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('app').classList.add('on');
+  document.getElementById('tb-name').textContent = SESSION.fullName;
+  document.getElementById('tb-role').textContent = SESSION.role;
+  document.getElementById('tb-av').textContent = SESSION.fullName.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  renderNav();
+  go('dashboard');
+}
+
+/* ---------------- nav ---------------- */
+const NAV = [
+  {sec:'Overview', items:[
+    {v:'dashboard', label:'Dashboard', icon:iGrid},
+    {v:'weeklyReport', label:'Weekly Report', icon:iChart},
+  ]},
+  {sec:'Records', items:[
+    {v:'employees', label:'Employee Information', icon:iUsers, count:()=>DB.employees.length},
+    {v:'leaves', label:'Leave Tracker', icon:iCal, count:()=>DB.leaves.length},
+    {v:'disciplinary', label:'Disciplinary Action', icon:iShield, count:()=>DB.disciplinary.length},
+    {v:'cvr', label:'CVR / Violation Reports', icon:iDoc, count:()=>DB.cvr.length},
+    {v:'incidents', label:'Incident Reports', icon:iShield, count:()=>DB.incidents.length},
+    {v:'atd', label:'ATD Monitoring', icon:iDoc, count:()=>DB.atd.length},
+    {v:'nte', label:'Notice to Explain', icon:iDoc, count:()=>DB.nte.length},
+    {v:'memos', label:'Memorandum of Offense', icon:iDoc, count:()=>DB.memos.length},
+    {v:'nod', label:'Notice of Decision', icon:iDoc, count:()=>DB.nod.length},
+    {v:'oncall', label:'On-Call / Replacement', icon:iSwap, count:()=>DB.oncall.length},
+    {v:'transfers', label:'Department Transfers', icon:iSwap, count:()=>DB.transfers.length},
+    {v:'prf', label:'PRF / Replacement', icon:iDoc, count:()=>DB.prf.length},
+    {v:'evaluations', label:'Probationary Evaluations', icon:iShield, count:()=>DB.employees.filter(e=>classify(e)==='Probationary').length},
+  ]},
+  {sec:'Manage', items:[
+    {v:'offenseSummary', label:'Offense Summary', icon:iChart},
+    {v:'offenseCatalog', label:'Offense Catalog', icon:iGear},
+    {v:'reports', label:'Reports', icon:iChart},
+    {v:'users', label:'User Management', icon:iUser},
+    {v:'settings', label:'Settings', icon:iGear},
+  ]}
+];
+function renderNav(){
+  const nav=document.getElementById('nav'); nav.innerHTML='';
+  NAV.forEach(group=>{
+    const g=document.createElement('div'); g.className='navgroup';
+    g.innerHTML = `<div class="navlabel">${group.sec}</div>`;
+    group.items.forEach(it=>{
+      const b=document.createElement('button');
+      b.className='navitem'+(STATE.view===it.v?' active':'');
+      b.onclick=()=>go(it.v);
+      b.innerHTML = it.icon(16) + `<span>${it.label}</span>` + (it.count? `<span class="cnt">${it.count()}</span>`:'');
+      g.appendChild(b);
+    });
+    nav.appendChild(g);
+  });
+}
+function go(view){
+  STATE.view=view; STATE.search=''; STATE.filter='';
+  renderNav();
+  RENDERERS[view]();
+}
+
+/* ---------------- icons (inline svg, currentColor) ---------------- */
+function iGrid(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>`;}
+function iUsers(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17.5" cy="8.5" r="2.4"/><path d="M15 14.3c2.7.2 4.7 2.2 4.9 5.7"/></svg>`;}
+function iCal(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="4.5" width="17" height="16" rx="2"/><path d="M3.5 9.5h17M8 3v3M16 3v3"/></svg>`;}
+function iShield(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v6c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V6l7-3z"/></svg>`;}
+function iDoc(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg>`;}
+function iSwap(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h13M17 8l-3-3M17 8l-3 3M20 16H7M7 16l3-3M7 16l3 3"/></svg>`;}
+function iChart(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>`;}
+function iUser(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.6 3-6 7-6s7 2.4 7 6"/></svg>`;}
+function iGear(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a1.7 1.7 0 000-3l1-1.7-1.7-1.7-1.7 1a1.7 1.7 0 00-3 0l-1-1.7H11l-1 1.7a1.7 1.7 0 00-3 0l-1.7-1L3.6 8.8l1 1.7a1.7 1.7 0 000 3l-1 1.7 1.7 1.7 1.7-1a1.7 1.7 0 003 0l1 1.7h1.9l1-1.7a1.7 1.7 0 003 0l1.7 1 1.7-1.7-1-1.7z"/></svg>`;}
+function iPlus(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>`;}
+function iEdit(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>`;}
+function iTrash(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>`;}
+function iSearch(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>`;}
+function iDownload(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>`;}
+
+/* ---------------- audit / permissions ---------------- */
+function logAudit(action){
+  const entry={ts:new Date().toISOString(), user:SESSION?SESSION.fullName:'System', action};
+  DB.audit.unshift(entry); DB.audit=DB.audit.slice(0,200);
+  supabase.from('hr_audit_logs').insert({user_id:SESSION?.id||null,user_name:entry.user,action:entry.action}).then(({error})=>{ if(error) console.warn('Audit log failed',error); });
+}
+function canEdit(){ return !SESSION || SESSION.role!=='Viewer'; }
+function setTitle(t,sub){ document.getElementById('tb-title').textContent=t; document.getElementById('tb-sub').textContent=sub||''; }
+
+/* ---------------- classification ---------------- */
+function classify(emp){
+  if(emp.classOverride && emp.classOverride!=='Auto') return emp.classOverride;
+  if(!emp.dateHired) return '—';
+  const hired = new Date(emp.dateHired+'T00:00:00');
+  const days = Math.floor((Date.now()-hired.getTime())/86400000);
+  return days >= (DB.settings.probationDays||180) ? 'Regular' : 'Probationary';
+}
+
+/* ---------------- CSV export ---------------- */
+function toCSV(rows, cols){
+  const head = cols.map(c=>`"${c.label}"`).join(',');
+  const body = rows.map(r=> cols.map(c=>{
+    let v = typeof c.get==='function'? c.get(r) : r[c.key];
+    v = (v==null?'':String(v)).replace(/"/g,'""');
+    return `"${v}"`;
+  }).join(',')).join('\n');
+  return head+'\n'+body;
+}
+function downloadCSV(filename, csv){
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ---------------- modal helpers ---------------- */
+function openModal(html){ document.getElementById('modal').innerHTML=html; document.getElementById('overlay').classList.add('on'); }
+function closeModal(){ document.getElementById('overlay').classList.remove('on'); document.getElementById('modal').innerHTML=''; }
+document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeModal(); });
+
+function fieldHTML(f, val){
+  const v = val==null?'':val;
+  if(f.type==='select'){
+    return `<div class="field ${f.full?'full':''}"><label>${f.label}${f.required?' *':''}</label>
+      <select id="f_${f.key}" ${f.required?'required':''}>
+        ${f.options.map(o=>`<option value="${esc(o)}" ${o===v?'selected':''}>${esc(o)}</option>`).join('')}
+      </select></div>`;
+  }
+  if(f.type==='textarea'){
+    return `<div class="field full"><label>${f.label}${f.required?' *':''}</label><textarea id="f_${f.key}" rows="3" ${f.required?'required':''}>${esc(v)}</textarea></div>`;
+  }
+  if(f.type==='file'){
+    const existingData = f.existingData || '';
+    return `<div class="field ${f.full?'full':''}"><label>${f.label}</label>
+      <input type="hidden" id="f_${f.key}" value="${esc(v)}">
+      <input type="hidden" id="f_${f.key}_data" value="${esc(existingData)}">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="this.nextElementSibling.click()">${iPlus(13)} Choose File</button>
+      <input type="file" style="display:none" onchange="handleFileInput('${f.key}', this)">
+      <div id="f_${f.key}_preview">${attachPreviewHTML(f.key, v, existingData)}</div>
+      <div class="computed-note" style="margin-top:6px;">Uploaded securely to Supabase Storage (max ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB per file).</div>
+      </div>`;
+  }
+  return `<div class="field ${f.full?'full':''}"><label>${f.label}${f.required?' *':''}</label><input type="${f.type}" id="f_${f.key}" value="${esc(v)}" ${f.required?'required':''}></div>`;
+}
+function readFields(fields){
+  const out={};
+  fields.forEach(f=>{
+    const el=document.getElementById('f_'+f.key);
+    out[f.key]= el? el.value.trim(): '';
+    if(f.type==='file'){
+      const dataEl = document.getElementById('f_'+f.key+'_data');
+      out[f.key+'Data'] = dataEl? dataEl.value : '';
+    }
+  });
+  return out;
+}
+
+/* ================================================================
+   DASHBOARD
+   ================================================================ */
+function renderDashboard(){
+  setTitle('Dashboard', `Overview of all HR & disciplinary records — ${DB.settings.orgName}`);
+  const emps = DB.employees;
+  const total = emps.length;
+  const statusCounts = {}; EMP_STATUS.forEach(s=>statusCounts[s]=0);
+  emps.forEach(e=> statusCounts[e.status] = (statusCounts[e.status]||0)+1 );
+  const male = emps.filter(e=>e.gender==='Male').length;
+  const female = emps.filter(e=>e.gender==='Female').length;
+  const probationary = emps.filter(e=>classify(e)==='Probationary').length;
+  const regular = emps.filter(e=>classify(e)==='Regular').length;
+
+  const deptCounts = {};
+  emps.forEach(e=>{ const d=e.department||'Unassigned'; deptCounts[d]=(deptCounts[d]||0)+1; });
+
+  const onLeaveToday = DB.leaves.filter(l=> l.startDate<=todayISO() && l.endDate>=todayISO()).length;
+  const upcomingLeaves = DB.leaves.filter(l=> l.startDate>todayISO()).length;
+
+  const activeOnCall = DB.oncall.filter(o=>o.status==='Active').length;
+  const wkStart = mondayOf(todayISO()), wkEnd = addDaysISO(wkStart,6);
+  const oncallThisWeek = DB.oncall.filter(o=>overlapsRange(o.startDate,o.endDate,wkStart,wkEnd));
+
+  const html = `
+  <div class="grid cols-4" style="margin-bottom:18px;">
+    <div class="stat" style="--accent:var(--brass)"><div class="lbl">Total Employees</div><div class="val">${total}</div><div class="sub">${male} Male · ${female} Female</div></div>
+    <div class="stat" style="--accent:var(--forest)"><div class="lbl">Active</div><div class="val">${statusCounts['Active']}</div><div class="sub">${statusCounts['Newly Hired']} newly hired</div></div>
+    <div class="stat" style="--accent:var(--rust)"><div class="lbl">AWOL</div><div class="val">${statusCounts['AWOL']}</div><div class="sub">${statusCounts['Resigned']} resigned this period</div></div>
+    <div class="stat" style="--accent:#3A5B9A"><div class="lbl">On Leave Today</div><div class="val">${onLeaveToday}</div><div class="sub">${upcomingLeaves} upcoming</div></div>
+  </div>
+
+  <div class="grid cols-2" style="margin-bottom:16px;">
+    <div class="panel">
+      <h3>Employee Status Breakdown</h3>
+      <div class="desc">Live count across all statuses, updates automatically as records change.</div>
+      ${EMP_STATUS.map(s=>{
+        const c=statusCounts[s]||0; const pct= total? Math.round(c/total*100):0;
+        return `<div class="barrow"><div class="name">${s}</div><div class="bartrack"><div class="barfill" style="width:${pct}%"></div></div><div class="amt">${c}</div></div>`;
+      }).join('')}
+    </div>
+    <div class="panel">
+      <h3>Gender &amp; Employment Classification</h3>
+      <div class="desc">Overall headcount composition.</div>
+      <div class="donut-wrap">
+        ${donut([{v:male,c:'#B8863B'},{v:female,c:'#3C6E52'}])}
+        <div class="legend">
+          <div class="row"><span class="dot" style="background:#B8863B"></span>Male<span class="amt">${male}</span></div>
+          <div class="row"><span class="dot" style="background:#3C6E52"></span>Female<span class="amt">${female}</span></div>
+        </div>
+      </div>
+      <div style="height:1px;background:var(--line);margin:16px 0;"></div>
+      <div class="donut-wrap">
+        ${donut([{v:probationary,c:'#C08D2E'},{v:regular,c:'#1C2333'}])}
+        <div class="legend">
+          <div class="row"><span class="dot" style="background:#C08D2E"></span>Probationary<span class="amt">${probationary}</span></div>
+          <div class="row"><span class="dot" style="background:#1C2333"></span>Regular<span class="amt">${regular}</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid cols-2" style="margin-bottom:16px;">
+    <div class="panel">
+      <h3>Department Headcount</h3>
+      <div class="desc">Employees organized by department.</div>
+      ${Object.keys(deptCounts).length? Object.entries(deptCounts).sort((a,b)=>b[1]-a[1]).map(([d,c])=>{
+        const pct= total? Math.round(c/total*100):0;
+        return `<div class="barrow"><div class="name">${esc(d)}</div><div class="bartrack"><div class="barfill" style="width:${pct}%"></div></div><div class="amt">${c}</div></div>`;
+      }).join('') : `<div class="small">No employees encoded yet.</div>`}
+    </div>
+    <div class="panel">
+      <h3>Disciplinary &amp; Monitoring Snapshot</h3>
+      <div class="desc">Records requiring HR attention.</div>
+      <div class="grid cols-2" style="gap:10px;">
+        <div class="stat" style="--accent:var(--rust);padding:12px 14px;"><div class="lbl">Disciplinary Records</div><div class="val" style="font-size:22px;">${DB.disciplinary.length}</div></div>
+        <div class="stat" style="--accent:var(--amber);padding:12px 14px;"><div class="lbl">Open NTEs</div><div class="val" style="font-size:22px;">${DB.nte.filter(n=>n.status!=='Resolved').length}</div></div>
+        <div class="stat" style="--accent:#3A5B9A;padding:12px 14px;"><div class="lbl">Memoranda Issued</div><div class="val" style="font-size:22px;">${DB.memos.length}</div></div>
+        <div class="stat" style="--accent:var(--forest);padding:12px 14px;"><div class="lbl">Active On-Call</div><div class="val" style="font-size:22px;">${activeOnCall}</div></div>
+        <div class="stat" style="--accent:var(--rust);padding:12px 14px;cursor:pointer;" onclick="go('atd')"><div class="lbl">ATD Outstanding</div><div class="val" style="font-size:16px;">${peso(DB.atd.reduce((s,r)=>s+atdRemaining(r),0))}</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:16px;">
+    <h3>This Week's On-Call (${fmtDate(wkStart)} – ${fmtDate(wkEnd)})</h3>
+    <div class="desc">Every on-call / replacement assignment covering this week — Active, Completed, or Cancelled. <a href="#" onclick="go('weeklyReport'); return false;" style="color:var(--brass);">View full Weekly Report →</a></div>
+    ${oncallThisWeek.length? `<div class="tablewrap"><table>
+      <thead><tr><th>Employee</th><th>Department</th><th>Replacing</th><th>Start</th><th>End</th><th>Status</th></tr></thead>
+      <tbody>${oncallThisWeek.map(o=>`<tr><td><b>${esc(o.employeeName)}</b></td><td>${esc(o.department||'—')}</td><td>${esc(o.employeeReplaced||'—')}</td><td>${fmtDate(o.startDate)}</td><td>${fmtDate(o.endDate)}</td><td>${statusBadge(o.status, ONCALL_STATUS_MAP)}</td></tr>`).join('')}</tbody>
+    </table></div>` : '<div class="small">No on-call assignments cover this week.</div>'}
+  </div>
+
+  <div class="panel">
+    <h3>Recent Activity</h3>
+    <div class="desc">Audit trail of the latest changes made to records in this session.</div>
+    ${DB.audit.slice(0,8).map(a=>`<div class="cal-list-item"><span>${esc(a.action)}</span><span class="small">${esc(a.user)} · ${new Date(a.ts).toLocaleString()}</span></div>`).join('') || '<div class="small">No activity yet.</div>'}
+  </div>
+  `;
+  document.getElementById('content').innerHTML = html;
+}
+function donut(segs){
+  const total = segs.reduce((s,x)=>s+x.v,0)||1;
+  let acc=0; const stops=[];
+  segs.forEach(s=>{ const start=acc/total*360; acc+=s.v; const end=acc/total*360; stops.push(`${s.c} ${start}deg ${end}deg`); });
+  const bg = stops.length? `conic-gradient(${stops.join(',')})` : '#EEEDE7';
+  return `<div class="donut" style="background:${bg}; display:flex;align-items:center;justify-content:center;">
+    <div style="width:74px;height:74px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-family:'Source Serif 4',serif;font-weight:700;font-size:18px;">${total}</div>
+  </div>`;
+}
+
+/* ================================================================
+   GENERIC CRUD MODULE FACTORY (used by leaves, disciplinary, nte, memos, nod, oncall)
+   ================================================================ */
+function moduleConfig(key){ return MODULES[key]; }
+
+function renderModuleView(key){
+  const cfg = MODULES[key];
+  setTitle(cfg.title, cfg.subtitle);
+  const data = DB[key];
+  const q = (STATE.search||'').toLowerCase();
+  let rows = data.filter(r=>{
+    if(!q) return true;
+    return cfg.searchFields.some(f=> (r[f]||'').toLowerCase().includes(q));
+  });
+  if(STATE.filter && cfg.filterField){
+    rows = rows.filter(r=> r[cfg.filterField]===STATE.filter);
+  }
+  rows = rows.slice().sort((a,b)=> (b[cfg.sortKey]||'').localeCompare(a[cfg.sortKey]||''));
+
+  const filterOptions = cfg.filterOptions || [];
+
+  const html = `
+  <div class="sectionhead">
+    <div><h2>${cfg.title}</h2><p>${cfg.subtitle}</p></div>
+    ${canEdit()? `<button class="btn btn-brass" onclick="openRecordForm('${key}')">${iPlus(15)} ${cfg.addLabel}</button>`:''}
+  </div>
+  ${cfg.notice? `<div class="notice"><b>Note:</b> ${cfg.notice}</div>`:''}
+  <div class="toolbar">
+    <div class="search">${iSearch(15)}<input id="tbl-search" placeholder="Search ${cfg.title.toLowerCase()}…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderModuleView('${key}')"></div>
+    ${filterOptions.length? `<select onchange="STATE.filter=this.value; renderModuleView('${key}')">
+      <option value="">All ${cfg.filterLabel}</option>
+      ${filterOptions.map(o=>`<option value="${esc(o)}" ${STATE.filter===o?'selected':''}>${esc(o)}</option>`).join('')}
+    </select>`:''}
+    <div class="spacer"></div>
+    <button class="btn btn-ghost btn-sm" onclick="exportModuleCSV('${key}')">${iDownload(14)} Export CSV</button>
+    ${cfg.extraToolbar? cfg.extraToolbar():''}
+  </div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr>${cfg.columns.map(c=>`<th>${c.label}</th>`).join('')}<th style="text-align:right;">Actions</th></tr></thead>
+      <tbody>
+        ${rows.length? rows.map(r=>`<tr>${cfg.columns.map(c=>`<td>${c.render? c.render(r): esc(r[c.key]||'—')}</td>`).join('')}
+          <td><div class="rowactions">
+            ${canEdit()? `<button class="iconbtn" onclick="openRecordForm('${key}','${r.id}')" title="Edit">${iEdit(14)}</button>
+            <button class="iconbtn" onclick="deleteRecord('${key}','${r.id}')" title="Delete">${iTrash(14)}</button>`:'<span class="small">View only</span>'}
+          </div></td>
+        </tr>`).join('') : `<tr><td colspan="${cfg.columns.length+1}"><div class="empty"><b>No records yet</b>${cfg.addLabel} to get started.</div></td></tr>`}
+      </tbody>
+    </table>
+  </div>`;
+  document.getElementById('content').innerHTML = html;
+}
+
+function openRecordForm(key, id){
+  const cfg = MODULES[key];
+  const existing = id? DB[key].find(r=>r.id===id) : null;
+  const fields = cfg.fields.map(f=> f.type==='file' && existing? {...f, existingData: existing[f.key+'Data']||''} : f);
+  openModal(`
+    <div class="modal-head"><h3>${existing? 'Edit':'Add'} ${cfg.singular}</h3><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body">
+      <div class="formgrid" id="record-form">
+        ${fields.map(f=> fieldHTML(f, existing? existing[f.key] : (f.default? f.default() : ''))).join('')}
+      </div>
+      ${cfg.computedNote? `<div class="computed-note">${cfg.computedNote}</div>`:''}
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveRecord('${key}','${id||''}')">Save Record</button>
+    </div>
+  `);
+}
+function saveRecord(key, id){
+  const cfg = MODULES[key];
+  const vals = readFields(cfg.fields);
+  const missing = cfg.fields.filter(f=>f.required && !vals[f.key]);
+  if(missing.length){ toast('Please complete: '+missing.map(f=>f.label).join(', ')); return; }
+  if(id){
+    const rec = DB[key].find(r=>r.id===id);
+    Object.assign(rec, vals);
+    logAudit(`Updated ${cfg.singular.toLowerCase()} record for ${vals[cfg.searchFields[0]]||''}`);
+    toast(cfg.singular+' updated.');
+  } else {
+    const rec = {id:uid(), ...vals};
+    DB[key].push(rec);
+    logAudit(`Added new ${cfg.singular.toLowerCase()} record for ${vals[cfg.searchFields[0]]||''}`);
+    toast(cfg.singular+' added.');
+  }
+  saveDB(); closeModal(); renderNav(); RENDERERS[key]? RENDERERS[key]() : renderModuleView(key);
+}
+function deleteRecord(key,id){
+  const cfg = MODULES[key];
+  if(!confirm('Delete this record? This cannot be undone.')) return;
+  DB[key] = DB[key].filter(r=>r.id!==id);
+  logAudit(`Deleted a ${cfg.singular.toLowerCase()} record`);
+  saveDB(); renderNav(); RENDERERS[key]? RENDERERS[key]() : renderModuleView(key);
+  toast(cfg.singular+' deleted.');
+}
+function exportModuleCSV(key){
+  const cfg = MODULES[key];
+  const csv = toCSV(DB[key], cfg.columns.map(c=>({label:c.label, get:c.csv || (r=>r[c.key])})));
+  downloadCSV(key+'_export.csv', csv);
+  toast('CSV exported.');
+}
+
+function downloadRecordAttachment(moduleKey, id, fieldKey){
+  const rec = DB[moduleKey].find(r=>r.id===id);
+  if(!rec) return;
+  downloadAttachment(rec[fieldKey+'Data'], rec[fieldKey]);
+}
+function attachCellHTML(moduleKey, r, fieldKey){
+  const name = r[fieldKey];
+  const data = r[fieldKey+'Data'];
+  if(!name) return '<span class="small">—</span>';
+  return `<div class="attach-cell">${iDoc(13)}<span title="${esc(name)}" style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(name)}</span>${data?`<button class="iconbtn" title="Download" onclick="downloadRecordAttachment('${moduleKey}','${r.id}','${fieldKey}')">${iDownload(12)}</button>`:'<span class="small" title="No stored file (demo record or uploaded before this feature)">n/a</span>'}</div>`;
+}
+
+/* status badge helper */
+function statusBadge(val, map){
+  const cls = (map&&map[val]) || 'b-grey';
+  return `<span class="badge ${cls}"><span class="dot"></span>${esc(val||'—')}</span>`;
+}
+const EMP_STATUS_MAP = {'Active':'b-green','AWOL':'b-red','Resigned':'b-grey','Transferred to Another Department':'b-blue','Separated':'b-red','Returned to Agency':'b-amber','Newly Hired':'b-blue'};
+const LEAVE_STATUS_MAP = {'Pending':'b-amber','Approved':'b-blue','Ongoing':'b-green','Completed':'b-grey','Disapproved':'b-red'};
+const NTE_STATUS_MAP = {'Pending Explanation':'b-amber','Explanation Submitted':'b-blue','Under Review':'b-blue','Resolved':'b-green'};
+const ONCALL_STATUS_MAP = {'Active':'b-green','Completed':'b-grey','Cancelled':'b-red'};
+
+/* ================================================================
+   EMPLOYEES (custom view — has classification logic)
+   ================================================================ */
+function renderEmployees(){
+  setTitle('Employee Information', 'Encode, view, and manage employee records across all departments.');
+  const q=(STATE.search||'').toLowerCase();
+  const deptFilter = STATE.filter;
+  let rows = DB.employees.filter(e=>{
+    const matches = !q || e.name.toLowerCase().includes(q) || (e.position||'').toLowerCase().includes(q);
+    const deptOk = !deptFilter || e.department===deptFilter;
+    return matches && deptOk;
+  });
+  const depts = [...new Set(DB.employees.map(e=>e.department).filter(Boolean))];
+
+  const html = `
+  <div class="sectionhead">
+    <div><h2>Employee Information</h2><p>${DB.employees.length} employees on record across ${depts.length} departments.</p></div>
+    ${canEdit()? `<button class="btn btn-brass" onclick="openEmployeeForm()">${iPlus(15)} Add Employee</button>`:''}
+  </div>
+  <div class="toolbar">
+    <div class="search">${iSearch(15)}<input placeholder="Search by name or position…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderEmployees()"></div>
+    <select onchange="STATE.filter=this.value; renderEmployees()">
+      <option value="">All Departments</option>
+      ${depts.map(d=>`<option value="${esc(d)}" ${STATE.filter===d?'selected':''}>${esc(d)}</option>`).join('')}
+    </select>
+    <div class="spacer"></div>
+    <button class="btn btn-ghost btn-sm" onclick="exportEmployeesCSV()">${iDownload(14)} Export CSV</button>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Name</th><th>Position</th><th>Department</th><th>Date Hired</th><th>Gender</th><th>Status</th><th>Classification</th><th style="text-align:right;">Actions</th></tr></thead>
+      <tbody>
+        ${rows.length? rows.map(e=>`<tr>
+          <td><b>${esc(e.name)}</b></td>
+          <td>${esc(e.position||'—')}</td>
+          <td>${esc(e.department||'—')}</td>
+          <td>${fmtDate(e.dateHired)}</td>
+          <td>${esc(e.gender||'—')}</td>
+          <td>${statusBadge(e.status, EMP_STATUS_MAP)}</td>
+          <td>${statusBadge(classify(e), classify(e)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</td>
+          <td><div class="rowactions">
+            ${canEdit()? `<button class="iconbtn" onclick="openEmployeeForm('${e.id}')" title="Edit">${iEdit(14)}</button>
+            <button class="iconbtn" onclick="openTransferForEmployee('${e.id}')" title="Record Department Transfer">${iSwap(14)}</button>
+            <button class="iconbtn" onclick="deleteEmployee('${e.id}')" title="Delete">${iTrash(14)}</button>`:'<span class="small">View only</span>'}
+          </div></td>
+        </tr>`).join('') : `<tr><td colspan="8"><div class="empty"><b>No employees found</b>Try a different search or add a new employee.</div></td></tr>`}
+      </tbody>
+    </table>
+  </div>`;
+  document.getElementById('content').innerHTML = html;
+}
+const EMP_FIELDS = [
+  {key:'name', label:'Employee Name', type:'text', required:true},
+  {key:'position', label:'Position', type:'text', required:true},
+  {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
+  {key:'dateHired', label:'Date Hired', type:'date', required:true},
+  {key:'gender', label:'Gender', type:'select', options:['Male','Female'], required:true},
+  {key:'status', label:'Employment Status', type:'select', options:EMP_STATUS, required:true},
+  {key:'statusDate', label:'Status Effective Date (resignation/AWOL/separation/etc.)', type:'date'},
+  {key:'prfNumber', label:'PRF Number (if applicable)', type:'text'},
+  {key:'classOverride', label:'Classification', type:'select', options:['Auto','Probationary','Regular'], required:true},
+];
+function openEmployeeForm(id){
+  const existing = id? DB.employees.find(e=>e.id===id): null;
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Edit':'Add'} Employee</h3><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body">
+      <div class="formgrid">
+        ${EMP_FIELDS.map(f=>fieldHTML(f, existing? existing[f.key]:(f.key==='status'?'Newly Hired':f.key==='classOverride'?'Auto':''))).join('')}
+      </div>
+      <div class="computed-note">Classification is calculated automatically from Date Hired against the ${DB.settings.probationDays}-day regularization threshold (set in Settings). Choose "Auto" unless you need to manually correct a record.</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployee('${id||''}')">Save Employee</button></div>
+  `);
+}
+function saveEmployee(id){
+  const vals = readFields(EMP_FIELDS);
+  const missing = EMP_FIELDS.filter(f=>f.required && !vals[f.key]);
+  if(missing.length){ toast('Please complete: '+missing.map(f=>f.label).join(', ')); return; }
+  if(id){ Object.assign(DB.employees.find(e=>e.id===id), vals); logAudit('Updated employee record: '+vals.name); toast('Employee updated.'); }
+  else { DB.employees.push({id:uid(), ...vals}); logAudit('Added new employee: '+vals.name); toast('Employee added.'); }
+  saveDB(); closeModal(); renderNav(); renderEmployees();
+}
+function deleteEmployee(id){
+  if(!confirm('Delete this employee record? This cannot be undone.')) return;
+  const emp = DB.employees.find(e=>e.id===id);
+  DB.employees = DB.employees.filter(e=>e.id!==id);
+  logAudit('Deleted employee record: '+(emp?emp.name:''));
+  saveDB(); renderNav(); renderEmployees(); toast('Employee deleted.');
+}
+function openTransferForEmployee(id){
+  const emp = DB.employees.find(e=>e.id===id);
+  if(!emp) return;
+  openModal(`
+    <div class="modal-head"><h3>Record Department Transfer</h3><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body">
+      <div class="formgrid">
+        <div class="field full"><label>Employee</label><input value="${esc(emp.name)}" disabled style="background:var(--paper);"></div>
+        <div class="field"><label>Transferred From *</label><select id="tf_from">${DEPT_OPTIONS.map(d=>`<option ${d===emp.department?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+        <div class="field"><label>From Date *</label><input type="date" id="tf_fromDate" value="${todayISO()}"></div>
+        <div class="field"><label>Transferred To *</label><select id="tf_to">${DEPT_OPTIONS.map(d=>`<option ${d===emp.department?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+        <div class="field"><label>To Date *</label><input type="date" id="tf_toDate" value="${todayISO()}"></div>
+        <div class="field full"><label>Remarks</label><textarea id="tf_remarks" rows="2"></textarea></div>
+      </div>
+      <div class="computed-note">This logs the move in Department Transfers and updates the employee's current department and status to "Transferred to Another Department".</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployeeTransfer('${id}')">Save Transfer</button></div>
+  `);
+}
+function saveEmployeeTransfer(id){
+  const emp = DB.employees.find(e=>e.id===id);
+  if(!emp) return;
+  const fromDepartment = document.getElementById('tf_from').value;
+  const fromDate = document.getElementById('tf_fromDate').value;
+  const toDepartment = document.getElementById('tf_to').value;
+  const toDate = document.getElementById('tf_toDate').value;
+  const remarks = document.getElementById('tf_remarks').value.trim();
+  if(!fromDate || !toDate){ toast('Please set both the from and to dates.'); return; }
+  if(toDate < fromDate){ toast('The "To Date" cannot be before the "From Date".'); return; }
+  DB.transfers.push({id:uid(), employeeName:emp.name, fromDepartment, fromDate, toDepartment, toDate, remarks});
+  emp.department = toDepartment;
+  emp.status = 'Transferred to Another Department';
+  logAudit(`Transferred ${emp.name} from ${fromDepartment} to ${toDepartment}`);
+  saveDB(); closeModal(); renderNav(); renderEmployees();
+  toast('Transfer recorded.');
+}
+function exportEmployeesCSV(){
+  const csv = toCSV(DB.employees, [
+    {label:'Name', get:r=>r.name},{label:'Position', get:r=>r.position},{label:'Department', get:r=>r.department},
+    {label:'Date Hired', get:r=>r.dateHired},{label:'Gender', get:r=>r.gender},{label:'Status', get:r=>r.status},
+    {label:'Classification', get:r=>classify(r)},
+  ]);
+  downloadCSV('employees_export.csv', csv);
+  toast('CSV exported.');
+}
+
+/* ================================================================
+   LEAVE TRACKER (custom — has tabs: Records / Calendar)
+   ================================================================ */
+function renderLeaves(){
+  setTitle('Leave Tracker', 'Upload, monitor, and manage employee leave records.');
+  const tab = STATE.leaveTab||'records';
+  const html = `
+  <div class="sectionhead">
+    <div><h2>Leave Tracker</h2><p>${DB.leaves.length} leave requests on record.</p></div>
+    ${canEdit()? `<button class="btn btn-brass" onclick="openRecordForm('leaves')">${iPlus(15)} Add Leave Record</button>`:''}
+  </div>
+  <div class="notice"><b>Note:</b> Uploaded leave forms are stored as the actual file (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each) in this browser's local storage, so you can download them back — but nothing is sent to a server, and automatic OCR/text extraction from the document isn't performed; all fields here are entered or confirmed manually.</div>
+  <div class="tabs">
+    <button class="tabbtn ${tab==='records'?'active':''}" onclick="STATE.leaveTab='records'; renderLeaves()">Leave Records</button>
+    <button class="tabbtn ${tab==='calendar'?'active':''}" onclick="STATE.leaveTab='calendar'; renderLeaves()">Leave Calendar</button>
+    <button class="tabbtn ${tab==='summary'?'active':''}" onclick="STATE.leaveTab='summary'; renderLeaves()">Summary</button>
+  </div>
+  <div id="leave-sub"></div>
+  `;
+  document.getElementById('content').innerHTML = html;
+  if(tab==='records') renderLeaveRecords();
+  else if(tab==='calendar') renderLeaveCalendar();
+  else renderLeaveSummary();
+}
+function renderLeaveRecords(){
+  const q=(STATE.search||'').toLowerCase();
+  let rows = DB.leaves.filter(l=> !q || l.employeeName.toLowerCase().includes(q) || (l.department||'').toLowerCase().includes(q));
+  if(STATE.filter) rows = rows.filter(l=>l.status===STATE.filter);
+  rows = rows.slice().sort((a,b)=>(b.startDate||'').localeCompare(a.startDate||''));
+  document.getElementById('leave-sub').innerHTML = `
+    <div class="toolbar">
+      <div class="search">${iSearch(15)}<input placeholder="Search by employee or department…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderLeaveRecords()"></div>
+      <select onchange="STATE.filter=this.value; renderLeaveRecords()">
+        <option value="">All Status</option>${LEAVE_STATUS.map(s=>`<option ${STATE.filter===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+      <div class="spacer"></div>
+      <button class="btn btn-ghost btn-sm" onclick="exportModuleCSV('leaves')">${iDownload(14)} Export CSV</button>
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Employee</th><th>Department</th><th>Type</th><th>Start</th><th>End</th><th>Days</th><th>Attachment</th><th>Status</th><th style="text-align:right;">Actions</th></tr></thead>
+      <tbody>
+      ${rows.length? rows.map(l=>`<tr>
+        <td><b>${esc(l.employeeName)}</b></td><td>${esc(l.department||'—')}</td><td>${esc(l.leaveType)}</td>
+        <td>${fmtDate(l.startDate)}</td><td>${fmtDate(l.endDate)}</td><td>${daysBetweenInclusive(l.startDate,l.endDate)||'—'}</td>
+        <td>${attachCellHTML('leaves',l,'attachment')}</td>
+        <td>${statusBadge(l.status, LEAVE_STATUS_MAP)}</td>
+        <td><div class="rowactions">${canEdit()?`<button class="iconbtn" onclick="openRecordForm('leaves','${l.id}')">${iEdit(14)}</button><button class="iconbtn" onclick="deleteRecord('leaves','${l.id}')">${iTrash(14)}</button>`:'<span class="small">View only</span>'}</div></td>
+      </tr>`).join('') : `<tr><td colspan="9"><div class="empty"><b>No leave records</b>Add a leave record to begin tracking.</div></td></tr>`}
+      </tbody></table></div>`;
+}
+function renderLeaveSummary(){
+  const byDept={}, byEmp={};
+  DB.leaves.forEach(l=>{ const d=l.department||'Unassigned'; byDept[d]=(byDept[d]||0)+1; byEmp[l.employeeName]=(byEmp[l.employeeName]||0)+1; });
+  const onLeave = DB.leaves.filter(l=>l.startDate<=todayISO()&&l.endDate>=todayISO());
+  const upcoming = DB.leaves.filter(l=>l.startDate>todayISO());
+  const completed = DB.leaves.filter(l=>l.endDate<todayISO());
+  document.getElementById('leave-sub').innerHTML = `
+    <div class="grid cols-4" style="margin-bottom:16px;">
+      <div class="stat" style="--accent:var(--forest)"><div class="lbl">Currently on Leave</div><div class="val">${onLeave.length}</div></div>
+      <div class="stat" style="--accent:#3A5B9A"><div class="lbl">Upcoming Leaves</div><div class="val">${upcoming.length}</div></div>
+      <div class="stat" style="--accent:var(--slate)"><div class="lbl">Completed Leaves</div><div class="val">${completed.length}</div></div>
+      <div class="stat" style="--accent:var(--brass)"><div class="lbl">Total Requests</div><div class="val">${DB.leaves.length}</div></div>
+    </div>
+    <div class="grid cols-2">
+      <div class="panel"><h3>Leave Summary by Department</h3>${Object.keys(byDept).length? Object.entries(byDept).map(([d,c])=>`<div class="barrow"><div class="name">${esc(d)}</div><div class="bartrack"><div class="barfill" style="width:${Math.round(c/DB.leaves.length*100)}%"></div></div><div class="amt">${c}</div></div>`).join(''):'<div class="small">No data yet.</div>'}</div>
+      <div class="panel"><h3>Leave Summary by Employee</h3>${Object.keys(byEmp).length? Object.entries(byEmp).map(([n,c])=>`<div class="barrow"><div class="name">${esc(n)}</div><div class="bartrack"><div class="barfill" style="width:${Math.round(c/DB.leaves.length*100)}%"></div></div><div class="amt">${c}</div></div>`).join(''):'<div class="small">No data yet.</div>'}</div>
+    </div>`;
+}
+function renderLeaveCalendar(){
+  const y=STATE.calYear, m=STATE.calMonth;
+  const first=new Date(y,m,1); const startDow=first.getDay();
+  const daysInMonth=new Date(y,m+1,0).getDate();
+  const monthName=first.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  const cells=[]; for(let i=0;i<startDow;i++) cells.push(null);
+  for(let d=1; d<=daysInMonth; d++) cells.push(d);
+  const dow=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const todayStr = todayISO();
+  function leavesOn(dateStr){ return DB.leaves.filter(l=> l.startDate<=dateStr && l.endDate>=dateStr); }
+
+  let grid = `<div class="calgrid">` + dow.map(d=>`<div class="caldow">${d}</div>`).join('');
+  cells.forEach(d=>{
+    if(d===null){ grid+=`<div class="calday out"></div>`; return; }
+    const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const onLeave = leavesOn(dateStr);
+    const isToday = dateStr===todayStr;
+    const isSel = STATE.calSel===dateStr;
+    grid += `<div class="calday ${isToday?'today':''} ${isSel?'sel':''}" onclick="STATE.calSel='${dateStr}'; renderLeaveCalendar()">
+      <div class="dn">${d}</div>
+      <div class="dots">${onLeave.slice(0,5).map(()=>'<span></span>').join('')}</div>
+    </div>`;
+  });
+  grid += `</div>`;
+
+  const selList = STATE.calSel? leavesOn(STATE.calSel) : [];
+  document.getElementById('leave-sub').innerHTML = `
+    <div class="panel">
+      <div class="cal-head">
+        <div class="mo">${monthName}</div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-ghost btn-sm" onclick="calShift(-1)">&larr; Prev</button>
+          <button class="btn btn-ghost btn-sm" onclick="calShift(1)">Next &rarr;</button>
+        </div>
+      </div>
+      ${grid}
+      <div class="cal-panel">
+        <b style="font-size:13px;">${STATE.calSel? 'On leave — '+fmtDate(STATE.calSel) : 'Select a date to see who is on leave'}</b>
+        ${selList.length? selList.map(l=>`<div class="cal-list-item"><span>${esc(l.employeeName)} <span class="small">(${esc(l.leaveType)})</span></span><span>${statusBadge(l.status,LEAVE_STATUS_MAP)}</span></div>`).join('') : (STATE.calSel?'<div class="small" style="padding-top:8px;">No one is on leave this day.</div>':'')}
+      </div>
+    </div>`;
+}
+function calShift(dir){
+  STATE.calMonth += dir;
+  if(STATE.calMonth<0){STATE.calMonth=11; STATE.calYear--;}
+  if(STATE.calMonth>11){STATE.calMonth=0; STATE.calYear++;}
+  renderLeaveCalendar();
+}
+
+/* ================================================================
+   DISCIPLINARY (custom — offense counting)
+   ================================================================ */
+function offenseLevelFor(emp, violation, beforeId){
+  const prior = DB.disciplinary.filter(d=> d.employeeName===emp && d.violation===violation && d.id!==beforeId);
+  const n = prior.length; // this record will be n+1'th
+  return OFFENSE_LEVELS[Math.min(n, OFFENSE_LEVELS.length-1)];
+}
+function renderDisciplinary(){
+  setTitle('Disciplinary Action', "Monitor violations, offense levels, and actions taken per employee.");
+  const q=(STATE.search||'').toLowerCase();
+  let rows = DB.disciplinary.filter(d=> !q || d.employeeName.toLowerCase().includes(q) || (d.violation||'').toLowerCase().includes(q));
+  rows = rows.slice().sort((a,b)=>(b.dateOfIncident||'').localeCompare(a.dateOfIncident||''));
+  const html = `
+  <div class="sectionhead">
+    <div><h2>Disciplinary Action</h2><p>${DB.disciplinary.length} records across ${new Set(DB.disciplinary.map(d=>d.employeeName)).size} employees.</p></div>
+    ${canEdit()? `<button class="btn btn-brass" onclick="openRecordForm('disciplinary')">${iPlus(15)} Add Disciplinary Record</button>`:''}
+  </div>
+  <div class="notice"><b>Note:</b> Offense level is counted automatically from prior records of the same violation for that employee, referencing the company's approved disciplinary policy. Confirm the suggested action before saving.</div>
+  <div class="toolbar">
+    <div class="search">${iSearch(15)}<input placeholder="Search by employee or violation…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderDisciplinary()"></div>
+    <div class="spacer"></div>
+    <button class="btn btn-ghost btn-sm" onclick="exportModuleCSV('disciplinary')">${iDownload(14)} Export CSV</button>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Employee</th><th>Department</th><th>Violation</th><th>Offense Level</th><th>Date</th><th>Action Taken</th><th style="text-align:right;">Actions</th></tr></thead>
+    <tbody>
+    ${rows.length? rows.map(d=>`<tr>
+      <td><b>${esc(d.employeeName)}</b></td><td>${esc(d.department||'—')}</td><td>${esc(d.violation)}</td>
+      <td>${statusBadge(offenseLevelFor(d.employeeName,d.violation,d.id), {}) }</td>
+      <td>${fmtDate(d.dateOfIncident)}</td><td>${esc(d.action||'—')}</td>
+      <td><div class="rowactions">${canEdit()?`<button class="iconbtn" onclick="openRecordForm('disciplinary','${d.id}')">${iEdit(14)}</button><button class="iconbtn" onclick="deleteRecord('disciplinary','${d.id}')">${iTrash(14)}</button>`:'<span class="small">View only</span>'}</div></td>
+    </tr>`).join('') : `<tr><td colspan="7"><div class="empty"><b>No disciplinary records</b>Add a record to begin tracking violations.</div></td></tr>`}
+    </tbody></table></div>
+  <div class="panel" style="margin-top:16px;">
+    <h3>Offense Count by Employee</h3>
+    <div class="desc">Total disciplinary entries per employee, across all violation types.</div>
+    ${(()=>{ const c={}; DB.disciplinary.forEach(d=>c[d.employeeName]=(c[d.employeeName]||0)+1);
+      const entries = Object.entries(c).sort((a,b)=>b[1]-a[1]);
+      return entries.length? entries.map(([n,v])=>`<div class="barrow"><div class="name">${esc(n)}</div><div class="bartrack"><div class="barfill" style="width:${Math.round(v/Math.max(...entries.map(e=>e[1]))*100)}%"></div></div><div class="amt">${v}</div></div>`).join('') : '<div class="small">No data yet.</div>'; })()}
+  </div>`;
+  document.getElementById('content').innerHTML = html;
+}
+
+/* ================================================================
+   CVR / VIOLATION REPORTS (custom — checklist offenses, auto level
+   + consequence lookup from the Offense Catalog, file attachment)
+   ================================================================ */
+function cvrOffenseLevel(employeeName, offenseName, beforeId){
+  const prior = DB.cvr.filter(c=> c.id!==beforeId && c.employeeName===employeeName && (c.offenses||[]).includes(offenseName));
+  const idx = Math.min(prior.length, OFFENSE_LEVELS.length-1);
+  return {label: OFFENSE_LEVELS[idx], index: idx};
+}
+function consequenceFor(offenseName, levelIndex){
+  const cat = DB.offenseCatalog.find(o=> o.offense.trim().toLowerCase()===offenseName.trim().toLowerCase());
+  if(!cat) return `Not in Offense Catalog — add "${offenseName}" there to define its consequence.`;
+  const c = [cat.consequence1,cat.consequence2,cat.consequence3,cat.consequence4][levelIndex];
+  return c || cat.consequence4 || '—';
+}
+function cvrOffenseSummaryHTML(rec){
+  const list = [...(rec.offenses||[]), ...(rec.otherOffense? [rec.otherOffense]:[])];
+  if(!list.length) return '<span class="small">—</span>';
+  return list.map(o=>{
+    const lvl = cvrOffenseLevel(rec.employeeName, o, rec.id);
+    const cons = consequenceFor(o, lvl.index);
+    return `<div style="margin-bottom:6px;"><b>${esc(o)}</b> ${statusBadge(lvl.label,{})}<div class="small" style="margin-top:2px;">${esc(cons)}</div></div>`;
+  }).join('');
+}
+function renderCVR(){
+  setTitle('CVR / Violation Reports', "Check or write the offense from an employee's CVR — level and consequence are computed automatically.");
+  const q=(STATE.search||'').toLowerCase();
+  let rows = DB.cvr.filter(c=> !q || c.employeeName.toLowerCase().includes(q) || (c.offenses||[]).join(' ').toLowerCase().includes(q) || (c.otherOffense||'').toLowerCase().includes(q));
+  rows = rows.slice().sort((a,b)=>(b.dateOfCVR||'').localeCompare(a.dateOfCVR||''));
+  const html = `
+  <div class="sectionhead">
+    <div><h2>CVR / Violation Reports</h2><p>${DB.cvr.length} CVRs on record across ${new Set(DB.cvr.map(c=>c.employeeName)).size} employees.</p></div>
+    ${canEdit()? `<button class="btn btn-brass" onclick="openCVRForm()">${iPlus(15)} Add CVR</button>`:''}
+  </div>
+  <div class="notice"><b>Note:</b> This app cannot automatically scan or OCR a photo/scan of a printed CVR — check or write the offense(s) on this form yourself (matching what's marked on the paper CVR), and the offense level (1st/2nd/3rd/4th+) and consequence are then computed automatically from this employee's CVR history and the <b>Offense Catalog</b>. Attach the actual scanned/photographed CVR for the record. Add your agency's real offense list and consequences under Offense Catalog (in the Manage section) so the lookup matches your policy.</div>
+  <div class="toolbar">
+    <div class="search">${iSearch(15)}<input placeholder="Search by employee or offense…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderCVR()"></div>
+    <div class="spacer"></div>
+    <button class="btn btn-ghost btn-sm" onclick="exportCVRCSV()">${iDownload(14)} Export CSV</button>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Employee</th><th>Department</th><th>Date</th><th>Offense(s) &amp; Level</th><th>Attachment</th><th>Status</th><th style="text-align:right;">Actions</th></tr></thead>
+    <tbody>
+    ${rows.length? rows.map(c=>`<tr>
+      <td><b>${esc(c.employeeName)}</b></td><td>${esc(c.department||'—')}</td><td>${fmtDate(c.dateOfCVR)}</td>
+      <td style="min-width:220px;">${cvrOffenseSummaryHTML(c)}</td>
+      <td>${attachCellHTML('cvr',c,'attachment')}</td>
+      <td>${statusBadge(c.status, CVR_STATUS_MAP)}</td>
+      <td><div class="rowactions">${canEdit()?`<button class="iconbtn" onclick="openCVRForm('${c.id}')">${iEdit(14)}</button><button class="iconbtn" onclick="deleteCVR('${c.id}')">${iTrash(14)}</button>`:'<span class="small">View only</span>'}</div></td>
+    </tr>`).join('') : `<tr><td colspan="7"><div class="empty"><b>No CVRs yet</b>Add a CVR to begin tracking checked or written offenses.</div></td></tr>`}
+    </tbody></table></div>
+  <div class="panel" style="margin-top:16px;">
+    <h3>Repeated Offenses by Employee</h3>
+    <div class="desc">Total CVRs per employee — highlights who has recurring violations.</div>
+    ${(()=>{ const c={}; DB.cvr.forEach(r=>c[r.employeeName]=(c[r.employeeName]||0)+1);
+      const entries = Object.entries(c).sort((a,b)=>b[1]-a[1]);
+      return entries.length? entries.map(([n,v])=>`<div class="barrow"><div class="name">${esc(n)}</div><div class="bartrack"><div class="barfill" style="width:${Math.round(v/Math.max(...entries.map(e=>e[1]))*100)}%"></div></div><div class="amt">${v}</div></div>`).join('') : '<div class="small">No data yet.</div>'; })()}
+  </div>`;
+  document.getElementById('content').innerHTML = html;
+}
+function openCVRForm(id){
+  const existing = id? DB.cvr.find(c=>c.id===id): null;
+  const checked = existing? (existing.offenses||[]) : [];
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Edit':'Add'} CVR</h3><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body">
+      <div class="formgrid">
+        <div class="field"><label>Employee Name *</label><input id="cv_employeeName" value="${esc(existing?existing.employeeName:'')}"></div>
+        <div class="field"><label>Department *</label><select id="cv_department">${DEPT_OPTIONS.map(d=>`<option ${existing&&existing.department===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+        <div class="field"><label>Date of CVR *</label><input type="date" id="cv_date" value="${existing?existing.dateOfCVR:todayISO()}"></div>
+        <div class="field"><label>Status</label><select id="cv_status">${CVR_STATUS.map(s=>`<option ${(existing?existing.status:CVR_STATUS[0])===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
+        <div class="field full">
+          <label>Offense(s) Checked</label>
+          <div class="checklist">
+            ${DB.offenseCatalog.length? DB.offenseCatalog.map(o=>`<label class="checkrow"><input type="checkbox" value="${esc(o.offense)}" ${checked.includes(o.offense)?'checked':''}> ${esc(o.offense)}</label>`).join('') : '<div class="small">No offenses in the catalog yet — add them under Offense Catalog, or write one in below.</div>'}
+          </div>
+        </div>
+        <div class="field full"><label>Other / Additional Offense (write-in, not in catalog)</label><input id="cv_other" value="${esc((existing&&existing.otherOffense)||'')}"></div>
+        ${fieldHTML({key:'attachment', label:'Uploaded CVR Document', type:'file', full:true, existingData:(existing&&existing.attachmentData)||''}, existing?existing.attachment:'')}
+        <div class="field full"><label>Remarks</label><textarea id="cv_remarks" rows="2">${esc((existing&&existing.remarks)||'')}</textarea></div>
+      </div>
+      <div class="computed-note">Offense level (1st/2nd/3rd/4th+) and consequence are computed automatically per offense from this employee's CVR history and the Offense Catalog — no need to set them manually.</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveCVR('${id||''}')">Save CVR</button></div>
+  `);
+}
+function saveCVR(id){
+  const employeeName = document.getElementById('cv_employeeName').value.trim();
+  const department = document.getElementById('cv_department').value;
+  const dateOfCVR = document.getElementById('cv_date').value;
+  const status = document.getElementById('cv_status').value;
+  const otherOffense = document.getElementById('cv_other').value.trim();
+  const remarks = document.getElementById('cv_remarks').value.trim();
+  const offenses = Array.from(document.querySelectorAll('#modal input[type=checkbox]:checked')).map(el=>el.value);
+  const attachment = document.getElementById('f_attachment').value;
+  const attachmentData = document.getElementById('f_attachment_data').value;
+  if(!employeeName || !department || !dateOfCVR){ toast('Please complete employee, department, and date.'); return; }
+  if(!offenses.length && !otherOffense){ toast('Check at least one offense, or write one in.'); return; }
+  if(id){
+    const rec = DB.cvr.find(c=>c.id===id);
+    Object.assign(rec, {employeeName, department, dateOfCVR, status, offenses, otherOffense, attachment, attachmentData, remarks});
+    logAudit(`Updated CVR for ${employeeName}`);
+    toast('CVR updated.');
+  } else {
+    DB.cvr.push({id:uid(), employeeName, department, dateOfCVR, status, offenses, otherOffense, attachment, attachmentData, remarks});
+    logAudit(`Added CVR for ${employeeName}`);
+    toast('CVR added.');
+  }
+  saveDB(); closeModal(); renderNav(); renderCVR();
+}
+function deleteCVR(id){
+  if(!confirm('Delete this CVR record? This cannot be undone.')) return;
+  DB.cvr = DB.cvr.filter(c=>c.id!==id);
+  logAudit('Deleted a CVR record');
+  saveDB(); renderNav(); renderCVR(); toast('CVR deleted.');
+}
+function exportCVRCSV(){
+  const csv = toCSV(DB.cvr, [
+    {label:'Employee', get:r=>r.employeeName},{label:'Department', get:r=>r.department},
+    {label:'Date', get:r=>r.dateOfCVR},
+    {label:'Offenses', get:r=>[...(r.offenses||[]),...(r.otherOffense?[r.otherOffense]:[])].join('; ')},
+    {label:'Status', get:r=>r.status},{label:'Remarks', get:r=>r.remarks},
+  ]);
+  downloadCSV('cvr_export.csv', csv);
+  toast('CSV exported.');
+}
+
+/* ================================================================
+   INCIDENT REPORTS (custom — checklist incident types, auto repeat
+   count per employee/type, file attachment; mirrors CVR)
+   ================================================================ */
+function incidentTypeOccurrence(employeeName, typeName, beforeId){
+  const prior = DB.incidents.filter(i=> i.id!==beforeId && i.employeeName===employeeName && (i.incidentTypes||[]).includes(typeName));
+  return prior.length+1;
+}
+function nthLabel(n){ return n===1?'1st time':n===2?'2nd time':n===3?'3rd time':n+'th time'; }
+function incidentTypeSummaryHTML(rec){
+  const list = [...(rec.incidentTypes||[]), ...(rec.otherType? [rec.otherType]:[])];
+  if(!list.length) return '<span class="small">—</span>';
+  return list.map(t=>{
+    const n = incidentTypeOccurrence(rec.employeeName, t, rec.id);
+    return `<div style="margin-bottom:4px;"><b>${esc(t)}</b> ${statusBadge(nthLabel(n),{})}</div>`;
+  }).join('');
+}
+function renderIncidents(){
+  setTitle('Incident Reports', "Check or write the incident type from a printed report — repeat occurrences per employee are counted automatically.");
+  const q=(STATE.search||'').toLowerCase();
+  let rows = DB.incidents.filter(i=> !q || i.employeeName.toLowerCase().includes(q) || (i.incidentTypes||[]).join(' ').toLowerCase().includes(q) || (i.otherType||'').toLowerCase().includes(q) || (i.description||'').toLowerCase().includes(q));
+  rows = rows.slice().sort((a,b)=>(b.dateOfIncident||'').localeCompare(a.dateOfIncident||''));
+  const html = `
+  <div class="sectionhead">
+    <div><h2>Incident Reports</h2><p>${DB.incidents.length} incident reports on record across ${new Set(DB.incidents.map(i=>i.employeeName)).size} employees.</p></div>
+    ${canEdit()? `<button class="btn btn-brass" onclick="openIncidentForm()">${iPlus(15)} Add Incident Report</button>`:''}
+  </div>
+  <div class="notice"><b>Note:</b> This app cannot automatically scan or OCR a printed/photographed incident report — check or write the incident type(s) yourself to match what's on the report, and attach the actual document for the record. Repeat-incident counts per employee and type are then computed automatically from history.</div>
+  <div class="toolbar">
+    <div class="search">${iSearch(15)}<input placeholder="Search by employee, type, or description…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderIncidents()"></div>
+    <div class="spacer"></div>
+    <button class="btn btn-ghost btn-sm" onclick="exportIncidentsCSV()">${iDownload(14)} Export CSV</button>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Employee</th><th>Department</th><th>Date</th><th>Incident Type(s)</th><th>Severity</th><th>Attachment</th><th>Status</th><th style="text-align:right;">Actions</th></tr></thead>
+    <tbody>
+    ${rows.length? rows.map(i=>`<tr>
+      <td><b>${esc(i.employeeName)}</b></td><td>${esc(i.department||'—')}</td><td>${fmtDate(i.dateOfIncident)}</td>
+      <td style="min-width:180px;">${incidentTypeSummaryHTML(i)}</td>
+      <td>${statusBadge(i.severity, INCIDENT_SEVERITY_MAP)}</td>
+      <td>${attachCellHTML('incidents',i,'attachment')}</td>
+      <td>${statusBadge(i.status, INCIDENT_STATUS_MAP)}</td>
+      <td><div class="rowactions">${canEdit()?`<button class="iconbtn" onclick="openIncidentForm('${i.id}')">${iEdit(14)}</button><button class="iconbtn" onclick="deleteIncident('${i.id}')">${iTrash(14)}</button>`:'<span class="small">View only</span>'}</div></td>
+    </tr>`).join('') : `<tr><td colspan="8"><div class="empty"><b>No incident reports yet</b>Add a report to begin tracking.</div></td></tr>`}
+    </tbody></table></div>
+  <div class="panel" style="margin-top:16px;">
+    <h3>Repeated Incidents by Employee</h3>
+    <div class="desc">Total incident reports per employee — highlights recurring involvement.</div>
+    ${(()=>{ const c={}; DB.incidents.forEach(r=>c[r.employeeName]=(c[r.employeeName]||0)+1);
+      const entries = Object.entries(c).sort((a,b)=>b[1]-a[1]);
+      return entries.length? entries.map(([n,v])=>`<div class="barrow"><div class="name">${esc(n)}</div><div class="bartrack"><div class="barfill" style="width:${Math.round(v/Math.max(...entries.map(e=>e[1]))*100)}%"></div></div><div class="amt">${v}</div></div>`).join('') : '<div class="small">No data yet.</div>'; })()}
+  </div>`;
+  document.getElementById('content').innerHTML = html;
+}
+function openIncidentForm(id){
+  const existing = id? DB.incidents.find(i=>i.id===id): null;
+  const checked = existing? (existing.incidentTypes||[]) : [];
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Edit':'Add'} Incident Report</h3><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body">
+      <div class="formgrid">
+        <div class="field"><label>Employee Name *</label><input id="in_employeeName" value="${esc(existing?existing.employeeName:'')}"></div>
+        <div class="field"><label>Department *</label><select id="in_department">${DEPT_OPTIONS.map(d=>`<option ${existing&&existing.department===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+        <div class="field"><label>Date of Incident *</label><input type="date" id="in_date" value="${existing?existing.dateOfIncident:todayISO()}"></div>
+        <div class="field"><label>Severity</label><select id="in_severity">${INCIDENT_SEVERITY.map(s=>`<option ${(existing?existing.severity:INCIDENT_SEVERITY[0])===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
+        <div class="field full">
+          <label>Incident Type(s) Checked</label>
+          <div class="checklist">
+            ${INCIDENT_TYPES.map(t=>`<label class="checkrow"><input type="checkbox" value="${esc(t)}" ${checked.includes(t)?'checked':''}> ${esc(t)}</label>`).join('')}
+          </div>
+        </div>
+        <div class="field full"><label>Other / Additional Type (write-in)</label><input id="in_other" value="${esc((existing&&existing.otherType)||'')}"></div>
+        <div class="field full"><label>Description *</label><textarea id="in_description" rows="3">${esc((existing&&existing.description)||'')}</textarea></div>
+        <div class="field"><label>Status</label><select id="in_status">${INCIDENT_STATUS.map(s=>`<option ${(existing?existing.status:INCIDENT_STATUS[0])===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
+        ${fieldHTML({key:'attachment', label:'Uploaded Incident Report Document', type:'file', full:true, existingData:(existing&&existing.attachmentData)||''}, existing?existing.attachment:'')}
+        <div class="field full"><label>Remarks</label><textarea id="in_remarks" rows="2">${esc((existing&&existing.remarks)||'')}</textarea></div>
+      </div>
+      <div class="computed-note">Repeat-occurrence count per incident type is computed automatically from this employee's incident history — no need to set it manually.</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveIncident('${id||''}')">Save Incident Report</button></div>
+  `);
+}
+function saveIncident(id){
+  const employeeName = document.getElementById('in_employeeName').value.trim();
+  const department = document.getElementById('in_department').value;
+  const dateOfIncident = document.getElementById('in_date').value;
+  const severity = document.getElementById('in_severity').value;
+  const otherType = document.getElementById('in_other').value.trim();
+  const description = document.getElementById('in_description').value.trim();
+  const status = document.getElementById('in_status').value;
+  const remarks = document.getElementById('in_remarks').value.trim();
+  const incidentTypes = Array.from(document.querySelectorAll('#modal input[type=checkbox]:checked')).map(el=>el.value);
+  const attachment = document.getElementById('f_attachment').value;
+  const attachmentData = document.getElementById('f_attachment_data').value;
+  if(!employeeName || !department || !dateOfIncident || !description){ toast('Please complete employee, department, date, and description.'); return; }
+  if(!incidentTypes.length && !otherType){ toast('Check at least one incident type, or write one in.'); return; }
+  if(id){
+    const rec = DB.incidents.find(i=>i.id===id);
+    Object.assign(rec, {employeeName, department, dateOfIncident, severity, incidentTypes, otherType, description, status, attachment, attachmentData, remarks});
+    logAudit(`Updated Incident Report for ${employeeName}`);
+    toast('Incident report updated.');
+  } else {
+    DB.incidents.push({id:uid(), employeeName, department, dateOfIncident, severity, incidentTypes, otherType, description, status, attachment, attachmentData, remarks});
+    logAudit(`Added Incident Report for ${employeeName}`);
+    toast('Incident report added.');
+  }
+  saveDB(); closeModal(); renderNav(); renderIncidents();
+}
+function deleteIncident(id){
+  if(!confirm('Delete this incident report? This cannot be undone.')) return;
+  DB.incidents = DB.incidents.filter(i=>i.id!==id);
+  logAudit('Deleted an incident report');
+  saveDB(); renderNav(); renderIncidents(); toast('Incident report deleted.');
+}
+function exportIncidentsCSV(){
+  const csv = toCSV(DB.incidents, [
+    {label:'Employee', get:r=>r.employeeName},{label:'Department', get:r=>r.department},
+    {label:'Date', get:r=>r.dateOfIncident},
+    {label:'Types', get:r=>[...(r.incidentTypes||[]),...(r.otherType?[r.otherType]:[])].join('; ')},
+    {label:'Severity', get:r=>r.severity},{label:'Description', get:r=>r.description},
+    {label:'Status', get:r=>r.status},{label:'Remarks', get:r=>r.remarks},
+  ]);
+  downloadCSV('incidents_export.csv', csv);
+  toast('CSV exported.');
+}
+
+/* ================================================================
+   WEEKLY REPORT (headcount + disciplinary + leave, by date range)
+   ================================================================ */
+function mondayOf(dateStr){
+  const d = new Date(dateStr+'T00:00:00');
+  const day = d.getDay(); // 0=Sun..6=Sat
+  const diff = (day===0? -6 : 1-day);
+  d.setDate(d.getDate()+diff);
+  return d.toISOString().slice(0,10);
+}
+function addDaysISO(dateStr, n){ const d=new Date(dateStr+'T00:00:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+function inRange(dateStr, start, end){ return dateStr && dateStr>=start && dateStr<=end; }
+function overlapsRange(startA, endA, start, end){ if(!startA) return false; const e = endA||startA; return startA<=end && e>=start; }
+function weeklyShiftWeek(days){
+  STATE.weekStart = addDaysISO(STATE.weekStart || mondayOf(todayISO()), days);
+  renderWeeklyReport();
+}
+function toggleWeeklyCat(cat){
+  STATE.weeklyOpenCat = STATE.weeklyOpenCat===cat? null : cat;
+  renderWeeklyReport();
+}
+function renderWeeklyReport(){
+  if(!STATE.weekStart) STATE.weekStart = mondayOf(todayISO());
+  const start = STATE.weekStart, end = addDaysISO(start,6);
+  setTitle('Weekly Report', 'Employee movements, disciplinary activity, and leave for the selected week.');
+
+  const newlyHired = DB.employees.filter(e=>inRange(e.dateHired, start, end));
+  const resigned = DB.employees.filter(e=>e.status==='Resigned' && inRange(e.statusDate, start, end));
+  const awol = DB.employees.filter(e=>e.status==='AWOL' && inRange(e.statusDate, start, end));
+  const separated = DB.employees.filter(e=>e.status==='Separated' && inRange(e.statusDate, start, end));
+  const transferred = DB.transfers.filter(t=>inRange(t.toDate, start, end));
+
+  const cats = [
+    {key:'hired', label:'Newly Hired', rows:newlyHired, color:'b-blue'},
+    {key:'resigned', label:'Resigned', rows:resigned, color:'b-grey'},
+    {key:'awol', label:'AWOL', rows:awol, color:'b-red'},
+    {key:'transferred', label:'Transferred', rows:transferred, color:'b-blue'},
+    {key:'separated', label:'Separated', rows:separated, color:'b-red'},
+  ];
+
+  const cvrWeek = DB.cvr.filter(c=>inRange(c.dateOfCVR, start, end));
+  const nteWeek = DB.nte.filter(n=>inRange(n.dateReceived, start, end));
+  const nodWeek = DB.nod.filter(n=>inRange(n.dateOfNod, start, end));
+  const disciplinaryRows = [
+    ...cvrWeek.map(c=>({employeeName:c.employeeName, department:c.department, type:'CVR', detail:[...(c.offenses||[]),...(c.otherOffense?[c.otherOffense]:[])].join(', '), date:c.dateOfCVR, status:c.status})),
+    ...nteWeek.map(n=>({employeeName:n.employeeName, department:n.department, type:'NTE', detail:n.violation||'', date:n.dateReceived, status:n.status})),
+    ...nodWeek.map(n=>({employeeName:n.employeeName, department:n.department, type:'NOD', detail:n.finalAction||'', date:n.dateOfNod, status:n.finalAction? 'Decided':'—'})),
+  ].sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+
+  const leaveWeek = DB.leaves.filter(l=>overlapsRange(l.startDate, l.endDate, start, end));
+  const oncallWeek = DB.oncall.filter(o=>overlapsRange(o.startDate, o.endDate, start, end));
+
+  const html = `
+  <div class="sectionhead">
+    <div><h2>Weekly Report</h2><p>${fmtDate(start)} – ${fmtDate(end)}</p></div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-ghost btn-sm" onclick="weeklyShiftWeek(-7)">&lsaquo; Prev Week</button>
+      <button class="btn btn-ghost btn-sm" onclick="STATE.weekStart=mondayOf(todayISO()); renderWeeklyReport();">This Week</button>
+      <button class="btn btn-ghost btn-sm" onclick="weeklyShiftWeek(7)">Next Week &rsaquo;</button>
+      <button class="btn btn-ghost btn-sm" onclick="exportWeeklyCSV()">${iDownload(14)} Export CSV</button>
+    </div>
+  </div>
+
+  <div class="grid cols-5" style="gap:10px;">
+    ${cats.map(c=>`
+      <div class="stat" style="--accent:var(--brass);cursor:pointer;${STATE.weeklyOpenCat===c.key?'outline:2px solid var(--brass);':''}" onclick="toggleWeeklyCat('${c.key}')">
+        <div class="lbl">${c.label}</div><div class="val">${c.rows.length}</div><div class="sub">Click to view</div>
+      </div>`).join('')}
+  </div>
+
+  ${(()=>{ const open = cats.find(c=>c.key===STATE.weeklyOpenCat); if(!open) return '';
+    return `<div class="tablewrap" style="margin-top:14px;"><table>
+      <thead><tr><th>Employee</th><th>Department</th>${open.key==='transferred'?'<th>From</th><th>To</th><th>Date</th>':'<th>Status</th><th>Date</th>'}</tr></thead>
+      <tbody>${open.rows.length? open.rows.map(r=> open.key==='transferred'? `<tr><td><b>${esc(r.employeeName)}</b></td><td>${esc(r.department||'—')}</td><td>${esc(r.fromDepartment)}</td><td>${esc(r.toDepartment)}</td><td>${fmtDate(r.toDate)}</td></tr>` : `<tr><td><b>${esc(r.name)}</b></td><td>${esc(r.department||'—')}</td><td>${statusBadge(r.status, EMP_STATUS_MAP)}</td><td>${fmtDate(r.statusDate||r.dateHired)}</td></tr>` ).join('') : `<tr><td colspan="5"><div class="empty"><b>None this week</b></div></td></tr>`}</tbody>
+    </table></div>`; })()}
+
+  <div class="panel" style="margin-top:18px;">
+    <h3>Weekly Disciplinary Activity</h3>
+    <div class="desc">${disciplinaryRows.length} CVR / NTE / NOD record(s) dated this week.</div>
+    ${disciplinaryRows.length? `<div class="tablewrap"><table>
+      <thead><tr><th>Employee</th><th>Department</th><th>Type</th><th>Detail</th><th>Date</th><th>Status</th></tr></thead>
+      <tbody>${disciplinaryRows.map(r=>`<tr><td><b>${esc(r.employeeName)}</b></td><td>${esc(r.department||'—')}</td><td>${esc(r.type)}</td><td>${esc(r.detail||'—')}</td><td>${fmtDate(r.date)}</td><td>${esc(r.status||'—')}</td></tr>`).join('')}</tbody>
+    </table></div>` : '<div class="small">No disciplinary activity dated within this week.</div>'}
+  </div>
+
+  <div class="panel" style="margin-top:14px;">
+    <h3>Weekly Leave</h3>
+    <div class="desc">${leaveWeek.length} leave record(s) overlapping this week.</div>
+    ${leaveWeek.length? `<div class="tablewrap"><table>
+      <thead><tr><th>Employee</th><th>Department</th><th>Type</th><th>Start</th><th>End</th><th>Status</th><th>On-Call Replacement</th></tr></thead>
+      <tbody>${leaveWeek.map(l=>{ const rep = DB.oncall.find(o=>o.employeeReplaced && o.employeeReplaced.toLowerCase()===l.employeeName.toLowerCase() && overlapsRange(o.startDate,o.endDate,start,end)); return `<tr><td><b>${esc(l.employeeName)}</b></td><td>${esc(l.department||'—')}</td><td>${esc(l.leaveType)}</td><td>${fmtDate(l.startDate)}</td><td>${fmtDate(l.endDate)}</td><td>${statusBadge(l.status, LEAVE_STATUS_MAP)}</td><td>${rep? esc(rep.employeeName) : '<span class="small">—</span>'}</td></tr>`; }).join('')}</tbody>
+    </table></div>` : '<div class="small">No leave overlapping this week.</div>'}
+  </div>
+
+  <div class="panel" style="margin-top:14px;">
+    <h3>Weekly On-Call</h3>
+    <div class="desc">${oncallWeek.length} on-call / replacement personnel active during this week.</div>
+    ${oncallWeek.length? `<div class="tablewrap"><table>
+      <thead><tr><th>Employee</th><th>Department</th><th>PRF No.</th><th>Replacing</th><th>Reason</th><th>Start</th><th>End</th><th>Attachment</th><th>Status</th></tr></thead>
+      <tbody>${oncallWeek.map(o=>`<tr><td><b>${esc(o.employeeName)}</b></td><td>${esc(o.department||'—')}</td><td>${esc(o.prfNumber||'—')}</td><td>${esc(o.employeeReplaced||'—')}</td><td>${esc(o.reason||'—')}</td><td>${fmtDate(o.startDate)}</td><td>${fmtDate(o.endDate)}</td><td>${attachCellHTML('oncall',o,'attachment')}</td><td>${statusBadge(o.status, ONCALL_STATUS_MAP)}</td></tr>`).join('')}</tbody>
+    </table></div>` : '<div class="small">No on-call assignments active during this week.</div>'}
+  </div>
+
+  <div class="panel" style="margin-top:14px;">
+    <h3>ATD Monitoring</h3>
+    <div class="desc">All ${DB.atd.length} Authority to Deduct record(s) — deductions completed or still outstanding. <a href="#" onclick="go('atd'); return false;" style="color:var(--brass);">Open full ATD module →</a></div>
+    ${DB.atd.length? `<div class="tablewrap"><table>
+      <thead><tr><th>Employee</th><th>Department</th><th>Category</th><th>Total Due</th><th>Paid</th><th>Remaining</th><th>Status</th><th>Payment Schedule</th><th>Latest Update</th></tr></thead>
+      <tbody>${DB.atd.map(r=>{ const pays=(r.payments||[]).slice().sort((a,b)=>(a.dateRecorded||'').localeCompare(b.dateRecorded||'')); const latest=pays[pays.length-1];
+        return `<tr><td><b>${esc(r.employeeName)}</b></td><td>${esc(r.department||'—')}</td><td>${esc(r.category)}</td><td>${peso(r.totalAmount)}</td><td>${peso(atdTotalPaid(r))}</td><td>${peso(atdRemaining(r))}</td><td>${statusBadge(atdComputeStatus(r), ATD_STATUS_MAP)}</td><td>${esc(r.paymentTerms||'—')}</td><td>${latest? esc(latest.month)+' '+esc(latest.cutoff)+' · '+fmtDate(latest.dateRecorded) : '<span class="small">No payments yet</span>'}</td></tr>`; }).join('')}</tbody>
+    </table></div>` : '<div class="small">No ATD records on file.</div>'}
+  </div>`;
+  document.getElementById('content').innerHTML = html;
+}
+function exportWeeklyCSV(){
+  const start = STATE.weekStart || mondayOf(todayISO()), end = addDaysISO(start,6);
+  const rows = [];
+  DB.employees.forEach(e=>{
+    if(inRange(e.dateHired,start,end)) rows.push({employeeName:e.name, department:e.department, category:'Newly Hired', date:e.dateHired});
+    if(e.status==='Resigned' && inRange(e.statusDate,start,end)) rows.push({employeeName:e.name, department:e.department, category:'Resigned', date:e.statusDate});
+    if(e.status==='AWOL' && inRange(e.statusDate,start,end)) rows.push({employeeName:e.name, department:e.department, category:'AWOL', date:e.statusDate});
+    if(e.status==='Separated' && inRange(e.statusDate,start,end)) rows.push({employeeName:e.name, department:e.department, category:'Separated', date:e.statusDate});
+  });
+  DB.transfers.filter(t=>inRange(t.toDate,start,end)).forEach(t=>rows.push({employeeName:t.employeeName, department:t.toDepartment, category:`Transferred (${t.fromDepartment} → ${t.toDepartment})`, date:t.toDate}));
+  DB.oncall.filter(o=>overlapsRange(o.startDate,o.endDate,start,end)).forEach(o=>rows.push({employeeName:o.employeeName, department:o.department, category:`On-Call (replacing ${o.employeeReplaced||'—'})`, date:o.startDate}));
+  const csv = toCSV(rows, [
+    {label:'Employee', get:r=>r.employeeName},{label:'Department', get:r=>r.department},
+    {label:'Category', get:r=>r.category},{label:'Date', get:r=>r.date},
+  ]);
+  downloadCSV(`weekly_report_${start}_to_${end}.csv`, csv);
+  toast('Weekly CSV exported.');
+}
+
+/* ================================================================
+   ATD MONITORING (Authority to Deduct — payment tracking)
+   ================================================================ */
+function atdTotalPaid(r){ return (r.payments||[]).reduce((s,p)=>s+(parseFloat(p.amountPaid)||0),0); }
+function atdRemaining(r){ return Math.max(0, (parseFloat(r.totalAmount)||0) - atdTotalPaid(r)); }
+function atdComputeStatus(r){ const paid=atdTotalPaid(r); if(paid<=0) return 'Pending'; return atdRemaining(r)<=0 ? 'Paid' : 'Ongoing'; }
+function peso(n){ return '₱'+(parseFloat(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+function renderATD(){
+  setTitle('ATD Monitoring', 'Authority to Deduct — uniforms/expenses and charges, payment tracking by month and cut-off.');
+  const q=(STATE.search||'').toLowerCase();
+  let rows = DB.atd.filter(r=>{
+    if(!q) return true;
+    return (r.employeeName||'').toLowerCase().includes(q) || (r.department||'').toLowerCase().includes(q) || (r.deductionType||'').toLowerCase().includes(q);
+  });
+  if(STATE.filter) rows = rows.filter(r=>r.category===STATE.filter || r.status===STATE.filter);
+  rows = rows.slice().sort((a,b)=>(b.atdDate||'').localeCompare(a.atdDate||''));
+
+  const totalRecords = DB.atd.length;
+  const totalOutstanding = DB.atd.reduce((s,r)=>s+(parseFloat(r.totalAmount)||0),0);
+  const totalCollected = DB.atd.reduce((s,r)=>s+atdTotalPaid(r),0);
+  const totalRemaining = DB.atd.reduce((s,r)=>s+atdRemaining(r),0);
+  const byStatus = {Pending:0,Ongoing:0,Paid:0}; DB.atd.forEach(r=>byStatus[atdComputeStatus(r)]++);
+  const byDept = {}; DB.atd.forEach(r=>{ const d=r.department||'Unassigned'; byDept[d]=(byDept[d]||0)+1; });
+  const byCat = {}; ATD_CATEGORIES.forEach(c=>byCat[c]=DB.atd.filter(r=>r.category===c).length);
+
+  const html = `
+  <div class="sectionhead">
+    <div><h2>ATD Monitoring</h2><p>${totalRecords} record(s) — uniform/expense and charge deductions.</p></div>
+    ${canEdit()? `<button class="btn btn-brass" onclick="openATDForm()">${iPlus(15)} New ATD Record</button>`:''}
+  </div>
+  <div class="notice"><b>Note:</b> ATD form, Incident Report and quotation/SOA documents are stored as the actual file (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each) in this browser's local storage — nothing is sent to a server. Payment status, cumulative paid and remaining balance are calculated automatically from the recorded payments.</div>
+  <div class="grid cols-4" style="margin-bottom:16px;">
+    <div class="stat" style="--accent:var(--brass)"><div class="lbl">Total ATD Records</div><div class="val">${totalRecords}</div><div class="sub">${byCat['Uniforms/Expenses']} Uniforms/Expenses · ${byCat['Charges']} Charges</div></div>
+    <div class="stat" style="--accent:#3A5B9A"><div class="lbl">Total Amount Due</div><div class="val" style="font-size:20px;">${peso(totalOutstanding)}</div></div>
+    <div class="stat" style="--accent:var(--forest)"><div class="lbl">Total Collected</div><div class="val" style="font-size:20px;">${peso(totalCollected)}</div></div>
+    <div class="stat" style="--accent:var(--rust)"><div class="lbl">Remaining Balance</div><div class="val" style="font-size:20px;">${peso(totalRemaining)}</div><div class="sub">${byStatus.Pending} Pending · ${byStatus.Ongoing} Ongoing · ${byStatus.Paid} Paid</div></div>
+  </div>
+  <div class="toolbar">
+    <div class="search">${iSearch(15)}<input placeholder="Search employee, department, deduction type…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderATD()"></div>
+    <select onchange="STATE.filter=this.value; renderATD()">
+      <option value="">All Categories / Status</option>
+      <optgroup label="Category">${ATD_CATEGORIES.map(c=>`<option value="${esc(c)}" ${STATE.filter===c?'selected':''}>${esc(c)}</option>`).join('')}</optgroup>
+      <optgroup label="Status">${Object.keys(ATD_STATUS_MAP).map(s=>`<option value="${esc(s)}" ${STATE.filter===s?'selected':''}>${esc(s)}</option>`).join('')}</optgroup>
+    </select>
+    <div class="spacer"></div>
+    <button class="btn btn-ghost btn-sm" onclick="exportATDCSV()">${iDownload(14)} Export CSV</button>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Employee</th><th>Department</th><th>Category</th><th>Deduction</th><th>Total</th><th>Paid</th><th>Remaining</th><th>Status</th><th style="text-align:right;">Actions</th></tr></thead>
+    <tbody>
+    ${rows.length? rows.map(r=>`<tr>
+      <td><b>${esc(r.employeeName)}</b><div class="small">${fmtDate(r.atdDate)}</div></td>
+      <td>${esc(r.department||'—')}</td>
+      <td>${esc(r.category)}</td>
+      <td>${esc(r.deductionType||'—')}</td>
+      <td>${peso(r.totalAmount)}</td>
+      <td>${peso(atdTotalPaid(r))}</td>
+      <td>${peso(atdRemaining(r))}</td>
+      <td>${statusBadge(atdComputeStatus(r), ATD_STATUS_MAP)}</td>
+      <td><div class="rowactions">
+        <button class="btn btn-ghost btn-sm" onclick="openATDPayments('${r.id}')">Payments (${(r.payments||[]).length})</button>
+        ${canEdit()? `<button class="iconbtn" onclick="openATDForm('${r.id}')" title="Edit">${iEdit(14)}</button>
+        <button class="iconbtn" onclick="deleteATDRecord('${r.id}')" title="Delete">${iTrash(14)}</button>`:''}
+      </div></td>
+    </tr>`).join('') : `<tr><td colspan="9"><div class="empty"><b>No ATD records yet</b>Create a new ATD record to get started.</div></td></tr>`}
+    </tbody></table></div>
+
+  <div class="grid cols-2" style="margin-top:16px;">
+    <div class="panel"><h3>By Department</h3>
+      ${Object.keys(byDept).length? Object.entries(byDept).sort((a,b)=>b[1]-a[1]).map(([d,c])=>`<div class="barrow"><div class="name">${esc(d)}</div><div class="bartrack"><div class="barfill" style="width:${Math.round(c/totalRecords*100)||0}%"></div></div><div class="amt">${c}</div></div>`).join('') : '<div class="small">No records yet.</div>'}
+    </div>
+    <div class="panel"><h3>By Category</h3>
+      ${ATD_CATEGORIES.map(c=>{ const n=byCat[c]; return `<div class="barrow"><div class="name">${esc(c)}</div><div class="bartrack"><div class="barfill" style="width:${totalRecords?Math.round(n/totalRecords*100):0}%"></div></div><div class="amt">${n}</div></div>`; }).join('')}
+    </div>
+  </div>`;
+  document.getElementById('content').innerHTML = html;
+}
+
+function openATDForm(id){
+  const existing = id? DB.atd.find(r=>r.id===id) : null;
+  const cat = existing? existing.category : 'Uniforms/Expenses';
+  const empOptions = DB.employees.map(e=>e.name);
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Edit':'New'} ATD Record</h3><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body">
+      <div class="formgrid" id="atd-form">
+        <div class="field"><label>Employee *</label><select id="f_employeeName" onchange="atdFillEmployee()">
+          <option value="">— Select —</option>
+          ${empOptions.map(n=>`<option value="${esc(n)}" ${existing&&existing.employeeName===n?'selected':''}>${esc(n)}</option>`).join('')}
+        </select></div>
+        <div class="field"><label>Department</label><input id="f_department" value="${esc(existing?existing.department:'')}"></div>
+        <div class="field"><label>Position</label><input id="f_position" value="${esc(existing?existing.position:'')}"></div>
+        <div class="field"><label>ATD Category *</label><select id="f_category" onchange="atdToggleCategory()">
+          ${ATD_CATEGORIES.map(c=>`<option value="${esc(c)}" ${cat===c?'selected':''}>${esc(c)}</option>`).join('')}
+        </select></div>
+        <div class="field"><label>ATD Date *</label><input type="date" id="f_atdDate" value="${existing?existing.atdDate:todayISO()}"></div>
+        <div class="field"><label>Deduction Type / Reason *</label><input id="f_deductionType" value="${esc(existing?existing.deductionType:'')}" placeholder="e.g. Uniform cost, Negligence — damaged equipment"></div>
+        <div class="field"><label>Total ATD Amount (₱) *</label><input type="number" step="0.01" id="f_totalAmount" value="${existing?existing.totalAmount:''}"></div>
+        <div class="field"><label>Payment Terms / Installment</label><input id="f_paymentTerms" value="${esc(existing?existing.paymentTerms:'')}" placeholder="e.g. 3 cut-offs"></div>
+        ${fieldHTML({key:'atdForm', label:'ATD Form', type:'file', full:true, existingData:existing?existing.atdFormData:''}, existing?existing.atdForm:'')}
+        <div id="atd-charges-fields" style="display:${cat==='Charges'?'contents':'none'}">
+          ${fieldHTML({key:'incidentReport', label:'Incident Report (IR)', type:'file', existingData:existing?existing.incidentReportData:''}, existing?existing.incidentReport:'')}
+          ${fieldHTML({key:'quotation', label:'Quotation / SOA Basis', type:'file', existingData:existing?existing.quotationData:''}, existing?existing.quotation:'')}
+          <div class="field"><label>Statement of Account (SOA) Amount (₱)</label><input type="number" step="0.01" id="f_soaAmount" value="${existing?existing.soaAmount||'':''}"></div>
+        </div>
+        <div class="field full"><label>Remarks</label><textarea id="f_remarks" rows="2">${esc(existing?existing.remarks:'')}</textarea></div>
+      </div>
+      <div class="computed-note">Charges (negligence, incidents, damages) require the linked Incident Report and quotation/SOA. Uniform/expense deductions only need the ATD form.</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveATDRecord('${id||''}')">Save ATD Record</button></div>
+  `);
+}
+function atdToggleCategory(){
+  const box=document.getElementById('atd-charges-fields');
+  box.style.display = document.getElementById('f_category').value==='Charges' ? 'contents' : 'none';
+}
+function atdFillEmployee(){
+  const name=document.getElementById('f_employeeName').value;
+  const emp=DB.employees.find(e=>e.name===name);
+  if(emp){ document.getElementById('f_department').value=emp.department||''; document.getElementById('f_position').value=emp.position||''; }
+}
+function saveATDRecord(id){
+  const employeeName=document.getElementById('f_employeeName').value;
+  const category=document.getElementById('f_category').value;
+  const totalAmount=document.getElementById('f_totalAmount').value;
+  const atdDate=document.getElementById('f_atdDate').value;
+  const deductionType=document.getElementById('f_deductionType').value.trim();
+  if(!employeeName||!category||!totalAmount||!atdDate||!deductionType){ toast('Please complete all required fields.'); return; }
+  const vals = {
+    employeeName, department:document.getElementById('f_department').value.trim(), position:document.getElementById('f_position').value.trim(),
+    category, atdDate, deductionType, totalAmount:parseFloat(totalAmount)||0,
+    paymentTerms:document.getElementById('f_paymentTerms').value.trim(),
+    atdForm:document.getElementById('f_atdForm').value, atdFormData:document.getElementById('f_atdForm_data').value,
+    incidentReport:document.getElementById('f_incidentReport').value, incidentReportData:document.getElementById('f_incidentReport_data').value,
+    quotation:document.getElementById('f_quotation').value, quotationData:document.getElementById('f_quotation_data').value,
+    soaAmount:parseFloat(document.getElementById('f_soaAmount').value)||0,
+    remarks:document.getElementById('f_remarks').value.trim(),
+  };
+  if(id){
+    const rec=DB.atd.find(r=>r.id===id); Object.assign(rec, vals); rec.status=atdComputeStatus(rec);
+    logAudit('Updated ATD record for '+employeeName); toast('ATD record updated.');
+  } else {
+    const rec={id:uid(), ...vals, payments:[]}; rec.status=atdComputeStatus(rec);
+    DB.atd.push(rec); logAudit('Created ATD record for '+employeeName); toast('ATD record created.');
+  }
+  saveDB(); closeModal(); renderNav(); renderATD();
+}
+function deleteATDRecord(id){
+  if(!confirm('Delete this ATD record and its full payment history? This cannot be undone.')) return;
+  DB.atd = DB.atd.filter(r=>r.id!==id);
+  logAudit('Deleted an ATD record'); saveDB(); renderNav(); renderATD(); toast('ATD record deleted.');
+}
+
+function openATDPayments(id){
+  const rec = DB.atd.find(r=>r.id===id); if(!rec) return;
+  const payments = (rec.payments||[]).slice().sort((a,b)=>(a.dateRecorded||'').localeCompare(b.dateRecorded||''));
+  openModal(`
+    <div class="modal-head"><h3>Payment History — ${esc(rec.employeeName)}</h3><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body">
+      <div class="grid cols-4" style="margin-bottom:14px;gap:10px;">
+        <div class="stat" style="--accent:var(--brass);padding:12px 14px;"><div class="lbl">Total ATD</div><div class="val" style="font-size:17px;">${peso(rec.totalAmount)}</div></div>
+        <div class="stat" style="--accent:var(--forest);padding:12px 14px;"><div class="lbl">Total Paid</div><div class="val" style="font-size:17px;">${peso(atdTotalPaid(rec))}</div></div>
+        <div class="stat" style="--accent:var(--rust);padding:12px 14px;"><div class="lbl">Remaining</div><div class="val" style="font-size:17px;">${peso(atdRemaining(rec))}</div></div>
+        <div class="stat" style="--accent:#3A5B9A;padding:12px 14px;"><div class="lbl">Status</div><div class="val" style="font-size:17px;">${statusBadge(atdComputeStatus(rec), ATD_STATUS_MAP)}</div></div>
+      </div>
+      <div class="desc">${payments.length} payment(s) recorded, in chronological order. Payment terms: ${esc(rec.paymentTerms||'—')}.</div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Month</th><th>Cut-Off</th><th>Amount Paid</th><th>Payslip</th><th>Date Recorded</th><th style="text-align:right;">Actions</th></tr></thead>
+        <tbody>${payments.length? payments.map(p=>`<tr>
+          <td>${esc(p.month)}</td><td>${esc(p.cutoff)}</td><td>${peso(p.amountPaid)}</td>
+          <td>${atdPayslipCellHTML(rec.id, p)}</td>
+          <td>${fmtDate(p.dateRecorded)}</td>
+          <td><div class="rowactions">
+            ${canEdit()? `<button class="iconbtn" onclick="openATDPaymentForm('${rec.id}','${p.id}')" title="Edit">${iEdit(14)}</button>
+            <button class="iconbtn" onclick="deleteATDPayment('${rec.id}','${p.id}')" title="Delete">${iTrash(14)}</button>`:''}
+          </div></td>
+        </tr>`).join('') : `<tr><td colspan="6"><div class="empty"><b>No payments recorded yet</b></div></td></tr>`}</tbody>
+      </table></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button>${canEdit()? `<button class="btn btn-brass" onclick="openATDPaymentForm('${rec.id}')">${iPlus(15)} Record Payment</button>`:''}</div>
+  `);
+}
+function atdPayslipCellHTML(atdId, p){
+  if(!p.payslip) return '<span class="small">—</span>';
+  return `<div class="attach-cell">${iDoc(13)}<span title="${esc(p.payslip)}" style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.payslip)}</span>${p.payslipData?`<button class="iconbtn" title="Download" onclick="downloadATDPayslip('${atdId}','${p.id}')">${iDownload(12)}</button>`:'<span class="small" title="No stored file">n/a</span>'}</div>`;
+}
+function downloadATDPayslip(atdId, paymentId){
+  const rec = DB.atd.find(r=>r.id===atdId); if(!rec) return;
+  const p = (rec.payments||[]).find(x=>x.id===paymentId); if(!p) return;
+  downloadAttachment(p.payslipData, p.payslip);
+}
+function openATDPaymentForm(atdId, paymentId){
+  const rec = DB.atd.find(r=>r.id===atdId); if(!rec) return;
+  const existing = paymentId? (rec.payments||[]).find(p=>p.id===paymentId) : null;
+  const now = new Date();
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Edit':'Record'} Payment</h3><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body">
+      <div class="formgrid">
+        <div class="field"><label>Month *</label><select id="p_month">${ATD_MONTHS.map(m=>`<option ${(existing?existing.month:ATD_MONTHS[now.getMonth()])===m?'selected':''}>${m}</option>`).join('')}</select></div>
+        <div class="field"><label>Cut-Off *</label><select id="p_cutoff">${ATD_CUTOFFS.map(c=>`<option ${(existing?existing.cutoff:ATD_CUTOFFS[0])===c?'selected':''}>${c}</option>`).join('')}</select></div>
+        <div class="field"><label>Amount Paid (₱) *</label><input type="number" step="0.01" id="p_amountPaid" value="${existing?existing.amountPaid:''}"></div>
+        <div class="field"><label>Date Recorded</label><input type="date" id="p_dateRecorded" value="${existing?existing.dateRecorded:todayISO()}"></div>
+        ${fieldHTML({key:'payslip', label:'Payslip Attachment', type:'file', full:true, existingData:existing?existing.payslipData:''}, existing?existing.payslip:'')}
+      </div>
+      <div class="computed-note">Cumulative amount paid, remaining balance, and payment status recalculate automatically once saved.</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveATDPayment('${atdId}','${paymentId||''}')">Save Payment</button></div>
+  `);
+}
+function saveATDPayment(atdId, paymentId){
+  const rec = DB.atd.find(r=>r.id===atdId); if(!rec) return;
+  const amountPaid = parseFloat(document.getElementById('p_amountPaid').value)||0;
+  if(amountPaid<=0){ toast('Enter an amount paid greater than zero.'); return; }
+  const vals = {
+    month:document.getElementById('p_month').value, cutoff:document.getElementById('p_cutoff').value, amountPaid,
+    dateRecorded:document.getElementById('p_dateRecorded').value||todayISO(),
+    payslip:document.getElementById('f_payslip').value, payslipData:document.getElementById('f_payslip_data').value,
+  };
+  if(!rec.payments) rec.payments=[];
+  if(paymentId){
+    const p=rec.payments.find(x=>x.id===paymentId); Object.assign(p, vals);
+    logAudit(`Updated ATD payment for ${rec.employeeName} (${vals.month}, ${vals.cutoff})`);
+  } else {
+    rec.payments.push({id:uid(), ...vals});
+    logAudit(`Recorded ATD payment for ${rec.employeeName} (${vals.month}, ${vals.cutoff})`);
+  }
+  rec.status = atdComputeStatus(rec);
+  saveDB(); toast('Payment saved.'); openATDPayments(atdId); renderNav();
+}
+function deleteATDPayment(atdId, paymentId){
+  const rec = DB.atd.find(r=>r.id===atdId); if(!rec) return;
+  if(!confirm('Delete this payment entry?')) return;
+  rec.payments = (rec.payments||[]).filter(p=>p.id!==paymentId);
+  rec.status = atdComputeStatus(rec);
+  logAudit('Deleted an ATD payment entry for '+rec.employeeName);
+  saveDB(); toast('Payment removed.'); openATDPayments(atdId);
+}
+function exportATDCSV(){
+  const rows=[];
+  DB.atd.forEach(r=>{
+    if(!r.payments || !r.payments.length){ rows.push({employeeName:r.employeeName, department:r.department, category:r.category, deductionType:r.deductionType, totalAmount:r.totalAmount, month:'—', cutoff:'—', amountPaid:0, remaining:atdRemaining(r), status:atdComputeStatus(r)}); return; }
+    r.payments.forEach(p=> rows.push({employeeName:r.employeeName, department:r.department, category:r.category, deductionType:r.deductionType, totalAmount:r.totalAmount, month:p.month, cutoff:p.cutoff, amountPaid:p.amountPaid, remaining:atdRemaining(r), status:atdComputeStatus(r)}) );
+  });
+  const csv = toCSV(rows, [
+    {label:'Employee', get:r=>r.employeeName},{label:'Department', get:r=>r.department},{label:'Category', get:r=>r.category},
+    {label:'Deduction Type', get:r=>r.deductionType},{label:'Total ATD', get:r=>r.totalAmount},{label:'Month', get:r=>r.month},
+    {label:'Cut-Off', get:r=>r.cutoff},{label:'Amount Paid (this entry)', get:r=>r.amountPaid},{label:'Remaining Balance', get:r=>r.remaining},{label:'Status', get:r=>r.status},
+  ]);
+  downloadCSV('atd_monitoring_export.csv', csv);
+  toast('ATD CSV exported.');
+}
+
+/* ================================================================
+   PROBATIONARY EVALUATIONS (1st/3rd/6th month, auto-scheduled)
+   ================================================================ */
+function evalDueDate(dateHired, days){ return addDaysISO(dateHired, days); }
+function getEvalRecord(employeeId, milestone){ return DB.evaluations.find(e=>e.employeeId===employeeId && e.milestone===milestone); }
+function evalStatusInfo(emp, m){
+  const rec = getEvalRecord(emp.id, m.key);
+  if(rec && rec.completedDate) return {label:'Completed', cls:'b-green', rec};
+  const due = evalDueDate(emp.dateHired, m.days);
+  if(due < todayISO()) return {label:'Overdue', cls:'b-red', rec, due};
+  if(due <= addDaysISO(todayISO(),7)) return {label:'Due Soon', cls:'b-amber', rec, due};
+  return {label:'Upcoming', cls:'b-grey', rec, due};
+}
+function renderEvaluations(){
+  setTitle('Probationary Evaluations', 'Auto-scheduled 1st/3rd/6th month evaluations for employees still within the probation period.');
+  const q=(STATE.search||'').toLowerCase();
+  let emps = DB.employees.filter(e=>classify(e)==='Probationary' && e.dateHired);
+  if(q) emps = emps.filter(e=>e.name.toLowerCase().includes(q) || (e.department||'').toLowerCase().includes(q));
+  emps = emps.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const html = `
+  <div class="sectionhead">
+    <div><h2>Probationary Evaluations</h2><p>${emps.length} employee(s) currently on probation.</p></div>
+  </div>
+  <div class="notice"><b>Note:</b> Due dates are computed automatically from Date Hired (30 / 90 / 180 days). Mark an evaluation complete and attach the evaluation document once it's done.</div>
+  <div class="toolbar"><div class="search">${iSearch(15)}<input placeholder="Search by employee or department…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderEvaluations()"></div></div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Employee</th><th>Department</th><th>Date Hired</th><th>1st Month</th><th>3rd Month</th><th>6th Month</th></tr></thead>
+    <tbody>
+    ${emps.length? emps.map(e=>`<tr>
+      <td><b>${esc(e.name)}</b></td><td>${esc(e.department||'—')}</td><td>${fmtDate(e.dateHired)}</td>
+      ${EVAL_MILESTONES.map(m=>{ const s=evalStatusInfo(e,m); return `<td>
+        <div style="cursor:pointer;" onclick="openEvalForm('${e.id}','${m.key}')">${statusBadge(s.label, {[s.label]:s.cls})}</div>
+        <div class="small" style="margin-top:2px;">${s.rec&&s.rec.completedDate? fmtDate(s.rec.completedDate) : 'Due '+fmtDate(evalDueDate(e.dateHired,m.days))}</div>
+        ${s.rec&&s.rec.attachment? `<div class="small">${attachCellHTML('evaluations', s.rec, 'attachment')}</div>`:''}
+      </td>`; }).join('')}
+    </tr>`).join('') : `<tr><td colspan="6"><div class="empty"><b>No probationary employees</b></div></td></tr>`}
+    </tbody></table></div>`;
+  document.getElementById('content').innerHTML = html;
+}
+function openEvalForm(employeeId, milestoneKey){
+  const emp = DB.employees.find(e=>e.id===employeeId);
+  const m = EVAL_MILESTONES.find(x=>x.key===milestoneKey);
+  const rec = getEvalRecord(employeeId, milestoneKey);
+  openModal(`
+    <div class="modal-head"><h3>${m.label} Evaluation — ${esc(emp.name)}</h3><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body">
+      <div class="formgrid">
+        <div class="field"><label>Due Date</label><input value="${fmtDate(evalDueDate(emp.dateHired,m.days))}" disabled style="background:var(--paper);"></div>
+        <div class="field"><label>Date Completed</label><input type="date" id="ev_completedDate" value="${(rec&&rec.completedDate)||''}"></div>
+        ${fieldHTML({key:'attachment', label:'Uploaded Evaluation Document', type:'file', full:true, existingData:(rec&&rec.attachmentData)||''}, rec?rec.attachment:'')}
+        <div class="field full"><label>Remarks</label><textarea id="ev_remarks" rows="2">${esc((rec&&rec.remarks)||'')}</textarea></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEval('${employeeId}','${milestoneKey}')">Save Evaluation</button></div>
+  `);
+}
+function saveEval(employeeId, milestoneKey){
+  const completedDate = document.getElementById('ev_completedDate').value;
+  const attachment = document.getElementById('f_attachment').value;
+  const attachmentData = document.getElementById('f_attachment_data').value;
+  const remarks = document.getElementById('ev_remarks').value.trim();
+  let rec = getEvalRecord(employeeId, milestoneKey);
+  if(rec){ Object.assign(rec, {completedDate, attachment, attachmentData, remarks}); }
+  else { DB.evaluations.push({id:uid(), employeeId, milestone:milestoneKey, completedDate, attachment, attachmentData, remarks}); }
+  logAudit(`Updated evaluation (${milestoneKey}) for employee`);
+  saveDB(); closeModal(); renderEvaluations();
+  toast('Evaluation saved.');
+}
+
+/* ================================================================
+   CONSOLIDATED EMPLOYEE OFFENSE SUMMARY
+   ================================================================ */
+function renderOffenseSummary(){
+  setTitle('Employee Offense Summary', 'One consolidated view per employee — every offense, count, level, and consequence, from Disciplinary Action and CVR combined.');
+  const q=(STATE.search||'').toLowerCase();
+  const map = {};
+  function ensure(name, dept){ if(!map[name]) map[name]={department:dept, offenses:{}}; else if(dept && !map[name].department) map[name].department=dept; return map[name]; }
+  DB.disciplinary.forEach(d=>{ const m=ensure(d.employeeName, d.department); const key=d.violation||'Unspecified'; m.offenses[key]=(m.offenses[key]||0)+1; });
+  DB.cvr.forEach(c=>{ const m=ensure(c.employeeName, c.department); [...(c.offenses||[]), ...(c.otherOffense?[c.otherOffense]:[])].forEach(o=>{ m.offenses[o]=(m.offenses[o]||0)+1; }); });
+  let names = Object.keys(map).sort((a,b)=>a.localeCompare(b));
+  if(q) names = names.filter(n=> n.toLowerCase().includes(q) || Object.keys(map[n].offenses).some(o=>o.toLowerCase().includes(q)));
+  const html = `
+  <div class="sectionhead"><div><h2>Employee Offense Summary</h2><p>${names.length} employee(s) with recorded offenses.</p></div></div>
+  <div class="notice"><b>Note:</b> Combines Disciplinary Action and CVR records per employee. Level and consequence use the same lookup as CVR, referenced against the Offense Catalog.</div>
+  <div class="toolbar"><div class="search">${iSearch(15)}<input placeholder="Search by employee or offense…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderOffenseSummary()"></div></div>
+  ${names.length? names.map(n=>{
+    const m = map[n];
+    const rows = Object.entries(m.offenses).sort((a,b)=>b[1]-a[1]);
+    return `<div class="panel" style="margin-bottom:12px;">
+      <h3>${esc(n)} <span class="small" style="font-weight:400;">${esc(m.department||'')}</span></h3>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Offense</th><th>Count</th><th>Level</th><th>Consequence</th></tr></thead>
+        <tbody>${rows.map(([o,c])=>{ const idx=Math.min(c-1, OFFENSE_LEVELS.length-1); const level=OFFENSE_LEVELS[idx]; const cons=consequenceFor(o, idx); return `<tr><td><b>${esc(o)}</b></td><td>${c}</td><td>${statusBadge(level,{})}</td><td class="small">${esc(cons)}</td></tr>`; }).join('')}</tbody>
+      </table></div>
+    </div>`;
+  }).join('') : '<div class="empty"><b>No offenses recorded yet</b></div>'}`;
+  document.getElementById('content').innerHTML = html;
+}
+
+/* ================================================================
+   MODULE DEFINITIONS (leaves handled by custom view above but still
+   registered for the modal/CRUD/export helpers; nte, memos, nod, oncall
+   use the generic table view)
+   ================================================================ */
+const MODULES = {
+  leaves: {
+    title:'Leave Tracker', subtitle:'Upload, monitor, and manage employee leave records.', singular:'Leave Record', addLabel:'Add Leave Record',
+    searchFields:['employeeName','department'], sortKey:'startDate',
+    fields:[
+      {key:'employeeName', label:'Employee Name', type:'text', required:true},
+      {key:'position', label:'Position', type:'text'},
+      {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
+      {key:'leaveType', label:'Type of Leave', type:'select', options:LEAVE_TYPES, required:true},
+      {key:'startDate', label:'Leave Start Date', type:'date', required:true},
+      {key:'endDate', label:'Leave End Date', type:'date', required:true},
+      {key:'dateApplied', label:'Date of Application', type:'date'},
+      {key:'dateReceived', label:'Date Received', type:'date'},
+      {key:'reason', label:'Reason for Leave', type:'textarea'},
+      {key:'attachment', label:'Uploaded Leave Form', type:'file', full:true},
+      {key:'status', label:'Leave Status', type:'select', options:LEAVE_STATUS, required:true},
+      {key:'remarks', label:'Remarks', type:'textarea'},
+    ],
+    computedNote:'Total leave days are calculated automatically as (End Date − Start Date + 1) and shown in the records table.',
+    columns:[
+      {key:'employeeName', label:'Employee', render:r=>`<b>${esc(r.employeeName)}</b>`},
+      {key:'department', label:'Department'},
+      {key:'leaveType', label:'Type'},
+      {key:'startDate', label:'Start', render:r=>fmtDate(r.startDate)},
+      {key:'endDate', label:'End', render:r=>fmtDate(r.endDate)},
+      {key:'days', label:'Days', render:r=>daysBetweenInclusive(r.startDate,r.endDate)||'—', csv:r=>daysBetweenInclusive(r.startDate,r.endDate)},
+      {key:'status', label:'Status', render:r=>statusBadge(r.status, LEAVE_STATUS_MAP)},
+    ],
+  },
+  disciplinary:{ title:'Disciplinary Action', subtitle:'', singular:'Disciplinary Record', addLabel:'Add Record',
+    searchFields:['employeeName','violation'], sortKey:'dateOfIncident',
+    fields:[
+      {key:'employeeName', label:'Employee Name', type:'text', required:true},
+      {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
+      {key:'violation', label:'Violation Committed', type:'text', required:true, full:true},
+      {key:'dateOfIncident', label:'Date of Incident', type:'date', required:true},
+      {key:'action', label:'Disciplinary Action Taken', type:'text', full:true},
+      {key:'remarks', label:'Remarks', type:'textarea'},
+    ],
+    columns:[ // used for CSV export only — table itself is custom-rendered in renderDisciplinary()
+      {key:'employeeName', label:'Employee'},
+      {key:'department', label:'Department'},
+      {key:'violation', label:'Violation'},
+      {key:'offenseLevel', label:'Offense Level', csv:r=>offenseLevelFor(r.employeeName,r.violation,r.id)},
+      {key:'dateOfIncident', label:'Date'},
+      {key:'action', label:'Action'},
+      {key:'remarks', label:'Remarks'},
+    ],
+  },
+  nte:{ title:'Notice to Explain (NTE)', subtitle:'Track NTE issuance, receipt, and employee explanations.', singular:'NTE Record', addLabel:'Add NTE',
+    searchFields:['employeeName','violation'], sortKey:'dateIssued', filterField:'status', filterOptions:NTE_STATUS, filterLabel:'Status',
+    notice:`Uploaded NTE documents are stored as the actual file (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB) in this browser's local storage and can be downloaded back — but extraction of dates or text from the document itself is not performed automatically here.`,
+    fields:[
+      {key:'employeeName', label:'Employee Name', type:'text', required:true},
+      {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
+      {key:'violation', label:'Violation / Offense', type:'text', required:true, full:true},
+      {key:'dateIssued', label:'Date of NTE Issuance', type:'date', required:true},
+      {key:'dateReceived', label:'Date NTE Received', type:'date'},
+      {key:'attachment', label:'Uploaded NTE Document', type:'file', full:true},
+      {key:'explanation', label:"Employee's Written Explanation", type:'textarea'},
+      {key:'status', label:'NTE Status', type:'select', options:NTE_STATUS, required:true},
+      {key:'remarks', label:'Remarks', type:'textarea'},
+    ],
+    columns:[
+      {key:'employeeName', label:'Employee', render:r=>`<b>${esc(r.employeeName)}</b>`},
+      {key:'department', label:'Department'},
+      {key:'violation', label:'Violation'},
+      {key:'dateIssued', label:'Issued', render:r=>fmtDate(r.dateIssued)},
+      {key:'dateReceived', label:'Received', render:r=>fmtDate(r.dateReceived)},
+      {key:'attachment', label:'Attachment', render:r=>attachCellHTML('nte',r,'attachment'), csv:r=>r.attachment||''},
+      {key:'status', label:'Status', render:r=>statusBadge(r.status, NTE_STATUS_MAP)},
+    ],
+  },
+  memos:{ title:'Memorandum of Offense', subtitle:'Monitor memoranda issued for disciplinary offenses.', singular:'Memorandum', addLabel:'Add Memorandum',
+    searchFields:['employeeName','offenseType'], sortKey:'dateOfMemo',
+    fields:[
+      {key:'employeeName', label:'Employee Name', type:'text', required:true},
+      {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
+      {key:'offenseType', label:'Type of Offense', type:'text', required:true},
+      {key:'action', label:'Disciplinary Action', type:'text', required:true},
+      {key:'dateOfMemo', label:'Date of Memorandum', type:'date', required:true},
+      {key:'dateReceived', label:'Date Received', type:'date'},
+      {key:'attachment', label:'Uploaded Memorandum', type:'file', full:true},
+      {key:'remarks', label:'Remarks', type:'textarea'},
+    ],
+    columns:[
+      {key:'employeeName', label:'Employee', render:r=>`<b>${esc(r.employeeName)}</b>`},
+      {key:'department', label:'Department'},
+      {key:'offenseType', label:'Offense'},
+      {key:'action', label:'Action'},
+      {key:'dateOfMemo', label:'Date', render:r=>fmtDate(r.dateOfMemo)},
+      {key:'dateReceived', label:'Received', render:r=>fmtDate(r.dateReceived)},
+      {key:'attachment', label:'Attachment', render:r=>attachCellHTML('memos',r,'attachment'), csv:r=>r.attachment||''},
+    ],
+  },
+  nod:{ title:'Notice of Decision (NOD)', subtitle:'Track final disciplinary decisions.', singular:'Notice of Decision', addLabel:'Add NOD',
+    searchFields:['employeeName','relatedOffense'], sortKey:'dateOfNod',
+    fields:[
+      {key:'employeeName', label:'Employee Name', type:'text', required:true},
+      {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
+      {key:'relatedOffense', label:'Related Offense', type:'text', required:true, full:true},
+      {key:'dateOfNod', label:'Date of NOD', type:'date', required:true},
+      {key:'dateReceived', label:'Date Received', type:'date'},
+      {key:'finalAction', label:'Final Disciplinary Action', type:'text', full:true, required:true},
+      {key:'attachment', label:'Uploaded NOD Document', type:'file', full:true},
+      {key:'remarks', label:'Remarks', type:'textarea'},
+    ],
+    columns:[
+      {key:'employeeName', label:'Employee', render:r=>`<b>${esc(r.employeeName)}</b>`},
+      {key:'department', label:'Department'},
+      {key:'relatedOffense', label:'Related Offense'},
+      {key:'dateOfNod', label:'Date of NOD', render:r=>fmtDate(r.dateOfNod)},
+      {key:'finalAction', label:'Final Action'},
+      {key:'attachment', label:'Attachment', render:r=>attachCellHTML('nod',r,'attachment'), csv:r=>r.attachment||''},
+    ],
+  },
+  oncall:{ title:'On-Call / Replacement', subtitle:'Monitor on-call employees and replacement personnel.', singular:'On-Call Record', addLabel:'Add On-Call Record',
+    searchFields:['employeeName','prfNumber','employeeReplaced'], sortKey:'startDate', filterField:'status', filterOptions:ONCALL_STATUS, filterLabel:'Status',
+    fields:[
+      {key:'employeeName', label:'Employee Name', type:'text', required:true},
+      {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
+      {key:'prfNumber', label:'PRF Number', type:'text', required:true},
+      {key:'reason', label:'Reason for Request', type:'text', full:true, required:true},
+      {key:'employeeReplaced', label:'Employee Being Replaced', type:'text'},
+      {key:'startDate', label:'Start Date', type:'date', required:true},
+      {key:'endDate', label:'End Date', type:'date', required:true},
+      {key:'status', label:'On-Call Status', type:'select', options:ONCALL_STATUS, required:true},
+      {key:'attachment', label:'Uploaded PRF Document / Leave Form', type:'file', full:true},
+      {key:'remarks', label:'Remarks', type:'textarea'},
+    ],
+    computedNote:'Total number of days is calculated automatically from Start Date and End Date.',
+    columns:[
+      {key:'employeeName', label:'Employee', render:r=>`<b>${esc(r.employeeName)}</b>`},
+      {key:'department', label:'Department'},
+      {key:'prfNumber', label:'PRF No.'},
+      {key:'employeeReplaced', label:'Replacing'},
+      {key:'startDate', label:'Start', render:r=>fmtDate(r.startDate)},
+      {key:'endDate', label:'End', render:r=>fmtDate(r.endDate)},
+      {key:'days', label:'Days', render:r=>daysBetweenInclusive(r.startDate,r.endDate)||'—', csv:r=>daysBetweenInclusive(r.startDate,r.endDate)},
+      {key:'attachment', label:'Attachment', render:r=>attachCellHTML('oncall',r,'attachment'), csv:r=>r.attachment||''},
+      {key:'status', label:'Status', render:r=>statusBadge(r.status, ONCALL_STATUS_MAP)},
+    ],
+  },
+  transfers:{ title:'Department Transfers', subtitle:'Track employees moved between departments, with the date of each move.', singular:'Transfer Record', addLabel:'Add Transfer Record',
+    searchFields:['employeeName','fromDepartment','toDepartment'], sortKey:'toDate',
+    notice:"Use the transfer icon on an employee's row in Employee Information to record a move — that also updates the employee's current department automatically. Adding a record here manually logs history only and does not change the employee record.",
+    fields:[
+      {key:'employeeName', label:'Employee Name', type:'text', required:true},
+      {key:'fromDepartment', label:'Transferred From', type:'select', options:DEPT_OPTIONS, required:true},
+      {key:'fromDate', label:'From Date', type:'date', required:true},
+      {key:'toDepartment', label:'Transferred To', type:'select', options:DEPT_OPTIONS, required:true},
+      {key:'toDate', label:'To Date', type:'date', required:true},
+      {key:'remarks', label:'Remarks', type:'textarea'},
+    ],
+    columns:[
+      {key:'employeeName', label:'Employee', render:r=>`<b>${esc(r.employeeName)}</b>`},
+      {key:'fromDepartment', label:'From'},
+      {key:'fromDate', label:'From Date', render:r=>fmtDate(r.fromDate)},
+      {key:'toDepartment', label:'To'},
+      {key:'toDate', label:'To Date', render:r=>fmtDate(r.toDate)},
+      {key:'remarks', label:'Remarks'},
+    ],
+  },
+  offenseCatalog:{ title:'Offense Catalog', subtitle:"Your agency's disciplinary offense list and consequence per occurrence — CVR uses this to compute offense level automatically.", singular:'Offense', addLabel:'Add Offense',
+    searchFields:['offense'], sortKey:'offense',
+    notice:"Add every offense from your agency's disciplinary matrix here, with the consequence for each occurrence. CVR records reference this list automatically to determine the offense level and consequence.",
+    fields:[
+      {key:'offense', label:'Offense / Violation', type:'text', required:true, full:true},
+      {key:'consequence1', label:'1st Offense — Consequence', type:'text', full:true},
+      {key:'consequence2', label:'2nd Offense — Consequence', type:'text', full:true},
+      {key:'consequence3', label:'3rd Offense — Consequence', type:'text', full:true},
+      {key:'consequence4', label:'4th Offense+ — Consequence', type:'text', full:true},
+    ],
+    columns:[
+      {key:'offense', label:'Offense', render:r=>`<b>${esc(r.offense)}</b>`},
+      {key:'consequence1', label:'1st'},
+      {key:'consequence2', label:'2nd'},
+      {key:'consequence3', label:'3rd'},
+      {key:'consequence4', label:'4th+'},
+    ],
+  },
+  prf:{ title:'PRF / Replacement Tracking', subtitle:'Personnel Requisition Forms — replacement and additional manpower requests.', singular:'PRF Record', addLabel:'Add PRF Record',
+    searchFields:['employeeName','prfNumber','employeeReplaced'], sortKey:'dateOfRequest',
+    fields:[
+      {key:'employeeName', label:'Employee Name (hired/assigned)', type:'text', required:true},
+      {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
+      {key:'prfNumber', label:'PRF Number', type:'text', required:true},
+      {key:'dateOfRequest', label:'Date of Request', type:'date', required:true},
+      {key:'reasonForRequest', label:'Reason for Manpower Request', type:'text', full:true, required:true},
+      {key:'classification', label:'Classification', type:'select', options:PRF_CLASS, required:true},
+      {key:'employeeReplaced', label:'Employee Being Replaced (if applicable)', type:'text'},
+      {key:'attachment', label:'Uploaded PRF Document', type:'file', full:true},
+      {key:'remarks', label:'Remarks', type:'textarea'},
+    ],
+    columns:[
+      {key:'employeeName', label:'Employee', render:r=>`<b>${esc(r.employeeName)}</b>`},
+      {key:'department', label:'Department'},
+      {key:'prfNumber', label:'PRF No.'},
+      {key:'classification', label:'Classification'},
+      {key:'employeeReplaced', label:'Replacing'},
+      {key:'dateOfRequest', label:'Date', render:r=>fmtDate(r.dateOfRequest)},
+      {key:'attachment', label:'Attachment', render:r=>attachCellHTML('prf',r,'attachment'), csv:r=>r.attachment||''},
+    ],
+  },
+};
+
+/* ================================================================
+   REPORTS
+   ================================================================ */
+function renderReports(){
+  setTitle('Reports', 'Export any module as a spreadsheet-ready CSV file.');
+  const items = [
+    {key:'employees', label:'Employee Information', count:DB.employees.length, fn:exportEmployeesCSV},
+    {key:'leaves', label:'Leave Tracker', count:DB.leaves.length, fn:()=>exportModuleCSV('leaves')},
+    {key:'disciplinary', label:'Disciplinary Action', count:DB.disciplinary.length, fn:()=>{
+        const csv = toCSV(DB.disciplinary, [
+          {label:'Employee', get:r=>r.employeeName},{label:'Department', get:r=>r.department},{label:'Violation', get:r=>r.violation},
+          {label:'Offense Level', get:r=>offenseLevelFor(r.employeeName,r.violation,r.id)},{label:'Date', get:r=>r.dateOfIncident},{label:'Action', get:r=>r.action},
+        ]); downloadCSV('disciplinary_export.csv', csv); toast('CSV exported.');
+      }},
+    {key:'nte', label:'Notice to Explain', count:DB.nte.length, fn:()=>exportModuleCSV('nte')},
+    {key:'memos', label:'Memorandum of Offense', count:DB.memos.length, fn:()=>exportModuleCSV('memos')},
+    {key:'nod', label:'Notice of Decision', count:DB.nod.length, fn:()=>exportModuleCSV('nod')},
+    {key:'oncall', label:'On-Call / Replacement', count:DB.oncall.length, fn:()=>exportModuleCSV('oncall')},
+  ];
+  document.getElementById('content').innerHTML = `
+    <div class="grid cols-2">
+      ${items.map((it,i)=>`
+        <div class="panel" style="display:flex;align-items:center;justify-content:space-between;">
+          <div><h3 style="margin-bottom:2px;">${it.label}</h3><div class="small">${it.count} record${it.count===1?'':'s'}</div></div>
+          <button class="btn btn-ghost btn-sm" onclick="REPORT_FNS[${i}]()">${iDownload(14)} Export CSV</button>
+        </div>`).join('')}
+    </div>
+    <div class="notice" style="margin-top:18px;"><b>Note:</b> In a production deployment, this section would also generate formatted PDF/Excel reports and support scheduled or department-scoped exports.</div>
+  `;
+  window.REPORT_FNS = items.map(it=>it.fn);
+}
+
+/* ================================================================
+   USER MANAGEMENT
+   ================================================================ */
+function renderUsers(){
+  setTitle('User Management', 'Manage dashboard profiles and access roles.');
+  const rows = DB.users;
+  document.getElementById('content').innerHTML = `
+    <div class="sectionhead">
+      <div><h2>User Management</h2><p>${rows.length} registered profile${rows.length===1?'':'s'}.</p></div>
+    </div>
+    ${SESSION.role!=='Administrator'? `<div class="notice"><b>Note:</b> Only Administrators can change roles or profile details. New users register from the login screen.</div>`:''}
+    <div class="tablewrap"><table>
+      <thead><tr><th>Full Name</th><th>Username</th><th>Email</th><th>Role</th><th>Created</th><th style="text-align:right;">Actions</th></tr></thead>
+      <tbody>
+      ${rows.map(u=>`<tr>
+        <td><b>${esc(u.fullName)}</b>${u.id===SESSION.id?' <span class="pill">You</span>':''}</td>
+        <td class="mono">${esc(u.username||'—')}</td>
+        <td>${esc(u.email||'—')}</td>
+        <td>${statusBadge(u.role, {'Administrator':'b-blue','HR Staff':'b-green','Viewer':'b-grey'})}</td>
+        <td>${fmtDate(u.createdAt)}</td>
+        <td><div class="rowactions">
+          ${SESSION.role==='Administrator'? `<button class="iconbtn" onclick="openUserForm('${u.id}')" title="Edit profile">${iEdit(14)}</button>`:'<span class="small">—</span>'}
+        </div></td>
+      </tr>`).join('')}
+      </tbody></table></div>`;
+}
+function openUserForm(id){
+  if(SESSION.role!=='Administrator') return;
+  const existing = id? DB.users.find(u=>u.id===id): null;
+  if(!existing) return;
+  openModal(`
+    <div class="modal-head"><h3>Edit User Profile</h3><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body">
+      <div class="formgrid">
+        <div class="field"><label>Full Name *</label><input id="u_fullName" value="${esc(existing.fullName||'')}"></div>
+        <div class="field"><label>Username *</label><input id="u_username" value="${esc(existing.username||'')}"></div>
+        <div class="field full"><label>Email</label><input value="${esc(existing.email||'')}" disabled style="background:var(--paper);"></div>
+        <div class="field"><label>Role</label><select id="u_role">
+          <option ${existing.role==='Administrator'?'selected':''}>Administrator</option>
+          <option ${existing.role==='HR Staff'?'selected':''}>HR Staff</option>
+          <option ${existing.role==='Viewer'?'selected':''}>Viewer</option>
+        </select></div>
+      </div>
+      <div class="computed-note">Passwords are managed by Supabase Auth. Use the account email's password-reset flow to change a password.</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveUser('${id}')">Save User</button></div>
+  `);
+}
+async function saveUser(id){
+  if(SESSION.role!=='Administrator') return;
+  const fullName=document.getElementById('u_fullName').value.trim();
+  const username=document.getElementById('u_username').value.trim().toLowerCase();
+  const role=document.getElementById('u_role').value;
+  if(!fullName||!username){ toast('Please complete all required fields.'); return; }
+  const {error}=await supabase.from('profiles').update({full_name:fullName,username,role}).eq('id',id);
+  if(error){ toast('Could not update user: '+error.message,true); return; }
+  await loadProfiles();
+  const updated=DB.users.find(u=>u.id===SESSION.id); if(updated) SESSION=updated;
+  logAudit('Updated user profile: '+fullName); await saveDB();
+  closeModal(); renderUsers(); toast('User profile saved.');
+}
+
+/* ================================================================
+   SETTINGS
+   ================================================================ */
+function renderSettings(){
+  setTitle('Settings', 'Organization preferences and audit log.');
+  document.getElementById('content').innerHTML = `
+    <div class="grid cols-2">
+      <div class="panel">
+        <h3>Organization</h3>
+        <div class="desc">Applied across the dashboard header and reports.</div>
+        <div class="field"><label>Organization Name</label><input id="s_org" value="${esc(DB.settings.orgName)}"></div>
+        <div class="field"><label>Probation → Regularization Threshold (days)</label><input id="s_prob" type="number" value="${DB.settings.probationDays}">
+          <div class="computed-note">Default is 180 days (the standard Philippine probationary period). Employee classification recalculates automatically wherever it is displayed.</div>
+        </div>
+        <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+      </div>
+      <div class="panel">
+        <h3>Audit Trail</h3>
+        <div class="desc">Log of record changes made in this session (most recent first).</div>
+        <div style="max-height:320px;overflow-y:auto;">
+        ${DB.audit.length? DB.audit.map(a=>`<div class="cal-list-item"><span>${esc(a.action)}</span><span class="small">${esc(a.user)} · ${new Date(a.ts).toLocaleString()}</span></div>`).join('') : '<div class="small">No activity yet.</div>'}
+        </div>
+      </div>
+    </div>
+    <div class="notice" style="margin-top:16px;"><b>Supabase deployment:</b> HR records are stored in Supabase Postgres and uploaded documents are stored in the private <b>hr-documents</b> Storage bucket. Row Level Security should remain enabled. No OCR/text extraction is performed on uploaded documents.</div>
+  `;
+}
+async function saveSettings(){
+  DB.settings.orgName = document.getElementById('s_org').value.trim()||'SCPA';
+  DB.settings.probationDays = parseInt(document.getElementById('s_prob').value,10)||180;
+  logAudit('Updated organization settings');
+  if(await saveDB()) toast('Settings saved.'); enterApp(); go('settings');
+}
+
+/* ================================================================
+   RENDERERS map + boot
+   ================================================================ */
+const RENDERERS = {
+  dashboard: renderDashboard,
+  employees: renderEmployees,
+  leaves: renderLeaves,
+  disciplinary: renderDisciplinary,
+  nte: ()=>renderModuleView('nte'),
+  memos: ()=>renderModuleView('memos'),
+  nod: ()=>renderModuleView('nod'),
+  oncall: ()=>renderModuleView('oncall'),
+  transfers: ()=>renderModuleView('transfers'),
+  cvr: renderCVR,
+  incidents: renderIncidents,
+  atd: renderATD,
+  weeklyReport: renderWeeklyReport,
+  prf: ()=>renderModuleView('prf'),
+  evaluations: renderEvaluations,
+  offenseSummary: renderOffenseSummary,
+  offenseCatalog: ()=>renderModuleView('offenseCatalog'),
+  reports: renderReports,
+  users: renderUsers,
+  settings: renderSettings,
+};
+
+document.getElementById('login-form').addEventListener('keydown', e=>{ if(document.getElementById('auth-error').style.display==='block') document.getElementById('auth-error').style.display='none'; });
+
+(async function initSupabase(){
+  const {data}=await supabase.auth.getSession();
+  if(data.session) await bootAuthenticated(data.session.user);
+})();
+</script>
+</body>
+</html>
