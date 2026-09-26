@@ -100,7 +100,7 @@ a{color:inherit;}
 .cols-3{grid-template-columns:repeat(3,1fr);}
 .cols-2{grid-template-columns:1fr 1fr;}
 @media (max-width:1000px){.cols-4{grid-template-columns:repeat(2,1fr);}.cols-5{grid-template-columns:repeat(2,1fr);}.cols-3{grid-template-columns:repeat(2,1fr);}.cols-2{grid-template-columns:1fr;}}
-@media (max-width:640px){.cols-4{grid-template-columns:1fr;}.cols-5{grid-template-columns:1fr;}#app.on{grid-template-columns:1fr;}#sidebar{position:relative;height:auto;}}
+@media (max-width:640px){.cols-4,.cols-5,.cols-3{grid-template-columns:1fr;}}
 
 .stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden;}
 .stat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent,var(--brass));}
@@ -205,6 +205,90 @@ a{color:inherit;}
 .dashboard-footnote{font-size:10.5px;color:var(--slate);margin-top:10px;line-height:1.45;}
 @media (max-width:1180px){.dashboard-kpis{grid-template-columns:repeat(3,1fr);}.dashboard-grid,.dashboard-grid.equal{grid-template-columns:1fr;}.case-pipeline{grid-template-columns:repeat(3,1fr);}}
 @media (max-width:700px){.dashboard-hero{flex-direction:column;align-items:flex-start;}.dashboard-actions{justify-content:flex-start;}.dashboard-kpis{grid-template-columns:1fr 1fr;}.alert-grid{grid-template-columns:1fr;}.case-pipeline{grid-template-columns:repeat(2,1fr);}}
+
+/* ---------- Responsive shell / touch layout ---------- */
+.topbar-left{display:flex;align-items:center;gap:10px;min-width:0;}
+.mobile-menu{display:none;width:38px;height:38px;border:1px solid var(--line-2);background:#fff;border-radius:8px;align-items:center;justify-content:center;flex-direction:column;gap:4px;flex:none;}
+.mobile-menu span{display:block;width:16px;height:1.8px;background:var(--ink);border-radius:2px;}
+.sidebar-backdrop{display:none;}
+.mobile-menu:focus-visible,.navitem:focus-visible,.btn:focus-visible,.iconbtn:focus-visible{outline:3px solid rgba(184,134,59,.25);outline-offset:2px;}
+.tablewrap{-webkit-overflow-scrolling:touch;}
+.modal{max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);}
+.formgrid{min-width:0;}
+.field,.panel,.metric-card,.dashboard-kpi,.stat,.toolbar,.sectionhead{min-width:0;}
+.btn{min-height:38px;touch-action:manipulation;}
+.iconbtn{min-width:34px;min-height:34px;align-items:center;justify-content:center;touch-action:manipulation;}
+@media (max-width:960px){
+  #app.on{display:block;min-height:100vh;}
+  #sidebar{position:fixed;left:0;top:0;bottom:0;width:min(310px,86vw);height:100dvh;z-index:60;transform:translateX(-105%);transition:transform .18s ease;box-shadow:14px 0 40px rgba(0,0,0,.22);overflow-y:auto;}
+  #app.sidebar-open #sidebar{transform:translateX(0);}
+  .sidebar-backdrop{position:fixed;inset:0;background:rgba(12,17,26,.48);z-index:50;display:none;}
+  #app.sidebar-open + .sidebar-backdrop{display:block;}
+  .mobile-menu{display:inline-flex;}
+  #topbar{padding-left:14px;padding-right:14px;gap:10px;}
+  #topbar .sub{max-width:58vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #content{padding:18px 16px 48px;}
+  .analytics-kpis{grid-template-columns:repeat(2,1fr);}
+  .dashboard-kpis{grid-template-columns:repeat(2,1fr);}
+}
+@media (max-width:720px){
+  #topbar{align-items:flex-start;min-height:70px;}
+  #topbar h2{font-size:17px;line-height:1.15;}
+  #topbar .sub{font-size:11px;max-width:54vw;}
+  .who{gap:7px;}
+  .who .name{font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .who .role{font-size:9.5px;}
+  .who .av{width:30px;height:30px;}
+  #content{padding:14px 12px 40px;}
+  .panel{padding:15px;}
+  .dashboard-kpis,.analytics-kpis{grid-template-columns:1fr 1fr;gap:9px;}
+  .dashboard-kpi{padding:12px 13px;}
+  .dashboard-kpi .value{font-size:24px;}
+  .metric-card{padding:13px;}
+  .metric-card .v{font-size:22px;}
+  .dashboard-grid,.analytics-grid{gap:12px;}
+  .dashboard-panel-head{flex-direction:column;align-items:flex-start;}
+  .toolbar{gap:8px;}
+  .toolbar .search{flex:1 1 100%;max-width:none;min-width:0;}
+  .toolbar select{flex:1 1 150px;min-width:0;}
+  .toolbar .spacer{display:none;}
+  .toolbar .btn{flex:0 0 auto;}
+  .sectionhead>div:first-child{min-width:0;}
+  .sectionhead h2{font-size:20px;}
+  .case-pipeline{grid-template-columns:repeat(2,1fr);}
+  .alert-grid{grid-template-columns:1fr;}
+  .chart-row{grid-template-columns:90px 1fr 30px;gap:7px;}
+  .chart-row .label{font-size:11.5px;}
+  .report-filter-grid,.report-grid{grid-template-columns:1fr!important;}
+  .report-kpi-grid{grid-template-columns:repeat(2,1fr)!important;}
+}
+@media (max-width:480px){
+  .auth-card{max-width:none;border-radius:12px;}
+  #auth-screen{padding:12px;align-items:flex-start;padding-top:24px;}
+  .auth-head,.auth-body{padding-left:20px;padding-right:20px;}
+  #topbar{padding-top:calc(10px + env(safe-area-inset-top,0px));}
+  .topbar-left{gap:7px;}
+  .mobile-menu{width:36px;height:36px;}
+  .who>div:first-child{display:none;}
+  .who .av{width:34px;height:34px;}
+  .dashboard-hero h1{font-size:23px;}
+  .dashboard-actions .btn{width:100%;}
+  .dashboard-kpis,.analytics-kpis{grid-template-columns:1fr 1fr;}
+  .dashboard-kpi .label{font-size:9.5px;}
+  .dashboard-kpi .meta{font-size:10px;}
+  .dashboard-kpi .value{font-size:22px;}
+  .grid.cols-2,.grid.cols-3,.grid.cols-4,.grid.cols-5{grid-template-columns:1fr;}
+  .case-pipeline{grid-template-columns:1fr 1fr;}
+  .case-summary{grid-template-columns:1fr!important;}
+  .modal{width:calc(100vw - 12px);border-radius:12px;}
+  .modal-head,.modal-foot{padding:12px 14px;}
+  .modal-body{padding:14px;}
+  table{font-size:12px;min-width:600px;}
+  thead th{padding:10px;}
+  tbody td{padding:10px;}
+  .empty{padding:24px 12px;}
+}
+@media (prefers-reduced-motion:reduce){#sidebar{transition:none;}}
 
 /* ---------- toolbar / tables ---------- */
 .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
@@ -371,9 +455,14 @@ label.opt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--s
 
   <main id="main">
     <div id="topbar">
-      <div>
-        <h2 id="tb-title">Dashboard</h2>
-        <div class="sub" id="tb-sub">Overview of all HR &amp; disciplinary records</div>
+      <div class="topbar-left">
+        <button class="mobile-menu" type="button" aria-label="Open navigation" aria-expanded="false" onclick="toggleSidebar()">
+          <span></span><span></span><span></span>
+        </button>
+        <div>
+          <h2 id="tb-title">Dashboard</h2>
+          <div class="sub" id="tb-sub">Overview of all HR &amp; disciplinary records</div>
+        </div>
       </div>
       <div class="who">
         <div>
@@ -386,6 +475,7 @@ label.opt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--s
     <div id="content"></div>
   </main>
 </div>
+<div id="sidebar-backdrop" class="sidebar-backdrop" aria-hidden="true" onclick="closeSidebar()"></div>
 
 <div class="overlay" id="overlay"><div class="modal" id="modal"></div></div>
 <div class="toast" id="toast"></div>
@@ -657,7 +747,8 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = seedDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null };
+let STATE = { view:'dashboard', search:'', filter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'' };
+let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
 let toastT;
@@ -790,9 +881,24 @@ function renderNav(){
     nav.appendChild(g);
   });
 }
+function toggleSidebar(){
+  const app=document.getElementById('app');
+  if(!app) return;
+  const open=app.classList.toggle('sidebar-open');
+  const btn=document.querySelector('.mobile-menu');
+  if(btn) btn.setAttribute('aria-expanded',open?'true':'false');
+}
+function closeSidebar(){
+  const app=document.getElementById('app');
+  if(!app) return;
+  app.classList.remove('sidebar-open');
+  const btn=document.querySelector('.mobile-menu');
+  if(btn) btn.setAttribute('aria-expanded','false');
+}
 function go(view){
   STATE.view=view; STATE.search=''; STATE.filter='';
   renderNav();
+  closeSidebar();
   RENDERERS[view]();
 }
 
@@ -2667,33 +2773,164 @@ async function renderAnalytics(){
 /* ================================================================
    REPORTS
    ================================================================ */
-function renderReports(){
-  setTitle('Reports', 'Export any module as a spreadsheet-ready CSV file.');
-  const items = [
-    {key:'employees', label:'Employee Information', count:DB.employees.length, fn:exportEmployeesCSV},
-    {key:'leaves', label:'Leave Tracker', count:DB.leaves.length, fn:()=>exportModuleCSV('leaves')},
-    {key:'disciplinary', label:'Disciplinary Action', count:DB.disciplinary.length, fn:()=>{
-        const csv = toCSV(DB.disciplinary, [
-          {label:'Employee', get:r=>r.employeeName},{label:'Department', get:r=>r.department},{label:'Violation', get:r=>r.violation},
-          {label:'Offense Level', get:r=>offenseLevelFor(r.employeeName,r.violation,r.id)},{label:'Date', get:r=>r.dateOfIncident},{label:'Action', get:r=>r.action},
-        ]); downloadCSV('disciplinary_export.csv', csv); toast('CSV exported.');
-      }},
-    {key:'nte', label:'Notice to Explain', count:DB.nte.length, fn:()=>exportModuleCSV('nte')},
-    {key:'memos', label:'Memorandum of Offense', count:DB.memos.length, fn:()=>exportModuleCSV('memos')},
-    {key:'nod', label:'Notice of Decision', count:DB.nod.length, fn:()=>exportModuleCSV('nod')},
-    {key:'oncall', label:'On-Call / Replacement', count:DB.oncall.length, fn:()=>exportModuleCSV('oncall')},
-  ];
-  document.getElementById('content').innerHTML = `
-    <div class="grid cols-2">
-      ${items.map((it,i)=>`
-        <div class="panel" style="display:flex;align-items:center;justify-content:space-between;">
-          <div><h3 style="margin-bottom:2px;">${it.label}</h3><div class="small">${it.count} record${it.count===1?'':'s'}</div></div>
-          <button class="btn btn-ghost btn-sm" onclick="REPORT_FNS[${i}]()">${iDownload(14)} Export CSV</button>
-        </div>`).join('')}
-    </div>
-    <div class="notice" style="margin-top:18px;"><b>Note:</b> In a production deployment, this section would also generate formatted PDF/Excel reports and support scheduled or department-scoped exports.</div>
-  `;
-  window.REPORT_FNS = items.map(it=>it.fn);
+function reportDateFor(module, rec){
+  if(!rec) return '';
+  const candidates={
+    employees:['dateHired','statusDate'], leaves:['dateReceived','dateApplied','startDate'],
+    disciplinary:['dateOfIncident'], nte:['dateIssued','dateReceived'], memos:['dateOfMemo','dateReceived'],
+    nod:['dateOfNod','dateReceived'], oncall:['startDate'], transfers:['toDate','fromDate'],
+    cvr:['dateOfCVR'], incidents:['dateOfIncident'], prf:['dateOfRequest','dateOfPRF'],
+    evaluations:['completedDate'], atd:['atdDate','dateRecorded']
+  };
+  for(const key of (candidates[module]||[])) if(rec[key]) return String(rec[key]).slice(0,10);
+  return '';
+}
+function reportInRange(date,start,end){ return !!date && date>=start && date<=end; }
+function reportDeptMatch(rec,dept){ return !dept || (rec?.department||'Unassigned')===dept; }
+function reportFilterRows(module,start,end,dept){
+  return (DB[module]||[]).filter(r=>reportInRange(reportDateFor(module,r),start,end) && reportDeptMatch(r,dept));
+}
+function reportCaseRows(cases,start,end,dept){
+  return (cases||[]).filter(c=>reportInRange(String(c.opened_at||c.updated_at||'').slice(0,10),start,end) && (!dept || (c.department||'Unassigned')===dept));
+}
+function reportDepartments(){
+  const set=new Set();
+  DB.employees.forEach(e=>e.department&&set.add(e.department));
+  ['leaves','disciplinary','nte','memos','nod','oncall','transfers','cvr','incidents','atd'].forEach(m=>(DB[m]||[]).forEach(r=>r.department&&set.add(r.department)));
+  return [...set].sort((a,b)=>a.localeCompare(b));
+}
+function exportReportRows(filename,rows,cols){
+  downloadCSV(filename,toCSV(rows,cols));
+  toast('Report exported.');
+}
+function exportReportEmployees(){
+  const rows=reportFilterRows('employees',STATE.reportStart,STATE.reportEnd,STATE.reportDept);
+  exportReportRows('employees_report.csv',rows,[
+    {label:'Employee',get:r=>r.name},{label:'Position',get:r=>r.position},{label:'Department',get:r=>r.department},
+    {label:'Date Hired',get:r=>r.dateHired},{label:'Gender',get:r=>r.gender},{label:'Status',get:r=>r.status},{label:'Classification',get:r=>classify(r)}
+  ]);
+}
+function exportReportCases(){
+  const rows=reportCaseRows(REPORT_CACHE.cases,STATE.reportStart,STATE.reportEnd,STATE.reportDept);
+  exportReportRows('hr_cases_report.csv',rows,[
+    {label:'Case',get:r=>r.case_number},{label:'Employee',get:r=>r.employee_name},{label:'Department',get:r=>r.department},
+    {label:'Status',get:r=>r.status},{label:'Opened',get:r=>r.opened_at},{label:'Closed',get:r=>r.closed_at},{label:'Updated',get:r=>r.updated_at}
+  ]);
+}
+function exportReportActivity(){
+  const mods=[['incidents','Incident Report'],['cvr','CVR'],['disciplinary','Disciplinary'],['nte','NTE'],['memos','Memorandum'],['nod','NOD'],['leaves','Leave'],['oncall','On-Call'],['transfers','Transfer'],['atd','ATD']];
+  const rows=[];
+  mods.forEach(([m,label])=>reportFilterRows(m,STATE.reportStart,STATE.reportEnd,STATE.reportDept).forEach(r=>rows.push({type:label,employee:r.employeeName||r.name||'',department:r.department||'',date:reportDateFor(m,r),status:r.status||'',detail:r.violation||r.deductionType||r.reason||r.finalAction||''})));
+  rows.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  exportReportRows('hr_activity_report.csv',rows,[{label:'Type',get:r=>r.type},{label:'Employee',get:r=>r.employee},{label:'Department',get:r=>r.department},{label:'Date',get:r=>r.date},{label:'Status',get:r=>r.status},{label:'Detail',get:r=>r.detail}]);
+}
+function exportReportATD(){
+  exportReportRows('atd_collection_report.csv',REPORT_CACHE.atdRows,[
+    {label:'Employee',get:r=>r.employeeName},{label:'Department',get:r=>r.department},{label:'Category',get:r=>r.category},
+    {label:'Deduction Type',get:r=>r.deductionType},{label:'Total Amount',get:r=>r.totalAmount},{label:'Paid',get:r=>atdTotalPaid(r)},{label:'Remaining',get:r=>atdRemaining(r)},{label:'Status',get:r=>r.status}
+  ]);
+}
+async function renderReports(){
+  setTitle('Reports','Flexible management reports with date and department filters.');
+  const start=STATE.reportStart||addDaysISO(todayISO(),-29), end=STATE.reportEnd||todayISO(), dept=STATE.reportDept||'';
+  STATE.reportStart=start; STATE.reportEnd=end;
+  if(end<start){
+    document.getElementById('content').innerHTML='<div class="panel"><div class="notice"><b>Invalid report period.</b> The end date must be on or after the start date.</div></div>';
+    return;
+  }
+  const departments=reportDepartments();
+  document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Loading report data…</div></div>';
+  try{
+    const {data:cases,error}=await supabase.from('hr_cases').select('id,case_number,employee_name,department,status,opened_at,closed_at,updated_at').order('updated_at',{ascending:false}).limit(1000);
+    if(error) throw error;
+    if(STATE.view!=='reports') return;
+    REPORT_CACHE.cases=cases||[];
+    REPORT_CACHE.atdRows=[];
+    const caseRows=reportCaseRows(REPORT_CACHE.cases,start,end,dept);
+    const employees=reportFilterRows('employees',start,end,dept);
+    const leaves=reportFilterRows('leaves',start,end,dept);
+    const incidents=reportFilterRows('incidents',start,end,dept);
+    const cvr=reportFilterRows('cvr',start,end,dept);
+    const disc=reportFilterRows('disciplinary',start,end,dept);
+    const nte=reportFilterRows('nte',start,end,dept);
+    const memos=reportFilterRows('memos',start,end,dept);
+    const nod=reportFilterRows('nod',start,end,dept);
+    const transfers=reportFilterRows('transfers',start,end,dept);
+    const atdRows=reportFilterRows('atd',start,end,dept);
+    REPORT_CACHE.atdRows=atdRows;
+    const oncall=reportFilterRows('oncall',start,end,dept);
+    const hired=employees.filter(e=>e.dateHired>=start&&e.dateHired<=end).length;
+    const transferred=transfers.length;
+    const atdTotal=atdRows.reduce((s,r)=>s+(Number(r.totalAmount)||0),0);
+    const atdPaid=atdRows.reduce((s,r)=>s+atdTotalPaid(r),0);
+    const atdRemainingTotal=atdRows.reduce((s,r)=>s+atdRemaining(r),0);
+    const movement=employees.filter(e=>['Resigned','AWOL','Separated'].includes(e.status)&&e.statusDate>=start&&e.statusDate<=end);
+    const activityTotal=incidents.length+cvr.length+disc.length+nte.length+memos.length+nod.length+leaves.length+oncall.length+transfers.length+atdRows.length;
+    const caseStatus={}; caseRows.forEach(c=>caseStatus[c.status]=(caseStatus[c.status]||0)+1);
+    const deptCases={}; caseRows.filter(c=>!['Closed','Cancelled','Resolved'].includes(c.status)).forEach(c=>{const d=c.department||'Unassigned';deptCases[d]=(deptCases[d]||0)+1;});
+    const topCaseDepts=Object.entries(deptCases).sort((a,b)=>b[1]-a[1]).slice(0,8);
+    const maxDept=Math.max(...topCaseDepts.map(x=>x[1]),1);
+    const reportKpis=[
+      ['Employees in Period',employees.length,'Records dated in selected period','var(--brass)'],
+      ['HR Cases',caseRows.length,'Cases opened/updated in period','var(--forest)'],
+      ['HR Activity',activityTotal,'Cross-module activity items','var(--amber)'],
+      ['Open NTEs',nte.filter(r=>r.status!=='Resolved').length,'Selected period','var(--rust)'],
+      ['ATD Remaining',peso(atdRemainingTotal),'Selected period','var(--brass)']
+    ];
+    const html=`
+      <div class="sectionhead">
+        <div><h2>Management Reports</h2><p>${fmtDate(start)} – ${fmtDate(end)}${dept?' · '+esc(dept):' · All Departments'}</p></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-ghost btn-sm" onclick="exportReportActivity()">${iDownload(14)} Export Activity</button><button class="btn btn-brass btn-sm" onclick="exportReportCases()">${iDownload(14)} Export Cases</button></div>
+      </div>
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="report-filter-grid" style="display:grid;grid-template-columns:1fr 1fr 1.2fr auto;gap:10px;align-items:end;">
+          <div class="field" style="margin-bottom:0;"><label>From</label><input id="report-start" type="date" value="${esc(start)}"></div>
+          <div class="field" style="margin-bottom:0;"><label>To</label><input id="report-end" type="date" value="${esc(end)}"></div>
+          <div class="field" style="margin-bottom:0;"><label>Department</label><select id="report-dept"><option value="">All Departments</option>${departments.map(d=>`<option value="${esc(d)}" ${dept===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+          <button class="btn btn-primary" onclick="applyReportFilters()">Apply Filters</button>
+        </div>
+      </div>
+      <div class="report-kpi-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px;">
+        ${reportKpis.map(k=>`<div class="metric-card" style="--accent:${k[3]};"><div class="k">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div></div>`).join('')}
+      </div>
+      <div class="report-grid" style="display:grid;grid-template-columns:1.05fr .95fr;gap:16px;margin-bottom:16px;">
+        <div class="panel"><div class="dashboard-panel-head"><div><h3>HR Case Status</h3><div class="desc">Cases opened or updated within the selected period.</div></div><button class="btn btn-ghost btn-sm" onclick="go('cases')">Open Cases</button></div>
+          <div class="chart-list">${Object.keys(CASE_STATUS_MAP).map(st=>{const n=caseStatus[st]||0;return `<div class="chart-row"><div class="label">${esc(st)}</div><div class="chart-track"><div class="chart-fill" style="width:${Math.round(n/Math.max(caseRows.length,1)*100)}%"></div></div><div class="chart-count">${n}</div></div>`;}).join('')||'<div class="empty">No cases in this period.</div>'}</div>
+        </div>
+        <div class="panel"><div class="dashboard-panel-head"><div><h3>Open Case Load by Department</h3><div class="desc">Current open case distribution from the selected case set.</div></div></div>
+          <div class="chart-list">${topCaseDepts.length?topCaseDepts.map(([d,n])=>`<div class="chart-row"><div class="label">${esc(d)}</div><div class="chart-track"><div class="chart-fill alt" style="width:${Math.round(n/maxDept*100)}%"></div></div><div class="chart-count">${n}</div></div>`).join(''):'<div class="empty">No open cases in this period.</div>'}</div>
+        </div>
+      </div>
+      <div class="report-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+        <div class="panel"><div class="dashboard-panel-head"><div><h3>Workforce Movement</h3><div class="desc">Hires and recorded movement in the selected period.</div></div><button class="btn btn-ghost btn-sm" onclick="exportReportEmployees()">${iDownload(14)} Employees</button></div>
+          <div class="grid cols-2" style="gap:10px;margin-bottom:12px;"><div class="metric-card"><div class="k">Newly Hired</div><div class="v">${hired}</div></div><div class="metric-card"><div class="k">Transfers</div><div class="v">${transferred}</div></div></div>
+          <div class="small">Resigned / AWOL / Separated records require a populated <b>statusDate</b> to appear in the movement count.</div>
+          ${movement.length?`<div class="dashboard-list" style="margin-top:10px;">${movement.slice(0,6).map(e=>`<div class="dashboard-list-row"><div><div class="primary">${esc(e.name)}</div><div class="secondary">${esc(e.department||'Unassigned')} · ${esc(e.status)}</div></div><div class="right">${fmtDate(e.statusDate)}</div></div>`).join('')}</div>`:''}
+        </div>
+        <div class="panel"><div class="dashboard-panel-head"><div><h3>ATD Collection</h3><div class="desc">Selected-period ATD records and payment progress.</div></div><button class="btn btn-ghost btn-sm" onclick='exportReportATD()'>${iDownload(14)} Export ATD</button></div>
+          <div class="grid cols-3" style="gap:10px;"><div class="metric-card"><div class="k">ATD Records</div><div class="v">${atdRows.length}</div></div><div class="metric-card"><div class="k">Total Amount</div><div class="v" style="font-size:20px;">${peso(atdTotal)}</div></div><div class="metric-card"><div class="k">Paid</div><div class="v" style="font-size:20px;">${peso(atdPaid)}</div></div></div>
+          <div style="margin-top:12px;"><div class="small" style="display:flex;justify-content:space-between;gap:8px;"><span>Collection progress</span><b>${atdTotal?Math.round(atdPaid/atdTotal*100):0}%</b></div><div class="chart-track" style="height:10px;margin-top:6px;"><div class="chart-fill alt" style="width:${atdTotal?Math.min(100,Math.round(atdPaid/atdTotal*100)):0}%"></div></div></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="dashboard-panel-head"><div><h3>Activity Breakdown</h3><div class="desc">Operational volume by module for the selected period.</div></div></div>
+        <div class="report-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="chart-list">${[['Incidents',incidents.length],['CVR',cvr.length],['Disciplinary',disc.length],['NTE',nte.length],['Memoranda',memos.length]].map(([l,n])=>`<div class="chart-row"><div class="label">${l}</div><div class="chart-track"><div class="chart-fill warn" style="width:${Math.round(n/Math.max(Math.max(incidents.length,cvr.length,disc.length,nte.length,memos.length),1)*100)}%"></div></div><div class="chart-count">${n}</div></div>`).join('')}</div>
+          <div class="chart-list">${[['NOD',nod.length],['Leaves',leaves.length],['On-Call',oncall.length],['Transfers',transfers.length],['ATD',atdRows.length]].map(([l,n])=>`<div class="chart-row"><div class="label">${l}</div><div class="chart-track"><div class="chart-fill alt" style="width:${Math.round(n/Math.max(Math.max(nod.length,leaves.length,oncall.length,transfers.length,atdRows.length),1)*100)}%"></div></div><div class="chart-count">${n}</div></div>`).join('')}</div>
+        </div>
+        <div class="analytics-note">Report values are descriptive summaries of the records stored in the application. They do not independently determine legal, disciplinary, or compliance outcomes.</div>
+      </div>`;
+    document.getElementById('content').innerHTML=html;
+  }catch(e){
+    document.getElementById('content').innerHTML=`<div class="panel"><h3>Management Reports</h3><div class="notice"><b>Could not load report data.</b> ${esc(e.message||e)}</div></div>`;
+  }
+}
+function applyReportFilters(){
+  const start=document.getElementById('report-start')?.value||todayISO();
+  const end=document.getElementById('report-end')?.value||todayISO();
+  const dept=document.getElementById('report-dept')?.value||'';
+  if(end<start){toast('Report end date cannot be before the start date.',true);return;}
+  STATE.reportStart=start; STATE.reportEnd=end; STATE.reportDept=dept; renderReports();
 }
 
 /* ================================================================
@@ -3180,6 +3417,7 @@ Object.assign(window, {
   downloadATDPayslip, downloadAttachment, downloadCSV, downloadRecordAttachment, enterApp, esc, evalDueDate,
   evalStatusInfo, exportATDCSV, exportCVRCSV, exportEmployeesCSV, exportIncidentsCSV, exportModuleCSV, exportWeeklyCSV,
   fieldHTML, fmtDate, getEvalRecord, go, handleFileInput, incidentTypeOccurrence, incidentTypeSummaryHTML,
+  toggleSidebar, closeSidebar, applyReportFilters, exportReportEmployees, exportReportActivity, exportReportATD, exportReportCases,
   loadDB, loadProfiles, logAudit, mondayOf, nthLabel, offenseLevelFor, openATDForm, openATDPaymentForm,
   openATDPayments, openCVRForm, openEmployeeForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard,
