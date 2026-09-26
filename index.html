@@ -10,8 +10,8 @@
 <style>
 :root{
   /* Strellas-inspired palette: deep navy, warm gold, cool gray */
-  --ink:#194082; --ink-2:#12356F; --paper:#F3F5F8; --panel:#FFFFFF;
-  --brass:#C08A37; --brass-dk:#9D6D24; --gold-soft:#F4D971; --navy-deep:#001670;
+  --ink:#0B2E63; --ink-2:#08244C; --paper:#F3F5F8; --panel:#FFFFFF;
+  --brass:#C08A37; --brass-dk:#9D6D24; --gold-soft:#F4D971; --navy-deep:#041A36;
   --forest:#3B6955; --rust:#A94435; --amber:#C89A36; --slate:#687384;
   --line:#DCE2EA; --line-2:#C8D0DB;
   --shadow: 0 1px 2px rgba(15,36,72,.06), 0 8px 24px rgba(15,36,72,.07);
@@ -211,7 +211,7 @@ a{color:inherit;}
 
 /* ---------- Phase 6: Employee 360 Profile ---------- */
 .profile-hero{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;padding:18px;border:1px solid var(--line);background:linear-gradient(135deg,#fff 0%,#f8fbff 72%,#eef3f9 100%);border-radius:12px;margin-bottom:14px;}
-.profile-avatar{width:56px;height:56px;border-radius:15px;background:linear-gradient(135deg,var(--ink),var(--navy-deep));color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;box-shadow:0 8px 18px rgba(25,64,130,.18);}
+.profile-avatar{width:56px;height:56px;border-radius:15px;background:linear-gradient(135deg,var(--ink),var(--navy-deep));color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;box-shadow:0 8px 18px rgba(10,42,90,.18);}
 .profile-title{font-size:20px;font-weight:800;letter-spacing:-.01em;}
 .profile-sub{font-size:12px;color:var(--slate);margin-top:3px;}
 .profile-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
@@ -236,6 +236,42 @@ a{color:inherit;}
 .data-warning .mark{width:8px;height:8px;border-radius:50%;background:var(--brass);margin-top:4px;flex:none;}
 @media (max-width:900px){.profile-hero{grid-template-columns:auto 1fr;}.profile-hero .profile-actions{grid-column:1/-1;}.profile-grid{grid-template-columns:1fr;}.profile-kpis{grid-template-columns:repeat(2,1fr);}}
 @media (max-width:540px){.profile-hero{gap:11px;padding:14px;}.profile-avatar{width:48px;height:48px;border-radius:12px;}.profile-title{font-size:18px;}.profile-kpis{grid-template-columns:1fr 1fr;}.profile-detail{grid-template-columns:1fr;}.profile-list-row{flex-direction:column;}.profile-list-row .right{text-align:left;}}
+
+
+/* ---------- Phase 7: Action Center ---------- */
+.action-center-hero{display:flex;justify-content:space-between;gap:16px;align-items:flex-end;margin-bottom:16px;}
+.action-center-hero h1{margin:0;font-size:24px;letter-spacing:-.01em;}
+.action-center-hero p{margin:5px 0 0;color:var(--slate);font-size:12.5px;line-height:1.5;}
+.action-center-count{display:inline-flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--slate);font-size:11.5px;font-weight:700;white-space:nowrap;}
+.action-center-count b{color:var(--ink);font-size:16px;}
+.action-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;margin-bottom:16px;}
+.action-list{display:flex;flex-direction:column;gap:8px;}
+.action-item{display:flex;align-items:flex-start;gap:11px;padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;cursor:pointer;transition:border-color .12s ease,box-shadow .12s ease,transform .06s ease;}
+.action-item:hover{border-color:#B8C4D4;box-shadow:0 5px 18px rgba(10,42,90,.07);}
+.action-item:active{transform:translateY(1px);}
+.action-item .flag{width:9px;height:9px;border-radius:50%;margin-top:5px;flex:none;background:var(--brass);}
+.action-item.danger .flag{background:var(--rust);}
+.action-item.info .flag{background:var(--ink);}
+.action-item .body{min-width:0;flex:1;}
+.action-item .title{font-size:12.5px;font-weight:700;color:var(--ink);line-height:1.35;}
+.action-item .detail{font-size:11px;color:var(--slate);margin-top:3px;line-height:1.45;}
+.action-item .meta{font-size:10px;color:var(--slate);margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;}
+.action-item .meta span{padding:2px 6px;border-radius:20px;background:var(--paper);border:1px solid var(--line);}
+.action-side{display:flex;flex-direction:column;gap:12px;}
+.action-summary{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+.action-summary .metric-card{padding:13px;}
+.action-summary .metric-card .v{font-size:22px;}
+.action-tip{padding:12px 13px;border:1px dashed var(--line-2);border-radius:9px;background:#FBFCFE;font-size:11px;color:var(--slate);line-height:1.5;}
+.action-empty{padding:26px 16px;border:1px dashed var(--line-2);border-radius:9px;text-align:center;background:#FBFCFE;color:var(--slate);font-size:12px;}
+@media (max-width:960px){.action-grid{grid-template-columns:1fr;}}
+@media (max-width:700px){.action-center-hero{flex-direction:column;align-items:flex-start;}.action-center-hero h1{font-size:21px;}.action-summary{grid-template-columns:1fr 1fr;}}
+@media (max-width:480px){.action-center-count{width:100%;justify-content:space-between;}.action-summary{grid-template-columns:1fr 1fr;}.action-item{padding:10px;}}
+
+
+/* ---------- Phase 8: Employee Master Data ---------- */
+.employee-master-note{padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:#F8FAFD;color:var(--slate);font-size:11px;line-height:1.45;margin-bottom:12px;}
+.field input[readonly]{background:#F5F7FA;color:#475467;font-weight:700;cursor:not-allowed;}
+@media (max-width:720px){.employee-master-note{font-size:10.5px;}.profile-detail .item[style*='grid-column']{grid-column:1/-1!important;}}
 
 /* ---------- Responsive shell / touch layout ---------- */
 .topbar-left{display:flex;align-items:center;gap:10px;min-width:0;}
@@ -444,7 +480,7 @@ label.opt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--s
     <div class="auth-head">
       <div class="badge">S</div>
       <h1>SLSC HR Management</h1>
-      <p>&amp; Online System</p>
+      <p>&amp; Disciplinary Dashboard</p>
     </div>
     <div class="auth-body">
       <div class="auth-tabs">
@@ -482,7 +518,7 @@ label.opt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--s
   <aside id="sidebar">
     <div class="brand">
       <div class="badge">S</div>
-      <div class="brand-txt"><div class="t1">SLSC HR</div><div class="t2">Online System</div></div>
+      <div class="brand-txt"><div class="t1">SLSC HR</div><div class="t2">Disciplinary Dashboard</div></div>
     </div>
     <nav id="nav"></nav>
     <button class="btn btn-ghost btn-block logout" onclick="doLogout()">Log Out</button>
@@ -526,7 +562,7 @@ if(!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('YOUR_PRO
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 /* =========================================================================
-   SCPA HR MANAGEMENT & DISCIPLINARY DASHBOARD — GitHub Pages + Vercel + Supabase
+   SLSC HR MANAGEMENT & DISCIPLINARY DASHBOARD — GitHub Pages + Vercel + Supabase
    Phase 2: record-level Postgres persistence, Supabase Auth, and private Storage.
    ========================================================================= */
 
@@ -535,7 +571,7 @@ let DB_SNAPSHOT = null;
 let SAVE_QUEUE = Promise.resolve();
 
 function blankDB(){
-  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],settings:{orgName:'SCPA',probationDays:180},audit:[],users:[]};
+  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],settings:{orgName:'SLSC',probationDays:180},audit:[],users:[]};
 }
 
 async function loadDB(){
@@ -584,7 +620,7 @@ async function saveDBInternal(state){
       if(error) throw error;
     }
   }
-  const {error:settingsError}=await supabase.from('hr_settings').upsert({id:'singleton',data:state.settings||{orgName:'SCPA',probationDays:180},updated_at:now,updated_by:SESSION?.id||null},{onConflict:'id'});
+  const {error:settingsError}=await supabase.from('hr_settings').upsert({id:'singleton',data:state.settings||{orgName:'SLSC',probationDays:180},updated_at:now,updated_by:SESSION?.id||null},{onConflict:'id'});
   if(settingsError) throw settingsError;
   DB_SNAPSHOT=JSON.parse(JSON.stringify(state));
 }
@@ -773,10 +809,26 @@ function seedDB(){
   ];
   return {
     users, employees, leaves, disciplinary, nte, memos, nod, oncall, transfers, offenseCatalog, cvr, incidents, prf, evaluations, atd,
-    settings:{orgName:'SCPA', probationDays:180},
+    settings:{orgName:'SLSC', probationDays:180},
     audit:[{ts:new Date().toISOString(), user:'System', action:'Seeded initial demo data'}]
   };
 }
+function nextEmployeeNumber(list){
+  const nums=(list||[]).map(e=>{ const m=String(e.employeeNo||'').match(/^EMP-(\d+)$/i); return m?parseInt(m[1],10):0; });
+  const next=(Math.max(0,...nums)+1);
+  return 'EMP-'+String(next).padStart(4,'0');
+}
+function normalizeEmployeeMasterData(){
+  let changed=false;
+  const used=new Set();
+  (DB.employees||[]).forEach(e=>{
+    if(!e.employeeNo || used.has(String(e.employeeNo).toUpperCase())){ e.employeeNo=nextEmployeeNumber(DB.employees.filter(x=>x!==e && x.employeeNo)); changed=true; }
+    used.add(String(e.employeeNo).toUpperCase());
+    ['birthDate','civilStatus','mobileNumber','personalEmail','address','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'].forEach(k=>{ if(e[k]===undefined){ e[k]=''; changed=true; } });
+  });
+  return changed;
+}
+
 function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); }
 
 let DB = seedDB();
@@ -844,7 +896,9 @@ async function bootAuthenticated(user){
     const hasAny=RECORD_MODULES.some(k=>(state[k]||[]).length);
     if(!hasAny){ DB=seedDB(); await saveDB(); } else DB=state;
     if(!DB.audit) DB.audit=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];});
+    const employeeMasterChanged=normalizeEmployeeMasterData();
     DB_SNAPSHOT=JSON.parse(JSON.stringify(DB));
+    if(employeeMasterChanged) await saveDB();
     await loadProfiles();
     const profile=DB.users.find(x=>x.id===user.id);
     SESSION=profile || {id:user.id,fullName:user.user_metadata?.full_name||user.email,username:user.user_metadata?.username||'',email:user.email,role:'HR Staff'};
@@ -869,10 +923,97 @@ function enterApp(){
   go('dashboard');
 }
 
+/* ---------------- Phase 7: Action Center ---------------- */
+function actionCenterItems(caseRows){
+  const today=todayISO();
+  const next7=addDaysISO(today,7);
+  const next14=addDaysISO(today,14);
+  const items=[];
+  const activeCases=(caseRows||[]).filter(c=>!['Closed','Cancelled','Resolved'].includes(c.status));
+  activeCases.forEach(c=>{
+    const age=analyticsDaysOpen(c.opened_at,c.closed_at);
+    if(age>=30) items.push({level:'danger',title:`${c.case_number} has been open ${age} days`,detail:`${c.employee_name} · ${c.status}${c.department?' · '+c.department:''}`,meta:['HR Case','30+ days'],view:'cases',id:c.id});
+    if(c.status==='For Decision') items.push({level:'warning',title:`${c.case_number} is ready for decision`,detail:`${c.employee_name}${c.department?' · '+c.department:''}`,meta:['HR Case','For Decision'],view:'cases',id:c.id});
+    if(!c.assigned_to) items.push({level:'warning',title:`${c.case_number} is unassigned`,detail:`${c.employee_name}${c.department?' · '+c.department:''}`,meta:['HR Case','Unassigned'],view:'cases',id:c.id});
+  });
+
+  const pendingLeaves=DB.leaves.filter(l=>l.status==='Pending').sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
+  pendingLeaves.slice(0,8).forEach(l=>items.push({level:'warning',title:`Leave request pending: ${l.employeeName}`,detail:`${fmtDate(l.startDate)} – ${fmtDate(l.endDate)}${l.department?' · '+l.department:''}`,meta:['Leave','Pending'],view:'leaves'}));
+
+  const evalItems=[];
+  DB.employees.filter(e=>classify(e)==='Probationary' && e.dateHired).forEach(e=>EVAL_MILESTONES.forEach(m=>{
+    const st=evalStatusInfo(e,m);
+    if(st.label==='Overdue') evalItems.push({level:'danger',title:`Overdue evaluation: ${e.name}`,detail:`${m.label||m.key||m} due ${fmtDate(st.due)}`,meta:['Evaluation','Overdue'],view:'evaluations'});
+    else if(st.label==='Due Soon' && st.due<=next14) evalItems.push({level:'warning',title:`Evaluation due soon: ${e.name}`,detail:`${m.label||m.key||m} due ${fmtDate(st.due)}`,meta:['Evaluation','Due soon'],view:'evaluations'});
+  }));
+  items.push(...evalItems.slice(0,10));
+
+  DB.nte.filter(n=>n.status!=='Resolved').slice(0,10).forEach(n=>items.push({level:'warning',title:`NTE needs follow-up: ${n.employeeName}`,detail:`${n.status||'Open'}${n.dateReceived?' · received '+fmtDate(n.dateReceived):''}`,meta:['NTE','Open'],view:'nte'}));
+
+  DB.atd.filter(r=>atdRemaining(r)>0).slice(0,10).forEach(r=>items.push({level:'info',title:`ATD balance outstanding: ${r.employeeName}`,detail:`${peso(atdRemaining(r))} remaining${r.deductionType?' · '+r.deductionType:''}`,meta:['ATD','Balance'],view:'atd'}));
+
+  DB.leaves.filter(l=>l.startDate>today && l.startDate<=next7 && l.status!=='Disapproved').slice(0,8).forEach(l=>items.push({level:'info',title:`Upcoming leave: ${l.employeeName}`,detail:`Starts ${fmtDate(l.startDate)}${l.endDate?' · through '+fmtDate(l.endDate):''}`,meta:['Leave','Next 7 days'],view:'leaves'}));
+
+  const rank={danger:0,warning:1,info:2};
+  return items.sort((a,b)=>(rank[a.level]||9)-(rank[b.level]||9) || (a.title||'').localeCompare(b.title||''));
+}
+function actionCenterCounts(items){
+  return {total:items.length,danger:items.filter(x=>x.level==='danger').length,warning:items.filter(x=>x.level==='warning').length,info:items.filter(x=>x.level==='info').length};
+}
+async function renderActionCenter(){
+  setTitle('Action Center','A prioritized work queue for follow-ups, deadlines, and records needing attention.');
+  document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Loading action items…</div></div>';
+  try{
+    const {data:caseRows,error}=await supabase.from('hr_cases').select('id,case_number,employee_name,department,status,opened_at,closed_at,assigned_to').order('updated_at',{ascending:false}).limit(250);
+    if(error) throw error;
+    const items=actionCenterItems(caseRows||[]);
+    const counts=actionCenterCounts(items);
+    const visible=items.slice(0,30);
+    const html=`
+      <div class="action-center-hero">
+        <div><h1>Action Center</h1><p>One queue for urgent, upcoming, and informational HR follow-ups.</p></div>
+        <div class="action-center-count"><span>Open items</span><b>${counts.total}</b></div>
+      </div>
+      <div class="action-grid">
+        <div class="panel">
+          <div class="dashboard-panel-head"><div><h3>Priority Work Queue</h3><div class="desc">Click an item to open the related module.</div></div></div>
+          <div class="action-list">
+            ${visible.length?visible.map(x=>`<div class="action-item ${x.level}" onclick="go('${x.view}')"><span class="flag"></span><div class="body"><div class="title">${esc(x.title)}</div><div class="detail">${esc(x.detail)}</div><div class="meta">${(x.meta||[]).map(m=>`<span>${esc(m)}</span>`).join('')}</div></div><span style="font-size:16px;color:var(--slate);">›</span></div>`).join(''):'<div class="action-empty"><b>No active follow-ups.</b><div style="margin-top:5px;">The current records do not show outstanding action items.</div></div>'}
+          </div>
+          ${items.length>30?`<div class="analytics-note">Showing the first 30 items. Use the source modules for complete record-level review.</div>`:''}
+        </div>
+        <div class="action-side">
+          <div class="panel">
+            <h3>Queue Summary</h3><div class="desc">Grouped by urgency.</div>
+            <div class="action-summary">
+              <div class="metric-card"><div class="k">Urgent</div><div class="v">${counts.danger}</div><div class="s">Overdue / aged</div></div>
+              <div class="metric-card"><div class="k">Attention</div><div class="v">${counts.warning}</div><div class="s">Needs follow-up</div></div>
+              <div class="metric-card"><div class="k">Info</div><div class="v">${counts.info}</div><div class="s">Upcoming / balance</div></div>
+              <div class="metric-card"><div class="k">Total</div><div class="v">${counts.total}</div><div class="s">Current queue</div></div>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Quick Access</h3><div class="desc">Jump directly to high-use work areas.</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+              <button class="btn btn-ghost btn-sm" onclick="go('cases')">HR Cases</button>
+              <button class="btn btn-ghost btn-sm" onclick="go('evaluations')">Evaluations</button>
+              <button class="btn btn-ghost btn-sm" onclick="go('nte')">NTE</button>
+              <button class="btn btn-ghost btn-sm" onclick="go('atd')">ATD</button>
+              <button class="btn btn-ghost btn-sm" onclick="go('leaves')">Leaves</button>
+            </div>
+          </div>
+          <div class="action-tip"><b>Review note:</b> Action Center items are generated from current HR records. They are reminders for workflow review, not automatic determinations about an employee or case.</div>
+        </div>
+      </div>`;
+    document.getElementById('content').innerHTML=html;
+  }catch(e){document.getElementById('content').innerHTML=`<div class="panel"><h3>Action Center</h3><div class="notice"><b>Could not load action items.</b> ${esc(e.message||e)}</div></div>`;}
+}
+
 /* ---------------- nav ---------------- */
 const NAV = [
   {sec:'Overview', items:[
     {v:'dashboard', label:'Dashboard', icon:iGrid},
+    {v:'actionCenter', label:'Action Center', icon:iShield},
     {v:'analytics', label:'Management Analytics', icon:iChart},
     {v:'weeklyReport', label:'Weekly Report', icon:iChart},
   ]},
@@ -932,6 +1073,7 @@ function closeSidebar(){
 }
 function go(view){
   STATE.view=view; STATE.search=''; STATE.filter='';
+  closeSidebar();
   renderNav();
   closeSidebar();
   RENDERERS[view]();
@@ -1023,7 +1165,7 @@ function fieldHTML(f, val){
       <div class="computed-note" style="margin-top:6px;">Uploaded securely to Supabase Storage (max ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB per file).</div>
       </div>`;
   }
-  return `<div class="field ${f.full?'full':''}"><label>${f.label}${f.required?' *':''}</label><input type="${f.type}" id="f_${f.key}" value="${esc(v)}" ${f.required?'required':''}></div>`;
+  return `<div class="field ${f.full?'full':''}"><label>${f.label}${f.required?' *':''}</label><input type="${f.type}" id="f_${f.key}" value="${esc(v)}" ${f.required?'required':''} ${f.readonly?'readonly':''}></div>`;
 }
 function readFields(fields){
   const out={};
@@ -1423,9 +1565,10 @@ function renderEmployees(){
   </div>
   <div class="tablewrap">
     <table>
-      <thead><tr><th>Name</th><th>Position</th><th>Department</th><th>Date Hired</th><th>Gender</th><th>Status</th><th>Classification</th><th style="text-align:right;">Actions</th></tr></thead>
+      <thead><tr><th>Employee No.</th><th>Name</th><th>Position</th><th>Department</th><th>Date Hired</th><th>Gender</th><th>Status</th><th>Classification</th><th style="text-align:right;">Actions</th></tr></thead>
       <tbody>
         ${rows.length? rows.map(e=>`<tr>
+          <td class="mono">${esc(e.employeeNo||'—')}</td>
           <td><b>${esc(e.name)}</b></td>
           <td>${esc(e.position||'—')}</td>
           <td>${esc(e.department||'—')}</td>
@@ -1439,21 +1582,30 @@ function renderEmployees(){
             <button class="iconbtn" onclick="openTransferForEmployee('${e.id}')" title="Record Department Transfer">${iSwap(14)}</button>
             <button class="iconbtn" onclick="deleteEmployee('${e.id}')" title="Delete">${iTrash(14)}</button>`:''}
           </div></td>
-        </tr>`).join('') : `<tr><td colspan="8"><div class="empty"><b>No employees found</b>Try a different search or add a new employee.</div></td></tr>`}
+        </tr>`).join('') : `<tr><td colspan="9"><div class="empty"><b>No employees found</b>Try a different search or add a new employee.</div></td></tr>`}
       </tbody>
     </table>
   </div>`;
   document.getElementById('content').innerHTML = html;
 }
 const EMP_FIELDS = [
+  {key:'employeeNo', label:'Employee No.', type:'text', readonly:true},
   {key:'name', label:'Employee Name', type:'text', required:true},
   {key:'position', label:'Position', type:'text', required:true},
   {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
   {key:'dateHired', label:'Date Hired', type:'date', required:true},
+  {key:'birthDate', label:'Birth Date', type:'date'},
   {key:'gender', label:'Gender', type:'select', options:['Male','Female'], required:true},
+  {key:'civilStatus', label:'Civil Status', type:'select', options:['Single','Married','Widowed','Separated','Other',''], required:false},
   {key:'status', label:'Employment Status', type:'select', options:EMP_STATUS, required:true},
   {key:'statusDate', label:'Status Effective Date (resignation/AWOL/separation/etc.)', type:'date'},
   {key:'prfNumber', label:'PRF Number (if applicable)', type:'text'},
+  {key:'mobileNumber', label:'Mobile Number', type:'tel'},
+  {key:'personalEmail', label:'Personal / Contact Email', type:'email'},
+  {key:'address', label:'Home Address', type:'text', full:true},
+  {key:'emergencyContactName', label:'Emergency Contact Name', type:'text'},
+  {key:'emergencyContactRelationship', label:'Emergency Contact Relationship', type:'text'},
+  {key:'emergencyContactPhone', label:'Emergency Contact Phone', type:'tel'},
   {key:'classOverride', label:'Classification', type:'select', options:['Auto','Probationary','Regular'], required:true},
 ];
 function openEmployeeForm(id){
@@ -1462,8 +1614,9 @@ function openEmployeeForm(id){
     <div class="modal-head"><h3>${existing?'Edit':'Add'} Employee</h3><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
       <div class="formgrid">
-        ${EMP_FIELDS.map(f=>fieldHTML(f, existing? existing[f.key]:(f.key==='status'?'Newly Hired':f.key==='classOverride'?'Auto':''))).join('')}
+        ${EMP_FIELDS.map(f=>fieldHTML(f, existing? existing[f.key] : (f.key==='employeeNo'?nextEmployeeNumber(DB.employees):f.key==='status'?'Newly Hired':f.key==='classOverride'?'Auto':''))).join('')}
       </div>
+      <div class="employee-master-note"><b>Employee master data:</b> Employee No. is system-generated. Contact and emergency information is optional and can be completed later.</div>
       <div class="computed-note">Classification is calculated automatically from Date Hired against the ${DB.settings.probationDays}-day regularization threshold (set in Settings). Choose "Auto" unless you need to manually correct a record.</div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployee('${id||''}')">Save Employee</button></div>
@@ -1480,7 +1633,9 @@ async function saveEmployee(id){
   const missing = EMP_FIELDS.filter(f=>f.required && !vals[f.key]);
   if(missing.length){ toast('Please complete: '+missing.map(f=>f.label).join(', ')); return; }
   if(vals.dateHired>todayISO()){ toast('Date Hired cannot be in the future.'); return; }
+  if(vals.birthDate && vals.birthDate>todayISO()){ toast('Birth Date cannot be in the future.'); return; }
   if(vals.statusDate && vals.statusDate<vals.dateHired){ toast('Status Effective Date cannot be before Date Hired.'); return; }
+  if(vals.employeeNo && DB.employees.some(e=>e.id!==id && String(e.employeeNo||'').toUpperCase()===String(vals.employeeNo).toUpperCase())){ vals.employeeNo=nextEmployeeNumber(DB.employees); }
   const duplicateCandidates=findEmployeeDuplicates(vals,id);
   if(duplicateCandidates.length){
     const sample=duplicateCandidates.slice(0,3).map(e=>e.name+' — '+e.department).join('; ');
@@ -1544,8 +1699,10 @@ function saveEmployeeTransfer(id){
 }
 function exportEmployeesCSV(){
   const csv = toCSV(DB.employees, [
-    {label:'Name', get:r=>r.name},{label:'Position', get:r=>r.position},{label:'Department', get:r=>r.department},
-    {label:'Date Hired', get:r=>r.dateHired},{label:'Gender', get:r=>r.gender},{label:'Status', get:r=>r.status},
+    {label:'Employee No.', get:r=>r.employeeNo},{label:'Name', get:r=>r.name},{label:'Position', get:r=>r.position},{label:'Department', get:r=>r.department},
+    {label:'Date Hired', get:r=>r.dateHired},{label:'Birth Date', get:r=>r.birthDate},{label:'Gender', get:r=>r.gender},{label:'Civil Status', get:r=>r.civilStatus},
+    {label:'Mobile', get:r=>r.mobileNumber},{label:'Email', get:r=>r.personalEmail},{label:'Emergency Contact', get:r=>r.emergencyContactName},{label:'Emergency Phone', get:r=>r.emergencyContactPhone},
+    {label:'Status', get:r=>r.status},
     {label:'Classification', get:r=>classify(r)},
   ]);
   downloadCSV('employees_export.csv', csv);
@@ -1580,7 +1737,7 @@ async function openEmployeeProfile(id){
   ].filter(x=>x.date).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,14);
   const statusMap=EMP_STATUS_MAP;
   openModal(`<div class="modal-head"><div><h3>Employee 360 Profile</h3><div class="small">${esc(emp.id)}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body">
-    <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(emp.name)}</div><div class="profile-sub">${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div></div><div class="profile-actions">${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="closeModal(); openEmployeeForm('${emp.id}')">${iEdit(13)} Edit Employee</button>`:''}</div></div>
+    <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(emp.name)}</div><div class="profile-sub">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div></div><div class="profile-actions">${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="closeModal(); openEmployeeForm('${emp.id}')">${iEdit(13)} Edit Employee</button>`:''}</div></div>
     <div class="profile-kpis">
       <div class="profile-kpi"><div class="k">HR Cases</div><div class="v">${cases.length}</div><div class="s">Case history</div></div>
       <div class="profile-kpi"><div class="k">Leave Records</div><div class="v">${leaves.length}</div><div class="s">Requests on file</div></div>
@@ -1589,6 +1746,7 @@ async function openEmployeeProfile(id){
     </div>
     <div class="profile-grid">
       <div class="panel"><h3>Employment Information</h3><div class="desc">Current employee master record.</div><div class="profile-detail">
+        <div class="item"><div class="label">Employee No.</div><div class="value mono">${esc(emp.employeeNo||'—')}</div></div>
         <div class="item"><div class="label">Employee Name</div><div class="value">${esc(emp.name)}</div></div>
         <div class="item"><div class="label">Position</div><div class="value">${esc(emp.position||'—')}</div></div>
         <div class="item"><div class="label">Department</div><div class="value">${esc(emp.department||'—')}</div></div>
@@ -1597,6 +1755,16 @@ async function openEmployeeProfile(id){
         <div class="item"><div class="label">Employment Status</div><div class="value">${esc(emp.status||'—')}</div></div>
         <div class="item"><div class="label">Status Effective Date</div><div class="value">${fmtDate(emp.statusDate)}</div></div>
         <div class="item"><div class="label">PRF Number</div><div class="value">${esc(emp.prfNumber||'—')}</div></div>
+      </div></div>
+      <div class="panel"><h3>Contact &amp; Emergency Information</h3><div class="desc">Personal contact details recorded for HR operations.</div><div class="profile-detail">
+        <div class="item"><div class="label">Birth Date</div><div class="value">${fmtDate(emp.birthDate)}</div></div>
+        <div class="item"><div class="label">Civil Status</div><div class="value">${esc(emp.civilStatus||'—')}</div></div>
+        <div class="item"><div class="label">Mobile</div><div class="value">${esc(emp.mobileNumber||'—')}</div></div>
+        <div class="item"><div class="label">Email</div><div class="value">${esc(emp.personalEmail||'—')}</div></div>
+        <div class="item" style="grid-column:1/-1;"><div class="label">Home Address</div><div class="value">${esc(emp.address||'—')}</div></div>
+        <div class="item"><div class="label">Emergency Contact</div><div class="value">${esc(emp.emergencyContactName||'—')}</div></div>
+        <div class="item"><div class="label">Relationship</div><div class="value">${esc(emp.emergencyContactRelationship||'—')}</div></div>
+        <div class="item"><div class="label">Emergency Phone</div><div class="value">${esc(emp.emergencyContactPhone||'—')}</div></div>
       </div></div>
       <div class="panel"><h3>Record Summary</h3><div class="desc">Activity across connected HR modules.</div><div class="profile-statline">
         <div class="profile-detail"><div class="item"><div class="label">NTE</div><div class="value">${nte.length}</div></div><div class="item"><div class="label">Memoranda</div><div class="value">${memos.length}</div></div></div>
@@ -3136,7 +3304,7 @@ function renderSettings(){
   `;
 }
 async function saveSettings(){
-  DB.settings.orgName = document.getElementById('s_org').value.trim()||'SCPA';
+  DB.settings.orgName = document.getElementById('s_org').value.trim()||'SLSC';
   DB.settings.probationDays = parseInt(document.getElementById('s_prob').value,10)||180;
   logAudit('Updated organization settings');
   if(await saveDB()) toast('Settings saved.'); enterApp(); go('settings');
@@ -3491,6 +3659,7 @@ async function deleteCase(id){
    ================================================================ */
 const RENDERERS = {
   dashboard: renderDashboard,
+  actionCenter: renderActionCenter,
   analytics: renderAnalytics,
   cases: renderCases,
   documents: renderDocuments,
@@ -3531,11 +3700,11 @@ Object.assign(window, {
   evalStatusInfo, exportATDCSV, exportCVRCSV, exportEmployeesCSV, exportIncidentsCSV, exportModuleCSV, exportWeeklyCSV,
   fieldHTML, fmtDate, getEvalRecord, go, handleFileInput, incidentTypeOccurrence, incidentTypeSummaryHTML,
   toggleSidebar, closeSidebar, applyReportFilters, exportReportEmployees, exportReportActivity, exportReportATD, exportReportCases,
-  loadDB, loadProfiles, logAudit, mondayOf, nthLabel, offenseLevelFor, openATDForm, openATDPaymentForm,
+  loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, openATDForm, openATDPaymentForm,
   openATDPayments, openCVRForm, openEmployeeForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard,
   renderDisciplinary, renderEmployees, renderEvaluations, renderIncidents, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords,
-  renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderOffenseSummary, renderReports, renderSettings,
+  renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
   renderUsers, renderWeeklyReport, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, setTitle, shiftDate, statusBadge, switchAuthTab, toCSV,
   toast, todayISO, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek
