@@ -1277,7 +1277,7 @@ function renderDisciplinary(){
       <td><b>${esc(d.employeeName)}</b></td><td>${esc(d.department||'—')}</td><td>${esc(d.violation)}</td>
       <td>${statusBadge(offenseLevelFor(d.employeeName,d.violation,d.id), {}) }</td>
       <td>${fmtDate(d.dateOfIncident)}</td><td>${esc(d.action||'—')}</td>
-      <td><div class="rowactions">${canEdit()?`<button class="iconbtn" onclick="openRecordForm('disciplinary','${d.id}')">${iEdit(14)}</button><button class="iconbtn" onclick="deleteRecord('disciplinary','${d.id}')">${iTrash(14)}</button>`:'<span class="small">View only</span>'}</div></td>
+      <td><div class="rowactions">${canEdit()?`<button class="iconbtn" title="HR Case" onclick="openRecordCaseDialog('disciplinary','${d.id}')">${iShield(14)}</button><button class="iconbtn" onclick="openRecordForm('disciplinary','${d.id}')">${iEdit(14)}</button><button class="iconbtn" onclick="deleteRecord('disciplinary','${d.id}')">${iTrash(14)}</button>`:'<span class="small">View only</span>'}</div></td>
     </tr>`).join('') : `<tr><td colspan="7"><div class="empty"><b>No disciplinary records</b>Add a record to begin tracking violations.</div></td></tr>`}
     </tbody></table></div>
   <div class="panel" style="margin-top:16px;">
@@ -1338,7 +1338,7 @@ function renderCVR(){
       <td style="min-width:220px;">${cvrOffenseSummaryHTML(c)}</td>
       <td>${attachCellHTML('cvr',c,'attachment')}</td>
       <td>${statusBadge(c.status, CVR_STATUS_MAP)}</td>
-      <td><div class="rowactions">${canEdit()?`<button class="iconbtn" onclick="openCVRForm('${c.id}')">${iEdit(14)}</button><button class="iconbtn" onclick="deleteCVR('${c.id}')">${iTrash(14)}</button>`:'<span class="small">View only</span>'}</div></td>
+      <td><div class="rowactions">${canEdit()?`<button class="iconbtn" title="HR Case" onclick="openRecordCaseDialog('cvr','${c.id}')">${iShield(14)}</button><button class="iconbtn" onclick="openCVRForm('${c.id}')">${iEdit(14)}</button><button class="iconbtn" onclick="deleteCVR('${c.id}')">${iTrash(14)}</button>`:'<span class="small">View only</span>'}</div></td>
     </tr>`).join('') : `<tr><td colspan="7"><div class="empty"><b>No CVRs yet</b>Add a CVR to begin tracking checked or written offenses.</div></td></tr>`}
     </tbody></table></div>
   <div class="panel" style="margin-top:16px;">
@@ -1459,7 +1459,7 @@ function renderIncidents(){
       <td>${statusBadge(i.severity, INCIDENT_SEVERITY_MAP)}</td>
       <td>${attachCellHTML('incidents',i,'attachment')}</td>
       <td>${statusBadge(i.status, INCIDENT_STATUS_MAP)}</td>
-      <td><div class="rowactions">${canEdit()?`<button class="iconbtn" onclick="openIncidentForm('${i.id}')">${iEdit(14)}</button><button class="iconbtn" onclick="deleteIncident('${i.id}')">${iTrash(14)}</button>`:'<span class="small">View only</span>'}</div></td>
+      <td><div class="rowactions">${canEdit()?`<button class="iconbtn" title="HR Case" onclick="openRecordCaseDialog('incidents','${i.id}')">${iShield(14)}</button><button class="iconbtn" onclick="openIncidentForm('${i.id}')">${iEdit(14)}</button><button class="iconbtn" onclick="deleteIncident('${i.id}')">${iTrash(14)}</button>`:'<span class="small">View only</span>'}</div></td>
     </tr>`).join('') : `<tr><td colspan="8"><div class="empty"><b>No incident reports yet</b>Add a report to begin tracking.</div></td></tr>`}
     </tbody></table></div>
   <div class="panel" style="margin-top:16px;">
@@ -2404,6 +2404,76 @@ function caseRecordDate(module,r){
   if(!r) return '';
   return r.dateOfIncident||r.dateOfCVR||r.dateOfApplication||r.atdDate||r.startDate||r.dateRecorded||r.dateHired||r.createdAt||r.completedDate||'';
 }
+
+async function openRecordCaseDialog(module,recordId){
+  if(SESSION?.role==='Viewer') return;
+  const rec=(DB[module]||[]).find(r=>String(r.id)===String(recordId));
+  if(!rec){toast('Record could not be found.',true);return;}
+  try{
+    const [{data:links,error:linkError},{data:cases,error:caseError}]=await Promise.all([
+      supabase.from('hr_case_links').select('case_id,label,linked_at').eq('module',module).eq('record_id',String(recordId)).order('linked_at',{ascending:false}),
+      supabase.from('hr_cases').select('id,case_number,employee_name,subject,status,opened_at').order('updated_at',{ascending:false}).limit(200)
+    ]);
+    if(linkError) throw linkError;
+    if(caseError) throw caseError;
+    const linkedIds=new Set((links||[]).map(x=>String(x.case_id)));
+    const linkedCases=(cases||[]).filter(c=>linkedIds.has(String(c.id)));
+    const availableCases=(cases||[]).filter(c=>!linkedIds.has(String(c.id)));
+    openModal(`<div class="modal-head"><div><h3>${esc(caseModuleLabel(module))} — HR Case</h3><div class="small">${esc(caseRecordLabel(module,rec))}</div></div><button onclick="closeModal()">&times;</button></div>
+      <div class="modal-body">
+        <div class="panel" style="padding:14px;margin-bottom:14px;">
+          <h3>Linked Case${linkedCases.length===1?'':'s'}</h3>
+          <div class="desc">This record can belong to one or more HR case files.</div>
+          ${linkedCases.length?linkedCases.map(c=>`<div class="case-link" style="margin-bottom:8px;"><div class="stage">${iDoc(13)}</div><div class="body"><div class="title">${esc(c.case_number)}</div><div class="meta">${esc(c.subject||'HR Case')} · ${statusBadge(c.status,CASE_STATUS_MAP)}</div></div><div class="actions"><button class="btn btn-ghost btn-sm" onclick="openCaseDetails('${c.id}')">Open</button></div></div>`).join(''):'<div class="empty"><b>Not linked to a case yet</b>Create a new case or link this record to an existing one.</div>'}
+        </div>
+        <div class="panel" style="padding:14px;">
+          <h3>Attach to Case</h3>
+          <div class="desc">Choose an existing case or create a new case from this record.</div>
+          ${availableCases.length?`<div class="field"><label>Existing HR Case</label><select id="record-case-select"><option value="">Select a case…</option>${availableCases.map(c=>`<option value="${esc(c.id)}">${esc(c.case_number)} — ${esc(c.employee_name)}${c.subject?' — '+esc(c.subject):''}</option>`).join('')}</select></div><button class="btn btn-ghost btn-sm" onclick="linkRecordToExistingCase('${module}','${recordId}')">Link to Selected Case</button>`:'<div class="small">No other existing cases are available for linking.</div>'}
+          <div style="height:10px"></div>
+          <button class="btn btn-brass btn-sm" onclick="createCaseFromRecord('${module}','${recordId}')">${iPlus(13)} Create New Case from This Record</button>
+        </div>
+      </div>
+      <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>`);
+    document.getElementById('modal').classList.add('case-modal');
+  }catch(e){toast('Could not load case links: '+e.message,true);}
+}
+async function createCaseFromRecord(module,recordId){
+  if(SESSION?.role==='Viewer') return;
+  const rec=(DB[module]||[]).find(r=>String(r.id)===String(recordId));
+  if(!rec){toast('Record could not be found.',true);return;}
+  const employeeName=rec.employeeName||rec.name||'';
+  const emp=employeeName?DB.employees.find(e=>String(e.name).toLowerCase()===String(employeeName).toLowerCase()):null;
+  const department=rec.department||emp?.department||'';
+  const openedAt=caseRecordDate(module,rec)||todayISO();
+  const subject=caseRecordLabel(module,rec);
+  try{
+    const caseNumber=await nextCaseNumber();
+    const {data,error}=await supabase.from('hr_cases').insert({
+      case_number:caseNumber,employee_record_id:emp?.id||null,employee_name:employeeName||'Unassigned',department,subject,status:'Open',
+      opened_at:openedAt,assigned_to:SESSION?.id||null,created_by:SESSION?.id||null,updated_by:SESSION?.id||null
+    }).select('id').single();
+    if(error) throw error;
+    const {error:linkError}=await supabase.from('hr_case_links').insert({case_id:data.id,module,record_id:String(recordId),label:subject,linked_by:SESSION?.id||null});
+    if(linkError){await supabase.from('hr_cases').delete().eq('id',data.id);throw linkError;}
+    logAudit(`Created HR case ${caseNumber} from ${caseModuleLabel(module)}`);
+    toast(`HR case ${caseNumber} created and linked.`);
+    await openCaseDetails(data.id);
+  }catch(e){toast('Could not create HR case: '+e.message,true);}
+}
+async function linkRecordToExistingCase(module,recordId){
+  if(SESSION?.role==='Viewer') return;
+  const caseId=document.getElementById('record-case-select')?.value;
+  if(!caseId){toast('Please select an existing HR case first.');return;}
+  const rec=(DB[module]||[]).find(r=>String(r.id)===String(recordId));
+  if(!rec){toast('Record could not be found.',true);return;}
+  const label=caseRecordLabel(module,rec);
+  const {error}=await supabase.from('hr_case_links').insert({case_id:caseId,module,record_id:String(recordId),label,linked_by:SESSION?.id||null});
+  if(error){toast(error.code==='23505'?'That record is already linked to this case.':'Could not link record: '+error.message,true);return;}
+  logAudit(`Linked ${caseModuleLabel(module)} to existing HR case`);
+  toast('Record linked to HR case.');
+  await openCaseDetails(caseId);
+}
 async function nextCaseNumber(){
   const year=new Date().getFullYear();
   const prefix=`CASE-${year}-`;
@@ -2551,7 +2621,7 @@ document.getElementById('login-form').addEventListener('keydown', e=>{ if(docume
 // can execute those handlers normally.
 Object.assign(window, {
   addDaysISO, atdComputeStatus, atdFillEmployee, atdPayslipCellHTML, atdRemaining, atdToggleCategory, atdTotalPaid,
-  caseModuleLabel, caseRecordLabel, deleteCase, linkCaseRecord, openCaseDetails, openCaseForm, openCaseLinkForm, populateCaseRecordOptions, renderCases, saveCase,
+  caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, populateCaseRecordOptions, renderCases, saveCase,
   attachCellHTML, attachPreviewHTML, authErr, bootAuthenticated, calShift, canEdit, classify, clearFileField, closeModal,
   consequenceFor, cvrOffenseLevel, cvrOffenseSummaryHTML, daysBetweenInclusive, defaultOffenseCatalog, deleteATDPayment,
   deleteATDRecord, deleteCVR, deleteEmployee, deleteIncident, deleteRecord, doLogin, doLogout, doRegister, donut,
