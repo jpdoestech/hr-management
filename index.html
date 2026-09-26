@@ -605,6 +605,47 @@ tbody tr:hover{background:#FAF9F5;}
 @media (max-width:720px){.workflow-hero{flex-direction:column;align-items:flex-start;}.workflow-actions{justify-content:flex-start;}.workflow-kpis{grid-template-columns:1fr 1fr;}.workflow-detail{grid-template-columns:1fr;}.workflow-row{grid-template-columns:10px 1fr;}.workflow-row .right,.workflow-row .actions{grid-column:2;grid-row:auto;text-align:left;justify-content:flex-start;}}
 @media (max-width:460px){.workflow-kpis{grid-template-columns:1fr 1fr;gap:7px;}.workflow-kpi{padding:10px;}.workflow-kpi .v{font-size:20px;}}
 
+/* ---------- Automation Center ---------- */
+.automation-hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:16px;}
+.automation-hero h1{margin:0;font-size:27px;line-height:1.08;}
+.automation-hero p{margin:6px 0 0;font-size:12.5px;color:var(--slate);max-width:760px;}
+.automation-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end;}
+.automation-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+.automation-kpi{background:#fff;border:1px solid var(--line);border-radius:10px;padding:13px;box-shadow:var(--shadow);position:relative;overflow:hidden;}
+.automation-kpi::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--accent,var(--ink));}
+.automation-kpi .k{font-size:9.8px;text-transform:uppercase;letter-spacing:.055em;color:var(--slate);font-weight:700;}
+.automation-kpi .v{font:700 23px/1 'Source Serif 4',Georgia,serif;margin-top:6px;}
+.automation-kpi .s{font-size:10.5px;color:var(--slate);margin-top:4px;line-height:1.35;}
+.automation-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:16px;margin-bottom:16px;}
+.automation-panel{background:#fff;border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow);overflow:hidden;}
+.automation-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:14px 15px;border-bottom:1px solid var(--line);background:#FBFCFE;}
+.automation-panel-head h3{margin:0;font-size:15px;}
+.automation-panel-head .desc{margin:3px 0 0;font-size:11px;color:var(--slate);line-height:1.45;}
+.automation-rule-list,.automation-run-list{padding:9px;display:flex;flex-direction:column;gap:7px;}
+.automation-rule{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;}
+.automation-rule.disabled{opacity:.62;background:#FBFCFE;}
+.automation-rule .title{font-size:12.5px;font-weight:750;}
+.automation-rule .desc{font-size:10.5px;color:var(--slate);margin-top:3px;line-height:1.4;}
+.automation-rule .meta{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;}
+.automation-rule .tag{font-size:9.2px;color:var(--slate);border:1px solid var(--line);border-radius:99px;padding:3px 6px;background:#FBFCFE;}
+.automation-switch{display:inline-flex;align-items:center;gap:7px;font-size:10.5px;color:var(--slate);white-space:nowrap;}
+.automation-switch input{accent-color:var(--ink);}
+.automation-run-row{display:grid;grid-template-columns:10px 1fr auto;gap:10px;align-items:center;padding:10px 11px;border:1px solid var(--line);border-radius:9px;}
+.automation-run-row .dot{width:8px;height:8px;border-radius:50%;background:var(--forest);}
+.automation-run-row.failed .dot{background:var(--rust);}
+.automation-run-row .title{font-size:11.8px;font-weight:700;}
+.automation-run-row .meta{font-size:10.2px;color:var(--slate);margin-top:2px;line-height:1.4;}
+.automation-empty{padding:26px 14px;text-align:center;color:var(--slate);font-size:11px;}
+.automation-empty b{display:block;color:var(--ink);font-size:13px;margin-bottom:4px;}
+.automation-rule-note{padding:11px 12px;border:1px dashed var(--line-2);border-radius:8px;background:#FAFBFD;font-size:10.5px;color:var(--slate);line-height:1.55;margin:9px;}
+.automation-insight{padding:13px 14px;border:1px solid var(--line);border-radius:9px;background:#fff;margin-bottom:9px;}
+.automation-insight:last-child{margin-bottom:0;}
+.automation-insight .k{font-size:9.7px;text-transform:uppercase;letter-spacing:.06em;color:var(--slate);font-weight:700;}
+.automation-insight .v{font:700 21px/1.1 'Source Serif 4',Georgia,serif;margin-top:5px;}
+.automation-insight .s{font-size:10.5px;color:var(--slate);margin-top:3px;line-height:1.4;}
+@media (max-width:1100px){.automation-grid{grid-template-columns:1fr;}.automation-kpis{grid-template-columns:repeat(2,1fr);}.automation-rule{grid-template-columns:1fr auto;}.automation-rule .automation-switch{grid-column:2;grid-row:1;}.automation-rule .btn{grid-column:1;}}
+@media (max-width:720px){.automation-hero{flex-direction:column;align-items:flex-start;}.automation-actions{justify-content:flex-start;}.automation-kpis{grid-template-columns:1fr 1fr;}.automation-rule{grid-template-columns:1fr;}.automation-rule .automation-switch{grid-column:auto;grid-row:auto;}.automation-rule .btn{grid-column:auto;}.automation-run-row{grid-template-columns:8px 1fr;}.automation-run-row .right{grid-column:2;}}
+
 
 /* ---------- Data Quality & Governance ---------- */
 .quality-hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:16px;}
@@ -875,12 +916,12 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
    Phase 2: record-level Postgres persistence, Supabase Auth, and private Storage.
    ========================================================================= */
 
-const RECORD_MODULES = ['employees','leaves','disciplinary','nte','memos','nod','oncall','transfers','offenseCatalog','cvr','incidents','prf','evaluations','atd','workflowTasks','documents'];
+const RECORD_MODULES = ['employees','leaves','disciplinary','nte','memos','nod','oncall','transfers','offenseCatalog','cvr','incidents','prf','evaluations','atd','workflowTasks','automationRuns','documents'];
 let DB_SNAPSHOT = null;
 let SAVE_QUEUE = Promise.resolve();
 
 function blankDB(){
-  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],documents:[],settings:{orgName:'SLSC',probationDays:180},audit:[],users:[]};
+  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],settings:{orgName:'SLSC',probationDays:180},audit:[],users:[]};
 }
 
 async function loadDB(){
@@ -1149,7 +1190,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = seedDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'' };
+let STATE = { view:'dashboard', search:'', filter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'' };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
@@ -1210,13 +1251,14 @@ async function bootAuthenticated(user){
     let state=await loadDB();
     const hasAny=RECORD_MODULES.some(k=>(state[k]||[]).length);
     if(!hasAny){ DB=seedDB(); await saveDB(); } else DB=state;
-    if(!DB.audit) DB.audit=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; DB.prf.forEach(p=>{if(!p.status)p.status='Draft';}); if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; if(!DB.workflowTasks) DB.workflowTasks=[]; if(!DB.documents) DB.documents=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];});
+    if(!DB.audit) DB.audit=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; DB.prf.forEach(p=>{if(!p.status)p.status='Draft';}); if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; if(!DB.workflowTasks) DB.workflowTasks=[]; if(!DB.automationRuns) DB.automationRuns=[]; if(!DB.documents) DB.documents=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];}); if(!DB.settings) DB.settings={orgName:'SLSC',probationDays:180};
     const employeeMasterChanged=normalizeEmployeeMasterData();
     DB_SNAPSHOT=JSON.parse(JSON.stringify(DB));
     if(employeeMasterChanged) await saveDB();
     await loadProfiles();
     const profile=DB.users.find(x=>x.id===user.id);
     SESSION=profile || {id:user.id,fullName:user.user_metadata?.full_name||user.email,username:user.user_metadata?.username||'',email:user.email,role:'HR Staff'};
+    ensureAutomationSettings();
     await workflowSyncTasks({silent:true});
     enterApp();
   }catch(e){ authErr('Could not load the HR database: '+e.message); await supabase.auth.signOut(); }
@@ -1225,6 +1267,8 @@ async function bootAuthenticated(user){
 async function doLogout(){
   if(NOTIFICATION_TIMER) clearInterval(NOTIFICATION_TIMER);
   NOTIFICATION_TIMER=null;
+  if(AUTOMATION_TIMER) clearInterval(AUTOMATION_TIMER);
+  AUTOMATION_TIMER=null;
   NOTIFICATION_ITEMS=[];
   closeNotificationPanel();
   await supabase.auth.signOut();
@@ -1331,6 +1375,11 @@ async function buildNotificationItems(){
     else if(d.expirationDate<=docNext30) items.push(notificationItem(`doc-expiring-${d.id}`,'warning',`Document expiring soon: ${d.name||'Untitled document'}`,`${owner} · Expires ${fmtDate(d.expirationDate)}`,'documents'));
   });
 
+  (DB.workflowTasks||[]).filter(t=>t.automationGenerated && t.status==='Pending' && workflowVisibleToSession(t)).slice(0,10).forEach(t=>{
+    const level=t.priority==='Urgent'?'danger':t.priority==='High'?'warning':'info';
+    items.push(notificationItem(`automation-task-${t.id}`,level,`Automation task: ${t.title}`,`${t.employeeName||'HR workflow'}${t.dueDate?' · '+workflowDueText(t):''}`,'workflow',t.id));
+  });
+
   const seen=new Set();
   return items.filter(x=>{ if(seen.has(x.id)) return false; seen.add(x.id); return true; })
     .sort((a,b)=>notificationLevelRank(a.level)-notificationLevelRank(b.level) || (a.title||'').localeCompare(b.title||''))
@@ -1374,6 +1423,7 @@ async function openNotification(id,view,recordId){
   updateNotificationBadgeFromItems();
   closeNotificationPanel();
   if(recordId && view==='cases'){ await openCaseDetails(recordId); return; }
+  if(recordId && view==='workflow'){ openWorkflowTask(recordId); return; }
   go(view);
 }
 
@@ -1390,6 +1440,9 @@ function enterApp(){
   refreshNotificationBadge();
   if(NOTIFICATION_TIMER) clearInterval(NOTIFICATION_TIMER);
   NOTIFICATION_TIMER=setInterval(()=>refreshNotificationBadge(),60000);
+  if(AUTOMATION_TIMER) clearInterval(AUTOMATION_TIMER);
+  runAutomationEngine({silent:true});
+  AUTOMATION_TIMER=setInterval(()=>runAutomationEngine({silent:true}),300000);
 }
 
 /* ---------------- Phase 7: Action Center ---------------- */
@@ -1593,6 +1646,7 @@ const NAV = [
     {v:'dashboard', label:'Dashboard', icon:iGrid},
     {v:'actionCenter', label:'Action Center', icon:iShield},
     {v:'workflow', label:'Workflow & Approvals', icon:iCheck, count:()=>workflowPendingCount()},
+    {v:'automation', label:'Automation Center', icon:iGear, count:()=>automationPendingCount()},
     {v:'operations', label:'HR Operations', icon:iGrid},
     {v:'analytics', label:'Management Analytics', icon:iChart},
     {v:'weeklyReport', label:'Weekly Report', icon:iChart},
@@ -3876,6 +3930,220 @@ async function renderWorkflowCenter(){
   document.getElementById('content').innerHTML=html;
 }
 
+
+/* ================================================================
+   AUTOMATION ENGINE
+   Browser-side rule runner with durable task/run metadata. The app
+   remains the source of record; automation coordinates work around it.
+   Server-side scheduled execution can be added later without changing
+   the rule contracts below.
+   ================================================================ */
+const AUTOMATION_RULES = [
+  {id:'probation_milestones',label:'Probation Milestone Prep',category:'Lifecycle',defaultEnabled:true,description:'Create a preparation task when a 30/90/180-day probation milestone is due within 14 days or is overdue.',windowDays:14},
+  {id:'document_expiry',label:'Document Expiry Follow-up',category:'Documents',defaultEnabled:true,description:'Create a follow-up task for active documents expiring within 30 days.',windowDays:30},
+  {id:'aged_cases',label:'Aged Case Review',category:'Employee Relations',defaultEnabled:true,description:'Flag open HR cases that have remained open for 30 days or more.',windowDays:30},
+  {id:'case_deadline_priority',label:'Case Deadline Escalation',category:'Employee Relations',defaultEnabled:true,description:'Automatically raise workflow-task urgency as open case deadlines approach or pass.',windowDays:3},
+  {id:'data_quality_followup',label:'Data Quality Follow-up',category:'Governance',defaultEnabled:true,description:'Create one governance task when the current data-quality scan contains material errors.',windowDays:0}
+];
+let AUTOMATION_RUNNING=false;
+let AUTOMATION_TIMER=null;
+function ensureAutomationSettings(){
+  if(!DB.settings) DB.settings={orgName:'SLSC',probationDays:180};
+  if(!DB.settings.automationRules) DB.settings.automationRules={};
+  let changed=false;
+  AUTOMATION_RULES.forEach(r=>{
+    if(typeof DB.settings.automationRules[r.id] !== 'boolean'){ DB.settings.automationRules[r.id]=r.defaultEnabled; changed=true; }
+  });
+  return changed;
+}
+function automationRuleEnabled(id){ ensureAutomationSettings(); return DB.settings.automationRules[id]!==false; }
+function automationPendingCount(){ return (DB.workflowTasks||[]).filter(t=>t.automationGenerated && t.status==='Pending' && workflowVisibleToSession(t)).length; }
+function automationTaskKey(ruleId,key){ return `automation:${ruleId}:${key}`; }
+function automationExistingTask(ruleId,key){ return (DB.workflowTasks||[]).find(t=>t.workflowKey===automationTaskKey(ruleId,key)); }
+function automationUpsertTask(ruleId,key,patch){
+  if(!DB.workflowTasks) DB.workflowTasks=[];
+  const workflowKey=automationTaskKey(ruleId,key);
+  let t=DB.workflowTasks.find(x=>x.workflowKey===workflowKey);
+  if(!t){
+    t={id:uid(),workflowKey,createdAt:new Date().toISOString(),createdBy:SESSION?.id||null,status:'Pending',automationGenerated:true,automationRuleId:ruleId};
+    DB.workflowTasks.push(t);
+  }
+  Object.assign(t,patch,{workflowKey,automationGenerated:true,automationRuleId:ruleId});
+  return t;
+}
+function automationCloseTask(ruleId,key,reason='Condition cleared'){
+  const t=automationExistingTask(ruleId,key);
+  if(!t || !['Pending','Rejected'].includes(t.status)) return false;
+  t.status='Completed'; t.completedAt=t.completedAt||new Date().toISOString(); t.completedBy=t.completedBy||null; t.decision='Auto-completed'; t.autoCompletionReason=reason;
+  return true;
+}
+function automationDateState(due,today=todayISO(),windowDays=14){
+  if(!due) return 'none';
+  if(due<today) return 'overdue';
+  if(due<=addDaysISO(today,windowDays)) return 'upcoming';
+  return 'future';
+}
+function automationTaskPriority(state){ return state==='overdue'?'Urgent':state==='upcoming'?'High':'Normal'; }
+function automationRuleStateMap(){
+  const out={};
+  AUTOMATION_RULES.forEach(r=>out[r.id]={rule:r,created:0,updated:0,closed:0,active:0,errors:[]});
+  return out;
+}
+async function runAutomationEngine({manual=false,silent=false}={}){
+  if(AUTOMATION_RUNNING) return {skipped:true};
+  AUTOMATION_RUNNING=true;
+  const started=new Date().toISOString();
+  const stats=automationRuleStateMap();
+  const errors=[];
+  try{
+    let settingsChanged=ensureAutomationSettings();
+    if(settingsChanged) await saveDB();
+    await workflowSyncTasks({silent:true});
+    const today=todayISO();
+
+    // 1) Probation milestone preparation.
+    if(automationRuleEnabled('probation_milestones')){
+      const rstat=stats.probation_milestones;
+      DB.employees.filter(e=>classify(e)==='Probationary' && e.dateHired).forEach(emp=>EVAL_MILESTONES.forEach(m=>{
+        const due=evalDueDate(emp.dateHired,m.days); if(!due) return;
+        const state=automationDateState(due,today,14);
+        const ev=getEvalRecord(emp.id,m.key);
+        const key=`${emp.id}:${m.key}`;
+        if(ev?.completedDate || state==='future'){
+          if(automationCloseTask('probation_milestones',key,ev?.completedDate?'Evaluation completed':'Outside automation window')) rstat.closed++;
+          return;
+        }
+        if(state==='overdue'||state==='upcoming'){
+          const existed=!!automationExistingTask('probation_milestones',key);
+          const t=automationUpsertTask('probation_milestones',key,{workflowType:'Task',title:`Prepare ${m.label} evaluation — ${emp.name}`,description:`Probation milestone ${m.label} for ${emp.name}. ${state==='overdue'?'Milestone is overdue.':'Milestone is approaching.'}`,module:'evaluations',recordId:ev?.id||'',employeeRecordId:emp.id,employeeName:emp.name,department:emp.department||'',priority:automationTaskPriority(state),dueDate:due,assigneeId:'',actionType:'evaluation_prep',status:'Pending'});
+          if(existed) rstat.updated++; else rstat.created++;
+          rstat.active++;
+        }
+      }));
+    }
+
+    // 2) Document expiration follow-up.
+    if(automationRuleEnabled('document_expiry')){
+      const rstat=stats.document_expiry;
+      (DB.documents||[]).filter(d=>d.expirationDate && d.status!=='Archived').forEach(d=>{
+        const state=automationDateState(d.expirationDate,today,30); const key=String(d.id);
+        if(state==='future' || !state){ if(automationCloseTask('document_expiry',key,'Document is outside expiry window')) rstat.closed++; return; }
+        const emp=DB.employees.find(e=>String(e.id)===String(d.employeeId));
+        const owner=emp?.name||d.employeeName||'HR document';
+        const existed=!!automationExistingTask('document_expiry',key);
+        const t=automationUpsertTask('document_expiry',key,{workflowType:'Review',title:`Review document expiry — ${d.name||'Untitled document'}`,description:`${owner} · ${state==='overdue'?'Document has expired.':'Document expires soon.'}`,module:'documents',recordId:d.id,employeeName:owner,department:emp?.department||d.department||'',priority:state==='overdue'?'Urgent':'High',dueDate:d.expirationDate,assigneeId:'',actionType:'document_review',status:'Pending'});
+        rstat.active++; if(existed) rstat.updated++; else rstat.created++;
+      });
+    }
+
+    // 3) Aged case review (read-only query into source records).
+    if(automationRuleEnabled('aged_cases')){
+      const rstat=stats.aged_cases;
+      const {data:cases,error}=await supabase.from('hr_cases').select('id,case_number,employee_record_id,employee_name,department,status,opened_at,assigned_to,priority,due_date,updated_at').order('updated_at',{ascending:false}).limit(1000);
+      if(error) throw error;
+      (cases||[]).forEach(c=>{
+        const closed=['Closed','Cancelled','Resolved'].includes(c.status); const age=analyticsDaysOpen(c.opened_at,null);
+        const key=String(c.id);
+        if(closed || age<30){ if(automationCloseTask('aged_cases',key,closed?'Case closed':'Case is under 30 days old')) rstat.closed++; return; }
+        const existed=!!automationExistingTask('aged_cases',key);
+        const t=automationUpsertTask('aged_cases',key,{workflowType:'Review',title:`Review aged HR case — ${c.case_number||'HR Case'}`,description:`${c.employee_name||'Employee'} · Open ${age} days${c.department?' · '+c.department:''}`,module:'cases',recordId:c.id,employeeRecordId:c.employee_record_id||'',employeeName:c.employee_name||'',department:c.department||'',priority:age>=60?'Urgent':'High',dueDate:c.due_date||today,assigneeId:c.assigned_to||'',actionType:'case_review',status:'Pending'});
+        rstat.active++; if(existed) rstat.updated++; else rstat.created++;
+      });
+    }
+
+    // 4) Escalate task urgency around case deadlines.
+    if(automationRuleEnabled('case_deadline_priority')){
+      const rstat=stats.case_deadline_priority;
+      (DB.workflowTasks||[]).filter(t=>t.module==='cases'&&t.status==='Pending'&&t.dueDate).forEach(t=>{
+        const state=automationDateState(t.dueDate,today,3); const next=state==='overdue'?'Urgent':state==='upcoming'?'High':(t.priority||'Normal');
+        if(['overdue','upcoming'].includes(state) && t.priority!==next){t.priority=next;t.lastAutomationUpdateAt=new Date().toISOString();rstat.updated++;}
+        if(state==='overdue'||state==='upcoming') rstat.active++;
+      });
+    }
+
+    // 5) One governance task when there are material errors.
+    if(automationRuleEnabled('data_quality_followup')){
+      const rstat=stats.data_quality_followup;
+      let caseRows=[];
+      try{ const q=await supabase.from('hr_cases').select('id,case_number,employee_name,department,status,opened_at,closed_at,updated_at').order('updated_at',{ascending:false}).limit(1000); if(!q.error) caseRows=q.data||[]; }catch(e){}
+      const errors=(typeof qualityIssues==='function'?qualityIssues(caseRows).filter(x=>x.severity==='error'):[]);
+      const key='global';
+      if(errors.length){
+        const t=automationUpsertTask('data_quality_followup',key,{workflowType:'Review',title:'Review HR data-quality errors',description:`${errors.length} material data-quality error${errors.length===1?'':'s'} require HR review.`,module:'dataQuality',recordId:'',employeeName:'',department:'',priority:errors.length>=5?'Urgent':'High',dueDate:'',assigneeId:'',actionType:'data_quality_review',status:'Pending'});
+        rstat.active++; if(t.createdAt===t.lastAutomationCreatedAt) rstat.created++; else rstat.updated++; t.lastAutomationCreatedAt=t.createdAt;
+      } else if(automationCloseTask('data_quality_followup',key,'No material data-quality errors remain')) rstat.closed++;
+    }
+
+    const changedTasks=JSON.stringify(DB.workflowTasks);
+    // Persist automation run plus task changes together. saveDB is idempotent through hr_records.
+    const totalCreated=Object.values(stats).reduce((n,x)=>n+x.created,0);
+    const totalUpdated=Object.values(stats).reduce((n,x)=>n+x.updated,0);
+    const totalClosed=Object.values(stats).reduce((n,x)=>n+x.closed,0);
+    DB.automationRuns=DB.automationRuns||[];
+    DB.automationRuns.unshift({id:uid(),runAt:started,completedAt:new Date().toISOString(),runBy:SESSION?.id||null,mode:manual?'Manual':'Automatic',created:totalCreated,updated:totalUpdated,closed:totalClosed,errors:errors.length,summary:{rules:Object.values(stats).map(x=>({ruleId:x.rule.id,created:x.created,updated:x.updated,closed:x.closed,active:x.active,errors:x.errors.length}))}});
+    DB.automationRuns=DB.automationRuns.slice(0,100);
+    await saveDB();
+    await refreshNotificationBadge();
+    renderNav();
+    if(!silent && manual) toast(`Automation run complete · ${totalCreated} created, ${totalUpdated} updated, ${totalClosed} closed.`);
+    return {created:totalCreated,updated:totalUpdated,closed:totalClosed,errors:errors.length,stats};
+  }catch(e){
+    errors.push(e.message||String(e));
+    DB.automationRuns=DB.automationRuns||[];
+    DB.automationRuns.unshift({id:uid(),runAt:started,completedAt:new Date().toISOString(),runBy:SESSION?.id||null,mode:manual?'Manual':'Automatic',created:0,updated:0,closed:0,errors:1,summary:{error:e.message||String(e)}});
+    DB.automationRuns=DB.automationRuns.slice(0,100);
+    try{ await saveDB(); }catch(saveErr){ if(!silent) toast('Automation run failed to save: '+saveErr.message,true); }
+    if(!silent) toast('Automation run failed: '+(e.message||e),true);
+    return {created:0,updated:0,closed:0,errors:1,error:e.message||String(e)};
+  }finally{ AUTOMATION_RUNNING=false; }
+}
+async function toggleAutomationRule(id,enabled){
+  if(!canEdit()) return;
+  ensureAutomationSettings();
+  DB.settings.automationRules[id]=!!enabled;
+  await saveDB();
+  logAudit(`${enabled?'Enabled':'Disabled'} automation rule: ${AUTOMATION_RULES.find(r=>r.id===id)?.label||id}`);
+  toast(`Automation rule ${enabled?'enabled':'disabled'}.`);
+  await runAutomationEngine({manual:false,silent:true});
+  renderAutomationCenter();
+}
+function automationRunSummary(run){
+  if(!run) return 'No automation runs yet.';
+  if(run.summary?.error) return run.summary.error;
+  return `${run.created||0} created · ${run.updated||0} updated · ${run.closed||0} closed${run.errors?' · '+run.errors+' error'+(run.errors===1?'':'s'):''}`;
+}
+function automationLastRun(){ return (DB.automationRuns||[]).slice().sort((a,b)=>String(b.runAt||'').localeCompare(String(a.runAt||'')))[0]||null; }
+function automationOpenTask(id){ openWorkflowTask(id); }
+async function renderAutomationCenter(){
+  setTitle('Automation Center','Automatic HR task generation, deadline escalation, lifecycle preparation, and governance follow-up.');
+  document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Running current HR automation rules…</div></div>';
+  await runAutomationEngine({silent:true});
+  ensureAutomationSettings();
+  const tasks=(DB.workflowTasks||[]).filter(t=>t.automationGenerated);
+  const pending=tasks.filter(t=>t.status==='Pending');
+  const overdue=pending.filter(t=>t.dueDate&&t.dueDate<todayISO());
+  const last=automationLastRun();
+  const enabled=AUTOMATION_RULES.filter(r=>automationRuleEnabled(r.id)).length;
+  const q=(STATE.automationSearch||'').toLowerCase().trim();
+  const visibleTasks=pending.filter(t=>!q||[t.title,t.description,t.employeeName,t.department,t.automationRuleId].some(v=>String(v||'').toLowerCase().includes(q)));
+  const runs=(DB.automationRuns||[]).slice().sort((a,b)=>String(b.runAt||'').localeCompare(String(a.runAt||''))).slice(0,8);
+  const byRule={}; pending.forEach(t=>byRule[t.automationRuleId]=(byRule[t.automationRuleId]||0)+1);
+  const html=`<div class="automation-hero"><div><h1>Automation Center</h1><p>Rules continuously inspect existing HR records and coordinate work through the Workflow &amp; Approvals engine. Automation does not make personnel decisions or overwrite source HR records.</p></div><div class="automation-actions">${canEdit()?`<button class="btn btn-brass" onclick="runAutomationEngine({manual:true}).then(()=>renderAutomationCenter())">${iCheck(15)} Run Now</button>`:''}<button class="btn btn-ghost" onclick="go('workflow')">Open Workflow</button><button class="btn btn-ghost" onclick="go('dataQuality')">Data Quality</button></div></div>
+    <div class="automation-kpis">
+      <div class="automation-kpi" style="--accent:var(--ink)"><div class="k">Enabled Rules</div><div class="v">${enabled}</div><div class="s">${AUTOMATION_RULES.length} configured rule${AUTOMATION_RULES.length===1?'':'s'}</div></div>
+      <div class="automation-kpi" style="--accent:${pending.length?'var(--amber)':'var(--forest)'}"><div class="k">Automation Tasks</div><div class="v">${pending.length}</div><div class="s">Pending generated work</div></div>
+      <div class="automation-kpi" style="--accent:${overdue.length?'var(--rust)':'var(--forest)'}"><div class="k">Overdue</div><div class="v">${overdue.length}</div><div class="s">Generated tasks past due</div></div>
+      <div class="automation-kpi" style="--accent:var(--brass)"><div class="k">Last Run</div><div class="v" style="font-size:16px;line-height:1.2;">${last?fmtDate(String(last.runAt).slice(0,10)):'—'}</div><div class="s">${last?automationRunSummary(last):'Automation has not run yet'}</div></div>
+    </div>
+    <div class="automation-grid">
+      <div class="automation-panel"><div class="automation-panel-head"><div><h3>Automation Rules</h3><div class="desc">Built-in HR rules that create or update operational work.</div></div></div><div class="automation-rule-list">${AUTOMATION_RULES.map(r=>`<div class="automation-rule ${automationRuleEnabled(r.id)?'':'disabled'}"><div><div class="title">${esc(r.label)}</div><div class="desc">${esc(r.description)}</div><div class="meta"><span class="tag">${esc(r.category)}</span><span class="tag">${byRule[r.id]||0} pending</span></div></div><label class="automation-switch"><input type="checkbox" ${automationRuleEnabled(r.id)?'checked':''} ${canEdit()?'':'disabled'} onchange="toggleAutomationRule('${esc(r.id)}',this.checked)"> Enabled</label><button class="btn btn-ghost btn-sm" onclick="go('workflow')">View Work</button></div>`).join('')}</div><div class="automation-rule-note"><b>Execution model:</b> the current browser deployment runs automation when the application opens and on a periodic timer while it remains open. It is designed so a secure server-side scheduler can later call the same rule contracts without exposing service credentials in the frontend.</div></div>
+      <div class="automation-panel"><div class="automation-panel-head"><div><h3>Automation Health</h3><div class="desc">Current generated workload and latest run status.</div></div></div><div style="padding:9px;">${Object.entries(byRule).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([id,n])=>{const r=AUTOMATION_RULES.find(x=>x.id===id);return `<div class="automation-insight"><div class="k">${esc(r?.category||id)}</div><div class="v">${n}</div><div class="s">${esc(r?.label||id)} currently has pending generated work.</div></div>`;}).join('')||'<div class="automation-empty"><b>No generated work</b>Current automation rules have no pending tasks.</div>'}${last?`<div class="automation-insight"><div class="k">Latest Run</div><div class="v" style="font-size:16px;">${esc(last.mode||'Automatic')}</div><div class="s">${fmtDate(String(last.runAt||'').slice(0,10))} · ${esc(automationRunSummary(last))}</div></div>`:''}</div></div>
+    </div>
+    <div class="automation-panel" style="margin-bottom:16px;"><div class="automation-panel-head"><div><h3>Generated Work</h3><div class="desc">Automation-created tasks appear in the same Workflow &amp; Approvals queue used by HR staff.</div></div></div><div class="automation-rule-note" style="margin:9px 9px 0;"><b>Search:</b> <input class="field" style="margin:0;padding:8px 10px;width:100%;border:1px solid var(--line-2);border-radius:7px;" placeholder="Search generated tasks, employees, departments…" value="${esc(STATE.automationSearch||'')}" oninput="STATE.automationSearch=this.value; renderAutomationCenter()"></div><div class="automation-run-list">${visibleTasks.slice(0,60).map(t=>`<div class="automation-run-row ${t.status==='Pending'&&t.dueDate&&t.dueDate<todayISO()?'failed':''}"><span class="dot"></span><div><div class="title">${esc(t.title)}</div><div class="meta">${esc(t.description||'')}${t.employeeName?' · '+esc(t.employeeName):''}${t.dueDate?' · Due '+esc(fmtDate(t.dueDate)):''}</div></div><div class="right"><button class="btn btn-ghost btn-sm" onclick="automationOpenTask('${esc(t.id)}')">Open</button></div></div>`).join('')||'<div class="automation-empty"><b>No pending generated tasks</b>Automation is currently caught up.</div>'}</div></div>
+    <div class="automation-panel"><div class="automation-panel-head"><div><h3>Recent Automation Runs</h3><div class="desc">Durable run history retained in the HR record store.</div></div></div><div class="automation-run-list">${runs.length?runs.map(run=>`<div class="automation-run-row ${run.errors?'failed':''}"><span class="dot"></span><div><div class="title">${esc(run.mode||'Automatic')} automation run</div><div class="meta">${fmtDate(String(run.runAt||'').slice(0,10))} · ${esc(automationRunSummary(run))}</div></div><div class="right small">${run.completedAt?esc(String(run.completedAt).slice(11,16)):''}</div></div>`).join(''):'<div class="automation-empty"><b>No runs recorded</b>The automation engine will create a run entry after its first execution.</div>'}</div></div>`;
+  document.getElementById('content').innerHTML=html;
+}
+
 /* ================================================================
    MODULE DEFINITIONS (leaves handled by custom view above but still
    registered for the modal/CRUD/export helpers; nte, memos, nod, oncall
@@ -5292,6 +5560,7 @@ const RENDERERS = {
   dashboard: renderDashboard,
   actionCenter: renderActionCenter,
   workflow: renderWorkflowCenter,
+  automation: renderAutomationCenter,
   operations: renderOperationsWorkspace,
   analytics: renderAnalytics,
   cases: renderCases,
@@ -5333,6 +5602,7 @@ Object.assign(window, {
   addDaysISO, atdComputeStatus, atdFillEmployee, atdPayslipCellHTML, atdRemaining, atdToggleCategory, atdTotalPaid,
   addCaseActivity, addCaseNote, caseActivityIcon, caseActivityLabel, caseDeadlineInfo, casePriorityBadge, caseWorkflowSteps, caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, setCaseWorkflowStatus, buildNotificationItems, closeNotificationPanel, markAllNotificationsRead, openNotification, refreshNotificationBadge, renderNotificationPanel, toggleNotificationPanel, analyticsApplyFilters, analyticsSetPreset, exportAnalyticsSnapshot,
   workflowSyncTasks, workflowPendingCount, workflowFindTask, workflowOpenSource, workflowSaveTaskNote, workflowAssignTask, workflowSaveAssignment, workflowCompleteTask, workflowDecideTask, openWorkflowTask, openWorkflowCreateForm, saveWorkflowManualTask, renderWorkflowCenter, workflowActionButtons, workflowPriorityBadge, workflowDueText,
+  AUTOMATION_RULES, automationPendingCount, ensureAutomationSettings, automationRuleEnabled, runAutomationEngine, toggleAutomationRule, automationOpenTask, renderAutomationCenter,
   countStoredDocuments, renderDocuments, openStoredDocument, collectStoredDocuments, collectDocumentIndex, openDriveDocument, openDriveDocumentForm, saveDriveDocument, deleteDriveDocument, countDriveDocuments, documentExpiryInfo, openDriveWorkspace,
   attachCellHTML, attachPreviewHTML, authErr, bootAuthenticated, calShift, canEdit, classify, clearFileField, closeModal,
   consequenceFor, cvrOffenseLevel, cvrOffenseSummaryHTML, daysBetweenInclusive, defaultOffenseCatalog, deleteATDPayment,
