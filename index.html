@@ -9,11 +9,13 @@
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
 :root{
-  --ink:#1C2333; --ink-2:#2A3348; --paper:#F2F1EC; --panel:#FFFFFF;
-  --brass:#B8863B; --brass-dk:#96702E; --forest:#3C6E52; --rust:#A6432F;
-  --amber:#C08D2E; --slate:#5B6472; --line:#E3E0D6; --line-2:#D8D4C7;
-  --shadow: 0 1px 2px rgba(28,35,51,.06), 0 6px 20px rgba(28,35,51,.06);
-  --radius:10px;
+  /* Strellas-inspired palette: deep navy, warm gold, cool gray */
+  --ink:#194082; --ink-2:#12356F; --paper:#F3F5F8; --panel:#FFFFFF;
+  --brass:#C08A37; --brass-dk:#9D6D24; --gold-soft:#F4D971; --navy-deep:#001670;
+  --forest:#3B6955; --rust:#A94435; --amber:#C89A36; --slate:#687384;
+  --line:#DCE2EA; --line-2:#C8D0DB;
+  --shadow: 0 1px 2px rgba(15,36,72,.06), 0 8px 24px rgba(15,36,72,.07);
+  --radius:11px;
   font-family:'IBM Plex Sans',system-ui,sans-serif;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px);
@@ -33,8 +35,8 @@ a{color:inherit;}
 /* ---------- Auth Screen ---------- */
 #auth-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
   background:
-    radial-gradient(1200px 600px at 15% -10%, rgba(184,134,59,.14), transparent 60%),
-    linear-gradient(180deg,var(--ink) 0%, var(--ink-2) 100%);
+    radial-gradient(1200px 600px at 15% -10%, rgba(244,217,113,.16), transparent 60%),
+    linear-gradient(180deg,var(--navy-deep) 0%, var(--ink-2) 100%);
 }
 .auth-card{width:100%;max-width:430px;background:var(--panel);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;}
 .auth-head{padding:30px 34px 22px;background:var(--ink);color:#fff;position:relative;}
@@ -79,7 +81,7 @@ a{color:inherit;}
 .navitem{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:7px;font-size:13.5px;color:#C7CAD6;margin-bottom:2px;border:none;background:transparent;width:100%;text-align:left;}
 .navitem svg{flex:none;opacity:.85;}
 .navitem:hover{background:rgba(255,255,255,.06);color:#fff;}
-.navitem.active{background:rgba(184,134,59,.18);color:#fff;box-shadow:inset 2px 0 0 var(--brass);}
+.navitem.active{background:rgba(192,138,55,.20);color:#fff;box-shadow:inset 2px 0 0 var(--brass);}
 .navitem .cnt{margin-left:auto;font-size:10.5px;background:rgba(255,255,255,.09);padding:1px 7px;border-radius:20px;color:#D7D9E2;}
 #sidebar .logout{margin-top:18px;width:100%;}
 
@@ -146,7 +148,7 @@ a{color:inherit;}
 .chart-fill.danger{background:linear-gradient(90deg,var(--rust),#8E3727);}
 .chart-count{text-align:right;font-weight:700;}
 .analytics-table{width:100%;border-collapse:collapse;font-size:12.5px;}
-.analytics-table th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);padding:9px 10px;border-bottom:1px solid var(--line);background:#FAFAF7;}
+.analytics-table th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);padding:9px 10px;border-bottom:1px solid var(--line);background:#F7F9FC;}
 .analytics-table td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle;}
 .analytics-table tr:last-child td{border-bottom:none;}
 .attention-list{display:flex;flex-direction:column;gap:8px;}
@@ -194,7 +196,7 @@ a{color:inherit;}
 .case-stage .stage-bar{height:5px;border-radius:5px;background:var(--paper);overflow:hidden;margin-top:8px;}
 .case-stage .stage-fill{height:100%;background:var(--stage,var(--brass));border-radius:5px;}
 .dashboard-mini-table{width:100%;border-collapse:collapse;font-size:12.5px;}
-.dashboard-mini-table th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);padding:8px 9px;border-bottom:1px solid var(--line);background:#FAFAF7;}
+.dashboard-mini-table th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);padding:8px 9px;border-bottom:1px solid var(--line);background:#F7F9FC;}
 .dashboard-mini-table td{padding:9px;border-bottom:1px solid var(--line);vertical-align:middle;}
 .dashboard-mini-table tr:last-child td{border-bottom:none;}
 .dashboard-list{display:flex;flex-direction:column;gap:7px;}
@@ -206,12 +208,41 @@ a{color:inherit;}
 @media (max-width:1180px){.dashboard-kpis{grid-template-columns:repeat(3,1fr);}.dashboard-grid,.dashboard-grid.equal{grid-template-columns:1fr;}.case-pipeline{grid-template-columns:repeat(3,1fr);}}
 @media (max-width:700px){.dashboard-hero{flex-direction:column;align-items:flex-start;}.dashboard-actions{justify-content:flex-start;}.dashboard-kpis{grid-template-columns:1fr 1fr;}.alert-grid{grid-template-columns:1fr;}.case-pipeline{grid-template-columns:repeat(2,1fr);}}
 
+
+/* ---------- Phase 6: Employee 360 Profile ---------- */
+.profile-hero{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;padding:18px;border:1px solid var(--line);background:linear-gradient(135deg,#fff 0%,#f8fbff 72%,#eef3f9 100%);border-radius:12px;margin-bottom:14px;}
+.profile-avatar{width:56px;height:56px;border-radius:15px;background:linear-gradient(135deg,var(--ink),var(--navy-deep));color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;box-shadow:0 8px 18px rgba(25,64,130,.18);}
+.profile-title{font-size:20px;font-weight:800;letter-spacing:-.01em;}
+.profile-sub{font-size:12px;color:var(--slate);margin-top:3px;}
+.profile-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.profile-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;}
+.profile-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+.profile-kpi{padding:12px 13px;border:1px solid var(--line);border-radius:10px;background:#fff;min-width:0;}
+.profile-kpi .k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--slate);font-weight:700;}
+.profile-kpi .v{font:700 23px/1 'Source Serif 4',Georgia,serif;margin-top:7px;}
+.profile-kpi .s{font-size:10.5px;color:var(--slate);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.profile-list{display:flex;flex-direction:column;gap:7px;}
+.profile-list-row{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;}
+.profile-list-row .main{min-width:0;flex:1;}
+.profile-list-row .title{font-size:12px;font-weight:700;}
+.profile-list-row .meta{font-size:10.5px;color:var(--slate);margin-top:2px;line-height:1.4;}
+.profile-list-row .right{white-space:nowrap;font-size:10.5px;color:var(--slate);text-align:right;}
+.profile-statline{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+.profile-detail{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+.profile-detail .item{padding:10px 11px;border:1px solid var(--line);border-radius:8px;background:#fbfcfe;}
+.profile-detail .label{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);font-weight:700;}
+.profile-detail .value{font-size:12.5px;font-weight:600;margin-top:4px;word-break:break-word;}
+.data-warning{display:flex;gap:9px;align-items:flex-start;padding:10px 12px;border:1px solid #E8D19A;background:#FFFBEE;color:#6F571D;border-radius:9px;font-size:11.5px;line-height:1.45;margin-bottom:12px;}
+.data-warning .mark{width:8px;height:8px;border-radius:50%;background:var(--brass);margin-top:4px;flex:none;}
+@media (max-width:900px){.profile-hero{grid-template-columns:auto 1fr;}.profile-hero .profile-actions{grid-column:1/-1;}.profile-grid{grid-template-columns:1fr;}.profile-kpis{grid-template-columns:repeat(2,1fr);}}
+@media (max-width:540px){.profile-hero{gap:11px;padding:14px;}.profile-avatar{width:48px;height:48px;border-radius:12px;}.profile-title{font-size:18px;}.profile-kpis{grid-template-columns:1fr 1fr;}.profile-detail{grid-template-columns:1fr;}.profile-list-row{flex-direction:column;}.profile-list-row .right{text-align:left;}}
+
 /* ---------- Responsive shell / touch layout ---------- */
 .topbar-left{display:flex;align-items:center;gap:10px;min-width:0;}
 .mobile-menu{display:none;width:38px;height:38px;border:1px solid var(--line-2);background:#fff;border-radius:8px;align-items:center;justify-content:center;flex-direction:column;gap:4px;flex:none;}
 .mobile-menu span{display:block;width:16px;height:1.8px;background:var(--ink);border-radius:2px;}
 .sidebar-backdrop{display:none;}
-.mobile-menu:focus-visible,.navitem:focus-visible,.btn:focus-visible,.iconbtn:focus-visible{outline:3px solid rgba(184,134,59,.25);outline-offset:2px;}
+.mobile-menu:focus-visible,.navitem:focus-visible,.btn:focus-visible,.iconbtn:focus-visible{outline:3px solid rgba(192,138,55,.28);outline-offset:2px;}
 .tablewrap{-webkit-overflow-scrolling:touch;}
 .modal{max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);}
 .formgrid{min-width:0;}
@@ -300,7 +331,7 @@ a{color:inherit;}
 
 .tablewrap{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow-x:auto;}
 table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px;}
-thead th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);font-weight:600;padding:12px 14px;border-bottom:1px solid var(--line);white-space:nowrap;background:#FAFAF7;}
+thead th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);font-weight:600;padding:12px 14px;border-bottom:1px solid var(--line);white-space:nowrap;background:#F7F9FC;}
 tbody td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:middle;}
 tbody tr:last-child td{border-bottom:none;}
 tbody tr:hover{background:#FAF9F5;}
@@ -316,7 +347,7 @@ tbody tr:hover{background:#FAF9F5;}
 .b-red{background:#FBECE8;color:var(--rust);} .b-red .dot{background:var(--rust);}
 .b-amber{background:#FBF1E1;color:var(--amber);} .b-amber .dot{background:var(--amber);}
 .b-grey{background:#EEEDE7;color:var(--slate);} .b-grey .dot{background:var(--slate);}
-.b-blue{background:#E9EDF6;color:#3A5B9A;} .b-blue .dot{background:#3A5B9A;}
+.b-blue{background:#E9EDF6;color:var(--ink);} .b-blue .dot{background:var(--ink);}
 
 .pill{font-size:11px;background:var(--paper);border:1px solid var(--line-2);padding:2px 8px;border-radius:20px;color:var(--slate);}
 
@@ -399,6 +430,10 @@ tbody tr:hover{background:#FAF9F5;}
 .checkrow{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;}
 .checkrow input{width:auto;margin:0;}
 label.opt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--slate);font-weight:500;margin-top:6px;}
+
+@media (min-width:1440px){#content{max-width:1680px;margin:0 auto;padding-left:34px;padding-right:34px;}.dashboard-grid,.analytics-grid{gap:18px;}.panel{padding:22px;}}
+@media (max-width:380px){#content{padding-left:9px;padding-right:9px;}.dashboard-kpis,.analytics-kpis{gap:7px;}.dashboard-kpi,.metric-card{padding:10px;}.dashboard-kpi .value,.metric-card .v{font-size:20px;}.btn{padding:9px 11px;font-size:12.5px;}.sectionhead h2{font-size:18px;}}
+
 </style>
 </head>
 <body>
@@ -409,7 +444,7 @@ label.opt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--s
     <div class="auth-head">
       <div class="badge">S</div>
       <h1>SLSC HR Management</h1>
-      <p>&amp;Online System</p>
+      <p>&amp; Online System</p>
     </div>
     <div class="auth-body">
       <div class="auth-tabs">
@@ -447,7 +482,7 @@ label.opt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--s
   <aside id="sidebar">
     <div class="brand">
       <div class="badge">S</div>
-      <div class="brand-txt"><div class="t1">SLSC HR</div><div class="t2">Disciplinary Dashboard</div></div>
+      <div class="brand-txt"><div class="t1">SCPA HR</div><div class="t2">Disciplinary Dashboard</div></div>
     </div>
     <nav id="nav"></nav>
     <button class="btn btn-ghost btn-block logout" onclick="doLogout()">Log Out</button>
@@ -491,7 +526,7 @@ if(!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('YOUR_PRO
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 /* =========================================================================
-   SLSC HR MANAGEMENT & DISCIPLINARY DASHBOARD — GitHub Pages + Vercel + Supabase
+   SCPA HR MANAGEMENT & DISCIPLINARY DASHBOARD — GitHub Pages + Vercel + Supabase
    Phase 2: record-level Postgres persistence, Supabase Auth, and private Storage.
    ========================================================================= */
 
@@ -500,7 +535,7 @@ let DB_SNAPSHOT = null;
 let SAVE_QUEUE = Promise.resolve();
 
 function blankDB(){
-  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],settings:{orgName:'SLSC',probationDays:180},audit:[],users:[]};
+  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],settings:{orgName:'SCPA',probationDays:180},audit:[],users:[]};
 }
 
 async function loadDB(){
@@ -549,7 +584,7 @@ async function saveDBInternal(state){
       if(error) throw error;
     }
   }
-  const {error:settingsError}=await supabase.from('hr_settings').upsert({id:'singleton',data:state.settings||{orgName:'SLSC',probationDays:180},updated_at:now,updated_by:SESSION?.id||null},{onConflict:'id'});
+  const {error:settingsError}=await supabase.from('hr_settings').upsert({id:'singleton',data:state.settings||{orgName:'SCPA',probationDays:180},updated_at:now,updated_by:SESSION?.id||null},{onConflict:'id'});
   if(settingsError) throw settingsError;
   DB_SNAPSHOT=JSON.parse(JSON.stringify(state));
 }
@@ -738,7 +773,7 @@ function seedDB(){
   ];
   return {
     users, employees, leaves, disciplinary, nte, memos, nod, oncall, transfers, offenseCatalog, cvr, incidents, prf, evaluations, atd,
-    settings:{orgName:'SLSC', probationDays:180},
+    settings:{orgName:'SCPA', probationDays:180},
     audit:[{ts:new Date().toISOString(), user:'System', action:'Seeded initial demo data'}]
   };
 }
@@ -1084,7 +1119,7 @@ async function renderDashboard(){
         <div class="dashboard-kpi" style="--accent:var(--rust)"><div class="top"><div class="label">Active Cases</div><div class="icon">${iShield(15)}</div></div><div class="value">${activeCases.length}</div><div class="meta">${agedCases.length} aged 30+ days</div></div>
         <div class="dashboard-kpi" style="--accent:var(--forest)"><div class="top"><div class="label">On Leave Today</div><div class="icon">${iCal(15)}</div></div><div class="value">${onLeaveToday}</div><div class="meta">${upcomingLeaves.length} upcoming in 30 days</div></div>
         <div class="dashboard-kpi" style="--accent:var(--amber)"><div class="top"><div class="label">Open Follow-ups</div><div class="icon">${iDoc(15)}</div></div><div class="value">${openNTE+evalOverdue.length}</div><div class="meta">${openNTE} NTE · ${evalOverdue.length} overdue evaluations</div></div>
-        <div class="dashboard-kpi" style="--accent:#3A5B9A"><div class="top"><div class="label">ATD Outstanding</div><div class="icon">₱</div></div><div class="value" style="font-size:22px;">${peso(atdOutstanding)}</div><div class="meta">${atdOpen} record(s) with balance</div></div>
+        <div class="dashboard-kpi" style="--accent:var(--ink)"><div class="top"><div class="label">ATD Outstanding</div><div class="icon">₱</div></div><div class="value" style="font-size:22px;">${peso(atdOutstanding)}</div><div class="meta">${atdOpen} record(s) with balance</div></div>
       </div>
 
       <div class="dashboard-grid">
@@ -1097,7 +1132,7 @@ async function renderDashboard(){
         <div class="panel">
           <div class="dashboard-panel-head"><div><h3>Case Pipeline</h3><div class="desc">Current distribution of HR case stages.</div></div><button class="btn btn-ghost btn-sm" onclick="go('cases')">Manage</button></div>
           <div class="case-pipeline">
-            ${statusList.map(s=>{const c=caseStatus[s]||0;const pct=Math.round(c/statusMax*100);const stage=s==='Open'?'var(--brass)':s==='NTE Issued'||s==='Memo Issued'?'var(--amber)':s==='For Decision'?'#3A5B9A':s==='Resolved'?'var(--forest)':'var(--slate)';return `<div class="case-stage"><div class="stage-label">${esc(s)}</div><div class="stage-count">${c}</div><div class="stage-bar"><div class="stage-fill" style="--stage:${stage};width:${pct}%"></div></div></div>`;}).join('')}
+            ${statusList.map(s=>{const c=caseStatus[s]||0;const pct=Math.round(c/statusMax*100);const stage=s==='Open'?'var(--brass)':s==='NTE Issued'||s==='Memo Issued'?'var(--amber)':s==='For Decision'?'var(--ink)':s==='Resolved'?'var(--forest)':'var(--slate)';return `<div class="case-stage"><div class="stage-label">${esc(s)}</div><div class="stage-count">${c}</div><div class="stage-bar"><div class="stage-fill" style="--stage:${stage};width:${pct}%"></div></div></div>`;}).join('')}
           </div>
         </div>
       </div>
@@ -1399,9 +1434,10 @@ function renderEmployees(){
           <td>${statusBadge(e.status, EMP_STATUS_MAP)}</td>
           <td>${statusBadge(classify(e), classify(e)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</td>
           <td><div class="rowactions">
+            <button class="iconbtn" onclick="openEmployeeProfile('${e.id}')" title="View employee profile">${iUser(14)}</button>
             ${canEdit()? `<button class="iconbtn" onclick="openEmployeeForm('${e.id}')" title="Edit">${iEdit(14)}</button>
             <button class="iconbtn" onclick="openTransferForEmployee('${e.id}')" title="Record Department Transfer">${iSwap(14)}</button>
-            <button class="iconbtn" onclick="deleteEmployee('${e.id}')" title="Delete">${iTrash(14)}</button>`:'<span class="small">View only</span>'}
+            <button class="iconbtn" onclick="deleteEmployee('${e.id}')" title="Delete">${iTrash(14)}</button>`:''}
           </div></td>
         </tr>`).join('') : `<tr><td colspan="8"><div class="empty"><b>No employees found</b>Try a different search or add a new employee.</div></td></tr>`}
       </tbody>
@@ -1433,10 +1469,23 @@ function openEmployeeForm(id){
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployee('${id||''}')">Save Employee</button></div>
   `);
 }
+function normalizeEmployeeName(v){ return String(v||'').toLowerCase().replace(/\s+/g,' ').trim(); }
+function findEmployeeDuplicates(vals,id){
+  const keyName=normalizeEmployeeName(vals.name);
+  return DB.employees.filter(e=>e.id!==id && normalizeEmployeeName(e.name)===keyName && String(e.dateHired||'')===String(vals.dateHired||'') && String(e.department||'')===String(vals.department||''));
+}
+
 async function saveEmployee(id){
   const vals = readFields(EMP_FIELDS);
   const missing = EMP_FIELDS.filter(f=>f.required && !vals[f.key]);
   if(missing.length){ toast('Please complete: '+missing.map(f=>f.label).join(', ')); return; }
+  if(vals.dateHired>todayISO()){ toast('Date Hired cannot be in the future.'); return; }
+  if(vals.statusDate && vals.statusDate<vals.dateHired){ toast('Status Effective Date cannot be before Date Hired.'); return; }
+  const duplicateCandidates=findEmployeeDuplicates(vals,id);
+  if(duplicateCandidates.length){
+    const sample=duplicateCandidates.slice(0,3).map(e=>e.name+' — '+e.department).join('; ');
+    if(!confirm('Possible duplicate employee record found: '+sample+'. Continue saving anyway?')) return;
+  }
   const rec=id?DB.employees.find(e=>e.id===id):{id:uid(), ...vals};
   const oldStoragePaths=recordStoragePaths(id?rec:null);
   Object.assign(rec, vals);
@@ -1484,6 +1533,7 @@ function saveEmployeeTransfer(id){
   const toDate = document.getElementById('tf_toDate').value;
   const remarks = document.getElementById('tf_remarks').value.trim();
   if(!fromDate || !toDate){ toast('Please set both the from and to dates.'); return; }
+  if(fromDepartment===toDepartment){ toast('Transferred From and Transferred To must be different departments.'); return; }
   if(toDate < fromDate){ toast('The "To Date" cannot be before the "From Date".'); return; }
   DB.transfers.push({id:uid(), employeeName:emp.name, fromDepartment, fromDate, toDepartment, toDate, remarks});
   emp.department = toDepartment;
@@ -1500,6 +1550,69 @@ function exportEmployeesCSV(){
   ]);
   downloadCSV('employees_export.csv', csv);
   toast('CSV exported.');
+}
+
+async function openEmployeeProfile(id){
+  const emp=DB.employees.find(e=>e.id===id);
+  if(!emp){ toast('Employee record could not be found.',true); return; }
+  const nameKey=normalizeEmployeeName(emp.name);
+  const sameName=(rows)=>rows.filter(r=>normalizeEmployeeName(r.employeeName||r.name)===nameKey);
+  const leaves=sameName(DB.leaves), discipline=sameName(DB.disciplinary), cvr=sameName(DB.cvr), incidents=sameName(DB.incidents), nte=sameName(DB.nte), memos=sameName(DB.memos), nod=sameName(DB.nod), atd=sameName(DB.atd), transfers=sameName(DB.transfers);
+  const evaluations=DB.evaluations.filter(r=>String(r.employeeId)===String(emp.id));
+  const atdBalance=atd.reduce((sum,r)=>sum+Math.max(0,(Number(r.totalAmount)||0)-atdTotalPaid(r)),0);
+  let cases=[];
+  try{
+    const {data,error}=await supabase.from('hr_cases').select('id,case_number,status,subject,opened_at,updated_at').ilike('employee_name',emp.name).order('updated_at',{ascending:false}).limit(20);
+    if(!error) cases=data||[];
+  }catch(e){}
+  const initials=emp.name.split(/\s+/).map(x=>x[0]||'').slice(0,2).join('').toUpperCase();
+  const activities=[
+    ...leaves.map(r=>({date:r.startDate,type:'Leave',title:r.leaveType||'Leave Record',meta:r.status||''})),
+    ...discipline.map(r=>({date:r.dateOfIncident,type:'Disciplinary',title:r.violation||'Disciplinary Action',meta:r.action||''})),
+    ...cvr.map(r=>({date:r.dateOfCVR,type:'CVR',title:[...(r.offenses||[]),...(r.otherOffense?[r.otherOffense]:[])].join(', ')||'CVR / Violation Report',meta:r.status||''})),
+    ...incidents.map(r=>({date:r.dateOfIncident,type:'Incident',title:[...(r.incidentTypes||[]),...(r.otherType?[r.otherType]:[])].join(', ')||'Incident Report',meta:r.status||''})),
+    ...nte.map(r=>({date:r.dateReceived,type:'NTE',title:r.subject||r.violation||'Notice to Explain',meta:r.status||''})),
+    ...memos.map(r=>({date:r.dateOfMemorandum||r.dateOfMemo||r.dateReceived,type:'Memo',title:r.subject||r.title||'Memorandum of Offense',meta:r.status||''})),
+    ...nod.map(r=>({date:r.dateOfNod,type:'NOD',title:r.subject||r.finalAction||'Notice of Decision',meta:r.finalAction||''})),
+    ...atd.map(r=>({date:r.atdDate,type:'ATD',title:r.deductionType||'ATD Record',meta:r.status||''})),
+    ...transfers.map(r=>({date:r.toDate||r.fromDate,type:'Transfer',title:(r.fromDepartment||'')+' → '+(r.toDepartment||''),meta:'Department Transfer'})),
+    ...cases.map(r=>({date:r.opened_at,type:'HR Case',title:r.case_number+' · '+(r.subject||'HR Case'),meta:r.status||''}))
+  ].filter(x=>x.date).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,14);
+  const statusMap=EMP_STATUS_MAP;
+  openModal(`<div class="modal-head"><div><h3>Employee 360 Profile</h3><div class="small">${esc(emp.id)}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body">
+    <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(emp.name)}</div><div class="profile-sub">${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div></div><div class="profile-actions">${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="closeModal(); openEmployeeForm('${emp.id}')">${iEdit(13)} Edit Employee</button>`:''}</div></div>
+    <div class="profile-kpis">
+      <div class="profile-kpi"><div class="k">HR Cases</div><div class="v">${cases.length}</div><div class="s">Case history</div></div>
+      <div class="profile-kpi"><div class="k">Leave Records</div><div class="v">${leaves.length}</div><div class="s">Requests on file</div></div>
+      <div class="profile-kpi"><div class="k">Discipline / Incidents</div><div class="v">${discipline.length+cvr.length+incidents.length}</div><div class="s">Recorded activity</div></div>
+      <div class="profile-kpi"><div class="k">ATD Balance</div><div class="v">${peso(atdBalance)}</div><div class="s">Outstanding balance</div></div>
+    </div>
+    <div class="profile-grid">
+      <div class="panel"><h3>Employment Information</h3><div class="desc">Current employee master record.</div><div class="profile-detail">
+        <div class="item"><div class="label">Employee Name</div><div class="value">${esc(emp.name)}</div></div>
+        <div class="item"><div class="label">Position</div><div class="value">${esc(emp.position||'—')}</div></div>
+        <div class="item"><div class="label">Department</div><div class="value">${esc(emp.department||'—')}</div></div>
+        <div class="item"><div class="label">Date Hired</div><div class="value">${fmtDate(emp.dateHired)}</div></div>
+        <div class="item"><div class="label">Gender</div><div class="value">${esc(emp.gender||'—')}</div></div>
+        <div class="item"><div class="label">Employment Status</div><div class="value">${esc(emp.status||'—')}</div></div>
+        <div class="item"><div class="label">Status Effective Date</div><div class="value">${fmtDate(emp.statusDate)}</div></div>
+        <div class="item"><div class="label">PRF Number</div><div class="value">${esc(emp.prfNumber||'—')}</div></div>
+      </div></div>
+      <div class="panel"><h3>Record Summary</h3><div class="desc">Activity across connected HR modules.</div><div class="profile-statline">
+        <div class="profile-detail"><div class="item"><div class="label">NTE</div><div class="value">${nte.length}</div></div><div class="item"><div class="label">Memoranda</div><div class="value">${memos.length}</div></div></div>
+        <div class="profile-detail"><div class="item"><div class="label">NOD</div><div class="value">${nod.length}</div></div><div class="item"><div class="label">Evaluations</div><div class="value">${evaluations.length}</div></div></div>
+        <div class="profile-detail"><div class="item"><div class="label">Transfers</div><div class="value">${transfers.length}</div></div><div class="item"><div class="label">On-File CVR</div><div class="value">${cvr.length}</div></div></div>
+        <div class="profile-detail"><div class="item"><div class="label">Incidents</div><div class="value">${incidents.length}</div></div><div class="item"><div class="label">ATD Records</div><div class="value">${atd.length}</div></div></div>
+      </div></div>
+    </div>
+    <div class="panel" style="margin-top:14px;"><div class="dashboard-panel-head"><div><h3>Recent HR Activity</h3><div class="desc">Latest records across the employee's HR history.</div></div></div>
+      ${activities.length?`<div class="profile-list">${activities.map(a=>`<div class="profile-list-row"><div class="main"><div class="title">${esc(a.type)} · ${esc(a.title)}</div><div class="meta">${esc(a.meta||'')}</div></div><div class="right">${fmtDate(String(a.date).slice(0,10))}</div></div>`).join('')}</div>`:'<div class="empty"><b>No HR activity yet</b>This employee does not have additional records across the tracked modules.</div>'}
+    </div>
+    <div class="panel" style="margin-top:14px;"><div class="dashboard-panel-head"><div><h3>HR Case History</h3><div class="desc">Cases currently associated with this employee.</div></div></div>
+      ${cases.length?`<div class="profile-list">${cases.slice(0,8).map(c=>`<div class="profile-list-row"><div class="main"><div class="title">${esc(c.case_number)} · ${esc(c.subject||'HR Case')}</div><div class="meta">Opened ${fmtDate(c.opened_at)} · Updated ${fmtDate(String(c.updated_at).slice(0,10))}</div></div><div class="right">${statusBadge(c.status,CASE_STATUS_MAP)}<div style="margin-top:5px;"><button class="btn btn-ghost btn-sm" onclick="openCaseDetails('${c.id}')">Open</button></div></div></div>`).join('')}</div>`:'<div class="empty"><b>No HR cases</b>No central case file is currently associated with this employee.</div>'}
+    </div>
+  </div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>`);
+  document.getElementById('modal').classList.add('case-modal');
 }
 
 /* ================================================================
@@ -1561,7 +1674,7 @@ function renderLeaveSummary(){
   document.getElementById('leave-sub').innerHTML = `
     <div class="grid cols-4" style="margin-bottom:16px;">
       <div class="stat" style="--accent:var(--forest)"><div class="lbl">Currently on Leave</div><div class="val">${onLeave.length}</div></div>
-      <div class="stat" style="--accent:#3A5B9A"><div class="lbl">Upcoming Leaves</div><div class="val">${upcoming.length}</div></div>
+      <div class="stat" style="--accent:var(--ink)"><div class="lbl">Upcoming Leaves</div><div class="val">${upcoming.length}</div></div>
       <div class="stat" style="--accent:var(--slate)"><div class="lbl">Completed Leaves</div><div class="val">${completed.length}</div></div>
       <div class="stat" style="--accent:var(--brass)"><div class="lbl">Total Requests</div><div class="val">${DB.leaves.length}</div></div>
     </div>
@@ -2079,7 +2192,7 @@ function renderATD(){
   <div class="notice"><b>Note:</b> ATD form, Incident Report and quotation/SOA documents are stored as the actual file (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each) in this browser's local storage — nothing is sent to a server. Payment status, cumulative paid and remaining balance are calculated automatically from the recorded payments.</div>
   <div class="grid cols-4" style="margin-bottom:16px;">
     <div class="stat" style="--accent:var(--brass)"><div class="lbl">Total ATD Records</div><div class="val">${totalRecords}</div><div class="sub">${byCat['Uniforms/Expenses']} Uniforms/Expenses · ${byCat['Charges']} Charges</div></div>
-    <div class="stat" style="--accent:#3A5B9A"><div class="lbl">Total Amount Due</div><div class="val" style="font-size:20px;">${peso(totalOutstanding)}</div></div>
+    <div class="stat" style="--accent:var(--ink)"><div class="lbl">Total Amount Due</div><div class="val" style="font-size:20px;">${peso(totalOutstanding)}</div></div>
     <div class="stat" style="--accent:var(--forest)"><div class="lbl">Total Collected</div><div class="val" style="font-size:20px;">${peso(totalCollected)}</div></div>
     <div class="stat" style="--accent:var(--rust)"><div class="lbl">Remaining Balance</div><div class="val" style="font-size:20px;">${peso(totalRemaining)}</div><div class="sub">${byStatus.Pending} Pending · ${byStatus.Ongoing} Ongoing · ${byStatus.Paid} Paid</div></div>
   </div>
@@ -2223,7 +2336,7 @@ function openATDPayments(id){
         <div class="stat" style="--accent:var(--brass);padding:12px 14px;"><div class="lbl">Total ATD</div><div class="val" style="font-size:17px;">${peso(rec.totalAmount)}</div></div>
         <div class="stat" style="--accent:var(--forest);padding:12px 14px;"><div class="lbl">Total Paid</div><div class="val" style="font-size:17px;">${peso(atdTotalPaid(rec))}</div></div>
         <div class="stat" style="--accent:var(--rust);padding:12px 14px;"><div class="lbl">Remaining</div><div class="val" style="font-size:17px;">${peso(atdRemaining(rec))}</div></div>
-        <div class="stat" style="--accent:#3A5B9A;padding:12px 14px;"><div class="lbl">Status</div><div class="val" style="font-size:17px;">${statusBadge(atdComputeStatus(rec), ATD_STATUS_MAP)}</div></div>
+        <div class="stat" style="--accent:var(--ink);padding:12px 14px;"><div class="lbl">Status</div><div class="val" style="font-size:17px;">${statusBadge(atdComputeStatus(rec), ATD_STATUS_MAP)}</div></div>
       </div>
       <div class="desc">${payments.length} payment(s) recorded, in chronological order. Payment terms: ${esc(rec.paymentTerms||'—')}.</div>
       <div class="tablewrap"><table>
@@ -3023,7 +3136,7 @@ function renderSettings(){
   `;
 }
 async function saveSettings(){
-  DB.settings.orgName = document.getElementById('s_org').value.trim()||'SLSC';
+  DB.settings.orgName = document.getElementById('s_org').value.trim()||'SCPA';
   DB.settings.probationDays = parseInt(document.getElementById('s_prob').value,10)||180;
   logAudit('Updated organization settings');
   if(await saveDB()) toast('Settings saved.'); enterApp(); go('settings');
@@ -3421,7 +3534,7 @@ Object.assign(window, {
   loadDB, loadProfiles, logAudit, mondayOf, nthLabel, offenseLevelFor, openATDForm, openATDPaymentForm,
   openATDPayments, openCVRForm, openEmployeeForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard,
-  renderDisciplinary, renderEmployees, renderEvaluations, renderIncidents, renderLeaveCalendar, renderLeaveRecords,
+  renderDisciplinary, renderEmployees, renderEvaluations, renderIncidents, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderOffenseSummary, renderReports, renderSettings,
   renderUsers, renderWeeklyReport, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, setTitle, shiftDate, statusBadge, switchAuthTab, toCSV,
