@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>SCPA HR Management — Supabase</title>
+<title>SLSC HR Management — Supabase</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
@@ -408,7 +408,7 @@ label.opt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--s
   <div class="auth-card">
     <div class="auth-head">
       <div class="badge">S</div>
-      <h1>SCPA HR Management</h1>
+      <h1>SLSC HR Management</h1>
       <p>&amp; Disciplinary Dashboard</p>
     </div>
     <div class="auth-body">
@@ -447,7 +447,7 @@ label.opt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--s
   <aside id="sidebar">
     <div class="brand">
       <div class="badge">S</div>
-      <div class="brand-txt"><div class="t1">SCPA HR</div><div class="t2">Disciplinary Dashboard</div></div>
+      <div class="brand-txt"><div class="t1">SLSC HR</div><div class="t2">Disciplinary Dashboard</div></div>
     </div>
     <nav id="nav"></nav>
     <button class="btn btn-ghost btn-block logout" onclick="doLogout()">Log Out</button>
@@ -491,7 +491,7 @@ if(!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('YOUR_PRO
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 /* =========================================================================
-   SCPA HR MANAGEMENT & DISCIPLINARY DASHBOARD — GitHub Pages + Vercel + Supabase
+   SLSC HR MANAGEMENT & DISCIPLINARY DASHBOARD — GitHub Pages + Vercel + Supabase
    Phase 2: record-level Postgres persistence, Supabase Auth, and private Storage.
    ========================================================================= */
 
@@ -500,7 +500,7 @@ let DB_SNAPSHOT = null;
 let SAVE_QUEUE = Promise.resolve();
 
 function blankDB(){
-  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],settings:{orgName:'SCPA',probationDays:180},audit:[],users:[]};
+  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],settings:{orgName:'SLSC',probationDays:180},audit:[],users:[]};
 }
 
 async function loadDB(){
@@ -549,7 +549,7 @@ async function saveDBInternal(state){
       if(error) throw error;
     }
   }
-  const {error:settingsError}=await supabase.from('hr_settings').upsert({id:'singleton',data:state.settings||{orgName:'SCPA',probationDays:180},updated_at:now,updated_by:SESSION?.id||null},{onConflict:'id'});
+  const {error:settingsError}=await supabase.from('hr_settings').upsert({id:'singleton',data:state.settings||{orgName:'SLSC',probationDays:180},updated_at:now,updated_by:SESSION?.id||null},{onConflict:'id'});
   if(settingsError) throw settingsError;
   DB_SNAPSHOT=JSON.parse(JSON.stringify(state));
 }
@@ -738,7 +738,7 @@ function seedDB(){
   ];
   return {
     users, employees, leaves, disciplinary, nte, memos, nod, oncall, transfers, offenseCatalog, cvr, incidents, prf, evaluations, atd,
-    settings:{orgName:'SCPA', probationDays:180},
+    settings:{orgName:'SLSC', probationDays:180},
     audit:[{ts:new Date().toISOString(), user:'System', action:'Seeded initial demo data'}]
   };
 }
@@ -3023,7 +3023,7 @@ function renderSettings(){
   `;
 }
 async function saveSettings(){
-  DB.settings.orgName = document.getElementById('s_org').value.trim()||'SCPA';
+  DB.settings.orgName = document.getElementById('s_org').value.trim()||'SLSC';
   DB.settings.probationDays = parseInt(document.getElementById('s_prob').value,10)||180;
   logAudit('Updated organization settings');
   if(await saveDB()) toast('Settings saved.'); enterApp(); go('settings');
