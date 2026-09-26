@@ -938,23 +938,80 @@ function openRecordForm(key, id){
     </div>
   `);
 }
-function saveRecord(key, id){
+let CASE_WORKFLOW_CONTEXT = null;
+
+async function linkNewRecordToCase(caseId, module, rec){
+  if(!caseId || !rec) return true;
+  const label = caseRecordLabel(module, rec);
+  const {error} = await supabase.from('hr_case_links').insert({
+    case_id:caseId, module, record_id:String(rec.id), label, linked_by:SESSION?.id||null
+  });
+  if(error){
+    toast('Record saved, but it could not be linked to the HR case: '+error.message,true);
+    return false;
+  }
+  const newStatus = module==='nte'?'NTE Issued' : module==='memos'?'Memo Issued' : module==='nod'?'For Decision' : null;
+  if(newStatus){
+    const {error:statusError}=await supabase.from('hr_cases').update({status:newStatus,updated_by:SESSION?.id||null}).eq('id',caseId);
+    if(statusError) console.warn('Case status update failed',statusError);
+  }
+  logAudit(`Linked ${caseModuleLabel(module)} to HR case`);
+  return true;
+}
+
+function openWorkflowRecordForm(module, caseId){
+  if(SESSION?.role==='Viewer') return;
+  CASE_WORKFLOW_CONTEXT = {caseId, module};
+  openRecordForm(module);
+  supabase.from('hr_cases').select('employee_record_id,employee_name,department,subject').eq('id',caseId).maybeSingle().then(({data,error})=>{
+    if(error||!data) return;
+    const empInput=document.getElementById('f_employeeName');
+    const deptInput=document.getElementById('f_department');
+    if(empInput){empInput.value=data.employee_name||''; empInput.dispatchEvent(new Event('change'));}
+    if(deptInput && !deptInput.value) deptInput.value=data.department||'';
+    const dateMap={nte:'f_dateIssued',memos:'f_dateOfMemo',nod:'f_dateOfNod'};
+    const dateId=dateMap[module]; if(document.getElementById(dateId) && !document.getElementById(dateId).value) document.getElementById(dateId).value=todayISO();
+    if(module==='nte'){
+      const v=document.getElementById('f_violation'); if(v && !v.value) v.value=data.subject||'';
+      const st=document.getElementById('f_status'); if(st && !st.value) st.value='Pending Explanation';
+    }
+    if(module==='memos'){
+      const v=document.getElementById('f_offenseType'); if(v && !v.value) v.value=data.subject||'';
+      const d=document.getElementById('f_action'); if(d && !d.value) d.value='';
+    }
+    if(module==='nod'){
+      const v=document.getElementById('f_relatedOffense'); if(v && !v.value) v.value=data.subject||'';
+    }
+  });
+}
+
+async function saveRecord(key, id){
   const cfg = MODULES[key];
   const vals = readFields(cfg.fields);
   const missing = cfg.fields.filter(f=>f.required && !vals[f.key]);
   if(missing.length){ toast('Please complete: '+missing.map(f=>f.label).join(', ')); return; }
+  let rec;
+  const workflowCaseId = CASE_WORKFLOW_CONTEXT?.module===key ? CASE_WORKFLOW_CONTEXT.caseId : null;
   if(id){
-    const rec = DB[key].find(r=>r.id===id);
+    rec = DB[key].find(r=>r.id===id);
     Object.assign(rec, vals);
     logAudit(`Updated ${cfg.singular.toLowerCase()} record for ${vals[cfg.searchFields[0]]||''}`);
     toast(cfg.singular+' updated.');
   } else {
-    const rec = {id:uid(), ...vals};
+    rec = {id:uid(), ...vals};
     DB[key].push(rec);
     logAudit(`Added new ${cfg.singular.toLowerCase()} record for ${vals[cfg.searchFields[0]]||''}`);
     toast(cfg.singular+' added.');
   }
-  saveDB(); closeModal(); renderNav(); RENDERERS[key]? RENDERERS[key]() : renderModuleView(key);
+  await saveDB();
+  closeModal(); renderNav();
+  CASE_WORKFLOW_CONTEXT=null;
+  if(workflowCaseId && !id){
+    await linkNewRecordToCase(workflowCaseId,key,rec);
+    await openCaseDetails(workflowCaseId);
+  } else {
+    RENDERERS[key]? RENDERERS[key]() : renderModuleView(key);
+  }
 }
 function deleteRecord(key,id){
   const cfg = MODULES[key];
@@ -1798,7 +1855,7 @@ function atdFillEmployee(){
   const emp=DB.employees.find(e=>e.name===name);
   if(emp){ document.getElementById('f_department').value=emp.department||''; document.getElementById('f_position').value=emp.position||''; }
 }
-function saveATDRecord(id){
+async function saveATDRecord(id){
   const employeeName=document.getElementById('f_employeeName').value;
   const category=document.getElementById('f_category').value;
   const totalAmount=document.getElementById('f_totalAmount').value;
@@ -1815,14 +1872,24 @@ function saveATDRecord(id){
     soaAmount:parseFloat(document.getElementById('f_soaAmount').value)||0,
     remarks:document.getElementById('f_remarks').value.trim(),
   };
+  let rec;
+  const workflowCaseId = CASE_WORKFLOW_CONTEXT?.module==='atd' ? CASE_WORKFLOW_CONTEXT.caseId : null;
   if(id){
-    const rec=DB.atd.find(r=>r.id===id); Object.assign(rec, vals); rec.status=atdComputeStatus(rec);
+    rec=DB.atd.find(r=>r.id===id); Object.assign(rec, vals); rec.status=atdComputeStatus(rec);
     logAudit('Updated ATD record for '+employeeName); toast('ATD record updated.');
   } else {
-    const rec={id:uid(), ...vals, payments:[]}; rec.status=atdComputeStatus(rec);
+    rec={id:uid(), ...vals, payments:[]}; rec.status=atdComputeStatus(rec);
     DB.atd.push(rec); logAudit('Created ATD record for '+employeeName); toast('ATD record created.');
   }
-  saveDB(); closeModal(); renderNav(); renderATD();
+  await saveDB();
+  closeModal(); renderNav();
+  CASE_WORKFLOW_CONTEXT=null;
+  if(workflowCaseId && !id){
+    await linkNewRecordToCase(workflowCaseId,'atd',rec);
+    await openCaseDetails(workflowCaseId);
+  } else {
+    renderATD();
+  }
 }
 function deleteATDRecord(id){
   if(!confirm('Delete this ATD record and its full payment history? This cannot be undone.')) return;
@@ -2548,12 +2615,36 @@ async function openCaseDetails(id){
   const linkRows=(links||[]).map((ln,i)=>{const rec=(DB[ln.module]||[]).find(r=>String(r.id)===String(ln.record_id));const label=ln.label||caseRecordLabel(ln.module,rec);const date=caseRecordDate(ln.module,rec);return `<div class="case-link"><div class="stage">${i+1}</div><div class="body"><div class="title">${esc(caseModuleLabel(ln.module))}</div><div class="meta">${esc(label)}${date?' · '+esc(fmtDate(date)):''} · Linked ${new Date(ln.linked_at).toLocaleString()}</div></div><div class="actions">${canEdit()?`<button class="iconbtn" title="Remove link" onclick="unlinkCaseRecord('${id}','${esc(ln.module)}','${esc(ln.record_id)}')">${iTrash(13)}</button>`:''}</div></div>`;}).join('');
   openModal(`<div class="modal-head"><div><h3>${esc(caseRec.case_number)}</h3><div class="small">${esc(caseRec.subject||'HR Case File')}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body">
     <div class="case-summary"><div class="mini"><div class="k">Employee</div><div class="v">${esc(caseRec.employee_name)}</div></div><div class="mini"><div class="k">Department</div><div class="v">${esc(caseRec.department||'—')}</div></div><div class="mini"><div class="k">Status</div><div class="v">${statusBadge(caseRec.status,CASE_STATUS_MAP)}</div></div><div class="mini"><div class="k">Assigned To</div><div class="v">${esc(assigned?.fullName||'Unassigned')}</div></div></div>
-    <div class="sectionhead" style="margin-bottom:10px;"><div><h2 style="font-size:16px;">Case Timeline</h2><p>${links?.length||0} linked record${(links?.length||0)===1?'':'s'}.</p></div>${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="openCaseLinkForm('${id}')">${iPlus(13)} Link Existing Record</button>`:''}</div>
-    <div class="case-links">${linkRows||'<div class="empty"><b>No records linked yet</b>Link the Incident, CVR, Disciplinary Action, NTE, Memo, NOD, ATD, or another HR record to build the case history.</div>'}</div>
+    ${canEdit()?`<div class="panel" style="padding:14px;margin-bottom:14px;"><div class="sectionhead" style="margin-bottom:10px;"><div><h3>Case Workflow</h3><div class="desc" style="margin-bottom:0;">Create the next HR document directly from this case. New records are automatically linked back to this case.</div></div></div><div style="display:flex;flex-wrap:wrap;gap:8px;"><button class="btn btn-ghost btn-sm" onclick="openWorkflowRecordForm('nte','${id}')">${iPlus(13)} New NTE</button><button class="btn btn-ghost btn-sm" onclick="openWorkflowRecordForm('memos','${id}')">${iPlus(13)} New Memorandum</button><button class="btn btn-ghost btn-sm" onclick="openWorkflowRecordForm('nod','${id}')">${iPlus(13)} New NOD</button><button class="btn btn-ghost btn-sm" onclick="openWorkflowATDForm('${id}')">${iPlus(13)} New ATD</button><button class="btn btn-ghost btn-sm" onclick="openCaseLinkForm('${id}')">${iPlus(13)} Link Existing Record</button><button class="btn btn-ghost btn-sm" onclick="setCaseWorkflowStatus('${id}','Resolved')">Mark Resolved</button><button class="btn btn-ghost btn-sm" onclick="setCaseWorkflowStatus('${id}','Closed')">Close Case</button></div></div>`:''}
+    <div class="sectionhead" style="margin-bottom:10px;"><div><h2 style="font-size:16px;">Case Timeline</h2><p>${links?.length||0} linked record${(links?.length||0)===1?'':'s'}.</p></div></div>
+    <div class="case-links">${linkRows||'<div class="empty"><b>No records linked yet</b>Use the workflow buttons above or link an existing Incident, CVR, Disciplinary, NTE, Memo, NOD, ATD, or another HR record to build the case history.</div>'}</div>
     <div style="margin-top:16px;" class="panel"><h3>Case Information</h3><div class="small" style="margin-top:6px;line-height:1.7;">Opened: <b>${fmtDate(caseRec.opened_at)}</b> · Closed: <b>${fmtDate(caseRec.closed_at)}</b><br>Remarks: ${esc(caseRec.remarks||'—')}</div></div>
   </div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal(); renderCases();">Close</button>${canEdit()?`<button class="btn btn-primary" onclick="openCaseForm('${id}')">Edit Case</button>`:''}</div>`);
   document.getElementById('modal').classList.add('case-modal');
 }
+async function openWorkflowATDForm(caseId){
+  if(SESSION?.role==='Viewer') return;
+  CASE_WORKFLOW_CONTEXT = {caseId, module:'atd'};
+  openATDForm();
+  const {data,error}=await supabase.from('hr_cases').select('employee_name,department,subject').eq('id',caseId).maybeSingle();
+  if(error||!data) return;
+  const emp=document.getElementById('f_employeeName');
+  if(emp){emp.value=data.employee_name||''; emp.dispatchEvent(new Event('change'));}
+  const dept=document.getElementById('f_department'); if(dept && !dept.value) dept.value=data.department||'';
+  const deduction=document.getElementById('f_deductionType'); if(deduction && !deduction.value && data.subject) deduction.value=data.subject;
+}
+
+async function setCaseWorkflowStatus(caseId,status){
+  if(SESSION?.role==='Viewer') return;
+  if(status==='Closed' && !confirm('Close this HR case? You can still view its history afterward.')) return;
+  if(status==='Resolved' && !confirm('Mark this HR case as Resolved?')) return;
+  const closed_at=status==='Closed'?todayISO():null;
+  const {error}=await supabase.from('hr_cases').update({status,closed_at,updated_by:SESSION?.id||null}).eq('id',caseId);
+  if(error){toast('Could not update case status: '+error.message,true);return;}
+  logAudit(`Changed HR case status to ${status}`);
+  await openCaseDetails(caseId);
+}
+
 function openCaseLinkForm(caseId){
   if(SESSION?.role==='Viewer') return;
   const allowed=['incidents','cvr','disciplinary','nte','memos','nod','atd','employees','leaves','oncall','transfers','prf','evaluations'];
@@ -2621,7 +2712,7 @@ document.getElementById('login-form').addEventListener('keydown', e=>{ if(docume
 // can execute those handlers normally.
 Object.assign(window, {
   addDaysISO, atdComputeStatus, atdFillEmployee, atdPayslipCellHTML, atdRemaining, atdToggleCategory, atdTotalPaid,
-  caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, populateCaseRecordOptions, renderCases, saveCase,
+  caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, setCaseWorkflowStatus,
   attachCellHTML, attachPreviewHTML, authErr, bootAuthenticated, calShift, canEdit, classify, clearFileField, closeModal,
   consequenceFor, cvrOffenseLevel, cvrOffenseSummaryHTML, daysBetweenInclusive, defaultOffenseCatalog, deleteATDPayment,
   deleteATDRecord, deleteCVR, deleteEmployee, deleteIncident, deleteRecord, doLogin, doLogout, doRegister, donut,
