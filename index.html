@@ -605,6 +605,46 @@ tbody tr:hover{background:#FAF9F5;}
 @media (max-width:720px){.workflow-hero{flex-direction:column;align-items:flex-start;}.workflow-actions{justify-content:flex-start;}.workflow-kpis{grid-template-columns:1fr 1fr;}.workflow-detail{grid-template-columns:1fr;}.workflow-row{grid-template-columns:10px 1fr;}.workflow-row .right,.workflow-row .actions{grid-column:2;grid-row:auto;text-align:left;justify-content:flex-start;}}
 @media (max-width:460px){.workflow-kpis{grid-template-columns:1fr 1fr;gap:7px;}.workflow-kpi{padding:10px;}.workflow-kpi .v{font-size:20px;}}
 
+
+/* ---------- Data Quality & Governance ---------- */
+.quality-hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:16px;}
+.quality-hero h1{margin:0;font-size:27px;line-height:1.08;}
+.quality-hero p{margin:6px 0 0;font-size:12.5px;color:var(--slate);}
+.quality-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end;}
+.quality-score-grid{display:grid;grid-template-columns:1.2fr repeat(3,.7fr);gap:10px;margin-bottom:14px;}
+.quality-score{background:#fff;border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow);padding:14px;min-width:0;}
+.quality-score.main{display:flex;align-items:center;gap:14px;}
+.quality-score .ring{width:66px;height:66px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--accent,var(--forest)) calc(var(--score) * 1%), #E9EEF4 0);position:relative;flex:none;}
+.quality-score .ring::after{content:"";position:absolute;inset:7px;border-radius:50%;background:#fff;}
+.quality-score .ring b{position:relative;z-index:1;font:700 18px/1 'Source Serif 4',Georgia,serif;color:var(--ink);}
+.quality-score .k{font-size:9.8px;text-transform:uppercase;letter-spacing:.055em;color:var(--slate);font-weight:700;}
+.quality-score .v{font:700 24px/1 'Source Serif 4',Georgia,serif;margin-top:6px;color:var(--ink);}
+.quality-score .s{font-size:10.5px;color:var(--slate);margin-top:3px;line-height:1.4;}
+.quality-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px;border:1px solid var(--line);border-radius:10px;background:#FBFCFE;margin-bottom:12px;}
+.quality-toolbar .search{flex:1 1 260px;min-width:220px;}
+.quality-toolbar select,.quality-toolbar input{height:36px;}
+.quality-list{display:flex;flex-direction:column;gap:8px;}
+.quality-item{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:11px;align-items:start;padding:12px;border:1px solid var(--line);border-radius:9px;background:#fff;}
+.quality-item:hover{border-color:#B8C6D9;background:#FBFCFE;}
+.quality-item .dot{width:9px;height:9px;border-radius:50%;margin-top:5px;background:var(--slate);}
+.quality-item.error .dot{background:var(--rust);}.quality-item.warning .dot{background:var(--amber);}.quality-item.info .dot{background:var(--ink);}
+.quality-item .title{font-size:12.3px;font-weight:760;color:var(--ink);line-height:1.35;}
+.quality-item .detail{font-size:10.8px;color:var(--slate);line-height:1.45;margin-top:3px;}
+.quality-item .meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+.quality-item .meta span{font-size:9.5px;color:var(--slate);padding:2px 6px;border:1px solid var(--line);border-radius:99px;background:var(--paper);}
+.quality-item .actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;}
+.quality-section{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;}
+.quality-side{display:flex;flex-direction:column;gap:12px;}
+.quality-summary-list{display:flex;flex-direction:column;gap:8px;}
+.quality-summary-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:#FBFCFE;font-size:11px;}
+.quality-summary-row b{font-size:13px;color:var(--ink);}
+.quality-tip{padding:12px 13px;border:1px dashed var(--line-2);border-radius:9px;background:#FBFCFE;font-size:11px;color:var(--slate);line-height:1.5;}
+.quality-empty{padding:38px 18px;text-align:center;border:1px dashed var(--line-2);border-radius:9px;background:#FBFCFE;color:var(--slate);font-size:11.5px;}
+.quality-empty b{display:block;color:var(--forest);font-size:15px;margin-bottom:5px;}
+@media (max-width:1050px){.quality-score-grid{grid-template-columns:repeat(3,1fr);}.quality-score.main{grid-column:1/-1;}.quality-section{grid-template-columns:1fr;}}
+@media (max-width:700px){.quality-score-grid{grid-template-columns:1fr 1fr;}.quality-score.main{grid-column:1/-1;}.quality-item{grid-template-columns:9px 1fr;}.quality-item .actions{grid-column:2;justify-content:flex-start;}.quality-hero{flex-direction:column;align-items:flex-start;}.quality-actions{justify-content:flex-start;}}
+@media (max-width:460px){.quality-score-grid{grid-template-columns:1fr 1fr;gap:7px;}.quality-score{padding:10px;}.quality-score .v{font-size:20px;}}
+
 /* ---------- Phase 11: HR Operations Workspace ---------- */
 .ops-hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:16px;}
 .ops-hero h1{margin:0;font-size:27px;line-height:1.08;}
@@ -1109,7 +1149,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = seedDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'' };
+let STATE = { view:'dashboard', search:'', filter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'' };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
@@ -1580,6 +1620,7 @@ const NAV = [
     {v:'offenseCatalog', label:'Offense Catalog', icon:iGear},
     {v:'reports', label:'Reports', icon:iChart},
     {v:'users', label:'User Management', icon:iUser},
+    {v:'dataQuality', label:'Data Quality & Governance', icon:iCheck, count:()=>dataQualityIssueCount()},
     {v:'settings', label:'Settings', icon:iGear},
   ]}
 ];
@@ -4288,6 +4329,160 @@ async function renderAnalytics(){
   }
 }
 
+
+/* ================================================================
+   DATA QUALITY & GOVERNANCE
+   Derived checks across current HR records. No record is changed automatically.
+   ================================================================ */
+function qualitySeverityRank(level){ return level==='error'?0:level==='warning'?1:2; }
+function qualityIssue(id,severity,module,title,detail,action,meta=[]){ return {id,severity,module,title,detail,action,meta}; }
+function qualityEmployeeMatches(ref){
+  const raw=String(ref?.employeeId||'').trim();
+  const name=normalizeEmployeeName(ref?.employeeName||ref?.name||'');
+  return DB.employees.find(e=>raw && String(e.id)===raw) || DB.employees.find(e=>name && normalizeEmployeeName(e.name)===name) || null;
+}
+function qualityDateInvalid(value){ return !!value && /^\d{4}-\d{2}-\d{2}$/.test(String(value).slice(0,10))===false; }
+function qualityIssues(caseRows=[]){
+  const issues=[];
+  const add=(...args)=>issues.push(qualityIssue(...args));
+  const employees=DB.employees||[];
+  const today=todayISO();
+
+  if(!employees.length){
+    add('employees-empty','warning','employees','No employee master records found','The HR platform cannot validate cross-module employee relationships until employee master data exists.',"go('employees')",['Employees','Master data']);
+  }
+
+  employees.forEach((e,idx)=>{
+    const base=`employee:${e.id||idx}`;
+    const required=[['employeeNo','Employee No.'],['name','Employee Name'],['position','Position'],['department','Department'],['dateHired','Date Hired'],['gender','Gender'],['status','Employment Status']];
+    required.forEach(([k,label])=>{ if(!String(e[k]??'').trim()) add(`${base}:missing:${k}`,'error','employees',`${label} is missing`,`${e.name||'Employee record'} has incomplete required master data.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Required field']); });
+    if(e.dateHired && e.dateHired>today) add(`${base}:future-hire`,'error','employees','Date Hired is in the future',`${e.name||'Employee'} is recorded as hired on ${fmtDate(e.dateHired)}.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Date']);
+    if(e.birthDate && e.birthDate>today) add(`${base}:future-birth`,'error','employees','Birth Date is in the future',`${e.name||'Employee'} has a Birth Date later than today.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Date']);
+    if(e.statusDate && e.dateHired && e.statusDate<e.dateHired) add(`${base}:status-date`,'error','employees','Status date precedes Date Hired',`${e.name||'Employee'} has ${fmtDate(e.statusDate)} as a status date but was hired on ${fmtDate(e.dateHired)}.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Timeline']);
+    if(['Resigned','Separated','AWOL'].includes(e.status) && !e.statusDate) add(`${base}:status-date-missing`,'warning','employees','Status effective date is missing',`${e.name||'Employee'} is marked ${e.status} without a status effective date.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Status']);
+    if(!Array.isArray(e.employmentHistory)) add(`${base}:history-shape`,'warning','employees','Employment history is missing or invalid',`${e.name||'Employee'} does not have a valid employment-history array.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','History']);
+    if(!['Auto','Probationary','Regular'].includes(e.classOverride)) add(`${base}:class-override`,'error','employees','Invalid employee classification override',`${e.name||'Employee'} has an unsupported classification value: ${e.classOverride||'blank'}.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Classification']);
+    if(e.dateHired && qualityDateInvalid(e.dateHired)) add(`${base}:hire-format`,'error','employees','Invalid Date Hired format',`${e.name||'Employee'} does not use the expected YYYY-MM-DD date format.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Date']);
+  });
+
+  const duplicateGroups=new Map();
+  employees.forEach(e=>{
+    const key=[normalizeEmployeeName(e.name),String(e.dateHired||''),String(e.department||'')].join('|');
+    if(key!=='||') duplicateGroups.set(key,[...(duplicateGroups.get(key)||[]),e]);
+  });
+  duplicateGroups.forEach(group=>{
+    if(group.length>1){
+      const names=group.map(e=>e.name).join(', ');
+      group.forEach(e=>add(`duplicate:${e.id}`,'error','employees','Possible duplicate employee record',`${names} share the same normalized name, Date Hired, and department. Review before keeping both records.`,`openEmployeeForm('${e.id}')`,['Employee Master','Duplicate']));
+    }
+  });
+
+  const referenceModules=['leaves','disciplinary','nte','memos','nod','oncall','transfers','cvr','incidents','prf','evaluations','atd'];
+  referenceModules.forEach(module=>{
+    (DB[module]||[]).forEach((r,i)=>{
+      const hasRef=String(r.employeeId||r.employeeName||'').trim();
+      if(hasRef && !qualityEmployeeMatches(r)){
+        const who=r.employeeName||r.employee||r.name||'Unknown employee';
+        add(`${module}:orphan:${r.id||i}`,'warning',module,'Record references an unknown employee',`${who} could not be matched to the Employee Master by employee ID or name.`,`go('${module}')`,[caseModuleLabel(module),'Reference']);
+      }
+    });
+  });
+
+  (DB.leaves||[]).forEach((r,i)=>{
+    if(r.startDate && r.endDate && r.startDate>r.endDate) add(`leaves:range:${r.id||i}`,'error','leaves','Leave date range is invalid',`${r.employeeName||'Employee'} has a leave start date after the end date.`,"go('leaves')",['Leave','Date range']);
+  });
+  ['incidents','disciplinary','cvr','memos','nod'].forEach(module=>{
+    const candidates={incidents:['dateOfIncident'],disciplinary:['dateOfIncident'],cvr:['dateOfCVR'],memos:['dateOfMemo','dateIssued'],nod:['dateOfNod','dateIssued']}[module]||[];
+    (DB[module]||[]).forEach((r,i)=>candidates.forEach(k=>{ if(r[k] && r[k]>today) add(`${module}:future:${r.id||i}:${k}`,'warning',module,'Record date is in the future',`${caseModuleLabel(module)} for ${r.employeeName||'an employee'} uses ${fmtDate(r[k])}.`,"go('"+module+"')",[caseModuleLabel(module),'Date']); }));
+  });
+  (DB.transfers||[]).forEach((r,i)=>{
+    const from=r.fromDate||r.requestDate, to=r.toDate||r.effectiveDate;
+    if(from && to && from>to) add(`transfers:range:${r.id||i}`,'error','transfers','Transfer dates are inconsistent',`${r.employeeName||'Employee'} has a transfer/request date after the effective/to date.`,"go('transfers')",['Transfers','Timeline']);
+  });
+  (DB.atd||[]).forEach((r,i)=>{
+    const total=Number(r.totalAmount)||0, paid=atdTotalPaid(r), remaining=atdRemaining(r);
+    if(total<0 || paid<0) add(`atd:negative:${r.id||i}`,'error','atd','ATD amount is negative',`${r.employeeName||'Employee'} has an ATD amount/payment below zero.`,"go('atd')",['ATD','Amount']);
+    if(paid>total && total>0) add(`atd:paid-over:${r.id||i}`,'error','atd','ATD payments exceed total amount',`${r.employeeName||'Employee'} has ${peso(paid)} paid against ${peso(total)} total.`,`go('atd')`,['ATD','Amount']);
+    if(remaining<0) add(`atd:remaining:${r.id||i}`,'error','atd','ATD remaining balance is negative',`${r.employeeName||'Employee'} has a calculated remaining balance below zero.`,`go('atd')`,['ATD','Balance']);
+  });
+
+  (DB.documents||[]).forEach((d,i)=>{
+    if(String(d.storage||'').toLowerCase()==='google drive' && d.driveUrl && !isGoogleDriveUrl(d.driveUrl)) add(`documents:url:${d.id||i}`,'error','documents','Invalid Google Drive URL',`${d.name||'Document'} is marked as a Google Drive document but the saved URL is not recognized as a Google Drive/Docs URL.`,`openDriveDocumentForm('${d.id||''}')`,['Documents','Google Drive']);
+    if(String(d.storage||'').toLowerCase()==='google drive' && !d.driveUrl) add(`documents:missing-url:${d.id||i}`,'error','documents','Google Drive reference is missing',`${d.name||'Document'} is stored as a Google Drive record without a Drive URL.`,`openDriveDocumentForm('${d.id||''}')`,['Documents','Google Drive']);
+  });
+
+  (caseRows||[]).forEach((c,i)=>{
+    if(!c.case_number) add(`case:number:${c.id||i}`,'error','cases','HR case number is missing',`${c.employee_name||'Case'} does not have a case number.`,"go('cases')",['HR Cases','Required field']);
+    if(!c.employee_name) add(`case:employee:${c.id||i}`,'error','cases','HR case employee is missing',`${c.case_number||'Case'} does not identify an employee.`,"go('cases')",['HR Cases','Employee']);
+    if(c.employee_name && !qualityEmployeeMatches({employeeName:c.employee_name})) add(`case:orphan:${c.id||i}`,'warning','cases','HR case references an unknown employee',`${c.case_number||'Case'} is linked to ${c.employee_name}, which is not present in Employee Master.`,`openCaseDetails('${c.id}')`,['HR Cases','Reference']);
+    if(c.opened_at && c.closed_at && String(c.opened_at)>String(c.closed_at)) add(`case:dates:${c.id||i}`,'error','cases','HR case dates are inconsistent',`${c.case_number||'Case'} has a closed date before its opened date.`,`openCaseDetails('${c.id}')`,['HR Cases','Timeline']);
+  });
+
+  return issues.sort((a,b)=>qualitySeverityRank(a.severity)-qualitySeverityRank(b.severity) || a.title.localeCompare(b.title));
+}
+function dataQualityIssueCount(){
+  return qualityIssues([]).length;
+}
+function qualityFilteredIssues(issues){
+  const filter=STATE.qualityFilter||'all', search=String(STATE.qualitySearch||'').toLowerCase().trim();
+  return issues.filter(x=>(filter==='all'||x.severity===filter) && (!search || [x.title,x.detail,x.module,...(x.meta||[])].join(' ').toLowerCase().includes(search)));
+}
+function qualityScore(issues){
+  const e=issues.filter(x=>x.severity==='error').length, w=issues.filter(x=>x.severity==='warning').length, i=issues.filter(x=>x.severity==='info').length;
+  return Math.max(0,Math.min(100,Math.round(100-(e*5)-(w*2)-(i))));
+}
+function exportDataQuality(){
+  const rows=qualityFilteredIssues(QUALITY_CACHE.issues).map(x=>({severity:x.severity,module:x.module,title:x.title,detail:x.detail,metadata:(x.meta||[]).join(' | ')}));
+  downloadCSV('hr_data_quality_report.csv',toCSV(rows,[{label:'Severity',get:r=>r.severity},{label:'Module',get:r=>r.module},{label:'Issue',get:r=>r.title},{label:'Detail',get:r=>r.detail},{label:'Metadata',get:r=>r.metadata}]));
+  toast('Data quality report exported.');
+}
+let QUALITY_CACHE={issues:[]};
+async function renderDataQuality(){
+  setTitle('Data Quality & Governance','Identify incomplete, inconsistent, duplicated, or disconnected HR records before they become workflow problems.');
+  document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Running data quality scan…</div></div>';
+  try{
+    const {data:caseRows,error}=await supabase.from('hr_cases').select('id,case_number,employee_name,department,status,opened_at,closed_at,updated_at').order('updated_at',{ascending:false}).limit(1000);
+    if(error) throw error;
+    const issues=qualityIssues(caseRows||[]); QUALITY_CACHE.issues=issues;
+    const visible=qualityFilteredIssues(issues).slice(0,120);
+    const errors=issues.filter(x=>x.severity==='error').length;
+    const warnings=issues.filter(x=>x.severity==='warning').length;
+    const infos=issues.filter(x=>x.severity==='info').length;
+    const score=qualityScore(issues);
+    const moduleMap={}; issues.forEach(x=>moduleMap[x.module]=(moduleMap[x.module]||0)+1);
+    const topModules=Object.entries(moduleMap).sort((a,b)=>b[1]-a[1]).slice(0,8);
+    const html=`
+      <div class="quality-hero">
+        <div><h1>Data Quality &amp; Governance</h1><p>Review the integrity of HR master data and cross-module references before relying on automation or reporting.</p></div>
+        <div class="quality-actions"><button class="btn btn-ghost btn-sm" onclick="go('employees')">Employee Master</button><button class="btn btn-ghost btn-sm" onclick="exportDataQuality()">Export Findings</button><button class="btn btn-primary btn-sm" onclick="renderDataQuality()">Run Scan</button></div>
+      </div>
+      <div class="quality-score-grid">
+        <div class="quality-score main" style="--accent:${score>=90?'var(--forest)':score>=70?'var(--amber)':'var(--rust)'}">
+          <div class="ring" style="--score:${score}"><b>${score}</b></div>
+          <div><div class="k">Data Quality Score</div><div class="v">${issues.length?score+' / 100':'100 / 100'}</div><div class="s">Derived from current validation findings. The scan never changes records automatically.</div></div>
+        </div>
+        <div class="quality-score"><div class="k">Errors</div><div class="v">${errors}</div><div class="s">Requires correction or review</div></div>
+        <div class="quality-score"><div class="k">Warnings</div><div class="v">${warnings}</div><div class="s">Potential integrity issue</div></div>
+        <div class="quality-score"><div class="k">Info</div><div class="v">${infos}</div><div class="s">Non-blocking finding</div></div>
+      </div>
+      <div class="quality-toolbar">
+        <input class="search" placeholder="Search data quality findings…" value="${esc(STATE.qualitySearch||'')}" oninput="STATE.qualitySearch=this.value; renderDataQuality()">
+        <select onchange="STATE.qualityFilter=this.value; renderDataQuality()"><option value="all" ${STATE.qualityFilter==='all'?'selected':''}>All findings (${issues.length})</option><option value="error" ${STATE.qualityFilter==='error'?'selected':''}>Errors (${errors})</option><option value="warning" ${STATE.qualityFilter==='warning'?'selected':''}>Warnings (${warnings})</option><option value="info" ${STATE.qualityFilter==='info'?'selected':''}>Info (${infos})</option></select>
+      </div>
+      <div class="quality-section">
+        <div class="panel"><div class="panel-head"><div><h3>Findings</h3><div class="desc">${visible.length} shown${qualityFilteredIssues(issues).length>120?' · first 120 displayed':''}</div></div></div>
+          <div class="quality-list">${visible.length?visible.map(x=>`<div class="quality-item ${x.severity}"><span class="dot"></span><div><div class="title">${esc(x.title)}</div><div class="detail">${esc(x.detail)}</div><div class="meta"><span>${esc(x.severity.toUpperCase())}</span><span>${esc(caseModuleLabel(x.module))}</span>${(x.meta||[]).map(m=>`<span>${esc(m)}</span>`).join('')}</div></div><div class="actions">${x.action?`<button class="btn btn-ghost btn-sm" onclick="${x.action};event.stopPropagation();">Review</button>`:''}</div></div>`).join(''):'<div class="quality-empty"><b>Data quality looks clean</b>No findings match the current filter. Keep monitoring as new HR records are added.</div>'}</div>
+        </div>
+        <div class="quality-side">
+          <div class="panel"><h3>Findings by Module</h3><div class="desc">Where the current scan is detecting the most issues.</div><div class="quality-summary-list">${topModules.length?topModules.map(([m,n])=>`<div class="quality-summary-row"><span>${esc(caseModuleLabel(m))}</span><b>${n}</b></div>`).join(''):'<div class="small">No findings.</div>'}</div></div>
+          <div class="panel"><h3>Governance Checks</h3><div class="desc">The current scan looks for concrete record-integrity problems.</div><div class="quality-summary-list"><div class="quality-summary-row"><span>Required employee fields</span><b>✓</b></div><div class="quality-summary-row"><span>Duplicate employee candidates</span><b>✓</b></div><div class="quality-summary-row"><span>Cross-module employee references</span><b>✓</b></div><div class="quality-summary-row"><span>Date consistency</span><b>✓</b></div><div class="quality-summary-row"><span>ATD balance consistency</span><b>✓</b></div><div class="quality-summary-row"><span>Google Drive references</span><b>✓</b></div><div class="quality-summary-row"><span>HR case integrity</span><b>✓</b></div></div></div>
+          <div class="quality-tip"><b>Why this matters:</b> Workflow automation, approvals, reminders, and management reporting become more reliable when the underlying employee and HR records are complete and correctly connected. Findings are descriptive checks for HR review, not automatic decisions about employees.</div>
+        </div>
+      </div>`;
+    document.getElementById('content').innerHTML=html;
+  }catch(e){ document.getElementById('content').innerHTML=`<div class="panel"><h3>Data Quality &amp; Governance</h3><div class="notice"><b>Could not run the data quality scan.</b> ${esc(e.message||e)}</div></div>`; }
+}
+
 /* ================================================================
    REPORTS
    ================================================================ */
@@ -5119,6 +5314,7 @@ const RENDERERS = {
   offenseSummary: renderOffenseSummary,
   offenseCatalog: ()=>renderModuleView('offenseCatalog'),
   reports: renderReports,
+  dataQuality: renderDataQuality,
   users: renderUsers,
   settings: renderSettings,
 };
@@ -5148,7 +5344,7 @@ Object.assign(window, {
   loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
   openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard,
-  renderDisciplinary, renderEmployees, renderEvaluations, renderIncidents, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords,
+  renderDisciplinary, renderEmployees, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, setTitle, shiftDate, statusBadge, switchAuthTab, toCSV,
