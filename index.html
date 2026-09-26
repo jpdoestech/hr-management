@@ -160,6 +160,52 @@ a{color:inherit;}
 @media (max-width:1180px){.analytics-kpis{grid-template-columns:repeat(3,1fr);}.analytics-grid,.analytics-grid.equal{grid-template-columns:1fr;}}
 @media (max-width:700px){.analytics-kpis{grid-template-columns:1fr 1fr;}.chart-row{grid-template-columns:105px 1fr 34px;}}
 
+/* ---------- Professional Dashboard ---------- */
+.dashboard-hero{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;margin-bottom:18px;}
+.dashboard-hero .eyebrow{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--brass-dk);font-weight:700;margin-bottom:5px;}
+.dashboard-hero h1{margin:0;font-size:28px;line-height:1.08;}
+.dashboard-hero p{margin:6px 0 0;font-size:12.5px;color:var(--slate);}
+.dashboard-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+.dashboard-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px;}
+.dashboard-kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:15px 16px;position:relative;overflow:hidden;min-width:0;}
+.dashboard-kpi::after{content:"";position:absolute;inset:auto 0 0 0;height:3px;background:var(--accent,var(--brass));opacity:.9;}
+.dashboard-kpi .top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.dashboard-kpi .icon{width:30px;height:30px;border-radius:8px;background:var(--paper);display:flex;align-items:center;justify-content:center;color:var(--ink);}
+.dashboard-kpi .label{font-size:10.5px;text-transform:uppercase;letter-spacing:.055em;color:var(--slate);font-weight:700;}
+.dashboard-kpi .value{font:700 27px/1 'Source Serif 4',Georgia,serif;margin-top:9px;}
+.dashboard-kpi .meta{font-size:11px;color:var(--slate);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.dashboard-section{margin-bottom:16px;}
+.dashboard-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;margin-bottom:16px;}
+.dashboard-grid.equal{grid-template-columns:1fr 1fr;}
+.dashboard-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px;}
+.dashboard-panel-head h3{margin:0 0 4px;}
+.dashboard-panel-head .desc{margin:0;}
+.alert-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;}
+.alert-card{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);background:#fff;border-radius:9px;padding:11px 12px;cursor:pointer;transition:transform .08s ease,border-color .12s ease,box-shadow .12s ease;}
+.alert-card:hover{transform:translateY(-1px);border-color:var(--line-2);box-shadow:var(--shadow);}
+.alert-card .bullet{width:9px;height:9px;border-radius:50%;background:var(--amber);margin-top:5px;flex:none;}
+.alert-card.danger .bullet{background:var(--rust);}
+.alert-card .a-title{font-size:12.5px;font-weight:700;}
+.alert-card .a-meta{font-size:11px;color:var(--slate);margin-top:3px;line-height:1.35;}
+.case-pipeline{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;}
+.case-stage{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff;min-width:0;}
+.case-stage .stage-label{font-size:10px;color:var(--slate);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.case-stage .stage-count{font:700 22px/1 'Source Serif 4',Georgia,serif;margin-top:8px;}
+.case-stage .stage-bar{height:5px;border-radius:5px;background:var(--paper);overflow:hidden;margin-top:8px;}
+.case-stage .stage-fill{height:100%;background:var(--stage,var(--brass));border-radius:5px;}
+.dashboard-mini-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.dashboard-mini-table th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);padding:8px 9px;border-bottom:1px solid var(--line);background:#FAFAF7;}
+.dashboard-mini-table td{padding:9px;border-bottom:1px solid var(--line);vertical-align:middle;}
+.dashboard-mini-table tr:last-child td{border-bottom:none;}
+.dashboard-list{display:flex;flex-direction:column;gap:7px;}
+.dashboard-list-row{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;}
+.dashboard-list-row .primary{font-size:12px;font-weight:700;}
+.dashboard-list-row .secondary{font-size:11px;color:var(--slate);margin-top:2px;}
+.dashboard-list-row .right{font-size:11px;color:var(--slate);text-align:right;white-space:nowrap;}
+.dashboard-footnote{font-size:10.5px;color:var(--slate);margin-top:10px;line-height:1.45;}
+@media (max-width:1180px){.dashboard-kpis{grid-template-columns:repeat(3,1fr);}.dashboard-grid,.dashboard-grid.equal{grid-template-columns:1fr;}.case-pipeline{grid-template-columns:repeat(3,1fr);}}
+@media (max-width:700px){.dashboard-hero{flex-direction:column;align-items:flex-start;}.dashboard-actions{justify-content:flex-start;}.dashboard-kpis{grid-template-columns:1fr 1fr;}.alert-grid{grid-template-columns:1fr;}.case-pipeline{grid-template-columns:repeat(2,1fr);}}
+
 /* ---------- toolbar / tables ---------- */
 .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
 .toolbar .search{position:relative;flex:1;min-width:180px;max-width:320px;}
@@ -854,103 +900,155 @@ function readFields(fields){
 /* ================================================================
    DASHBOARD
    ================================================================ */
-function renderDashboard(){
+async function renderDashboard(){
   setTitle('Dashboard', `Overview of all HR & disciplinary records — ${DB.settings.orgName}`);
-  const emps = DB.employees;
-  const total = emps.length;
-  const statusCounts = {}; EMP_STATUS.forEach(s=>statusCounts[s]=0);
-  emps.forEach(e=> statusCounts[e.status] = (statusCounts[e.status]||0)+1 );
-  const male = emps.filter(e=>e.gender==='Male').length;
-  const female = emps.filter(e=>e.gender==='Female').length;
-  const probationary = emps.filter(e=>classify(e)==='Probationary').length;
-  const regular = emps.filter(e=>classify(e)==='Regular').length;
+  document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Loading dashboard…</div></div>';
+  try{
+    const [{data:cases,error:caseError}]=await Promise.all([
+      supabase.from('hr_cases').select('id,case_number,employee_name,department,status,opened_at,closed_at,updated_at').order('updated_at',{ascending:false}).limit(250)
+    ]);
+    if(caseError) throw caseError;
+    if(STATE.view!=='dashboard') return;
 
-  const deptCounts = {};
-  emps.forEach(e=>{ const d=e.department||'Unassigned'; deptCounts[d]=(deptCounts[d]||0)+1; });
+    const today=todayISO();
+    const next7=addDaysISO(today,7);
+    const next30=addDaysISO(today,30);
+    const emps=DB.employees;
+    const total=emps.length;
+    const statusCounts={}; EMP_STATUS.forEach(s=>statusCounts[s]=0);
+    emps.forEach(e=>statusCounts[e.status]=(statusCounts[e.status]||0)+1);
+    const male=emps.filter(e=>e.gender==='Male').length;
+    const female=emps.filter(e=>e.gender==='Female').length;
+    const probationary=emps.filter(e=>classify(e)==='Probationary').length;
+    const regular=emps.filter(e=>classify(e)==='Regular').length;
+    const onLeaveToday=DB.leaves.filter(l=>l.startDate<=today && l.endDate>=today && l.status!=='Disapproved').length;
+    const upcomingLeaves=DB.leaves.filter(l=>l.startDate>today && l.startDate<=next30 && l.status!=='Disapproved').sort((a,b)=>a.startDate.localeCompare(b.startDate));
+    const activeOnCall=DB.oncall.filter(o=>o.status==='Active').length;
+    const openNTE=DB.nte.filter(n=>n.status!=='Resolved').length;
+    const atdOutstanding=DB.atd.reduce((sum,r)=>sum+atdRemaining(r),0);
+    const atdOpen=DB.atd.filter(r=>atdRemaining(r)>0).length;
+    const evalOverdue=[];
+    const evalDueSoon=[];
+    emps.filter(e=>classify(e)==='Probationary' && e.dateHired).forEach(e=>EVAL_MILESTONES.forEach(m=>{
+      const st=evalStatusInfo(e,m);
+      if(st.label==='Overdue') evalOverdue.push({employee:e,milestone:m,due:st.due});
+      else if(st.label==='Due Soon') evalDueSoon.push({employee:e,milestone:m,due:st.due});
+    }));
 
-  const onLeaveToday = DB.leaves.filter(l=> l.startDate<=todayISO() && l.endDate>=todayISO()).length;
-  const upcomingLeaves = DB.leaves.filter(l=> l.startDate>todayISO()).length;
+    const allCases=cases||[];
+    const activeCases=allCases.filter(c=>!['Closed','Cancelled','Resolved'].includes(c.status));
+    const agedCases=activeCases.filter(c=>analyticsDaysOpen(c.opened_at,c.closed_at)>=30);
+    const statusList=['Open','NTE Issued','Memo Issued','For Decision','Resolved','Closed'];
+    const caseStatus={}; allCases.forEach(c=>caseStatus[c.status]=(caseStatus[c.status]||0)+1);
+    const caseDept={}; activeCases.forEach(c=>{const d=c.department||'Unassigned';caseDept[d]=(caseDept[d]||0)+1;});
+    const recentCases=allCases.slice(0,6);
 
-  const activeOnCall = DB.oncall.filter(o=>o.status==='Active').length;
-  const wkStart = mondayOf(todayISO()), wkEnd = addDaysISO(wkStart,6);
-  const oncallThisWeek = DB.oncall.filter(o=>overlapsRange(o.startDate,o.endDate,wkStart,wkEnd));
+    const attention=[];
+    if(agedCases.length) attention.push({danger:true,title:`${agedCases.length} HR case(s) open 30+ days`,meta:'Review aging cases and update their current workflow stage.',view:'cases'});
+    if(evalOverdue.length) attention.push({danger:true,title:`${evalOverdue.length} probationary evaluation(s) overdue`,meta:'Review the overdue 30 / 90 / 180-day evaluations.',view:'evaluations'});
+    if(openNTE) attention.push({title:`${openNTE} NTE record(s) awaiting resolution`,meta:'Review outstanding Notice to Explain records.',view:'nte'});
+    if(atdOutstanding>0) attention.push({title:`${peso(atdOutstanding)} ATD balance outstanding`,meta:`${atdOpen} deduction record(s) still have a remaining balance.`,view:'atd'});
+    if(onLeaveToday) attention.push({title:`${onLeaveToday} employee(s) on leave today`,meta:'Review the Leave Tracker for current coverage.',view:'leaves'});
+    if(!attention.length) attention.push({title:'No immediate attention items',meta:'The current HR records do not show overdue or open follow-ups.',view:'analytics'});
 
-  const html = `
-  <div class="grid cols-4" style="margin-bottom:18px;">
-    <div class="stat" style="--accent:var(--brass)"><div class="lbl">Total Employees</div><div class="val">${total}</div><div class="sub">${male} Male · ${female} Female</div></div>
-    <div class="stat" style="--accent:var(--forest)"><div class="lbl">Active</div><div class="val">${statusCounts['Active']}</div><div class="sub">${statusCounts['Newly Hired']} newly hired</div></div>
-    <div class="stat" style="--accent:var(--rust)"><div class="lbl">AWOL</div><div class="val">${statusCounts['AWOL']}</div><div class="sub">${statusCounts['Resigned']} resigned this period</div></div>
-    <div class="stat" style="--accent:#3A5B9A"><div class="lbl">On Leave Today</div><div class="val">${onLeaveToday}</div><div class="sub">${upcomingLeaves} upcoming</div></div>
-  </div>
+    const deptRows=Object.entries(caseDept).sort((a,b)=>b[1]-a[1]);
+    const maxDept=Math.max(...Object.values(caseDept),1);
+    const statusMax=Math.max(...statusList.map(s=>caseStatus[s]||0),1);
 
-  <div class="grid cols-2" style="margin-bottom:16px;">
-    <div class="panel">
-      <h3>Employee Status Breakdown</h3>
-      <div class="desc">Live count across all statuses, updates automatically as records change.</div>
-      ${EMP_STATUS.map(s=>{
-        const c=statusCounts[s]||0; const pct= total? Math.round(c/total*100):0;
-        return `<div class="barrow"><div class="name">${s}</div><div class="bartrack"><div class="barfill" style="width:${pct}%"></div></div><div class="amt">${c}</div></div>`;
-      }).join('')}
-    </div>
-    <div class="panel">
-      <h3>Gender &amp; Employment Classification</h3>
-      <div class="desc">Overall headcount composition.</div>
-      <div class="donut-wrap">
-        ${donut([{v:male,c:'#B8863B'},{v:female,c:'#3C6E52'}])}
-        <div class="legend">
-          <div class="row"><span class="dot" style="background:#B8863B"></span>Male<span class="amt">${male}</span></div>
-          <div class="row"><span class="dot" style="background:#3C6E52"></span>Female<span class="amt">${female}</span></div>
+    const upcoming=[
+      ...upcomingLeaves.slice(0,4).map(l=>({date:l.startDate,title:l.employeeName,meta:`${l.leaveType} · ${fmtDate(l.startDate)} – ${fmtDate(l.endDate)}`,view:'leaves'})),
+      ...evalDueSoon.slice(0,4).map(x=>({date:x.due,title:x.employee.name,meta:`${x.milestone.label} evaluation · due ${fmtDate(x.due)}`,view:'evaluations'}))
+    ].sort((a,b)=>a.date.localeCompare(b.date)).slice(0,7);
+
+    const html=`
+      <div class="dashboard-hero">
+        <div>
+          <div class="eyebrow">${esc(DB.settings.orgName)} · HR Operations</div>
+          <h1>Good ${new Date().getHours()<12?'morning':new Date().getHours()<18?'afternoon':'evening'}, ${esc((SESSION?.fullName||'Team').split(' ')[0])}.</h1>
+          <p>${fmtDate(today)} · A current snapshot of people, cases, leave, evaluations, and payroll-related deductions.</p>
+        </div>
+        <div class="dashboard-actions">
+          ${canEdit()?`<button class="btn btn-brass btn-sm" onclick="openEmployeeForm()">${iPlus(14)} Add Employee</button><button class="btn btn-ghost btn-sm" onclick="openCaseForm()">${iPlus(14)} New HR Case</button>`:''}
+          <button class="btn btn-ghost btn-sm" onclick="go('analytics')">${iChart(14)} Analytics</button>
         </div>
       </div>
-      <div style="height:1px;background:var(--line);margin:16px 0;"></div>
-      <div class="donut-wrap">
-        ${donut([{v:probationary,c:'#C08D2E'},{v:regular,c:'#1C2333'}])}
-        <div class="legend">
-          <div class="row"><span class="dot" style="background:#C08D2E"></span>Probationary<span class="amt">${probationary}</span></div>
-          <div class="row"><span class="dot" style="background:#1C2333"></span>Regular<span class="amt">${regular}</span></div>
+
+      <div class="dashboard-kpis">
+        <div class="dashboard-kpi" style="--accent:var(--brass)"><div class="top"><div class="label">Employees</div><div class="icon">${iUsers(15)}</div></div><div class="value">${total}</div><div class="meta">${statusCounts['Active']||0} active · ${probationary} probationary</div></div>
+        <div class="dashboard-kpi" style="--accent:var(--rust)"><div class="top"><div class="label">Active Cases</div><div class="icon">${iShield(15)}</div></div><div class="value">${activeCases.length}</div><div class="meta">${agedCases.length} aged 30+ days</div></div>
+        <div class="dashboard-kpi" style="--accent:var(--forest)"><div class="top"><div class="label">On Leave Today</div><div class="icon">${iCal(15)}</div></div><div class="value">${onLeaveToday}</div><div class="meta">${upcomingLeaves.length} upcoming in 30 days</div></div>
+        <div class="dashboard-kpi" style="--accent:var(--amber)"><div class="top"><div class="label">Open Follow-ups</div><div class="icon">${iDoc(15)}</div></div><div class="value">${openNTE+evalOverdue.length}</div><div class="meta">${openNTE} NTE · ${evalOverdue.length} overdue evaluations</div></div>
+        <div class="dashboard-kpi" style="--accent:#3A5B9A"><div class="top"><div class="label">ATD Outstanding</div><div class="icon">₱</div></div><div class="value" style="font-size:22px;">${peso(atdOutstanding)}</div><div class="meta">${atdOpen} record(s) with balance</div></div>
+      </div>
+
+      <div class="dashboard-grid">
+        <div class="panel">
+          <div class="dashboard-panel-head"><div><h3>Attention Required</h3><div class="desc">Items that may need an HR follow-up today.</div></div><button class="btn btn-ghost btn-sm" onclick="go('analytics')">View All</button></div>
+          <div class="alert-grid">
+            ${attention.slice(0,6).map(a=>`<div class="alert-card ${a.danger?'danger':''}" onclick="go('${a.view}')"><span class="bullet"></span><div><div class="a-title">${esc(a.title)}</div><div class="a-meta">${esc(a.meta)}</div></div></div>`).join('')}
+          </div>
+        </div>
+        <div class="panel">
+          <div class="dashboard-panel-head"><div><h3>Case Pipeline</h3><div class="desc">Current distribution of HR case stages.</div></div><button class="btn btn-ghost btn-sm" onclick="go('cases')">Manage</button></div>
+          <div class="case-pipeline">
+            ${statusList.map(s=>{const c=caseStatus[s]||0;const pct=Math.round(c/statusMax*100);const stage=s==='Open'?'var(--brass)':s==='NTE Issued'||s==='Memo Issued'?'var(--amber)':s==='For Decision'?'#3A5B9A':s==='Resolved'?'var(--forest)':'var(--slate)';return `<div class="case-stage"><div class="stage-label">${esc(s)}</div><div class="stage-count">${c}</div><div class="stage-bar"><div class="stage-fill" style="--stage:${stage};width:${pct}%"></div></div></div>`;}).join('')}
+          </div>
         </div>
       </div>
-    </div>
-  </div>
 
-  <div class="grid cols-2" style="margin-bottom:16px;">
-    <div class="panel">
-      <h3>Department Headcount</h3>
-      <div class="desc">Employees organized by department.</div>
-      ${Object.keys(deptCounts).length? Object.entries(deptCounts).sort((a,b)=>b[1]-a[1]).map(([d,c])=>{
-        const pct= total? Math.round(c/total*100):0;
-        return `<div class="barrow"><div class="name">${esc(d)}</div><div class="bartrack"><div class="barfill" style="width:${pct}%"></div></div><div class="amt">${c}</div></div>`;
-      }).join('') : `<div class="small">No employees encoded yet.</div>`}
-    </div>
-    <div class="panel">
-      <h3>Disciplinary &amp; Monitoring Snapshot</h3>
-      <div class="desc">Records requiring HR attention.</div>
-      <div class="grid cols-2" style="gap:10px;">
-        <div class="stat" style="--accent:var(--rust);padding:12px 14px;"><div class="lbl">Disciplinary Records</div><div class="val" style="font-size:22px;">${DB.disciplinary.length}</div></div>
-        <div class="stat" style="--accent:var(--amber);padding:12px 14px;"><div class="lbl">Open NTEs</div><div class="val" style="font-size:22px;">${DB.nte.filter(n=>n.status!=='Resolved').length}</div></div>
-        <div class="stat" style="--accent:#3A5B9A;padding:12px 14px;"><div class="lbl">Memoranda Issued</div><div class="val" style="font-size:22px;">${DB.memos.length}</div></div>
-        <div class="stat" style="--accent:var(--forest);padding:12px 14px;"><div class="lbl">Active On-Call</div><div class="val" style="font-size:22px;">${activeOnCall}</div></div>
-        <div class="stat" style="--accent:var(--rust);padding:12px 14px;cursor:pointer;" onclick="go('atd')"><div class="lbl">ATD Outstanding</div><div class="val" style="font-size:16px;">${peso(DB.atd.reduce((s,r)=>s+atdRemaining(r),0))}</div></div>
+      <div class="dashboard-grid equal">
+        <div class="panel">
+          <div class="dashboard-panel-head"><div><h3>Active Cases by Department</h3><div class="desc">Open workload grouped by current department.</div></div></div>
+          <div class="chart-list">
+            ${deptRows.length?deptRows.slice(0,7).map(([d,c])=>`<div class="chart-row"><div class="label" title="${esc(d)}">${esc(d)}</div><div class="chart-track"><div class="chart-fill" style="width:${Math.round(c/maxDept*100)}%"></div></div><div class="chart-count">${c}</div></div>`).join(''):'<div class="small">No active cases yet.</div>'}
+          </div>
+          <div class="dashboard-footnote">Use this as an operational workload view; it is not a measure of employee performance or legal outcome.</div>
+        </div>
+        <div class="panel">
+          <div class="dashboard-panel-head"><div><h3>Next 30 Days</h3><div class="desc">Upcoming leave starts and probationary evaluation due dates.</div></div></div>
+          <div class="dashboard-list">
+            ${upcoming.length?upcoming.map(x=>`<div class="dashboard-list-row" onclick="go('${x.view}')" style="cursor:pointer;"><div><div class="primary">${esc(x.title)}</div><div class="secondary">${esc(x.meta)}</div></div><div class="right">${fmtDate(x.date)}</div></div>`).join(''):'<div class="small">Nothing scheduled in the next 30 days.</div>'}
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
 
-  <div class="panel" style="margin-bottom:16px;">
-    <h3>This Week's On-Call (${fmtDate(wkStart)} – ${fmtDate(wkEnd)})</h3>
-    <div class="desc">Every on-call / replacement assignment covering this week — Active, Completed, or Cancelled. <a href="#" onclick="go('weeklyReport'); return false;" style="color:var(--brass);">View full Weekly Report →</a></div>
-    ${oncallThisWeek.length? `<div class="tablewrap"><table>
-      <thead><tr><th>Employee</th><th>Department</th><th>Replacing</th><th>Start</th><th>End</th><th>Status</th></tr></thead>
-      <tbody>${oncallThisWeek.map(o=>`<tr><td><b>${esc(o.employeeName)}</b></td><td>${esc(o.department||'—')}</td><td>${esc(o.employeeReplaced||'—')}</td><td>${fmtDate(o.startDate)}</td><td>${fmtDate(o.endDate)}</td><td>${statusBadge(o.status, ONCALL_STATUS_MAP)}</td></tr>`).join('')}</tbody>
-    </table></div>` : '<div class="small">No on-call assignments cover this week.</div>'}
-  </div>
+      <div class="dashboard-grid equal">
+        <div class="panel">
+          <div class="dashboard-panel-head"><div><h3>Recent HR Cases</h3><div class="desc">Most recently updated case records.</div></div><button class="btn btn-ghost btn-sm" onclick="go('cases')">View All</button></div>
+          <div class="tablewrap"><table class="dashboard-mini-table"><thead><tr><th>Case</th><th>Employee</th><th>Status</th><th>Age</th></tr></thead><tbody>
+            ${recentCases.length?recentCases.map(c=>`<tr onclick="openCaseDetails('${c.id}')" style="cursor:pointer;"><td><b class="mono">${esc(c.case_number)}</b></td><td>${esc(c.employee_name)}</td><td>${statusBadge(c.status,CASE_STATUS_MAP)}</td><td>${analyticsDaysOpen(c.opened_at,c.closed_at)}d</td></tr>`).join(''):'<tr><td colspan="4"><div class="empty">No HR cases yet.</div></td></tr>'}
+          </tbody></table></div>
+        </div>
+        <div class="panel">
+          <div class="dashboard-panel-head"><div><h3>Workforce Composition</h3><div class="desc">Current employee mix.</div></div><button class="btn btn-ghost btn-sm" onclick="go('employees')">Employees</button></div>
+          <div class="donut-wrap" style="margin-bottom:14px;">
+            ${donut([{v:male,c:'#B8863B'},{v:female,c:'#3C6E52'}])}
+            <div class="legend"><div class="row"><span class="dot" style="background:#B8863B"></span>Male<span class="amt">${male}</span></div><div class="row"><span class="dot" style="background:#3C6E52"></span>Female<span class="amt">${female}</span></div></div>
+          </div>
+          <div style="height:1px;background:var(--line);margin:8px 0 12px;"></div>
+          <div class="grid cols-2" style="gap:10px;">
+            <div class="metric-card"><div class="k">Regular</div><div class="v">${regular}</div><div class="s">Classified by threshold</div></div>
+            <div class="metric-card"><div class="k">Probationary</div><div class="v">${probationary}</div><div class="s">Within probation period</div></div>
+          </div>
+        </div>
+      </div>
 
-  <div class="panel">
-    <h3>Recent Activity</h3>
-    <div class="desc">Audit trail of the latest changes made to records in this session.</div>
-    ${DB.audit.slice(0,8).map(a=>`<div class="cal-list-item"><span>${esc(a.action)}</span><span class="small">${esc(a.user)} · ${new Date(a.ts).toLocaleString()}</span></div>`).join('') || '<div class="small">No activity yet.</div>'}
-  </div>
-  `;
-  document.getElementById('content').innerHTML = html;
+      <div class="panel">
+        <div class="dashboard-panel-head"><div><h3>HR Operations Pulse</h3><div class="desc">A compact view of the modules most often reviewed by management.</div></div><button class="btn btn-ghost btn-sm" onclick="go('weeklyReport')">Weekly Report</button></div>
+        <div class="grid cols-4">
+          <div class="metric-card"><div class="k">Incidents</div><div class="v">${DB.incidents.length}</div><div class="s">Recorded incident reports</div></div>
+          <div class="metric-card"><div class="k">Disciplinary</div><div class="v">${DB.disciplinary.length}</div><div class="s">Disciplinary action records</div></div>
+          <div class="metric-card"><div class="k">Active On-Call</div><div class="v">${activeOnCall}</div><div class="s">Current replacement assignments</div></div>
+          <div class="metric-card"><div class="k">Memoranda</div><div class="v">${DB.memos.length}</div><div class="s">Memoranda of offense</div></div>
+        </div>
+        <div class="dashboard-footnote">Dashboard figures are descriptive summaries of information stored in the application. Review the underlying records before making operational decisions.</div>
+      </div>
+    `;
+    document.getElementById('content').innerHTML=html;
+  }catch(e){
+    if(STATE.view!=='dashboard') return;
+    document.getElementById('content').innerHTML=`<div class="panel"><h3>Dashboard</h3><div class="notice"><b>Could not load dashboard data.</b> ${esc(e.message||e)}</div></div>`;
+  }
 }
 function donut(segs){
   const total = segs.reduce((s,x)=>s+x.v,0)||1;
