@@ -500,6 +500,41 @@ tbody tr:hover{background:#FAF9F5;}
 @media (max-width:900px){.case-intel-grid{grid-template-columns:1fr;}.case-intel-cards{grid-template-columns:repeat(2,1fr);}.case-progress{grid-template-columns:repeat(3,1fr);}}
 @media (max-width:560px){.case-intel-cards{grid-template-columns:1fr 1fr;}.case-summary{grid-template-columns:1fr 1fr!important;}.case-priority{font-size:10px;}.case-note-box{flex-direction:column;align-items:stretch;}.case-progress{grid-template-columns:repeat(2,1fr);}}
 @media (max-width:760px){.case-modal{max-width:100%;}.case-summary{grid-template-columns:1fr 1fr;}.case-link{align-items:flex-start;}.case-link .actions{margin-left:auto;}}
+
+/* ---------- Phase 10: Employee Lifecycle ---------- */
+.lifecycle-kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px;}
+.lifecycle-kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:13px 14px;min-width:0;position:relative;overflow:hidden;}
+.lifecycle-kpi::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--accent,var(--brass));}
+.lifecycle-kpi .k{font-size:9.8px;text-transform:uppercase;letter-spacing:.055em;color:var(--slate);font-weight:700;}
+.lifecycle-kpi .v{font:700 23px/1 'Source Serif 4',Georgia,serif;margin-top:6px;}
+.lifecycle-kpi .s{font-size:10.5px;color:var(--slate);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.lifecycle-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;margin-bottom:14px;}
+.lifecycle-grid.equal{grid-template-columns:1fr 1fr;}
+.lifecycle-list{display:flex;flex-direction:column;gap:8px;}
+.lifecycle-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 11px;border:1px solid var(--line);border-radius:9px;background:#fff;}
+.lifecycle-row .avatar{width:34px;height:34px;border-radius:10px;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex:none;}
+.lifecycle-row .main{min-width:0;}
+.lifecycle-row .title{font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.lifecycle-row .meta{font-size:10.5px;color:var(--slate);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.lifecycle-row .right{text-align:right;white-space:nowrap;}
+.lifecycle-row .right .date{font-size:10.5px;color:var(--slate);margin-top:3px;}
+.lifecycle-milestones{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.lifecycle-milestone{border:1px solid var(--line);border-radius:8px;padding:9px 10px;background:#fff;}
+.lifecycle-milestone .label{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);font-weight:700;}
+.lifecycle-milestone .date{font-size:12px;font-weight:700;margin-top:4px;}
+.lifecycle-milestone .meta{font-size:10px;color:var(--slate);margin-top:2px;}
+.lifecycle-event-list{display:flex;flex-direction:column;gap:7px;}
+.lifecycle-event{display:grid;grid-template-columns:84px 1fr auto;gap:9px;align-items:start;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;}
+.lifecycle-event .date{font-size:10.5px;color:var(--slate);font-weight:700;}
+.lifecycle-event .body{min-width:0;}
+.lifecycle-event .title{font-size:12px;font-weight:700;}
+.lifecycle-event .meta{font-size:10.5px;color:var(--slate);margin-top:2px;line-height:1.4;}
+.lifecycle-event .right{white-space:nowrap;text-align:right;}
+.lifecycle-helper{font-size:11px;color:var(--slate);padding:9px 11px;border:1px dashed var(--line-2);border-radius:8px;background:#FAFBFD;line-height:1.5;margin-top:10px;}
+.employee-quick-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
+@media (max-width:1200px){.lifecycle-kpis{grid-template-columns:repeat(3,1fr);}.lifecycle-grid,.lifecycle-grid.equal{grid-template-columns:1fr;}}
+@media (max-width:700px){.lifecycle-kpis{grid-template-columns:1fr 1fr;}.lifecycle-row{grid-template-columns:auto 1fr;}.lifecycle-row .right{grid-column:2;text-align:left;}.lifecycle-event{grid-template-columns:1fr;}.lifecycle-event .right{text-align:left;}.lifecycle-milestones{grid-template-columns:1fr;}}
+
 .sectionhead h2{margin:0;font-size:19px;}
 .sectionhead p{margin:3px 0 0;font-size:12.5px;color:var(--slate);}
 .toast{position:fixed;bottom:22px;right:22px;background:var(--ink);color:#fff;padding:11px 18px;border-radius:8px;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.3);z-index:200;opacity:0;transform:translateY(8px);transition:.25s;pointer-events:none;}
@@ -900,7 +935,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = seedDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', employeeStatusFilter:'', employeeClassFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'' };
+let STATE = { view:'dashboard', search:'', filter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'' };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
@@ -1087,6 +1122,7 @@ const NAV = [
     {v:'cases', label:'HR Cases', icon:iShield},
     {v:'documents', label:'Document Center', icon:iDoc, count:()=>countStoredDocuments()},
     {v:'employees', label:'Employee Information', icon:iUsers, count:()=>DB.employees.length},
+    {v:'employeeLifecycle', label:'Employment Lifecycle', icon:iChart},
     {v:'leaves', label:'Leave Tracker', icon:iCal, count:()=>DB.leaves.length},
     {v:'disciplinary', label:'Disciplinary Action', icon:iShield, count:()=>DB.disciplinary.length},
     {v:'cvr', label:'CVR / Violation Reports', icon:iDoc, count:()=>DB.cvr.length},
@@ -1605,6 +1641,175 @@ const NTE_STATUS_MAP = {'Pending Explanation':'b-amber','Explanation Submitted':
 const ONCALL_STATUS_MAP = {'Active':'b-green','Completed':'b-grey','Cancelled':'b-red'};
 
 /* ================================================================
+   PHASE 10 — EMPLOYEE LIFECYCLE
+   ================================================================ */
+const LIFECYCLE_EVENT_TYPES = [
+  'Onboarding Completed','Probation Started','30-Day Review','90-Day Review','Regularization',
+  'Promotion / Position Change','Return to Work','Resignation','Separation','AWOL / Leave of Absence',
+  'Rehire / Return to Agency','Other'
+];
+const LIFECYCLE_EVENT_STATUS = {
+  'Resignation':'Resigned',
+  'Separation':'Separated',
+  'AWOL / Leave of Absence':'AWOL',
+  'Return to Work':'Active',
+  'Rehire / Return to Agency':'Returned to Agency',
+  'Regularization':'Active'
+};
+function lifecycleInitials(emp){ return (emp?.name||'Employee').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
+function lifecycleDaysSince(dateStr){ if(!dateStr) return null; const d=new Date(dateStr+'T00:00:00'); if(isNaN(d)) return null; return Math.max(0,Math.floor((new Date()-d)/86400000)); }
+function lifecycleMilestoneStatus(emp, milestone){
+  const rec=getEvalRecord(emp.id,milestone.key);
+  const due=evalDueDate(emp.dateHired,milestone.days);
+  if(rec?.completedDate) return {label:'Completed',cls:'b-green',due,completed:rec.completedDate};
+  if(due<todayISO()) return {label:'Overdue',cls:'b-red',due};
+  if(due<=addDaysISO(todayISO(),14)) return {label:'Due Soon',cls:'b-amber',due};
+  return {label:'Upcoming',cls:'b-grey',due};
+}
+function lifecycleNextMilestone(emp){
+  if(!emp?.dateHired) return null;
+  if(['Resigned','Separated'].includes(emp.status)) return {label:emp.status,date:emp.statusDate||'',state:'Complete'};
+  if(emp.status==='Returned to Agency') return {label:'Returned to Agency',date:emp.statusDate||'',state:'Complete'};
+  if(classify(emp)!=='Probationary') return {label:'Regularized',date:emp.statusDate||'',state:'Complete'};
+  for(const m of EVAL_MILESTONES){
+    const st=lifecycleMilestoneStatus(emp,m);
+    if(st.label!=='Completed') return {label:m.label,date:st.due,state:st.label};
+  }
+  return {label:'6th Month Review',date:evalDueDate(emp.dateHired,180),state:'Completed'};
+}
+function lifecycleRecentEvents(limit=12){
+  const cutoff=addDaysISO(todayISO(),-90);
+  const events=[];
+  (DB.employees||[]).forEach(emp=>{
+    (Array.isArray(emp.employmentHistory)?emp.employmentHistory:[]).forEach(h=>{
+      events.push({employee:emp,date:h.effectiveDate||String(h.changedAt||'').slice(0,10),type:h.eventType||h.type||'Employment Status',title:h.eventType||`${h.from||'Initial'}${h.from?' → ':''}${h.to||'—'}`,meta:h.remarks||'',changedBy:h.changedBy||'System'});
+    });
+  });
+  (DB.transfers||[]).forEach(t=>events.push({employeeName:t.employeeName,date:t.toDate,type:'Department Transfer',title:`${t.fromDepartment} → ${t.toDepartment}`,meta:t.remarks||'',changedBy:'HR'}));
+  return events.filter(e=>e.date && e.date>=cutoff && e.date<=todayISO()).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,limit);
+}
+function openEmployeeLifecycleEventForm(id){
+  if(!canEdit()) return;
+  const existingEmp=id?DB.employees.find(e=>e.id===id):null;
+  const employeeOptions=DB.employees.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(e=>`<option value="${esc(e.id)}" ${existingEmp?.id===e.id?'selected':''}>${esc(e.employeeNo||'—')} · ${esc(e.name)}</option>`).join('');
+  openModal(`
+    <div class="modal-head"><div><h3>Record Employment Lifecycle Event</h3><div class="small">Add a verified employment milestone or status event to the employee timeline.</div></div><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body">
+      <div class="formgrid">
+        <div class="field full"><label>Employee *</label><select id="lc_employee" onchange="lifecycleEmployeePreview()"><option value="">— Select employee —</option>${employeeOptions}</select></div>
+        <div class="field"><label>Event Type *</label><select id="lc_eventType" onchange="lifecycleEventTypeChanged()">${LIFECYCLE_EVENT_TYPES.map(x=>`<option>${esc(x)}</option>`).join('')}</select></div>
+        <div class="field"><label>Effective Date *</label><input type="date" id="lc_date" value="${todayISO()}"></div>
+        <div class="field" id="lc_position_wrap" style="display:none"><label>New Position</label><input id="lc_position" placeholder="e.g. HR Officer II"></div>
+        <div class="field full"><label>Remarks / HR Reference</label><textarea id="lc_remarks" rows="3" placeholder="Reference, reason, approving authority, or other HR note…"></textarea></div>
+      </div>
+      <div id="lc_preview" class="lifecycle-helper">Select an employee to see the current employment state.</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployeeLifecycleEvent()">Save Lifecycle Event</button></div>
+  `);
+  lifecycleEventTypeChanged(); lifecycleEmployeePreview();
+}
+function lifecycleEventTypeChanged(){
+  const type=document.getElementById('lc_eventType')?.value;
+  const wrap=document.getElementById('lc_position_wrap');
+  if(wrap) wrap.style.display=type==='Promotion / Position Change'?'block':'none';
+  const preview=document.getElementById('lc_preview');
+  if(preview && type==='Regularization') preview.textContent='This event will mark the employee as Active and set Classification to Regular.';
+  else if(preview && type==='Resignation') preview.textContent='This event will set Employment Status to Resigned.';
+  else if(preview && type==='Separation') preview.textContent='This event will set Employment Status to Separated.';
+  else if(preview && type==='AWOL / Leave of Absence') preview.textContent='This event will set Employment Status to AWOL. Record any separate leave documentation in Leave Tracker.';
+  else if(preview && type==='Return to Work') preview.textContent='This event will set Employment Status to Active.';
+  else if(preview && type==='Rehire / Return to Agency') preview.textContent='This event will set Employment Status to Returned to Agency.';
+}
+function lifecycleEmployeePreview(){
+  const id=document.getElementById('lc_employee')?.value; const emp=DB.employees.find(e=>e.id===id); const preview=document.getElementById('lc_preview');
+  if(!preview) return;
+  if(!emp){ preview.textContent='Select an employee to see the current employment state.'; return; }
+  const next=lifecycleNextMilestone(emp);
+  preview.innerHTML=`Current: <b>${esc(emp.status||'—')}</b> · ${esc(emp.position||'—')} · ${esc(emp.department||'—')}${next?` · Next milestone: <b>${esc(next.label)}</b>${next.date?' due '+fmtDate(next.date):''}`:''}`;
+}
+async function saveEmployeeLifecycleEvent(){
+  if(!canEdit()) return;
+  const id=document.getElementById('lc_employee').value;
+  const eventType=document.getElementById('lc_eventType').value;
+  const effectiveDate=document.getElementById('lc_date').value;
+  const remarks=document.getElementById('lc_remarks').value.trim();
+  const newPosition=document.getElementById('lc_position')?.value.trim()||'';
+  const emp=DB.employees.find(e=>e.id===id);
+  if(!emp||!eventType||!effectiveDate){ toast('Please complete employee, event type, and effective date.'); return; }
+  if(effectiveDate<emp.dateHired){ toast('Lifecycle event date cannot be before Date Hired.'); return; }
+  if(effectiveDate>todayISO()){ toast('Lifecycle event date cannot be in the future.'); return; }
+  if(eventType==='Promotion / Position Change' && !newPosition){ toast('Enter the new position for a promotion or position change.'); return; }
+  const fromStatus=emp.status||''; const fromPosition=emp.position||''; const fromDepartment=emp.department||'';
+  let toStatus=fromStatus; let toPosition=fromPosition;
+  if(LIFECYCLE_EVENT_STATUS[eventType]) toStatus=LIFECYCLE_EVENT_STATUS[eventType];
+  if(eventType==='Regularization'){ emp.classOverride='Regular'; }
+  if(eventType==='Promotion / Position Change'){ emp.position=newPosition; toPosition=newPosition; }
+  if(toStatus!==fromStatus){ emp.status=toStatus; emp.statusDate=effectiveDate; }
+  if(!Array.isArray(emp.employmentHistory)) emp.employmentHistory=[];
+  emp.employmentHistory.push({
+    type:'Lifecycle Event',eventType,from:fromStatus,to:emp.status||fromStatus,fromPosition,toPosition,fromDepartment,toDepartment:emp.department||fromDepartment,
+    effectiveDate,remarks,changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'
+  });
+  logAudit(`Recorded employment lifecycle event for ${emp.name}: ${eventType}`);
+  await saveDB();
+  closeModal(); renderNav();
+  if(STATE.view==='employeeLifecycle') renderEmployeeLifecycle(); else renderEmployees();
+  toast('Employment lifecycle event recorded.');
+}
+function renderEmployeeLifecycle(){
+  setTitle('Employment Lifecycle','Track onboarding, probation, regularization, movement, and separation across the workforce.');
+  const q=(STATE.lifecycleSearch||'').toLowerCase();
+  const f=STATE.lifecycleFilter||'';
+  const employees=(DB.employees||[]).filter(e=>{
+    const hay=[e.employeeNo,e.name,e.position,e.department,e.status].map(v=>String(v||'').toLowerCase());
+    const searchOk=!q||hay.some(v=>v.includes(q));
+    const filterOk=!f||(f==='Probationary' ? classify(e)==='Probationary' : f==='Regular' ? classify(e)==='Regular' : e.status===f);
+    return searchOk&&filterOk;
+  }).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const ninetyAgo=addDaysISO(todayISO(),-90);
+  const recentHires=DB.employees.filter(e=>e.dateHired>=ninetyAgo&&e.dateHired<=todayISO()).length;
+  const probationary=DB.employees.filter(e=>classify(e)==='Probationary').length;
+  const regular=DB.employees.filter(e=>classify(e)==='Regular').length;
+  const separations=DB.employees.filter(e=>['Resigned','Separated'].includes(e.status)&&String(e.statusDate||'')>=ninetyAgo).length;
+  const transfers90=DB.transfers.filter(t=>String(t.toDate||'')>=ninetyAgo&&String(t.toDate||'')<=todayISO()).length;
+  const overdue=DB.employees.filter(e=>classify(e)==='Probationary'&&EVAL_MILESTONES.some(m=>evalStatusInfo(e,m).label==='Overdue')).length;
+  const events=lifecycleRecentEvents(10);
+  const probationRows=DB.employees.filter(e=>classify(e)==='Probationary'&&e.dateHired).slice().sort((a,b)=>{
+    const an=lifecycleNextMilestone(a)?.date||'9999', bn=lifecycleNextMilestone(b)?.date||'9999'; return an.localeCompare(bn);
+  }).slice(0,8);
+  const filterOptions=['Probationary','Regular',...EMP_STATUS];
+  document.getElementById('content').innerHTML=`
+    <div class="sectionhead"><div><h2>Employment Lifecycle</h2><p>${employees.length} of ${DB.employees.length} employees shown. Record actual milestones and employment events without changing the underlying HR case history.</p></div>${canEdit()?`<button class="btn btn-brass" onclick="openEmployeeLifecycleEventForm()">${iPlus(15)} Record Lifecycle Event</button>`:''}</div>
+    <div class="lifecycle-kpis">
+      <div class="lifecycle-kpi" style="--accent:var(--ink)"><div class="k">Workforce</div><div class="v">${DB.employees.length}</div><div class="s">Total employees</div></div>
+      <div class="lifecycle-kpi" style="--accent:var(--amber)"><div class="k">Probationary</div><div class="v">${probationary}</div><div class="s">Currently in probation</div></div>
+      <div class="lifecycle-kpi" style="--accent:var(--forest)"><div class="k">Regular</div><div class="v">${regular}</div><div class="s">Regular classification</div></div>
+      <div class="lifecycle-kpi" style="--accent:var(--brass)"><div class="k">New Hires · 90d</div><div class="v">${recentHires}</div><div class="s">Date Hired</div></div>
+      <div class="lifecycle-kpi" style="--accent:var(--ink)"><div class="k">Transfers · 90d</div><div class="v">${transfers90}</div><div class="s">Recorded movements</div></div>
+      <div class="lifecycle-kpi" style="--accent:${overdue?'var(--rust)':'var(--forest)'}"><div class="k">Overdue Reviews</div><div class="v">${overdue}</div><div class="s">Probation milestones</div></div>
+    </div>
+    <div class="toolbar">
+      <div class="search">${iSearch(15)}<input placeholder="Search employee, no., position, department…" value="${esc(STATE.lifecycleSearch)}" oninput="STATE.lifecycleSearch=this.value; renderEmployeeLifecycle()"></div>
+      <select onchange="STATE.lifecycleFilter=this.value; renderEmployeeLifecycle()"><option value="">All Lifecycle States</option>${filterOptions.filter((v,i,a)=>a.indexOf(v)===i).map(v=>`<option value="${esc(v)}" ${STATE.lifecycleFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
+      <div class="spacer"></div>
+    </div>
+    <div class="lifecycle-grid">
+      <div class="panel"><div class="dashboard-panel-head"><div><h3>Probation Pipeline</h3><div class="desc">Upcoming and overdue milestones for employees still classified as probationary.</div></div><button class="btn btn-ghost btn-sm" onclick="go('evaluations')">Open Evaluations →</button></div>
+        ${probationRows.length?`<div class="lifecycle-list">${probationRows.map(e=>{const n=lifecycleNextMilestone(e);const st=EVAL_MILESTONES.find(m=>m.label===n?.label);return `<div class="lifecycle-row"><div class="avatar">${lifecycleInitials(e)}</div><div class="main"><div class="title">${esc(e.employeeNo||'—')} · ${esc(e.name)}</div><div class="meta">${esc(e.position||'—')} · ${esc(e.department||'—')} · ${esc(employeeTenureText(e))}</div><div class="lifecycle-milestones" style="margin-top:7px;">${st?EVAL_MILESTONES.map(m=>{const x=lifecycleMilestoneStatus(e,m);return `<div class="lifecycle-milestone"><div class="label">${esc(m.label)}</div><div class="date">${fmtDate(x.due)}</div><div class="meta">${statusBadge(x.label,{[x.label]:x.cls})}</div></div>`}).join(''):''}</div></div><div class="right"><button class="btn btn-ghost btn-sm" onclick="openEmployeeProfile('${e.id}')">Profile</button>${canEdit()?`<div style="margin-top:5px;"><button class="btn btn-ghost btn-sm" onclick="openEmployeeLifecycleEventForm('${e.id}')">Event</button></div>`:''}<div class="date">${n?.label||''}${n?.date?' · '+fmtDate(n.date):''}</div></div></div>`;}).join('')}</div>`:'<div class="empty"><b>No probationary employees</b>There are no employees currently classified as probationary.</div>'}
+      </div>
+      <div class="panel"><div class="dashboard-panel-head"><div><h3>Workforce Movement · 90 Days</h3><div class="desc">Recent employee lifecycle changes and department transfers.</div></div></div>
+        <div class="lifecycle-event-list">${events.length?events.slice(0,8).map(e=>`<div class="lifecycle-event"><div class="date">${fmtDate(e.date)}</div><div class="body"><div class="title">${esc(e.employeeName||e.employee||'Employee')} · ${esc(e.type)}</div><div class="meta">${esc(e.title||'')} ${e.meta?'· '+esc(e.meta):''}</div></div><div class="right">${statusBadge(e.type==='Department Transfer'?'Transfer':(e.to||''),{})}</div></div>`).join(''):'<div class="empty"><b>No recent movement</b>Lifecycle and transfer events will appear here.</div>'}</div>
+        <div class="lifecycle-helper">Status-changing events are recorded in the employee employment history. Department transfers should continue to use the dedicated Transfer workflow so the transfer record and current department remain synchronized.</div>
+      </div>
+    </div>
+    <div class="panel"><div class="dashboard-panel-head"><div><h3>Employee Lifecycle Directory</h3><div class="desc">One operational view of current employment state, tenure, and next milestone.</div></div><div class="small">${separations} recent separation(s) in the last 90 days</div></div>
+      <div class="tablewrap"><table><thead><tr><th>Employee</th><th>Department</th><th>Status</th><th>Classification</th><th>Date Hired</th><th>Tenure</th><th>Next Milestone</th><th style="text-align:right;">Actions</th></tr></thead><tbody>
+      ${employees.length?employees.map(e=>{const n=lifecycleNextMilestone(e);return `<tr><td><b>${esc(e.employeeNo||'—')}</b><div>${esc(e.name)}</div><div class="small">${esc(e.position||'—')}</div></td><td>${esc(e.department||'—')}</td><td>${statusBadge(e.status,EMP_STATUS_MAP)}</td><td>${statusBadge(classify(e),classify(e)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</td><td>${fmtDate(e.dateHired)}</td><td>${esc(employeeTenureText(e))}</td><td>${n?`${esc(n.label)}${n.date?`<div class="small">${fmtDate(n.date)}</div>`:''}`:'—'}</td><td><div class="rowactions"><button class="iconbtn" title="Profile" onclick="openEmployeeProfile('${e.id}')">${iUser(14)}</button>${canEdit()?`<button class="iconbtn" title="Lifecycle Event" onclick="openEmployeeLifecycleEventForm('${e.id}')">${iPlus(14)}</button>`:''}</div></td></tr>`;}).join(''):`<tr><td colspan="8"><div class="empty"><b>No employees found</b>Try a different search or lifecycle filter.</div></td></tr>`}
+      </tbody></table></div>
+    </div>`;
+}
+
+/* ================================================================
    EMPLOYEES (custom view — has classification logic)
    ================================================================ */
 function renderEmployees(){
@@ -1886,7 +2091,7 @@ async function openEmployeeProfile(id){
   ].filter(x=>x.date).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,14);
   const statusMap=EMP_STATUS_MAP;
   openModal(`<div class="modal-head"><div><h3>Employee 360 Profile</h3><div class="small">${esc(emp.id)}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body">
-    <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(emp.name)}</div><div class="profile-sub">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div><div class="small" style="margin-top:6px;">${esc(employeeTenureText(emp))}</div></div><div class="profile-actions">${canEdit()?`<div class="employee-quick-actions"><button class="btn btn-ghost btn-sm" onclick="closeModal(); openEmployeeForm('${emp.id}')">${iEdit(13)} Edit</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeStatusForm('${emp.id}')">${iShield(13)} Status</button><button class="btn btn-ghost btn-sm" onclick="openTransferForEmployee('${emp.id}')">${iSwap(13)} Transfer</button></div>`:''}</div></div>
+    <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(emp.name)}</div><div class="profile-sub">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div><div class="small" style="margin-top:6px;">${esc(employeeTenureText(emp))}</div></div><div class="profile-actions">${canEdit()?`<div class="employee-quick-actions"><button class="btn btn-ghost btn-sm" onclick="closeModal(); openEmployeeForm('${emp.id}')">${iEdit(13)} Edit</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeStatusForm('${emp.id}')">${iShield(13)} Status</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeLifecycleEventForm('${emp.id}')">${iPlus(13)} Lifecycle</button><button class="btn btn-ghost btn-sm" onclick="openTransferForEmployee('${emp.id}')">${iSwap(13)} Transfer</button></div>`:''}</div></div>
     <div class="employee-completeness"><div style="min-width:0;"><div style="font-size:11px;font-weight:700;color:var(--ink);">Master Data Completion</div><div style="font-size:10px;color:var(--slate);">${employeeCompleteness(emp)}% of standard employee fields completed</div></div><div class="bar"><div class="fill" style="width:${employeeCompleteness(emp)}%;"></div></div><div class="pct">${employeeCompleteness(emp)}%</div></div>
     <div class="profile-kpis">
       <div class="profile-kpi"><div class="k">HR Cases</div><div class="v">${cases.length}</div><div class="s">Case history</div></div>
@@ -3894,6 +4099,7 @@ const RENDERERS = {
   cases: renderCases,
   documents: renderDocuments,
   employees: renderEmployees,
+  employeeLifecycle: renderEmployeeLifecycle,
   leaves: renderLeaves,
   disciplinary: renderDisciplinary,
   nte: ()=>renderModuleView('nte'),
@@ -3931,7 +4137,7 @@ Object.assign(window, {
   fieldHTML, fmtDate, getEvalRecord, go, handleFileInput, incidentTypeOccurrence, incidentTypeSummaryHTML,
   toggleSidebar, closeSidebar, applyReportFilters, exportReportEmployees, exportReportActivity, exportReportATD, exportReportCases,
   loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
-  openATDPayments, openCVRForm, openEmployeeForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
+  openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard,
   renderDisciplinary, renderEmployees, renderEvaluations, renderIncidents, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
