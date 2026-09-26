@@ -1004,16 +1004,37 @@ function downloadCSV(filename, csv){
 }
 
 /* ---------------- modal helpers ---------------- */
-function openModal(html){ document.getElementById('modal').classList.remove('case-modal'); document.getElementById('modal').innerHTML=html; document.getElementById('overlay').classList.add('on'); }
+let MODAL_TRIGGER=null;
+function openModal(html){
+  const overlay=document.getElementById('overlay');
+  const modal=document.getElementById('modal');
+  MODAL_TRIGGER=document.activeElement instanceof HTMLElement?document.activeElement:null;
+  modal.classList.remove('case-modal');
+  modal.innerHTML=html;
+  overlay.classList.add('on');
+  overlay.setAttribute('aria-hidden','false');
+  document.body.classList.add('modal-open');
+  requestAnimationFrame(()=>{
+    modal.scrollTop=0;
+    modal.querySelector('.modal-body')?.scrollTo(0,0);
+    (modal.querySelector('.modal-head button')||modal).focus();
+  });
+}
 async function closeModal(keepUploads=[]){
   const keep=new Set(Array.isArray(keepUploads)?keepUploads:[keepUploads]);
   const pending=[...PENDING_UPLOADS].filter(path=>!keep.has(path));
   pending.forEach(path=>PENDING_UPLOADS.delete(path));
-  await deleteStorageObjects(pending);
-  document.getElementById('overlay').classList.remove('on');
+  const overlay=document.getElementById('overlay');
+  overlay.classList.remove('on');
+  overlay.setAttribute('aria-hidden','true');
+  document.body.classList.remove('modal-open');
   document.getElementById('modal').innerHTML='';
+  if(MODAL_TRIGGER?.isConnected) MODAL_TRIGGER.focus();
+  MODAL_TRIGGER=null;
+  await deleteStorageObjects(pending);
 }
 document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeModal(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&document.getElementById('overlay').classList.contains('on')) closeModal(); });
 
 function fieldHTML(f, val){
   const v = val==null?'':val;
