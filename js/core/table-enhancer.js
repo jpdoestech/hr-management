@@ -25,7 +25,10 @@ export function installTableEnhancer({getState, getContent}) {
     state.tablePages ||= {};
     const sig=tableSignature(table);
     const stored=state.tablePages[key];
-    if(!stored || stored.signature!==sig){ state.tablePages[key]={page:1,size:10,signature:sig}; }
+    if(!stored || stored.signature!==sig){
+      const preferredSize=stored?.size||state.tablePageSizes?.[key]||10;
+      state.tablePages[key]={page:1,size:preferredSize,signature:sig};
+    }
     const meta=paginationMeta(state,key,visibleRows.length,10);
     visibleRows.forEach((row,idx)=>{ row.style.display=(idx>=meta.start-1&&idx<meta.end)?'':'none'; });
     const newFooter=`<div class="table-pagination-meta">${meta.total?`${meta.start}–${meta.end} of ${meta.total}`:'0'} <span>records</span></div>${paginationHTML(meta,key)}`;
@@ -54,8 +57,11 @@ export function installTableEnhancer({getState, getContent}) {
   function tablePageSize(key,size){
     const state=getState();
     state.tablePages ||= {};
+    state.tablePageSizes ||= {};
     const current=state.tablePages[key]||{page:1,size:10,signature:''};
-    state.tablePages[key]={...current,page:1,size:Number(size)||10};
+    const nextSize=Number(size)||10;
+    state.tablePageSizes[key]=nextSize;
+    state.tablePages[key]={...current,page:1,size:nextSize};
     enhanceDataTables();
   }
   function resetAllTablePages(){ getState().tablePages={}; enhanceDataTables(); }

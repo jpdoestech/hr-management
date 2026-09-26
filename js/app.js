@@ -288,7 +288,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = seedDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', tablePages:{} };
+let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', tablePages:{}, tablePageSizes:{} };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
@@ -530,7 +530,7 @@ async function openNotification(id,view,recordId){
   go(view);
 }
 
-function enterApp(){
+function enterApp(initialView='dashboard'){
   document.getElementById('auth-screen').style.display='none';
   document.getElementById('app').classList.add('on');
   document.getElementById('tb-name').textContent = SESSION.fullName;
@@ -539,7 +539,7 @@ function enterApp(){
   const bell=document.getElementById('notification-bell-icon');
   if(bell) bell.innerHTML=iBell(17);
   renderNav();
-  go('dashboard');
+  go(initialView,{skipUnsaved:true});
   refreshNotificationBadge();
   if(NOTIFICATION_TIMER) clearInterval(NOTIFICATION_TIMER);
   NOTIFICATION_TIMER=setInterval(()=>refreshNotificationBadge(),60000);
@@ -939,14 +939,19 @@ function closeSidebar(){
   const btn=document.querySelector('.mobile-menu');
   if(btn) btn.setAttribute('aria-expanded','false');
 }
-function go(view){
+async function go(view,{skipUnsaved=false}={}){
+  if(!skipUnsaved && !(await requestPageNavigation(view))) return;
   STATE.view=view; STATE.search=''; STATE.filter=''; STATE.filterDept=''; STATE.filterStatus='';
   STATE.tablePages={};
   closeSidebar();
   renderNav();
   const renderer=RENDERERS[view];
-  if(typeof renderer==='function') renderer();
-  requestAnimationFrame(()=>enhanceDataTables());
+  if(typeof renderer==='function') await Promise.resolve(renderer());
+  if(STATE.view!==view) return;
+  requestAnimationFrame(()=>{
+    enhanceDataTables();
+    capturePageEditState();
+  });
 }
 
 const SEARCH_RENDER_TIMERS=new Map();
@@ -1032,6 +1037,115 @@ function downloadCSV(filename, csv){
 
 /* ---------------- modal helpers ---------------- */
 let MODAL_TRIGGER=null;
+let MODAL_EDIT_STATE=null;
+let PAGE_EDIT_STATE=null;
+let PENDING_PAGE_NAVIGATION=null;
+const CONFIRMED_MODAL_CLOSE_TARGETS=new WeakSet();
+const EDIT_SAVE_HANDLER_PATTERN=/\b(?:save[A-Z]\w*|[A-Za-z_$]\w*Save[A-Z]\w*|addCaseNote|linkCaseRecord|createCaseFromRecord)\s*\(/;
+
+function editorControls(root,{page=false}={}){
+  if(!root) return [];
+  const ignoredPageArea='.toolbar,.data-toolbar,.analytics-toolbar,.workflow-toolbar,.ops-directory-filters,.table-pagination';
+  return [...root.querySelectorAll('input,select,textarea,[contenteditable="true"]')].filter(control=>{
+    if(control.disabled || control.closest('#data-confirm-overlay')) return false;
+    if(page && (control.closest(ignoredPageArea) || control.dataset.searchKey!=null || control.type==='search')) return false;
+    return !['button','submit','reset','hidden'].includes(String(control.type||'').toLowerCase());
+  });
+}
+function serializeEditor(root,options={}){
+  return JSON.stringify(editorControls(root,options).map((control,index)=>{
+    const key=control.id||control.name||`${control.tagName.toLowerCase()}-${index}`;
+    if(control.matches('[contenteditable="true"]')) return [key,control.textContent||''];
+    if(control.type==='file') return [key,[...(control.files||[])].map(file=>`${file.name}:${file.size}:${file.lastModified}`)];
+    if(control.type==='checkbox'||control.type==='radio') return [key,control.checked];
+    if(control.tagName==='SELECT'&&control.multiple) return [key,[...control.selectedOptions].map(option=>option.value)];
+    return [key,control.value];
+  }));
+}
+function findEditorSaveButton(root){
+  const candidates=[...root.querySelectorAll('button,[role="button"]')].map((button,index)=>{
+    const handler=button.getAttribute('onclick')||'';
+    const label=(button.textContent||button.title||'').replace(/\s+/g,' ').trim();
+    const intent=dataChangeIntent(button,'click');
+    if(!intent || intent.danger) return null;
+    const score=EDIT_SAVE_HANDLER_PATTERN.test(handler)?3:/\b(save|add note|link record|create|register|update)\b/i.test(label)?2:0;
+    return score?{button,score,index}:null;
+  }).filter(Boolean);
+  candidates.sort((a,b)=>b.score-a.score||a.index-b.index);
+  return candidates[0]?.button||null;
+}
+function captureModalEditState(){
+  const modal=document.getElementById('modal');
+  const saveButton=findEditorSaveButton(modal);
+  const controls=editorControls(modal);
+  MODAL_EDIT_STATE=saveButton&&controls.length?{baseline:serializeEditor(modal),saveButton}:null;
+}
+function modalHasUnsavedChanges(){
+  const modal=document.getElementById('modal');
+  return Boolean(MODAL_EDIT_STATE && modal?.isConnected && serializeEditor(modal)!==MODAL_EDIT_STATE.baseline);
+}
+function capturePageEditState(){
+  const content=document.getElementById('content');
+  const saveButton=findEditorSaveButton(content);
+  const controls=editorControls(content,{page:true});
+  PAGE_EDIT_STATE=saveButton&&controls.length?{view:STATE.view,baseline:serializeEditor(content,{page:true}),saveButton}:null;
+}
+function pageHasUnsavedChanges(){
+  const content=document.getElementById('content');
+  return Boolean(PAGE_EDIT_STATE && PAGE_EDIT_STATE.view===STATE.view && serializeEditor(content,{page:true})!==PAGE_EDIT_STATE.baseline);
+}
+async function requestPageNavigation(view){
+  if(!pageHasUnsavedChanges()) return true;
+  const choice=await confirmDataChange({
+    title:'Unsaved changes',
+    message:'You changed data on this page. Save your changes before leaving?',
+    confirmLabel:'Save changes',
+    secondaryLabel:'Discard changes',
+    cancelLabel:'Keep editing',
+  });
+  if(choice==='confirm'){
+    const saveButton=PAGE_EDIT_STATE?.saveButton;
+    if(saveButton?.isConnected){
+      PENDING_PAGE_NAVIGATION=view;
+      CONFIRMED_CHANGE_TARGETS.add(saveButton);
+      saveButton.click();
+    }
+    return false;
+  }
+  if(choice==='discard'){
+    PAGE_EDIT_STATE=null;
+    return true;
+  }
+  return false;
+}
+async function requestCloseModal(trigger=null){
+  if(!modalHasUnsavedChanges()){
+    if(trigger){CONFIRMED_MODAL_CLOSE_TARGETS.add(trigger);trigger.click();}
+    else await closeModal();
+    return true;
+  }
+  const choice=await confirmDataChange({
+    title:'Unsaved changes',
+    message:'You changed this record. Save your changes before leaving?',
+    confirmLabel:'Save changes',
+    secondaryLabel:'Discard changes',
+    cancelLabel:'Keep editing',
+  });
+  if(choice==='confirm'){
+    const saveButton=MODAL_EDIT_STATE?.saveButton;
+    if(saveButton?.isConnected){
+      CONFIRMED_CHANGE_TARGETS.add(saveButton);
+      saveButton.click();
+    }
+    return false;
+  }
+  if(choice==='discard'){
+    if(trigger){CONFIRMED_MODAL_CLOSE_TARGETS.add(trigger);trigger.click();}
+    else await closeModal();
+    return true;
+  }
+  return false;
+}
 function openModal(html){
   const overlay=document.getElementById('overlay');
   const modal=document.getElementById('modal');
@@ -1045,6 +1159,7 @@ function openModal(html){
     modal.scrollTop=0;
     modal.querySelector('.modal-body')?.scrollTo(0,0);
     enhanceRowActionMenus();
+    captureModalEditState();
     (modal.querySelector('.modal-head button')||modal).focus();
   });
 }
@@ -1057,18 +1172,19 @@ async function closeModal(keepUploads=[]){
   overlay.setAttribute('aria-hidden','true');
   document.body.classList.remove('modal-open');
   document.getElementById('modal').innerHTML='';
+  MODAL_EDIT_STATE=null;
   if(MODAL_TRIGGER?.isConnected) MODAL_TRIGGER.focus();
   MODAL_TRIGGER=null;
   await deleteStorageObjects(pending);
 }
-document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeModal(); });
+document.getElementById('overlay').addEventListener('click',e=>{if(e.target.id==='overlay') requestCloseModal();});
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape') return;
   if(document.getElementById('data-confirm-overlay')?.classList.contains('on')) return;
-  if(document.getElementById('overlay').classList.contains('on')) closeModal();
+  if(document.getElementById('overlay').classList.contains('on')) requestCloseModal();
 });
 
-const DATA_CHANGE_HANDLER_PATTERN=/\b(?:save[A-Z]\w*|delete[A-Z]\w*|doRegister|createCaseFromRecord|linkRecordToExistingCase|linkCaseRecord|unlinkCaseRecord|addCaseNote|setCaseWorkflowStatus|workflowCompleteTask|workflowDecideTask|runAutomationEngine|toggleAutomationRule)\s*\(/;
+const DATA_CHANGE_HANDLER_PATTERN=/\b(?:save[A-Z]\w*|[A-Za-z_$]\w*Save[A-Z]\w*|delete[A-Z]\w*|doRegister|createCaseFromRecord|linkRecordToExistingCase|linkCaseRecord|unlinkCaseRecord|addCaseNote|setCaseWorkflowStatus|workflowCompleteTask|workflowDecideTask|runAutomationEngine|toggleAutomationRule)\s*\(/;
 const CONFIRMED_CHANGE_TARGETS=new WeakSet();
 let DATA_CONFIRM_PENDING=null;
 let DATA_CONFIRM_TRIGGER=null;
@@ -1089,13 +1205,18 @@ function dataChangeIntent(target,eventType='click'){
     danger,
   };
 }
-function confirmDataChange({title='Confirm data change',message='This action will update stored system data. Do you want to continue?',confirmLabel='Confirm',danger=false}={}){
+function confirmDataChange({title='Confirm data change',message='This action will update stored system data. Do you want to continue?',confirmLabel='Confirm',secondaryLabel='',cancelLabel='Cancel',danger=false}={}){
   if(DATA_CONFIRM_PENDING) DATA_CONFIRM_PENDING(false);
   const overlay=document.getElementById('data-confirm-overlay');
   const accept=document.getElementById('data-confirm-accept');
+  const discard=document.getElementById('data-confirm-discard');
+  const cancel=document.getElementById('data-confirm-cancel');
   DATA_CONFIRM_TRIGGER=document.activeElement instanceof HTMLElement?document.activeElement:null;
   document.getElementById('data-confirm-title').textContent=title;
   document.getElementById('data-confirm-message').textContent=message;
+  cancel.textContent=cancelLabel;
+  discard.textContent=secondaryLabel||'Discard changes';
+  discard.hidden=!secondaryLabel;
   accept.textContent=confirmLabel;
   accept.className=`btn ${danger?'btn-danger':'btn-primary'}`;
   overlay.classList.toggle('danger',danger);
@@ -1104,10 +1225,10 @@ function confirmDataChange({title='Confirm data change',message='This action wil
   document.body.classList.add('data-confirm-open');
   return new Promise(resolve=>{
     DATA_CONFIRM_PENDING=resolve;
-    requestAnimationFrame(()=>document.getElementById('data-confirm-cancel')?.focus());
+    requestAnimationFrame(()=>cancel.focus());
   });
 }
-function resolveDataChangeConfirmation(confirmed){
+function resolveDataChangeConfirmation(result){
   if(!DATA_CONFIRM_PENDING) return;
   const resolve=DATA_CONFIRM_PENDING;
   DATA_CONFIRM_PENDING=null;
@@ -1117,10 +1238,11 @@ function resolveDataChangeConfirmation(confirmed){
   document.body.classList.remove('data-confirm-open');
   if(DATA_CONFIRM_TRIGGER?.isConnected) DATA_CONFIRM_TRIGGER.focus();
   DATA_CONFIRM_TRIGGER=null;
-  resolve(Boolean(confirmed));
+  resolve(result);
 }
 document.getElementById('data-confirm-cancel').addEventListener('click',()=>resolveDataChangeConfirmation(false));
-document.getElementById('data-confirm-accept').addEventListener('click',()=>resolveDataChangeConfirmation(true));
+document.getElementById('data-confirm-discard').addEventListener('click',()=>resolveDataChangeConfirmation('discard'));
+document.getElementById('data-confirm-accept').addEventListener('click',()=>resolveDataChangeConfirmation('confirm'));
 document.getElementById('data-confirm-overlay').addEventListener('click',event=>{
   if(event.target.id==='data-confirm-overlay') resolveDataChangeConfirmation(false);
 });
@@ -1130,6 +1252,15 @@ document.addEventListener('keydown',event=>{
     resolveDataChangeConfirmation(false);
   }
 });
+document.addEventListener('click',async event=>{
+  const target=event.target.closest?.('#modal button,#modal [role="button"]');
+  if(!target) return;
+  if(CONFIRMED_MODAL_CLOSE_TARGETS.has(target)){CONFIRMED_MODAL_CLOSE_TARGETS.delete(target);return;}
+  if(!(target.getAttribute('onclick')||'').includes('closeModal(') || !modalHasUnsavedChanges()) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  await requestCloseModal(target);
+},true);
 document.addEventListener('click',async event=>{
   const target=event.target.closest?.('button,[role="button"]');
   if(!target) return;
@@ -1170,6 +1301,11 @@ document.addEventListener('change',async event=>{
     target.dispatchEvent(new Event('change',{bubbles:true}));
   }
 },true);
+window.addEventListener('beforeunload',event=>{
+  if(!modalHasUnsavedChanges()&&!pageHasUnsavedChanges()) return;
+  event.preventDefault();
+  event.returnValue='';
+});
 
 const ROW_ACTION_MENUS=new Map();
 let ROW_ACTION_MENU_ID=0;
@@ -3265,17 +3401,24 @@ function openWorkflowTask(id){
         <div class="item"><div class="label">Department</div><div class="value">${esc(task.department||'—')}</div></div>
         <div class="item"><div class="label">Assigned To</div><div class="value">${esc((DB.users.find(u=>String(u.id)===String(task.assigneeId))?.fullName)||'Unassigned')}</div></div>
       </div>
-      <div class="field"><label>Workflow Note</label><textarea id="wf_task_note" rows="4" placeholder="Add an internal workflow note or decision remark…">${esc(task.remarks||'')}</textarea></div>
+      <div class="field"><label>Workflow Note</label><textarea id="wf_task_note" rows="4" placeholder="Add an internal workflow note or decision remark…" ${canEdit()?'':'readonly'}>${esc(task.remarks||'')}</textarea></div>
       <div class="workflow-rule"><b>Source of record:</b> ${esc(caseModuleLabel(task.module)||task.module)}. Workflow changes coordinate the work around the record; they do not replace the underlying HR record.</div>
       <div class="workflow-steps">${steps.join('')}</div>
     </div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button>${task.status==='Pending'&&canEdit()?`<button class="btn btn-ghost" onclick="workflowAssignTask('${task.id}')">Assign</button><button class="btn btn-ghost" onclick="workflowOpenSource(workflowFindTask('${task.id}'))">Open Record</button>${task.actionType==='case_assign'?`<button class="btn btn-primary" onclick="workflowAssignTask('${task.id}')">Assign Owner</button>`:task.workflowType==='Approval'?`<button class="btn btn-danger" onclick="workflowDecideTask('${task.id}','Rejected')">Reject / Return</button><button class="btn btn-brass" onclick="workflowDecideTask('${task.id}','Approved')">Approve</button>`:`<button class="btn btn-primary" onclick="workflowCompleteTask('${task.id}')">Complete Task</button>`}`:''}</div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button>${canEdit()?`<button class="btn btn-ghost" onclick="saveWorkflowTaskNote('${task.id}')">Save Note</button>`:''}${task.status==='Pending'&&canEdit()?`<button class="btn btn-ghost" onclick="workflowAssignTask('${task.id}')">Assign</button><button class="btn btn-ghost" onclick="workflowOpenSource(workflowFindTask('${task.id}'))">Open Record</button>${task.actionType==='case_assign'?`<button class="btn btn-primary" onclick="workflowAssignTask('${task.id}')">Assign Owner</button>`:task.workflowType==='Approval'?`<button class="btn btn-danger" onclick="workflowDecideTask('${task.id}','Rejected')">Reject / Return</button><button class="btn btn-brass" onclick="workflowDecideTask('${task.id}','Approved')">Approve</button>`:`<button class="btn btn-primary" onclick="workflowCompleteTask('${task.id}')">Complete Task</button>`}`:''}</div>`);
 }
 async function workflowSaveTaskNote(id){
   const task=workflowFindTask(id); if(!task) return;
   task.remarks=(document.getElementById('wf_task_note')?.value||'').trim();
   task.lastActionAt=new Date().toISOString(); task.lastActionBy=SESSION?.id||null;
   await saveDB();
+}
+async function saveWorkflowTaskNote(id){
+  if(!canEdit()) return;
+  await workflowSaveTaskNote(id);
+  toast('Workflow note saved.');
+  await closeModal();
+  if(STATE.view==='workflow') renderWorkflowCenter();
 }
 function workflowAssignTask(id){
   const task=workflowFindTask(id); if(!task) return;
@@ -3364,9 +3507,9 @@ async function saveWorkflowManualTask(){
   DB.workflowTasks.push(task); await saveDB(); logAudit(`Created workflow task: ${title}`); toast('HR task created.'); closeModal(); renderNav(); renderWorkflowCenter();
 }
 function workflowPageGo(_scope,page){ STATE.tablePages ||= {}; const cur=STATE.tablePages['workflow:list']||{page:1,size:10,signature:''}; STATE.tablePages['workflow:list']={...cur,page:Math.max(1,Number(page)||1)}; renderWorkflowCenter(); }
-function workflowPageSize(_scope,size){ STATE.tablePages ||= {}; const cur=STATE.tablePages['workflow:list']||{page:1,size:10,signature:''}; STATE.tablePages['workflow:list']={...cur,page:1,size:Number(size)||10,signature:''}; renderWorkflowCenter(); }
+function workflowPageSize(_scope,size){ STATE.tablePages ||= {}; STATE.tablePageSizes ||= {}; const nextSize=Number(size)||10; const cur=STATE.tablePages['workflow:list']||{page:1,size:nextSize,signature:''}; STATE.tablePageSizes['workflow:list']=nextSize; STATE.tablePages['workflow:list']={...cur,page:1,size:nextSize,signature:''}; renderWorkflowCenter(); }
 function automationPageGo(_scope,page){ STATE.tablePages ||= {}; const cur=STATE.tablePages['automation:tasks']||{page:1,size:10,signature:''}; STATE.tablePages['automation:tasks']={...cur,page:Math.max(1,Number(page)||1)}; renderAutomationCenter(); }
-function automationPageSize(_scope,size){ STATE.tablePages ||= {}; const cur=STATE.tablePages['automation:tasks']||{page:1,size:10,signature:''}; STATE.tablePages['automation:tasks']={...cur,page:1,size:Number(size)||10,signature:''}; renderAutomationCenter(); }
+function automationPageSize(_scope,size){ STATE.tablePages ||= {}; STATE.tablePageSizes ||= {}; const nextSize=Number(size)||10; const cur=STATE.tablePages['automation:tasks']||{page:1,size:nextSize,signature:''}; STATE.tablePageSizes['automation:tasks']=nextSize; STATE.tablePages['automation:tasks']={...cur,page:1,size:nextSize,signature:''}; renderAutomationCenter(); }
 
 async function renderWorkflowCenter(){
   setTitle('Workflow & Approvals','A unified work queue for approvals, reviews, deadlines, and HR tasks.');
@@ -4492,7 +4635,12 @@ async function saveSettings(){
   DB.settings.probationDays = parseInt(document.getElementById('s_prob').value,10)||180;
   DB.settings.googleDriveRootUrl = document.getElementById('s_drive_root')?.value.trim()||'';
   logAudit('Updated organization settings');
-  if(await saveDB()) toast('Settings saved.'); enterApp(); go('settings');
+  if(!(await saveDB())){PENDING_PAGE_NAVIGATION=null;return;}
+  const destination=PENDING_PAGE_NAVIGATION||'settings';
+  PENDING_PAGE_NAVIGATION=null;
+  PAGE_EDIT_STATE=null;
+  toast('Settings saved.');
+  enterApp(destination);
 }
 
 /* ================================================================
@@ -5091,7 +5239,7 @@ Object.assign(window, {
   STATE,
   addDaysISO, atdComputeStatus, atdFillEmployee, atdPayslipCellHTML, atdRemaining, atdToggleCategory, atdTotalPaid,
   addCaseActivity, addCaseNote, caseActivityIcon, caseActivityLabel, caseDeadlineInfo, casePriorityBadge, caseWorkflowSteps, caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, setCaseWorkflowStatus, buildNotificationItems, closeNotificationPanel, markAllNotificationsRead, openNotification, goFromNotifications, refreshNotificationBadge, renderNotificationPanel, toggleNotificationPanel, analyticsApplyFilters, analyticsSetPreset, exportAnalyticsSnapshot,
-  workflowSyncTasks, workflowPendingCount, workflowFindTask, workflowOpenSource, workflowSaveTaskNote, workflowAssignTask, workflowSaveAssignment, workflowCompleteTask, workflowDecideTask, openWorkflowTask, openWorkflowCreateForm, saveWorkflowManualTask, renderWorkflowCenter, workflowActionButtons, workflowPriorityBadge, workflowDueText, workflowPageGo, workflowPageSize, automationPageGo, automationPageSize,
+  workflowSyncTasks, workflowPendingCount, workflowFindTask, workflowOpenSource, workflowSaveTaskNote, saveWorkflowTaskNote, workflowAssignTask, workflowSaveAssignment, workflowCompleteTask, workflowDecideTask, openWorkflowTask, openWorkflowCreateForm, saveWorkflowManualTask, renderWorkflowCenter, workflowActionButtons, workflowPriorityBadge, workflowDueText, workflowPageGo, workflowPageSize, automationPageGo, automationPageSize,
   AUTOMATION_RULES, automationPendingCount, ensureAutomationSettings, automationRuleEnabled, runAutomationEngine, toggleAutomationRule, automationOpenTask, renderAutomationCenter,
   countStoredDocuments, renderDocuments, openStoredDocument, collectStoredDocuments, collectDocumentIndex, openDriveDocument, openDriveDocumentForm, saveDriveDocument, deleteDriveDocument, countDriveDocuments, documentExpiryInfo, openDriveWorkspace,
   attachCellHTML, attachPreviewHTML, authErr, bootAuthenticated, calShift, canEdit, classify, clearFileField, closeModal,

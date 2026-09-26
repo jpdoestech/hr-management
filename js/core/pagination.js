@@ -1,10 +1,13 @@
 export function paginationMeta(state,key,total,defaultSize=10){
   state.tablePages ||= {};
+  state.tablePageSizes ||= {};
   const allowed=[10,25,50,100];
-  const current=state.tablePages[key]||{page:1,size:defaultSize,signature:''};
+  const preferredSize=allowed.includes(Number(state.tablePageSizes[key]))?Number(state.tablePageSizes[key]):defaultSize;
+  const current=state.tablePages[key]||{page:1,size:preferredSize,signature:''};
   const size=allowed.includes(Number(current.size))?Number(current.size):defaultSize;
   const pages=Math.max(1,Math.ceil(total/size));
   const page=Math.min(Math.max(1,Number(current.page)||1),pages);
+  state.tablePageSizes[key]=size;
   state.tablePages[key]={...current,page,size};
   return {key,total,size,pages,page,start:total?((page-1)*size+1):0,end:Math.min(total,page*size)};
 }
@@ -31,5 +34,5 @@ export function paginationHTML(meta,scope,handlers={}){
   const key=String(scope).replace(/'/g,"\\'");
   const goFn=handlers.go||'tablePageGo';
   const sizeFn=handlers.size||'tablePageSize';
-  return `<div class="table-pagination"><label class="page-size">Rows <select onchange="${sizeFn}('${key}',this.value)">${[10,25,50,100].map(n=>`<option value="${n}" ${meta.size===n?'selected':''}>${n}</option>`).join('')}</select></label><div class="page-buttons"><button class="page-btn" ${meta.page<=1?'disabled':''} onclick="${goFn}('${key}',${meta.page-1})" aria-label="Previous page">‹</button>${pageList(meta).map(p=>p==='…'?`<span class="page-ellipsis">…</span>`:`<button class="page-btn ${p===meta.page?'active':''}" onclick="${goFn}('${key}',${p})">${p}</button>`).join('')}<button class="page-btn" ${meta.page>=meta.pages?'disabled':''} onclick="${goFn}('${key}',${meta.page+1})" aria-label="Next page">›</button></div></div>`;
+  return `<div class="table-pagination"><label class="page-size">Rows per page <select aria-label="Rows per page" onchange="${sizeFn}('${key}',this.value)">${[10,25,50,100].map(n=>`<option value="${n}" ${meta.size===n?'selected':''}>${n}</option>`).join('')}</select></label><div class="page-buttons"><button class="page-btn" ${meta.page<=1?'disabled':''} onclick="${goFn}('${key}',${meta.page-1})" aria-label="Previous page">‹</button>${pageList(meta).map(p=>p==='…'?`<span class="page-ellipsis">…</span>`:`<button class="page-btn ${p===meta.page?'active':''}" onclick="${goFn}('${key}',${p})">${p}</button>`).join('')}<button class="page-btn" ${meta.page>=meta.pages?'disabled':''} onclick="${goFn}('${key}',${meta.page+1})" aria-label="Next page">›</button></div></div>`;
 }
