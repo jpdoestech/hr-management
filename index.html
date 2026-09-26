@@ -273,6 +273,31 @@ a{color:inherit;}
 .field input[readonly]{background:#F5F7FA;color:#475467;font-weight:700;cursor:not-allowed;}
 @media (max-width:720px){.employee-master-note{font-size:10.5px;}.profile-detail .item[style*='grid-column']{grid-column:1/-1!important;}}
 
+/* ---------- Phase 8: Employee Operations ---------- */
+.employee-completeness{display:flex;align-items:center;gap:10px;margin-top:10px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:#FBFCFE;}
+.employee-completeness .bar{flex:1;height:7px;background:#E7EBF1;border-radius:999px;overflow:hidden;}
+.employee-completeness .fill{height:100%;background:var(--brass);border-radius:999px;}
+.employee-completeness .pct{font-size:11px;font-weight:700;color:var(--ink);min-width:34px;text-align:right;}
+.employee-history{display:flex;flex-direction:column;gap:0;}
+.employee-history-row{display:grid;grid-template-columns:10px 110px 1fr auto;gap:10px;align-items:start;padding:11px 0;border-bottom:1px solid var(--line);font-size:12px;}
+.employee-history-row:last-child{border-bottom:none;}
+.employee-history-row .dot{width:8px;height:8px;border-radius:50%;background:var(--ink);margin-top:4px;}
+.employee-history-row .date{font-size:10.5px;color:var(--slate);white-space:nowrap;}
+.employee-history-row .title{font-weight:700;color:var(--ink);}
+.employee-history-row .meta{font-size:10.5px;color:var(--slate);margin-top:3px;line-height:1.4;}
+.employee-quick-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px;}
+.employee-quick-actions .btn{flex:0 0 auto;}
+.employee-filter-row{display:flex;gap:8px;flex:1;min-width:0;flex-wrap:wrap;}
+.employee-filter-row select{min-width:145px;}
+@media (max-width:720px){
+  .employee-history-row{grid-template-columns:8px 1fr;gap:8px;}
+  .employee-history-row .date{grid-column:2;}
+  .employee-history-row .right{grid-column:2;justify-self:start;}
+  .employee-filter-row{width:100%;}
+  .employee-filter-row select{flex:1 1 140px;}
+  .employee-quick-actions .btn{flex:1 1 150px;}
+}
+
 /* ---------- Responsive shell / touch layout ---------- */
 .topbar-left{display:flex;align-items:center;gap:10px;min-width:0;}
 .mobile-menu{display:none;width:38px;height:38px;border:1px solid var(--line-2);background:#fff;border-radius:8px;align-items:center;justify-content:center;flex-direction:column;gap:4px;flex:none;}
@@ -480,7 +505,7 @@ label.opt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--s
     <div class="auth-head">
       <div class="badge">S</div>
       <h1>SLSC HR Management</h1>
-      <p>&amp; Disciplinary Dashboard</p>
+      <p>&amp; Online System</p>
     </div>
     <div class="auth-body">
       <div class="auth-tabs">
@@ -518,7 +543,7 @@ label.opt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--s
   <aside id="sidebar">
     <div class="brand">
       <div class="badge">S</div>
-      <div class="brand-txt"><div class="t1">SLSC HR</div><div class="t2">Disciplinary Dashboard</div></div>
+      <div class="brand-txt"><div class="t1">SLSC HR</div><div class="t2">Online System</div></div>
     </div>
     <nav id="nav"></nav>
     <button class="btn btn-ghost btn-block logout" onclick="doLogout()">Log Out</button>
@@ -562,7 +587,7 @@ if(!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('YOUR_PRO
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 /* =========================================================================
-   SLSC HR MANAGEMENT & DISCIPLINARY DASHBOARD — GitHub Pages + Vercel + Supabase
+   SLSC HR MANAGEMENT & Online System — GitHub Pages + Vercel + Supabase
    Phase 2: record-level Postgres persistence, Supabase Auth, and private Storage.
    ========================================================================= */
 
@@ -825,6 +850,10 @@ function normalizeEmployeeMasterData(){
     if(!e.employeeNo || used.has(String(e.employeeNo).toUpperCase())){ e.employeeNo=nextEmployeeNumber(DB.employees.filter(x=>x!==e && x.employeeNo)); changed=true; }
     used.add(String(e.employeeNo).toUpperCase());
     ['birthDate','civilStatus','mobileNumber','personalEmail','address','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'].forEach(k=>{ if(e[k]===undefined){ e[k]=''; changed=true; } });
+    if(!Array.isArray(e.employmentHistory)){
+      e.employmentHistory=[{type:'Employment Status',from:'',to:e.status||'Newly Hired',effectiveDate:e.statusDate||e.dateHired||'',remarks:'Initial employee record',changedAt:new Date().toISOString(),changedBy:'System'}];
+      changed=true;
+    }
   });
   return changed;
 }
@@ -834,7 +863,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = seedDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'' };
+let STATE = { view:'dashboard', search:'', filter:'', employeeStatusFilter:'', employeeClassFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'' };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
@@ -1539,27 +1568,44 @@ const ONCALL_STATUS_MAP = {'Active':'b-green','Completed':'b-grey','Cancelled':'
    EMPLOYEES (custom view — has classification logic)
    ================================================================ */
 function renderEmployees(){
-  setTitle('Employee Information', 'Encode, view, and manage employee records across all departments.');
+  setTitle('Employee Information', 'Master employee directory and HR operations.');
   const q=(STATE.search||'').toLowerCase();
   const deptFilter = STATE.filter;
+  const statusFilter = STATE.employeeStatusFilter||'';
+  const classFilter = STATE.employeeClassFilter||'';
   let rows = DB.employees.filter(e=>{
-    const matches = !q || e.name.toLowerCase().includes(q) || (e.position||'').toLowerCase().includes(q);
+    const hay=[e.employeeNo,e.name,e.position,e.department,e.mobileNumber,e.personalEmail].map(v=>String(v||'').toLowerCase());
+    const matches = !q || hay.some(v=>v.includes(q));
     const deptOk = !deptFilter || e.department===deptFilter;
-    return matches && deptOk;
+    const statusOk = !statusFilter || e.status===statusFilter;
+    const classOk = !classFilter || classify(e)===classFilter;
+    return matches && deptOk && statusOk && classOk;
   });
   const depts = [...new Set(DB.employees.map(e=>e.department).filter(Boolean))];
+  const statusOptions=[...new Set(DB.employees.map(e=>e.status).filter(Boolean))];
 
   const html = `
   <div class="sectionhead">
-    <div><h2>Employee Information</h2><p>${DB.employees.length} employees on record across ${depts.length} departments.</p></div>
+    <div><h2>Employee Information</h2><p>${rows.length} of ${DB.employees.length} employees shown across ${depts.length} departments.</p></div>
     ${canEdit()? `<button class="btn btn-brass" onclick="openEmployeeForm()">${iPlus(15)} Add Employee</button>`:''}
   </div>
   <div class="toolbar">
-    <div class="search">${iSearch(15)}<input placeholder="Search by name or position…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderEmployees()"></div>
-    <select onchange="STATE.filter=this.value; renderEmployees()">
-      <option value="">All Departments</option>
-      ${depts.map(d=>`<option value="${esc(d)}" ${STATE.filter===d?'selected':''}>${esc(d)}</option>`).join('')}
-    </select>
+    <div class="search">${iSearch(15)}<input placeholder="Search employee no., name, position, contact…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderEmployees()"></div>
+    <div class="employee-filter-row">
+      <select onchange="STATE.filter=this.value; renderEmployees()">
+        <option value="">All Departments</option>
+        ${depts.map(d=>`<option value="${esc(d)}" ${STATE.filter===d?'selected':''}>${esc(d)}</option>`).join('')}
+      </select>
+      <select onchange="STATE.employeeStatusFilter=this.value; renderEmployees()">
+        <option value="">All Statuses</option>
+        ${statusOptions.map(v=>`<option value="${esc(v)}" ${statusFilter===v?'selected':''}>${esc(v)}</option>`).join('')}
+      </select>
+      <select onchange="STATE.employeeClassFilter=this.value; renderEmployees()">
+        <option value="">All Classifications</option>
+        <option value="Probationary" ${classFilter==='Probationary'?'selected':''}>Probationary</option>
+        <option value="Regular" ${classFilter==='Regular'?'selected':''}>Regular</option>
+      </select>
+    </div>
     <div class="spacer"></div>
     <button class="btn btn-ghost btn-sm" onclick="exportEmployeesCSV()">${iDownload(14)} Export CSV</button>
   </div>
@@ -1580,6 +1626,7 @@ function renderEmployees(){
             <button class="iconbtn" onclick="openEmployeeProfile('${e.id}')" title="View employee profile">${iUser(14)}</button>
             ${canEdit()? `<button class="iconbtn" onclick="openEmployeeForm('${e.id}')" title="Edit">${iEdit(14)}</button>
             <button class="iconbtn" onclick="openTransferForEmployee('${e.id}')" title="Record Department Transfer">${iSwap(14)}</button>
+            <button class="iconbtn" onclick="openEmployeeStatusForm('${e.id}')" title="Update Employment Status">${iShield(14)}</button>
             <button class="iconbtn" onclick="deleteEmployee('${e.id}')" title="Delete">${iTrash(14)}</button>`:''}
           </div></td>
         </tr>`).join('') : `<tr><td colspan="9"><div class="empty"><b>No employees found</b>Try a different search or add a new employee.</div></td></tr>`}
@@ -1641,10 +1688,17 @@ async function saveEmployee(id){
     const sample=duplicateCandidates.slice(0,3).map(e=>e.name+' — '+e.department).join('; ');
     if(!confirm('Possible duplicate employee record found: '+sample+'. Continue saving anyway?')) return;
   }
-  const rec=id?DB.employees.find(e=>e.id===id):{id:uid(), ...vals};
+  const rec=id?DB.employees.find(e=>e.id===id):{id:uid(), employmentHistory:[], ...vals};
   const oldStoragePaths=recordStoragePaths(id?rec:null);
+  const previousStatus=id?rec.status:'';
+  const previousStatusDate=id?rec.statusDate:'';
   Object.assign(rec, vals);
-  if(!id) DB.employees.push(rec);
+  if(!Array.isArray(rec.employmentHistory)) rec.employmentHistory=[];
+  if(!id){
+    rec.employmentHistory.push({type:'Employment Status',from:'',to:rec.status,effectiveDate:rec.statusDate||rec.dateHired,remarks:'Initial employee record',changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
+  } else if(previousStatus!==rec.status || previousStatusDate!==rec.statusDate){
+    rec.employmentHistory.push({type:'Employment Status',from:previousStatus||'',to:rec.status||'',effectiveDate:rec.statusDate||todayISO(),remarks:'Updated from Employee Information',changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
+  }
   logAudit((id?'Updated':'Added new')+' employee record: '+vals.name);
   toast('Employee '+(id?'updated.':'added.'));
   await saveDB();
@@ -1697,6 +1751,61 @@ function saveEmployeeTransfer(id){
   saveDB(); closeModal(); renderNav(); renderEmployees();
   toast('Transfer recorded.');
 }
+function employeeCompleteness(emp){
+  const keys=['employeeNo','name','position','department','dateHired','birthDate','gender','civilStatus','mobileNumber','personalEmail','address','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'];
+  const filled=keys.filter(k=>String(emp?.[k]??'').trim()!=='').length;
+  return Math.round((filled/keys.length)*100);
+}
+function employeeTenureText(emp){
+  if(!emp?.dateHired) return 'Tenure unavailable';
+  const start=new Date(emp.dateHired+'T00:00:00');
+  const end=new Date();
+  if(isNaN(start)) return 'Tenure unavailable';
+  let months=(end.getFullYear()-start.getFullYear())*12+(end.getMonth()-start.getMonth());
+  if(end.getDate()<start.getDate()) months--;
+  if(months<1){ const days=Math.max(0,Math.floor((end-start)/86400000)); return `${days} day${days===1?'':'s'} in service`; }
+  const years=Math.floor(months/12), rem=months%12;
+  return years? `${years} yr${years===1?'':'s'}${rem?` ${rem} mo${rem===1?'':'s'}`:''} in service` : `${rem} mo${rem===1?'':'s'} in service`;
+}
+function openEmployeeStatusForm(id){
+  if(!canEdit()) return;
+  const emp=DB.employees.find(e=>e.id===id); if(!emp) return;
+  openModal(`
+    <div class="modal-head"><div><h3>Update Employment Status</h3><div class="small">${esc(emp.employeeNo||'—')} · ${esc(emp.name)}</div></div><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body">
+      <div class="formgrid">
+        <div class="field"><label>Current Status</label><input value="${esc(emp.status||'—')}" disabled style="background:var(--paper);"></div>
+        <div class="field"><label>New Status *</label><select id="es_status">${EMP_STATUS.map(s=>`<option value="${esc(s)}" ${s===emp.status?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
+        <div class="field"><label>Effective Date *</label><input type="date" id="es_date" value="${esc(emp.statusDate||todayISO())}"></div>
+        <div class="field full"><label>Remarks</label><textarea id="es_remarks" rows="3" placeholder="Reason, supporting note, or HR reference…"></textarea></div>
+      </div>
+      <div class="computed-note">This update becomes part of the employee's employment history. Department transfers should continue to be recorded through the Transfer workflow.</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployeeStatus('${id}')">Save Status</button></div>
+  `);
+}
+async function saveEmployeeStatus(id){
+  if(!canEdit()) return;
+  const emp=DB.employees.find(e=>e.id===id); if(!emp) return;
+  const status=document.getElementById('es_status').value;
+  const effectiveDate=document.getElementById('es_date').value;
+  const remarks=document.getElementById('es_remarks').value.trim();
+  if(!effectiveDate){ toast('Please set an effective date.'); return; }
+  if(effectiveDate<emp.dateHired){ toast('Status Effective Date cannot be before Date Hired.'); return; }
+  if(status===emp.status && effectiveDate===(emp.statusDate||'')){ toast('No status change was made.'); return; }
+  const from=emp.status||'';
+  emp.status=status;
+  emp.statusDate=effectiveDate;
+  if(!Array.isArray(emp.employmentHistory)) emp.employmentHistory=[];
+  emp.employmentHistory.push({type:'Employment Status',from,to:status,effectiveDate,remarks,changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
+  logAudit(`Updated employment status for ${emp.name}: ${from||'—'} → ${status}`);
+  await saveDB();
+  closeModal();
+  renderNav();
+  renderEmployees();
+  toast('Employment status updated.');
+}
+
 function exportEmployeesCSV(){
   const csv = toCSV(DB.employees, [
     {label:'Employee No.', get:r=>r.employeeNo},{label:'Name', get:r=>r.name},{label:'Position', get:r=>r.position},{label:'Department', get:r=>r.department},
@@ -1737,7 +1846,8 @@ async function openEmployeeProfile(id){
   ].filter(x=>x.date).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,14);
   const statusMap=EMP_STATUS_MAP;
   openModal(`<div class="modal-head"><div><h3>Employee 360 Profile</h3><div class="small">${esc(emp.id)}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body">
-    <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(emp.name)}</div><div class="profile-sub">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div></div><div class="profile-actions">${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="closeModal(); openEmployeeForm('${emp.id}')">${iEdit(13)} Edit Employee</button>`:''}</div></div>
+    <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(emp.name)}</div><div class="profile-sub">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div><div class="small" style="margin-top:6px;">${esc(employeeTenureText(emp))}</div></div><div class="profile-actions">${canEdit()?`<div class="employee-quick-actions"><button class="btn btn-ghost btn-sm" onclick="closeModal(); openEmployeeForm('${emp.id}')">${iEdit(13)} Edit</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeStatusForm('${emp.id}')">${iShield(13)} Status</button><button class="btn btn-ghost btn-sm" onclick="openTransferForEmployee('${emp.id}')">${iSwap(13)} Transfer</button></div>`:''}</div></div>
+    <div class="employee-completeness"><div style="min-width:0;"><div style="font-size:11px;font-weight:700;color:var(--ink);">Master Data Completion</div><div style="font-size:10px;color:var(--slate);">${employeeCompleteness(emp)}% of standard employee fields completed</div></div><div class="bar"><div class="fill" style="width:${employeeCompleteness(emp)}%;"></div></div><div class="pct">${employeeCompleteness(emp)}%</div></div>
     <div class="profile-kpis">
       <div class="profile-kpi"><div class="k">HR Cases</div><div class="v">${cases.length}</div><div class="s">Case history</div></div>
       <div class="profile-kpi"><div class="k">Leave Records</div><div class="v">${leaves.length}</div><div class="s">Requests on file</div></div>
@@ -1772,6 +1882,9 @@ async function openEmployeeProfile(id){
         <div class="profile-detail"><div class="item"><div class="label">Transfers</div><div class="value">${transfers.length}</div></div><div class="item"><div class="label">On-File CVR</div><div class="value">${cvr.length}</div></div></div>
         <div class="profile-detail"><div class="item"><div class="label">Incidents</div><div class="value">${incidents.length}</div></div><div class="item"><div class="label">ATD Records</div><div class="value">${atd.length}</div></div></div>
       </div></div>
+    </div>
+    <div class="panel" style="margin-top:14px;"><div class="dashboard-panel-head"><div><h3>Employment History</h3><div class="desc">Status changes recorded from the employee master record.</div></div></div>
+      ${Array.isArray(emp.employmentHistory)&&emp.employmentHistory.length?`<div class="employee-history">${emp.employmentHistory.slice().reverse().slice(0,12).map(h=>`<div class="employee-history-row"><div class="dot"></div><div class="date">${fmtDate(h.effectiveDate||String(h.changedAt||'').slice(0,10))}</div><div><div class="title">${esc(h.from||'Initial')} ${h.from?'→ ':''}${esc(h.to||'—')}</div><div class="meta">${esc(h.remarks||'No remarks')} · ${esc(h.changedBy||'System')}</div></div><div class="right">${statusBadge(h.to||'—',EMP_STATUS_MAP)}</div></div>`).join('')}</div>`:'<div class="empty"><b>No employment history</b>Status changes will appear here as they are recorded.</div>'}
     </div>
     <div class="panel" style="margin-top:14px;"><div class="dashboard-panel-head"><div><h3>Recent HR Activity</h3><div class="desc">Latest records across the employee's HR history.</div></div></div>
       ${activities.length?`<div class="profile-list">${activities.map(a=>`<div class="profile-list-row"><div class="main"><div class="title">${esc(a.type)} · ${esc(a.title)}</div><div class="meta">${esc(a.meta||'')}</div></div><div class="right">${fmtDate(String(a.date).slice(0,10))}</div></div>`).join('')}</div>`:'<div class="empty"><b>No HR activity yet</b>This employee does not have additional records across the tracked modules.</div>'}
@@ -3700,7 +3813,7 @@ Object.assign(window, {
   evalStatusInfo, exportATDCSV, exportCVRCSV, exportEmployeesCSV, exportIncidentsCSV, exportModuleCSV, exportWeeklyCSV,
   fieldHTML, fmtDate, getEvalRecord, go, handleFileInput, incidentTypeOccurrence, incidentTypeSummaryHTML,
   toggleSidebar, closeSidebar, applyReportFilters, exportReportEmployees, exportReportActivity, exportReportATD, exportReportCases,
-  loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, openATDForm, openATDPaymentForm,
+  loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
   openATDPayments, openCVRForm, openEmployeeForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard,
   renderDisciplinary, renderEmployees, renderEvaluations, renderIncidents, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords,
