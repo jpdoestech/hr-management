@@ -89,10 +89,41 @@ a{color:inherit;}
 #topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 26px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20;padding-top:calc(16px + env(safe-area-inset-top,0px));}
 #topbar h2{margin:0;font-size:19px;}
 #topbar .sub{font-size:12px;color:var(--slate);margin-top:2px;}
+.topbar-right{display:flex;align-items:center;gap:10px;min-width:0;}
 .who{display:flex;align-items:center;gap:10px;}
 .who .av{width:32px;height:32px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;}
 .who .name{font-size:13px;font-weight:600;}
 .who .role{font-size:10.5px;color:var(--slate);}
+.notification-wrap{position:relative;flex:none;}
+.notification-btn{position:relative;width:38px;height:38px;border:1px solid var(--line-2);border-radius:9px;background:#fff;color:var(--ink);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .12s ease,border-color .12s ease,transform .06s ease;}
+.notification-btn:hover{background:var(--paper);border-color:#B8C6D9;}
+.notification-btn:active{transform:translateY(1px);}
+.notification-btn .badge{position:absolute;right:-5px;top:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:20px;background:var(--rust);color:#fff;border:2px solid #fff;font-size:8.8px;font-weight:800;line-height:13px;display:none;align-items:center;justify-content:center;}
+.notification-btn .badge.show{display:flex;}
+.notification-popover{position:absolute;right:0;top:calc(100% + 10px);width:min(430px,calc(100vw - 24px));background:#fff;border:1px solid var(--line-2);border-radius:12px;box-shadow:0 18px 44px rgba(15,36,72,.16);overflow:hidden;display:none;z-index:80;}
+.notification-popover.on{display:block;}
+.notification-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:13px 14px;border-bottom:1px solid var(--line);background:#FBFCFE;}
+.notification-head h3{margin:0;font-size:14px;}
+.notification-head .meta{font-size:10.5px;color:var(--slate);margin-top:2px;}
+.notification-head-actions{display:flex;align-items:center;gap:6px;flex:none;}
+.notification-head-actions button{font-size:10.5px;color:var(--ink);background:transparent;border:none;cursor:pointer;padding:4px 0;}
+.notification-list{max-height:min(520px,62vh);overflow-y:auto;padding:6px;}
+.notification-item{display:flex;gap:10px;padding:10px;border-radius:9px;cursor:pointer;border:1px solid transparent;}
+.notification-item:hover{background:#F8FAFD;border-color:var(--line);}
+.notification-item.unread{background:#F7F9FC;}
+.notification-item .n-dot{width:8px;height:8px;border-radius:50%;background:var(--slate);margin-top:5px;flex:none;}
+.notification-item.danger .n-dot{background:var(--rust);}
+.notification-item.warning .n-dot{background:var(--amber);}
+.notification-item.info .n-dot{background:var(--ink);}
+.notification-item .n-main{min-width:0;flex:1;}
+.notification-item .n-title{font-size:11.8px;font-weight:750;line-height:1.35;}
+.notification-item .n-meta{font-size:10.2px;color:var(--slate);margin-top:3px;line-height:1.45;}
+.notification-item .n-unread{font-size:8px;color:var(--ink);font-weight:800;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;margin-top:1px;}
+.notification-empty{padding:26px 16px 28px;text-align:center;color:var(--slate);font-size:11.5px;}
+.notification-empty b{display:block;color:var(--ink);font-size:13px;margin-bottom:4px;}
+.notification-foot{padding:9px 12px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px;background:#FBFCFE;}
+.notification-foot .small{font-size:10px;color:var(--slate);}
+@media (max-width:720px){.topbar-right{gap:7px;}.notification-btn{width:36px;height:36px;}.notification-popover{right:-6px;width:min(420px,calc(100vw - 18px));}}
 #content{padding:24px 26px 60px;}
 
 /* ---------- cards / stats ---------- */
@@ -674,12 +705,28 @@ label.opt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--s
           <div class="sub" id="tb-sub">Overview of all HR &amp; disciplinary records</div>
         </div>
       </div>
-      <div class="who">
-        <div>
-          <div class="name" id="tb-name" style="text-align:right;"></div>
-          <div class="role" id="tb-role" style="text-align:right;"></div>
+      <div class="topbar-right">
+        <div class="notification-wrap" id="notification-wrap">
+          <button class="notification-btn" id="notification-button" type="button" aria-label="Open notifications" aria-expanded="false" onclick="toggleNotificationPanel(event)">
+            <span id="notification-bell-icon"></span>
+            <span class="badge" id="notification-badge">0</span>
+          </button>
+          <div class="notification-popover" id="notification-popover" aria-hidden="true">
+            <div class="notification-head">
+              <div><h3>Notifications</h3><div class="meta" id="notification-summary">Loading current HR alerts…</div></div>
+              <div class="notification-head-actions"><button type="button" onclick="markAllNotificationsRead(event)">Mark all read</button></div>
+            </div>
+            <div class="notification-list" id="notification-list"></div>
+            <div class="notification-foot"><span class="small">Alerts are generated from current HR records.</span><button class="btn btn-ghost btn-sm" type="button" onclick="goFromNotifications('actionCenter')">Action Center</button></div>
+          </div>
         </div>
-        <div class="av" id="tb-av"></div>
+        <div class="who">
+          <div>
+            <div class="name" id="tb-name" style="text-align:right;"></div>
+            <div class="role" id="tb-role" style="text-align:right;"></div>
+          </div>
+          <div class="av" id="tb-av"></div>
+        </div>
       </div>
     </div>
     <div id="content"></div>
@@ -1050,20 +1097,164 @@ async function bootAuthenticated(user){
 }
 
 async function doLogout(){
+  if(NOTIFICATION_TIMER) clearInterval(NOTIFICATION_TIMER);
+  NOTIFICATION_TIMER=null;
+  NOTIFICATION_ITEMS=[];
+  closeNotificationPanel();
   await supabase.auth.signOut();
   SESSION=null;
   document.getElementById('app').classList.remove('on');
   document.getElementById('auth-screen').style.display='flex';
   document.getElementById('li-user').value=''; document.getElementById('li-pass').value='';
 }
+let NOTIFICATION_TIMER=null;
+let NOTIFICATION_ITEMS=[];
+const NOTIFICATION_READ_KEY='SLSC_hr_notification_read_v1';
+
+function notificationStorageKey(){ return `${NOTIFICATION_READ_KEY}:${SESSION?.id||'guest'}`; }
+function notificationReadIds(){
+  try{
+    const raw=localStorage.getItem(notificationStorageKey());
+    const parsed=raw?JSON.parse(raw):[];
+    return new Set(Array.isArray(parsed)?parsed.map(String):[]);
+  }catch(e){ return new Set(); }
+}
+function saveNotificationReadIds(ids){
+  try{
+    const list=[...ids].slice(-300);
+    localStorage.setItem(notificationStorageKey(),JSON.stringify(list));
+  }catch(e){}
+}
+function markNotificationRead(id){
+  if(!id) return;
+  const ids=notificationReadIds(); ids.add(String(id)); saveNotificationReadIds(ids);
+}
+function markAllNotificationsRead(ev){
+  ev?.stopPropagation();
+  const ids=notificationReadIds(); NOTIFICATION_ITEMS.forEach(x=>ids.add(String(x.id))); saveNotificationReadIds(ids);
+  renderNotificationPanel();
+  updateNotificationBadgeFromItems();
+}
+function closeNotificationPanel(){
+  const panel=document.getElementById('notification-popover');
+  const btn=document.getElementById('notification-button');
+  if(panel) panel.classList.remove('on');
+  if(panel) panel.setAttribute('aria-hidden','true');
+  if(btn) btn.setAttribute('aria-expanded','false');
+}
+async function toggleNotificationPanel(ev){
+  ev?.stopPropagation();
+  const panel=document.getElementById('notification-popover');
+  const btn=document.getElementById('notification-button');
+  if(!panel) return;
+  const opening=!panel.classList.contains('on');
+  if(!opening){ closeNotificationPanel(); return; }
+  panel.classList.add('on');
+  panel.setAttribute('aria-hidden','false');
+  if(btn) btn.setAttribute('aria-expanded','true');
+  await renderNotificationPanel();
+}
+function goFromNotifications(view){ closeNotificationPanel(); go(view); }
+function notificationLevelRank(level){ return level==='danger'?0:level==='warning'?1:2; }
+function notificationItem(id,level,title,meta,view,recordId=''){ return {id:String(id),level,title,meta,view,recordId}; }
+async function buildNotificationItems(){
+  const today=todayISO();
+  const next3=addDaysISO(today,3);
+  const next7=addDaysISO(today,7);
+  const next14=addDaysISO(today,14);
+  const items=[];
+
+  let cases=[];
+  try{
+    const {data,error}=await supabase.from('hr_cases').select('id,case_number,employee_name,department,status,opened_at,closed_at,assigned_to,priority,due_date,updated_at').order('updated_at',{ascending:false}).limit(250);
+    if(error) throw error;
+    cases=data||[];
+  }catch(e){ console.warn('Notification case query failed',e); }
+
+  const openCases=cases.filter(c=>!['Closed','Cancelled','Resolved'].includes(c.status));
+  openCases.forEach(c=>{
+    const label=c.case_number||'HR Case';
+    if(c.due_date && c.due_date<today) items.push(notificationItem(`case-overdue-${c.id}`,'danger',`${label} is overdue`,`${c.employee_name||'Employee'} · Due ${fmtDate(c.due_date)}${c.priority?' · '+c.priority:''}`,'cases',c.id));
+    else if(c.due_date && c.due_date<=next3) items.push(notificationItem(`case-due-${c.id}`,'warning',`${label} is due soon`,`${c.employee_name||'Employee'} · Due ${fmtDate(c.due_date)}${c.priority?' · '+c.priority:''}`,'cases',c.id));
+    if(c.status==='For Decision') items.push(notificationItem(`case-decision-${c.id}`,'warning',`${label} is ready for decision`,`${c.employee_name||'Employee'}${c.department?' · '+c.department:''}`,'cases',c.id));
+    if(c.assigned_to && SESSION?.id && c.assigned_to===SESSION.id && !['Closed','Cancelled','Resolved'].includes(c.status)){
+      items.push(notificationItem(`case-assigned-${c.id}`,'info',`${label} is assigned to you`,`${c.employee_name||'Employee'} · ${c.status||'Open'}${c.due_date?' · Due '+fmtDate(c.due_date):''}`,'cases',c.id));
+    }
+    if(!c.assigned_to) items.push(notificationItem(`case-unassigned-${c.id}`,'warning',`${label} has no assignee`,`${c.employee_name||'Employee'}${c.department?' · '+c.department:''}`,'cases',c.id));
+  });
+
+  DB.leaves.filter(l=>l.status==='Pending').slice(0,8).forEach(l=>items.push(notificationItem(`leave-pending-${l.id}`,'warning',`Leave request pending: ${l.employeeName||'Employee'}`,`${fmtDate(l.startDate)} – ${fmtDate(l.endDate)}${l.department?' · '+l.department:''}`,'leaves')));
+  DB.leaves.filter(l=>l.startDate>today && l.startDate<=next7 && l.status!=='Disapproved').slice(0,6).forEach(l=>items.push(notificationItem(`leave-upcoming-${l.id}`,'info',`Upcoming leave: ${l.employeeName||'Employee'}`,`Starts ${fmtDate(l.startDate)}${l.endDate?' · through '+fmtDate(l.endDate):''}`,'leaves')));
+
+  DB.employees.filter(e=>classify(e)==='Probationary' && e.dateHired).forEach(e=>EVAL_MILESTONES.forEach(m=>{
+    const st=evalStatusInfo(e,m);
+    if(st.label==='Overdue') items.push(notificationItem(`eval-overdue-${e.id}-${m.key}`,'danger',`Overdue evaluation: ${e.name}`,`${m.label} · Due ${fmtDate(st.due)}`,'evaluations'));
+    else if(st.label==='Due Soon' && st.due<=next14) items.push(notificationItem(`eval-due-${e.id}-${m.key}`,'warning',`Evaluation due soon: ${e.name}`,`${m.label} · Due ${fmtDate(st.due)}`,'evaluations'));
+  }));
+
+  DB.nte.filter(n=>n.status!=='Resolved').slice(0,8).forEach(n=>items.push(notificationItem(`nte-${n.id}`,'warning',`NTE needs follow-up: ${n.employeeName||'Employee'}`,`${n.status||'Open'}${n.dateReceived?' · Received '+fmtDate(n.dateReceived):''}`,'nte')));
+  DB.incidents.filter(r=>['Reported','Under Investigation'].includes(r.status)).slice(0,8).forEach(r=>items.push(notificationItem(`incident-${r.id}`,'danger',`Incident requires review: ${r.employeeName||'Employee'}`,`${r.status} · ${r.incidentType||r.incidentTypes?.join(', ')||'Incident report'}`,'incidents')));
+  DB.atd.filter(r=>atdRemaining(r)>0 && r.status==='Ongoing').slice(0,6).forEach(r=>items.push(notificationItem(`atd-${r.id}`,'info',`ATD balance outstanding: ${r.employeeName||'Employee'}`,`${peso(atdRemaining(r))} remaining${r.deductionType?' · '+r.deductionType:''}`,'atd')));
+
+  const seen=new Set();
+  return items.filter(x=>{ if(seen.has(x.id)) return false; seen.add(x.id); return true; })
+    .sort((a,b)=>notificationLevelRank(a.level)-notificationLevelRank(b.level) || (a.title||'').localeCompare(b.title||''))
+    .slice(0,40);
+}
+function updateNotificationBadgeFromItems(){
+  const badge=document.getElementById('notification-badge');
+  if(!badge) return;
+  const read=notificationReadIds();
+  const unread=NOTIFICATION_ITEMS.filter(x=>!read.has(String(x.id))).length;
+  badge.textContent=unread>99?'99+':String(unread);
+  badge.classList.toggle('show',unread>0);
+  const btn=document.getElementById('notification-button');
+  if(btn) btn.setAttribute('aria-label',unread?`${unread} unread notifications`:'No unread notifications');
+}
+async function refreshNotificationBadge(){
+  if(!SESSION) return;
+  try{ NOTIFICATION_ITEMS=await buildNotificationItems(); updateNotificationBadgeFromItems(); }catch(e){ console.warn('Notification refresh failed',e); }
+}
+async function renderNotificationPanel(){
+  const list=document.getElementById('notification-list');
+  const summary=document.getElementById('notification-summary');
+  if(!list||!summary) return;
+  list.innerHTML='<div class="notification-empty">Loading current HR alerts…</div>';
+  NOTIFICATION_ITEMS=await buildNotificationItems();
+  const read=notificationReadIds();
+  const unread=NOTIFICATION_ITEMS.filter(x=>!read.has(String(x.id))).length;
+  summary.textContent=unread?`${unread} unread · ${NOTIFICATION_ITEMS.length} current alert${NOTIFICATION_ITEMS.length===1?'':'s'}`:`All caught up · ${NOTIFICATION_ITEMS.length} current alert${NOTIFICATION_ITEMS.length===1?'':'s'}`;
+  updateNotificationBadgeFromItems();
+  if(!NOTIFICATION_ITEMS.length){
+    list.innerHTML='<div class="notification-empty"><b>No new alerts</b>Your current HR records do not show additional notification items.</div>';
+    return;
+  }
+  list.innerHTML=NOTIFICATION_ITEMS.map(x=>{
+    const isUnread=!read.has(String(x.id));
+    return `<div class="notification-item ${x.level} ${isUnread?'unread':''}" onclick="openNotification('${esc(x.id)}','${esc(x.view)}','${esc(x.recordId||'')}')"><span class="n-dot"></span><div class="n-main"><div class="n-title">${esc(x.title)}</div><div class="n-meta">${esc(x.meta)}</div></div>${isUnread?'<span class="n-unread">New</span>':''}</div>`;
+  }).join('');
+}
+async function openNotification(id,view,recordId){
+  markNotificationRead(id);
+  updateNotificationBadgeFromItems();
+  closeNotificationPanel();
+  if(recordId && view==='cases'){ await openCaseDetails(recordId); return; }
+  go(view);
+}
+
 function enterApp(){
   document.getElementById('auth-screen').style.display='none';
   document.getElementById('app').classList.add('on');
   document.getElementById('tb-name').textContent = SESSION.fullName;
   document.getElementById('tb-role').textContent = SESSION.role;
   document.getElementById('tb-av').textContent = SESSION.fullName.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  const bell=document.getElementById('notification-bell-icon');
+  if(bell) bell.innerHTML=iBell(17);
   renderNav();
   go('dashboard');
+  refreshNotificationBadge();
+  if(NOTIFICATION_TIMER) clearInterval(NOTIFICATION_TIMER);
+  NOTIFICATION_TIMER=setInterval(()=>refreshNotificationBadge(),60000);
 }
 
 /* ---------------- Phase 7: Action Center ---------------- */
@@ -1348,6 +1539,7 @@ function iEdit(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fi
 function iTrash(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>`;}
 function iSearch(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>`;}
 function iDownload(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>`;}
+function iBell(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 9a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9z"/><path d="M10 21h4"/></svg>`;}
 
 /* ---------------- audit / permissions ---------------- */
 function logAudit(action){
@@ -4273,6 +4465,11 @@ const RENDERERS = {
   settings: renderSettings,
 };
 
+document.addEventListener('click', e=>{
+  const wrap=document.getElementById('notification-wrap');
+  if(wrap && !wrap.contains(e.target)) closeNotificationPanel();
+});
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeNotificationPanel(); });
 document.getElementById('login-form').addEventListener('keydown', e=>{ if(document.getElementById('auth-error').style.display==='block') document.getElementById('auth-error').style.display='none'; });
 
 // The app is an ES module, while the existing UI uses inline onclick/onsubmit
@@ -4280,7 +4477,7 @@ document.getElementById('login-form').addEventListener('keydown', e=>{ if(docume
 // can execute those handlers normally.
 Object.assign(window, {
   addDaysISO, atdComputeStatus, atdFillEmployee, atdPayslipCellHTML, atdRemaining, atdToggleCategory, atdTotalPaid,
-  addCaseActivity, addCaseNote, caseActivityIcon, caseActivityLabel, caseDeadlineInfo, casePriorityBadge, caseWorkflowSteps, caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, setCaseWorkflowStatus,
+  addCaseActivity, addCaseNote, caseActivityIcon, caseActivityLabel, caseDeadlineInfo, casePriorityBadge, caseWorkflowSteps, caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, setCaseWorkflowStatus, buildNotificationItems, closeNotificationPanel, markAllNotificationsRead, openNotification, refreshNotificationBadge, renderNotificationPanel, toggleNotificationPanel,
   countStoredDocuments, renderDocuments, openStoredDocument, collectStoredDocuments,
   attachCellHTML, attachPreviewHTML, authErr, bootAuthenticated, calShift, canEdit, classify, clearFileField, closeModal,
   consequenceFor, cvrOffenseLevel, cvrOffenseSummaryHTML, daysBetweenInclusive, defaultOffenseCatalog, deleteATDPayment,
