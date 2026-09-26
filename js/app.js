@@ -288,7 +288,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = seedDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', tablePages:{} };
+let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', tablePages:{} };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
@@ -837,11 +837,11 @@ async function renderOperationsWorkspace(){
         <section class="panel ops-directory">
           <div class="panel-heading-row"><div><h3>Employee Directory</h3><p>Search and filter the workforce, then open a complete employee operations workspace.</p></div><span class="record-count">${filteredEmployees.length} / ${allEmployees.length}</span></div>
           <div class="ops-directory-filters">
-            <div class="searchbox ops-searchbox">${iSearch(16)}<input id="ops-employee-search" placeholder="Search employee, ID, position, department, contact…" value="${esc(STATE.opsEmployeeSearch||'')}" onkeydown="if(event.key==='Enter'){STATE.opsEmployeeSearch=this.value;STATE.tablePages={};renderOperationsWorkspace()}"></div>
+            <div class="searchbox ops-searchbox">${iSearch(16)}<input id="ops-employee-search" data-search-key="opsEmployeeSearch" type="search" autocomplete="off" placeholder="Search employee, ID, position, department, contact…" value="${esc(STATE.opsEmployeeSearch||'')}" oninput="queueSearchRender(this,'opsEmployeeSearch',renderOperationsWorkspace)" onkeydown="if(event.key==='Enter'){event.preventDefault();queueSearchRender(this,'opsEmployeeSearch',renderOperationsWorkspace,0)}" aria-label="Search employees"></div>
             <select class="filter-select" onchange="STATE.opsEmployeeDept=this.value;STATE.tablePages={};renderOperationsWorkspace()"><option value="">All Departments</option>${depts.map(d=>`<option value="${esc(d)}" ${STATE.opsEmployeeDept===d?'selected':''}>${esc(d)}</option>`).join('')}</select>
             <select class="filter-select" onchange="STATE.opsEmployeeStatus=this.value;STATE.tablePages={};renderOperationsWorkspace()"><option value="">All Statuses</option>${statusOptions.map(v=>`<option value="${esc(v)}" ${STATE.opsEmployeeStatus===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
             <select class="filter-select" onchange="STATE.opsEmployeeClass=this.value;STATE.tablePages={};renderOperationsWorkspace()"><option value="">All Classifications</option>${classOptions.map(v=>`<option value="${v}" ${STATE.opsEmployeeClass===v?'selected':''}>${v}</option>`).join('')}</select>
-            <button class="btn btn-primary btn-sm" onclick="STATE.opsEmployeeSearch=document.getElementById('ops-employee-search')?.value||'';STATE.tablePages={};renderOperationsWorkspace()">${iSearch(14)} Search</button>${q||STATE.opsEmployeeDept||STATE.opsEmployeeStatus||STATE.opsEmployeeClass?`<button class="btn btn-ghost btn-sm" onclick="STATE.opsEmployeeSearch='';STATE.opsEmployeeDept='';STATE.opsEmployeeStatus='';STATE.opsEmployeeClass='';STATE.tablePages={};renderOperationsWorkspace()">Clear</button>`:''}
+            <button class="btn btn-primary btn-sm" onclick="queueSearchRender(document.getElementById('ops-employee-search'),'opsEmployeeSearch',renderOperationsWorkspace,0)">${iSearch(14)} Search</button>${q||STATE.opsEmployeeDept||STATE.opsEmployeeStatus||STATE.opsEmployeeClass?`<button class="btn btn-ghost btn-sm" onclick="cancelSearchRender('opsEmployeeSearch');STATE.opsEmployeeSearch='';STATE.opsEmployeeDept='';STATE.opsEmployeeStatus='';STATE.opsEmployeeClass='';STATE.tablePages={};renderOperationsWorkspace()">Clear</button>`:''}
           </div>
           <div class="table-card ops-directory-card"><div class="table-card-head"><div class="table-meta"><b>${filteredEmployees.length}</b> employees <span class="table-meta-muted">${opsActions} selected-work items require attention${selected?' for this employee':''}</span></div><button class="btn btn-ghost btn-sm" onclick="STATE.opsEmployeeSearch='';STATE.opsEmployeeDept='';STATE.opsEmployeeStatus='';STATE.opsEmployeeClass='';STATE.tablePages={};renderOperationsWorkspace()">Reset View</button></div><div class="tablewrap"><table class="data-table" id="ops-directory-table"><thead><tr><th>Employee</th><th>Position</th><th>Department</th><th>Status</th><th>Class</th><th>Attention</th><th class="actions-head">Open</th></tr></thead><tbody>${dirRows||`<tr><td colspan="7"><div class="empty"><b>No employees found</b><span>Adjust your search or filters.</span></div></td></tr>`}</tbody></table></div></div>
         </section>
@@ -856,7 +856,7 @@ async function renderOperationsWorkspace(){
           <div class="ops-health"><div class="health-bar"><span style="width:${Math.min(100,Math.max(0,completion))}%"></span></div><div><b>Master-data completeness</b><span>${completion}% populated</span></div>${nextMilestone?`<div><b>Next milestone</b><span>${esc(nextMilestone.label)}${nextMilestone.date?' · '+fmtDate(nextMilestone.date):''}</span></div>`:'<div><b>Lifecycle</b><span>No pending milestone</span></div>'}</div>
           <div class="ops-section-block">${actionHtml}</div>`:''}
       </section>
-      <section class="panel ops-history-panel"><div class="panel-heading-row"><div><h3>Employee Work History</h3><p>All connected HR activity for the selected employee, not only currently open items.</p></div><div class="toolbar-inline ops-history-tools"><div class="searchbox compact-search">${iSearch(14)}<input placeholder="Search activity…" value="${esc(STATE.opsHistorySearch||'')}" onkeydown="if(event.key==='Enter'){STATE.opsHistorySearch=this.value;STATE.tablePages={};renderOperationsWorkspace()}" aria-label="Search employee work history"></div><select class="filter-select" onchange="STATE.opsWorkFilter=this.value;STATE.tablePages={};renderOperationsWorkspace()"><option value="all">All Activity</option>${historyTypes.map(v=>`<option value="${esc(v.toLowerCase())}" ${STATE.opsWorkFilter===v.toLowerCase()?'selected':''}>${esc(v)}</option>`).join('')}</select>${historyQ||STATE.opsWorkFilter!=='all'?`<button class="btn btn-ghost btn-sm" onclick="STATE.opsHistorySearch='';STATE.opsWorkFilter='all';STATE.tablePages={};renderOperationsWorkspace()">Clear</button>`:''}<button class="btn btn-ghost btn-sm" onclick="openEmployeeProfile('${selected?.id||''}')" ${selected?'':'disabled'}>Employee 360</button></div></div><div class="table-card"><div class="table-card-head"><div class="table-meta"><b>${filteredHistory.length}</b> activities <span class="table-meta-muted">${historyQ?`matching “${esc(STATE.opsHistorySearch)}” · `:''}${STATE.opsWorkFilter==='all'?'all connected HR records':`filtered to ${esc(STATE.opsWorkFilter)}`}</span></div></div><div class="tablewrap"><table class="data-table"><thead><tr><th>Date</th><th>Type</th><th>Activity</th><th class="actions-head">Action</th></tr></thead><tbody>${workRows||`<tr><td colspan="4"><div class="empty"><b>No operational history</b><span>No matching connected records were found for this employee.</span></div></td></tr>`}</tbody></table></div></div></section>`;
+      <section class="panel ops-history-panel"><div class="panel-heading-row"><div><h3>Employee Work History</h3><p>All connected HR activity for the selected employee, not only currently open items.</p></div><div class="toolbar-inline ops-history-tools"><div class="searchbox compact-search">${iSearch(14)}<input data-search-key="opsHistorySearch" type="search" autocomplete="off" placeholder="Search activity…" value="${esc(STATE.opsHistorySearch||'')}" oninput="queueSearchRender(this,'opsHistorySearch',renderOperationsWorkspace)" onkeydown="if(event.key==='Enter'){event.preventDefault();queueSearchRender(this,'opsHistorySearch',renderOperationsWorkspace,0)}" aria-label="Search employee work history"></div><select class="filter-select" onchange="STATE.opsWorkFilter=this.value;STATE.tablePages={};renderOperationsWorkspace()"><option value="all">All Activity</option>${historyTypes.map(v=>`<option value="${esc(v.toLowerCase())}" ${STATE.opsWorkFilter===v.toLowerCase()?'selected':''}>${esc(v)}</option>`).join('')}</select>${historyQ||STATE.opsWorkFilter!=='all'?`<button class="btn btn-ghost btn-sm" onclick="cancelSearchRender('opsHistorySearch');STATE.opsHistorySearch='';STATE.opsWorkFilter='all';STATE.tablePages={};renderOperationsWorkspace()">Clear</button>`:''}<button class="btn btn-ghost btn-sm" onclick="openEmployeeProfile('${selected?.id||''}')" ${selected?'':'disabled'}>Employee 360</button></div></div><div class="table-card"><div class="table-card-head"><div class="table-meta"><b>${filteredHistory.length}</b> activities <span class="table-meta-muted">${historyQ?`matching “${esc(STATE.opsHistorySearch)}” · `:''}${STATE.opsWorkFilter==='all'?'all connected HR records':`filtered to ${esc(STATE.opsWorkFilter)}`}</span></div></div><div class="tablewrap"><table class="data-table"><thead><tr><th>Date</th><th>Type</th><th>Activity</th><th class="actions-head">Action</th></tr></thead><tbody>${workRows||`<tr><td colspan="4"><div class="empty"><b>No operational history</b><span>No matching connected records were found for this employee.</span></div></td></tr>`}</tbody></table></div></div></section>`;
     document.getElementById('content').innerHTML=html;
     requestAnimationFrame(()=>enhanceDataTables());
   }catch(e){ document.getElementById('content').innerHTML=`<div class="panel"><h3>HR Operations</h3><div class="notice"><b>Could not load the workspace.</b> ${esc(e.message||e)}</div></div>`; }
@@ -949,6 +949,32 @@ function go(view){
   requestAnimationFrame(()=>enhanceDataTables());
 }
 
+const SEARCH_RENDER_TIMERS=new Map();
+function queueSearchRender(input,stateKey,renderFn,delay=180){
+  const view=STATE.view;
+  const timerKey=`${view}:${stateKey}`;
+  STATE[stateKey]=input.value;
+  STATE.tablePages={};
+  clearTimeout(SEARCH_RENDER_TIMERS.get(timerKey));
+  SEARCH_RENDER_TIMERS.set(timerKey,setTimeout(async()=>{
+    SEARCH_RENDER_TIMERS.delete(timerKey);
+    if(STATE.view!==view) return;
+    await Promise.resolve(renderFn());
+    if(STATE.view!==view) return;
+    requestAnimationFrame(()=>{
+      const next=document.querySelector(`[data-search-key="${stateKey}"]`);
+      if(!next) return;
+      next.focus();
+      next.setSelectionRange?.(next.value.length,next.value.length);
+    });
+  },Math.max(0,Number(delay)||0)));
+}
+function cancelSearchRender(stateKey){
+  for(const [key,timer] of SEARCH_RENDER_TIMERS){
+    if(key.endsWith(`:${stateKey}`)){ clearTimeout(timer); SEARCH_RENDER_TIMERS.delete(key); }
+  }
+}
+
 /* ---------------- icons (inline svg, currentColor) ---------------- */
 function iGrid(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>`;}
 function iUsers(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17.5" cy="8.5" r="2.4"/><path d="M15 14.3c2.7.2 4.7 2.2 4.9 5.7"/></svg>`;}
@@ -963,6 +989,7 @@ function iGear(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fi
 function iPlus(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>`;}
 function iEdit(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>`;}
 function iTrash(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>`;}
+function iMore(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/></svg>`;}
 function iSearch(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>`;}
 function iDownload(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>`;}
 function iBell(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 9a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9z"/><path d="M10 21h4"/></svg>`;}
@@ -1017,6 +1044,7 @@ function openModal(html){
   requestAnimationFrame(()=>{
     modal.scrollTop=0;
     modal.querySelector('.modal-body')?.scrollTo(0,0);
+    enhanceRowActionMenus();
     (modal.querySelector('.modal-head button')||modal).focus();
   });
 }
@@ -1035,6 +1063,67 @@ async function closeModal(keepUploads=[]){
 }
 document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeModal(); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&document.getElementById('overlay').classList.contains('on')) closeModal(); });
+
+const ROW_ACTION_MENUS=new Map();
+let ROW_ACTION_MENU_ID=0;
+function rowActionLabel(button,index){
+  const explicit=(button.getAttribute('aria-label')||button.title||'').trim();
+  if(explicit) return explicit;
+  const handler=(button.getAttribute('onclick')||'').toLowerCase();
+  if(handler.includes('delete')||handler.includes('remove')) return 'Delete';
+  if(handler.includes('transfer')) return 'Record transfer';
+  if(handler.includes('status')) return 'Update status';
+  if(handler.includes('payment')) return 'Payments';
+  if(handler.includes('edit')||handler.includes('form')) return 'Edit';
+  if(handler.includes('profile')||handler.includes('details')||handler.includes('open')) return 'View details';
+  return `Action ${index+1}`;
+}
+function enhanceRowActionMenus(){
+  for(const [id,menu] of ROW_ACTION_MENUS){
+    if(!menu.trigger?.isConnected) ROW_ACTION_MENUS.delete(id);
+  }
+  document.querySelectorAll('#content .rowactions, #modal .rowactions').forEach(group=>{
+    if(group.dataset.menuEnhanced==='true') return;
+    const buttons=[...group.querySelectorAll(':scope > button:not([disabled])')];
+    if(!buttons.length) return;
+    const id=`row-actions-${++ROW_ACTION_MENU_ID}`;
+    const actions=buttons.map((button,index)=>({
+      button,
+      label:rowActionLabel(button,index),
+      icon:button.querySelector('svg')?.outerHTML||iMore(17),
+      danger:/delete|remove/i.test(`${button.title} ${button.getAttribute('onclick')||''}`),
+    }));
+    const trigger=document.createElement('button');
+    trigger.type='button';
+    trigger.className='btn btn-ghost btn-sm row-action-trigger';
+    trigger.title='Actions';
+    trigger.setAttribute('aria-label','Open actions');
+    trigger.setAttribute('aria-haspopup','dialog');
+    trigger.innerHTML=`${iMore(16)}<span>Actions</span>`;
+    trigger.addEventListener('click',event=>{event.stopPropagation();openRowActionMenu(id);});
+    group.replaceChildren(trigger);
+    group.classList.add('is-menu');
+    group.dataset.menuEnhanced='true';
+    ROW_ACTION_MENUS.set(id,{actions,trigger});
+  });
+}
+function openRowActionMenu(id){
+  const menu=ROW_ACTION_MENUS.get(id);
+  if(!menu) return;
+  openModal(`
+    <div class="modal-head"><div><h3>Actions</h3><div class="small">Choose the transaction you want to perform.</div></div><button type="button" onclick="closeModal()" aria-label="Close">&times;</button></div>
+    <div class="modal-body"><div class="row-action-menu">
+      ${menu.actions.map((action,index)=>`<button type="button" class="row-action-option${action.danger?' danger':''}" onclick="runRowAction('${id}',${index})"><span class="row-action-option-icon">${action.icon}</span><span>${esc(action.label)}</span></button>`).join('')}
+    </div></div>
+    <div class="modal-foot"><button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button></div>
+  `);
+}
+async function runRowAction(id,index){
+  const action=ROW_ACTION_MENUS.get(id)?.actions[index];
+  if(!action) return;
+  await closeModal();
+  action.button.click();
+}
 
 function fieldHTML(f, val){
   const v = val==null?'':val;
@@ -1268,11 +1357,11 @@ function renderModuleView(key){
     </div>
     ${cfg.notice?`<div class="notice notice-soft"><b>Important:</b> ${cfg.notice}</div>`:''}
     <div class="data-toolbar">
-      <div class="searchbox">${iSearch(16)}<input id="tbl-search" data-table-search placeholder="Search ${esc(cfg.title.toLowerCase())}…" value="${esc(STATE.search)}" onkeydown="if(event.key==='Enter'){STATE.search=this.value;STATE.tablePages={};renderModuleView('${key}')}" aria-label="Search ${esc(cfg.title)}"></div>
+      <div class="searchbox">${iSearch(16)}<input id="tbl-search" data-table-search data-search-key="search" placeholder="Search ${esc(cfg.title.toLowerCase())}…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',()=>renderModuleView('${key}'))" onkeydown="if(event.key==='Enter'){event.preventDefault();queueSearchRender(this,'search',()=>renderModuleView('${key}'),0)}" aria-label="Search ${esc(cfg.title)}"></div>
       ${hasDepartment&&deptOptions.length?`<select class="filter-select" aria-label="Filter by department" onchange="STATE.filterDept=this.value;STATE.tablePages={};renderModuleView('${key}')"><option value="">All Departments</option>${deptOptions.map(o=>`<option value="${esc(o)}" ${STATE.filterDept===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`:''}
       ${statusUsesLegacy?`<select class="filter-select" aria-label="Filter ${esc(cfg.filterLabel||'status')}" onchange="STATE.filter=this.value;STATE.tablePages={};renderModuleView('${key}')"><option value="">All ${esc(cfg.filterLabel||'records')}</option>${legacyOptions.map(o=>`<option value="${esc(o)}" ${STATE.filter===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`:''}
       ${hasStatus&&!statusUsesLegacy&&autoStatusOptions.length?`<select class="filter-select" aria-label="Filter by status" onchange="STATE.filterStatus=this.value;STATE.tablePages={};renderModuleView('${key}')"><option value="">All Statuses</option>${autoStatusOptions.map(o=>`<option value="${esc(o)}" ${STATE.filterStatus===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`:''}
-      <button class="btn btn-primary btn-sm" onclick="STATE.search=document.getElementById('tbl-search')?.value||'';STATE.tablePages={};renderModuleView('${key}')">${iSearch(14)} Search</button>
+      <button class="btn btn-primary btn-sm" onclick="queueSearchRender(document.getElementById('tbl-search'),'search',()=>renderModuleView('${key}'),0)">${iSearch(14)} Search</button>
       ${showClear?`<button class="btn btn-ghost btn-sm" onclick="STATE.search='';STATE.filter='';STATE.filterDept='';STATE.filterStatus='';STATE.tablePages={};renderModuleView('${key}')">Clear</button>`:''}
       <div class="toolbar-spacer"></div>
       <button class="btn btn-ghost btn-sm" onclick="exportModuleCSV('${key}')">${iDownload(14)} Export</button>
@@ -1584,7 +1673,7 @@ function renderEmployeeLifecycle(){
       <div class="lifecycle-kpi" style="--accent:${overdue?'var(--rust)':'var(--forest)'}"><div class="k">Overdue Reviews</div><div class="v">${overdue}</div><div class="s">Probation milestones</div></div>
     </div>
     <div class="toolbar">
-      <div class="search">${iSearch(15)}<input placeholder="Search employee, no., position, department…" value="${esc(STATE.lifecycleSearch)}" oninput="STATE.lifecycleSearch=this.value; renderEmployeeLifecycle()"></div>
+      <div class="search">${iSearch(15)}<input data-search-key="lifecycleSearch" placeholder="Search employee, no., position, department…" value="${esc(STATE.lifecycleSearch)}" oninput="queueSearchRender(this,'lifecycleSearch',renderEmployeeLifecycle)"></div>
       <select onchange="STATE.lifecycleFilter=this.value; renderEmployeeLifecycle()"><option value="">All Lifecycle States</option>${filterOptions.filter((v,i,a)=>a.indexOf(v)===i).map(v=>`<option value="${esc(v)}" ${STATE.lifecycleFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
       <div class="spacer"></div>
     </div>
@@ -1607,12 +1696,27 @@ function renderEmployeeLifecycle(){
 /* ================================================================
    EMPLOYEES (custom view — has classification logic)
    ================================================================ */
+function employeeSearchInput(value){
+  const input=document.getElementById('employee-directory-search');
+  if(input) queueSearchRender(input,'employeeSearch',renderEmployees);
+  else STATE.employeeSearch=value;
+}
+function resetEmployeeDirectoryFilters(){
+  cancelSearchRender('employeeSearch');
+  STATE.employeeSearch='';
+  STATE.employeeDepartmentFilter='';
+  STATE.employeeStatusFilter='';
+  STATE.employeeClassFilter='';
+  renderEmployees();
+  requestAnimationFrame(()=>document.getElementById('employee-directory-search')?.focus());
+}
 function renderEmployees(){
   setTitle('Employee Information', 'Master employee directory and HR operations.');
-  const q=(STATE.search||'').toLowerCase();
-  const deptFilter = STATE.filter;
+  const q=(STATE.employeeSearch||'').trim().toLowerCase();
+  const deptFilter = STATE.employeeDepartmentFilter||'';
   const statusFilter = STATE.employeeStatusFilter||'';
   const classFilter = STATE.employeeClassFilter||'';
+  const hasFilters=Boolean(q||deptFilter||statusFilter||classFilter);
   let rows = DB.employees.filter(e=>{
     const hay=[e.employeeNo,e.name,e.position,e.department,e.mobileNumber,e.personalEmail].map(v=>String(v||'').toLowerCase());
     const matches = !q || hay.some(v=>v.includes(q));
@@ -1629,25 +1733,25 @@ function renderEmployees(){
     <div><h2>Employee Information</h2><p>${rows.length} of ${DB.employees.length} employees shown across ${depts.length} departments.</p></div>
     ${canEdit()? `<button class="btn btn-brass" onclick="openEmployeeForm()">${iPlus(15)} Add Employee</button>`:''}
   </div>
-  <div class="toolbar">
-    <div class="search">${iSearch(15)}<input placeholder="Search employee no., name, position, contact…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderEmployees()"></div>
-    <div class="employee-filter-row">
-      <select onchange="STATE.filter=this.value; renderEmployees()">
-        <option value="">All Departments</option>
-        ${depts.map(d=>`<option value="${esc(d)}" ${STATE.filter===d?'selected':''}>${esc(d)}</option>`).join('')}
-      </select>
-      <select onchange="STATE.employeeStatusFilter=this.value; renderEmployees()">
-        <option value="">All Statuses</option>
-        ${statusOptions.map(v=>`<option value="${esc(v)}" ${statusFilter===v?'selected':''}>${esc(v)}</option>`).join('')}
-      </select>
-      <select onchange="STATE.employeeClassFilter=this.value; renderEmployees()">
-        <option value="">All Classifications</option>
-        <option value="Probationary" ${classFilter==='Probationary'?'selected':''}>Probationary</option>
-        <option value="Regular" ${classFilter==='Regular'?'selected':''}>Regular</option>
-      </select>
+  <div class="toolbar employee-directory-toolbar" aria-label="Employee directory search and filters">
+    <div class="search employee-directory-search">${iSearch(15)}<input id="employee-directory-search" data-search-key="employeeSearch" type="search" autocomplete="off" spellcheck="false" aria-label="Search employees" placeholder="Search employee no., name, position, department, or contact…" value="${esc(STATE.employeeSearch)}" oninput="employeeSearchInput(this.value)"></div>
+    <select aria-label="Filter employees by department" onchange="STATE.employeeDepartmentFilter=this.value; renderEmployees()">
+      <option value="">All Departments</option>
+      ${depts.map(d=>`<option value="${esc(d)}" ${deptFilter===d?'selected':''}>${esc(d)}</option>`).join('')}
+    </select>
+    <select aria-label="Filter employees by employment status" onchange="STATE.employeeStatusFilter=this.value; renderEmployees()">
+      <option value="">All Statuses</option>
+      ${statusOptions.map(v=>`<option value="${esc(v)}" ${statusFilter===v?'selected':''}>${esc(v)}</option>`).join('')}
+    </select>
+    <select aria-label="Filter employees by classification" onchange="STATE.employeeClassFilter=this.value; renderEmployees()">
+      <option value="">All Classifications</option>
+      <option value="Probationary" ${classFilter==='Probationary'?'selected':''}>Probationary</option>
+      <option value="Regular" ${classFilter==='Regular'?'selected':''}>Regular</option>
+    </select>
+    <div class="employee-toolbar-actions">
+      ${hasFilters?`<button class="btn btn-ghost btn-sm" onclick="resetEmployeeDirectoryFilters()">Reset</button>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="exportEmployeesCSV()">${iDownload(14)} Export CSV</button>
     </div>
-    <div class="spacer"></div>
-    <button class="btn btn-ghost btn-sm" onclick="exportEmployeesCSV()">${iDownload(14)} Export CSV</button>
   </div>
   <div class="tablewrap">
     <table class="data-table">
@@ -1669,7 +1773,7 @@ function renderEmployees(){
             <button class="iconbtn" onclick="openEmployeeStatusForm('${e.id}')" title="Update Employment Status">${iShield(14)}</button>
             <button class="iconbtn" onclick="deleteEmployee('${e.id}')" title="Delete">${iTrash(14)}</button>`:''}
           </div></td>
-        </tr>`).join('') : `<tr><td colspan="9"><div class="empty"><b>No employees found</b>Try a different search or add a new employee.</div></td></tr>`}
+        </tr>`).join('') : `<tr><td colspan="9"><div class="empty"><b>No employees found</b><span>${hasFilters?'Try adjusting the search or filters.':'Add an employee to begin building the directory.'}</span>${hasFilters?`<button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="resetEmployeeDirectoryFilters()">Reset search and filters</button>`:''}</div></td></tr>`}
       </tbody>
     </table>
   </div>`;
@@ -1967,7 +2071,7 @@ function renderLeaveRecords(){
   rows = rows.slice().sort((a,b)=>(b.startDate||'').localeCompare(a.startDate||''));
   document.getElementById('leave-sub').innerHTML = `
     <div class="toolbar">
-      <div class="search">${iSearch(15)}<input placeholder="Search by employee or department…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderLeaveRecords()"></div>
+      <div class="search">${iSearch(15)}<input data-search-key="search" placeholder="Search by employee or department…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderLeaveRecords)"></div>
       <select onchange="STATE.filter=this.value; renderLeaveRecords()">
         <option value="">All Status</option>${LEAVE_STATUS.map(s=>`<option ${STATE.filter===s?'selected':''}>${s}</option>`).join('')}
       </select>
@@ -2074,7 +2178,7 @@ function renderDisciplinary(){
   </div>
   <div class="notice"><b>Note:</b> Offense level is counted automatically from prior records of the same violation for that employee, referencing the company's approved disciplinary policy. Confirm the suggested action before saving.</div>
   <div class="toolbar">
-    <div class="search">${iSearch(15)}<input placeholder="Search by employee or violation…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderDisciplinary()"></div>
+    <div class="search">${iSearch(15)}<input data-search-key="search" placeholder="Search by employee or violation…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderDisciplinary)"></div>
     <select onchange="STATE.disciplinaryFilter=this.value;STATE.tablePages={};renderDisciplinary()"><option value="">All Levels / Departments</option>${OFFENSE_LEVELS.map(v=>`<option value="${esc(v)}" ${STATE.disciplinaryFilter===v?'selected':''}>${esc(v)}</option>`).join('')}${DEPT_OPTIONS.map(v=>`<option value="${esc(v)}" ${STATE.disciplinaryFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
     <button class="btn btn-ghost btn-sm" onclick="STATE.disciplinaryFilter='';STATE.search='';STATE.tablePages={};renderDisciplinary()">Clear</button>
     <div class="spacer"></div>
@@ -2137,7 +2241,7 @@ function renderCVR(){
   </div>
   <div class="notice"><b>Note:</b> This app cannot automatically scan or OCR a photo/scan of a printed CVR — check or write the offense(s) on this form yourself (matching what's marked on the paper CVR), and the offense level (1st/2nd/3rd/4th+) and consequence are then computed automatically from this employee's CVR history and the <b>Offense Catalog</b>. Attach the actual scanned/photographed CVR for the record. Add your agency's real offense list and consequences under Offense Catalog (in the Manage section) so the lookup matches your policy.</div>
   <div class="toolbar">
-    <div class="search">${iSearch(15)}<input placeholder="Search by employee or offense…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderCVR()"></div>
+    <div class="search">${iSearch(15)}<input data-search-key="search" placeholder="Search by employee or offense…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderCVR)"></div>
     <select onchange="STATE.cvrFilter=this.value;STATE.tablePages={};renderCVR()"><option value="">All CVR Statuses</option>${CVR_STATUS.map(v=>`<option value="${esc(v)}" ${STATE.cvrFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
     <button class="btn btn-ghost btn-sm" onclick="STATE.cvrFilter='';STATE.search='';STATE.tablePages={};renderCVR()">Clear</button>
     <div class="spacer"></div>
@@ -2258,7 +2362,7 @@ function renderIncidents(){
   </div>
   <div class="notice"><b>Note:</b> This app cannot automatically scan or OCR a printed/photographed incident report — check or write the incident type(s) yourself to match what's on the report, and attach the actual document for the record. Repeat-incident counts per employee and type are then computed automatically from history.</div>
   <div class="toolbar">
-    <div class="search">${iSearch(15)}<input placeholder="Search by employee, type, or description…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderIncidents()"></div>
+    <div class="search">${iSearch(15)}<input data-search-key="search" placeholder="Search by employee, type, or description…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderIncidents)"></div>
     <select onchange="STATE.incidentFilter=this.value;STATE.tablePages={};renderIncidents()"><option value="">All Severity / Status</option>${INCIDENT_SEVERITY.map(v=>`<option value="${esc(v)}" ${STATE.incidentFilter===v?'selected':''}>${esc(v)}</option>`).join('')}${INCIDENT_STATUS.map(v=>`<option value="${esc(v)}" ${STATE.incidentFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
     <button class="btn btn-ghost btn-sm" onclick="STATE.incidentFilter='';STATE.search='';STATE.tablePages={};renderIncidents()">Clear</button>
     <div class="spacer"></div>
@@ -2527,7 +2631,7 @@ function renderATD(){
     <div class="stat" style="--accent:var(--rust)"><div class="lbl">Remaining Balance</div><div class="val" style="font-size:20px;">${peso(totalRemaining)}</div><div class="sub">${byStatus.Pending} Pending · ${byStatus.Ongoing} Ongoing · ${byStatus.Paid} Paid</div></div>
   </div>
   <div class="toolbar">
-    <div class="search">${iSearch(15)}<input placeholder="Search employee, department, deduction type…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderATD()"></div>
+    <div class="search">${iSearch(15)}<input data-search-key="search" placeholder="Search employee, department, deduction type…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderATD)"></div>
     <select onchange="STATE.filter=this.value; renderATD()">
       <option value="">All Categories / Status</option>
       <optgroup label="Category">${ATD_CATEGORIES.map(c=>`<option value="${esc(c)}" ${STATE.filter===c?'selected':''}>${esc(c)}</option>`).join('')}</optgroup>
@@ -2781,7 +2885,7 @@ function renderEvaluations(){
     <div><h2>Probationary Evaluations</h2><p>${emps.length} employee(s) currently on probation.</p></div>
   </div>
   <div class="notice"><b>Note:</b> Due dates are computed automatically from Date Hired (30 / 90 / 180 days). Mark an evaluation complete and attach the evaluation document once it's done.</div>
-  <div class="toolbar"><div class="search">${iSearch(15)}<input placeholder="Search by employee or department…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderEvaluations()"></div><select onchange="STATE.evaluationFilter=this.value;STATE.tablePages={};renderEvaluations()"><option value="">All Evaluation Statuses</option><option value="Overdue" ${STATE.evaluationFilter==='Overdue'?'selected':''}>Overdue</option><option value="Due Soon" ${STATE.evaluationFilter==='Due Soon'?'selected':''}>Due Soon</option><option value="Upcoming" ${STATE.evaluationFilter==='Upcoming'?'selected':''}>Upcoming</option><option value="Completed" ${STATE.evaluationFilter==='Completed'?'selected':''}>Completed</option></select><button class="btn btn-ghost btn-sm" onclick="STATE.evaluationFilter='';STATE.search='';STATE.tablePages={};renderEvaluations()">Clear</button></div>
+  <div class="toolbar"><div class="search">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search by employee or department…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderEvaluations)"></div><select onchange="STATE.evaluationFilter=this.value;STATE.tablePages={};renderEvaluations()"><option value="">All Evaluation Statuses</option><option value="Overdue" ${STATE.evaluationFilter==='Overdue'?'selected':''}>Overdue</option><option value="Due Soon" ${STATE.evaluationFilter==='Due Soon'?'selected':''}>Due Soon</option><option value="Upcoming" ${STATE.evaluationFilter==='Upcoming'?'selected':''}>Upcoming</option><option value="Completed" ${STATE.evaluationFilter==='Completed'?'selected':''}>Completed</option></select><button class="btn btn-ghost btn-sm" onclick="cancelSearchRender('search');STATE.evaluationFilter='';STATE.search='';STATE.tablePages={};renderEvaluations()">Clear</button></div>
   <div class="tablewrap"><table class="data-table">
     <thead><tr><th>Employee</th><th>Department</th><th>Date Hired</th><th>1st Month</th><th>3rd Month</th><th>6th Month</th></tr></thead>
     <tbody>
@@ -2845,7 +2949,7 @@ function renderOffenseSummary(){
   const html = `
   <div class="sectionhead"><div><h2>Employee Offense Summary</h2><p>${names.length} employee(s) with recorded offenses.</p></div></div>
   <div class="notice"><b>Note:</b> Combines Disciplinary Action and CVR records per employee. Level and consequence use the same lookup as CVR, referenced against the Offense Catalog.</div>
-  <div class="toolbar"><div class="search">${iSearch(15)}<input placeholder="Search by employee or offense…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderOffenseSummary()"></div></div>
+  <div class="toolbar"><div class="search">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search by employee or offense…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderOffenseSummary)"></div></div>
   ${names.length? names.map(n=>{
     const m = map[n];
     const rows = Object.entries(m.offenses).sort((a,b)=>b[1]-a[1]);
@@ -3199,7 +3303,7 @@ async function renderWorkflowCenter(){
       <div class="workflow-kpi" style="--accent:var(--brass)"><div class="k">Due · 7d</div><div class="v">${due7.length}</div><div class="s">Upcoming deadlines</div></div>
       <div class="workflow-kpi" style="--accent:var(--forest)"><div class="k">Unassigned</div><div class="v">${unassigned.length}</div><div class="s">Needs an owner</div></div>
     </div>
-    <div class="workflow-panel"><div class="workflow-toolbar"><div class="search">${iSearch(15)}<input placeholder="Search tasks, employees, departments…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderWorkflowCenter()"></div><select onchange="STATE.workflowFilter=this.value; renderWorkflowCenter()"><option value="queue" ${STATE.workflowFilter==='queue'?'selected':''}>Pending Queue</option><option value="mine" ${STATE.workflowFilter==='mine'?'selected':''}>My Work</option><option value="unassigned" ${STATE.workflowFilter==='unassigned'?'selected':''}>Unassigned</option><option value="all" ${STATE.workflowFilter==='all'?'selected':''}>All Tasks</option></select><select onchange="STATE.workflowStatus=this.value; renderWorkflowCenter()"><option value="Pending" ${STATE.workflowStatus==='Pending'?'selected':''}>Pending</option><option value="Completed" ${STATE.workflowStatus==='Completed'?'selected':''}>Completed</option><option value="Rejected" ${STATE.workflowStatus==='Rejected'?'selected':''}>Rejected</option><option value="Cancelled" ${STATE.workflowStatus==='Cancelled'?'selected':''}>Cancelled</option><option value="All" ${STATE.workflowStatus==='All'?'selected':''}>All Statuses</option></select><select onchange="STATE.workflowType=this.value; renderWorkflowCenter()"><option value="" ${!STATE.workflowType?'selected':''}>All Types</option>${WORKFLOW_TYPES.map(t=>`<option value="${t}" ${STATE.workflowType===t?'selected':''}>${t}</option>`).join('')}</select></div>
+    <div class="workflow-panel"><div class="workflow-toolbar"><div class="search">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search tasks, employees, departments…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderWorkflowCenter)"></div><select onchange="STATE.workflowFilter=this.value; renderWorkflowCenter()"><option value="queue" ${STATE.workflowFilter==='queue'?'selected':''}>Pending Queue</option><option value="mine" ${STATE.workflowFilter==='mine'?'selected':''}>My Work</option><option value="unassigned" ${STATE.workflowFilter==='unassigned'?'selected':''}>Unassigned</option><option value="all" ${STATE.workflowFilter==='all'?'selected':''}>All Tasks</option></select><select onchange="STATE.workflowStatus=this.value; renderWorkflowCenter()"><option value="Pending" ${STATE.workflowStatus==='Pending'?'selected':''}>Pending</option><option value="Completed" ${STATE.workflowStatus==='Completed'?'selected':''}>Completed</option><option value="Rejected" ${STATE.workflowStatus==='Rejected'?'selected':''}>Rejected</option><option value="Cancelled" ${STATE.workflowStatus==='Cancelled'?'selected':''}>Cancelled</option><option value="All" ${STATE.workflowStatus==='All'?'selected':''}>All Statuses</option></select><select onchange="STATE.workflowType=this.value; renderWorkflowCenter()"><option value="" ${!STATE.workflowType?'selected':''}>All Types</option>${WORKFLOW_TYPES.map(t=>`<option value="${t}" ${STATE.workflowType===t?'selected':''}>${t}</option>`).join('')}</select></div>
     ${rows.length?`<div class="workflow-list">${pageRows.map(t=>{const sev=workflowTaskSeverity(t);return `<div class="workflow-row ${sev}"><span class="dot"></span><div class="main"><div class="title">${esc(t.title)}</div><div class="meta">${esc(t.employeeName||workflowSourceTitle(t))}${t.department?' · '+esc(t.department):''} · ${esc(t.description||'')} ${t.assigneeId?' · '+esc(DB.users.find(u=>String(u.id)===String(t.assigneeId))?.fullName||'Assigned'): ' · Unassigned'}</div></div><div class="right"><div>${workflowPriorityBadge(t.priority)}</div><div class="due">${esc(workflowDueText(t))}</div></div><div class="actions">${workflowActionButtons(t)}</div></div>`;}).join('')}</div><div class="table-pagination-wrap"><div class="table-pagination-meta">${page.meta.start?`${page.meta.start}–${page.meta.end}`:'0'} <span>of ${page.meta.total} workflow items</span></div>${paginationHTML(page.meta,'workflow:list',{go:'workflowPageGo',size:'workflowPageSize'})}</div>`:`<div class="workflow-empty"><b>No workflow items match this view.</b>Try another filter or create a manual HR task.</div>`}</div>
     <div class="notice" style="margin-top:12px;"><b>Workflow rule:</b> Source records remain the system of record. Approvals and task state coordinate HR work around those records and are retained in the audit trail.</div>`;
   document.getElementById('content').innerHTML=html;
@@ -3415,7 +3519,7 @@ async function renderAutomationCenter(){
       <div class="automation-panel"><div class="automation-panel-head"><div><h3>Automation Rules</h3><div class="desc">Built-in HR rules that create or update operational work.</div></div></div><div class="automation-rule-list">${AUTOMATION_RULES.map(r=>`<div class="automation-rule ${automationRuleEnabled(r.id)?'':'disabled'}"><div><div class="title">${esc(r.label)}</div><div class="desc">${esc(r.description)}</div><div class="meta"><span class="tag">${esc(r.category)}</span><span class="tag">${byRule[r.id]||0} pending</span></div></div><label class="automation-switch"><input type="checkbox" ${automationRuleEnabled(r.id)?'checked':''} ${canEdit()?'':'disabled'} onchange="toggleAutomationRule('${esc(r.id)}',this.checked)"> Enabled</label><button class="btn btn-ghost btn-sm" onclick="go('workflow')">View Work</button></div>`).join('')}</div><div class="automation-rule-note"><b>Execution model:</b> the current browser deployment runs automation when the application opens and on a periodic timer while it remains open. It is designed so a secure server-side scheduler can later call the same rule contracts without exposing service credentials in the frontend.</div></div>
       <div class="automation-panel"><div class="automation-panel-head"><div><h3>Automation Health</h3><div class="desc">Current generated workload and latest run status.</div></div></div><div style="padding:9px;">${Object.entries(byRule).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([id,n])=>{const r=AUTOMATION_RULES.find(x=>x.id===id);return `<div class="automation-insight"><div class="k">${esc(r?.category||id)}</div><div class="v">${n}</div><div class="s">${esc(r?.label||id)} currently has pending generated work.</div></div>`;}).join('')||'<div class="automation-empty"><b>No generated work</b>Current automation rules have no pending tasks.</div>'}${last?`<div class="automation-insight"><div class="k">Latest Run</div><div class="v" style="font-size:16px;">${esc(last.mode||'Automatic')}</div><div class="s">${fmtDate(String(last.runAt||'').slice(0,10))} · ${esc(automationRunSummary(last))}</div></div>`:''}</div></div>
     </div>
-    <div class="automation-panel" style="margin-bottom:16px;"><div class="automation-panel-head"><div><h3>Generated Work</h3><div class="desc">Automation-created tasks appear in the same Workflow &amp; Approvals queue used by HR staff.</div></div></div><div class="automation-rule-note" style="margin:9px 9px 0;"><b>Search:</b> <input class="field" style="margin:0;padding:8px 10px;width:100%;border:1px solid var(--line-2);border-radius:7px;" placeholder="Search generated tasks, employees, departments…" value="${esc(STATE.automationSearch||'')}" oninput="STATE.automationSearch=this.value;STATE.tablePages['automation:tasks']={page:1,size:10,signature:''}; renderAutomationCenter()"></div><div class="automation-run-list">${taskPage.rows.map(t=>`<div class="automation-run-row ${t.status==='Pending'&&t.dueDate&&t.dueDate<todayISO()?'failed':''}"><span class="dot"></span><div><div class="title">${esc(t.title)}</div><div class="meta">${esc(t.description||'')}${t.employeeName?' · '+esc(t.employeeName):''}${t.dueDate?' · Due '+esc(fmtDate(t.dueDate)):''}</div></div><div class="right"><button class="btn btn-ghost btn-sm" onclick="automationOpenTask('${esc(t.id)}')">Open</button></div></div>`).join('')||'<div class="automation-empty"><b>No pending generated tasks</b>Automation is currently caught up.</div>'}</div>${taskPage.meta.total?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${taskPage.meta.start}–${taskPage.meta.end} <span>of ${taskPage.meta.total} generated tasks</span></div>${paginationHTML(taskPage.meta,'automation:tasks',{go:'automationPageGo',size:'automationPageSize'})}</div>`:''}</div>
+    <div class="automation-panel" style="margin-bottom:16px;"><div class="automation-panel-head"><div><h3>Generated Work</h3><div class="desc">Automation-created tasks appear in the same Workflow &amp; Approvals queue used by HR staff.</div></div></div><div class="automation-rule-note" style="margin:9px 9px 0;"><b>Search:</b> <input class="field" data-search-key="automationSearch" type="search" autocomplete="off" style="margin:0;padding:8px 10px;width:100%;border:1px solid var(--line-2);border-radius:7px;" placeholder="Search generated tasks, employees, departments…" value="${esc(STATE.automationSearch||'')}" oninput="queueSearchRender(this,'automationSearch',renderAutomationCenter)"></div><div class="automation-run-list">${taskPage.rows.map(t=>`<div class="automation-run-row ${t.status==='Pending'&&t.dueDate&&t.dueDate<todayISO()?'failed':''}"><span class="dot"></span><div><div class="title">${esc(t.title)}</div><div class="meta">${esc(t.description||'')}${t.employeeName?' · '+esc(t.employeeName):''}${t.dueDate?' · Due '+esc(fmtDate(t.dueDate)):''}</div></div><div class="right"><button class="btn btn-ghost btn-sm" onclick="automationOpenTask('${esc(t.id)}')">Open</button></div></div>`).join('')||'<div class="automation-empty"><b>No pending generated tasks</b>Automation is currently caught up.</div>'}</div>${taskPage.meta.total?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${taskPage.meta.start}–${taskPage.meta.end} <span>of ${taskPage.meta.total} generated tasks</span></div>${paginationHTML(taskPage.meta,'automation:tasks',{go:'automationPageGo',size:'automationPageSize'})}</div>`:''}</div>
     <div class="automation-panel"><div class="automation-panel-head"><div><h3>Recent Automation Runs</h3><div class="desc">Durable run history retained in the HR record store.</div></div></div><div class="automation-run-list">${runs.length?runs.map(run=>`<div class="automation-run-row ${run.errors?'failed':''}"><span class="dot"></span><div><div class="title">${esc(run.mode||'Automatic')} automation run</div><div class="meta">${fmtDate(String(run.runAt||'').slice(0,10))} · ${esc(automationRunSummary(run))}</div></div><div class="right small">${run.completedAt?esc(String(run.completedAt).slice(11,16)):''}</div></div>`).join(''):'<div class="automation-empty"><b>No runs recorded</b>The automation engine will create a run entry after its first execution.</div>'}</div></div>`;
   document.getElementById('content').innerHTML=html;
 }
@@ -4010,7 +4114,7 @@ async function renderDataQuality(){
         <div class="quality-score"><div class="k">Info</div><div class="v">${infos}</div><div class="s">Non-blocking finding</div></div>
       </div>
       <div class="quality-toolbar">
-        <input class="search" placeholder="Search data quality findings…" value="${esc(STATE.qualitySearch||'')}" oninput="STATE.qualitySearch=this.value; renderDataQuality()">
+        <input class="search" data-search-key="qualitySearch" type="search" autocomplete="off" placeholder="Search data quality findings…" value="${esc(STATE.qualitySearch||'')}" oninput="queueSearchRender(this,'qualitySearch',renderDataQuality)">
         <select onchange="STATE.qualityFilter=this.value; renderDataQuality()"><option value="all" ${STATE.qualityFilter==='all'?'selected':''}>All findings (${issues.length})</option><option value="error" ${STATE.qualityFilter==='error'?'selected':''}>Errors (${errors})</option><option value="warning" ${STATE.qualityFilter==='warning'?'selected':''}>Warnings (${warnings})</option><option value="info" ${STATE.qualityFilter==='info'?'selected':''}>Info (${infos})</option></select>
       </div>
       <div class="quality-section">
@@ -4490,7 +4594,7 @@ function renderDocuments(){
     <div class="doc-stat"><div class="k">Employees with Files</div><div class="v">${uniqueEmployees}</div><div class="s">Employees represented in the document index</div></div>
   </div>
   <div class="toolbar">
-    <div class="search">${iSearch(15)}<input placeholder="Search document, employee, case, or category…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderDocuments()"></div>
+    <div class="search">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search document, employee, case, or category…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderDocuments)"></div>
     <select onchange="STATE.documentStorage=this.value; renderDocuments()"><option value="">All Storage</option><option value="Google Drive" ${storageFilter==='Google Drive'?'selected':''}>Google Drive</option><option value="Supabase" ${storageFilter==='Supabase'?'selected':''}>Supabase Storage</option></select>
     <select onchange="STATE.documentCategory=this.value; renderDocuments()"><option value="">All Categories</option>${[...DOCUMENT_CATEGORIES,'Legacy Attachment'].map(x=>`<option value="${esc(x)}" ${categoryFilter===x?'selected':''}>${esc(x)}</option>`).join('')}</select>
     <select onchange="STATE.documentStatus=this.value; renderDocuments()"><option value="">All Status</option>${DOCUMENT_STATUS.map(x=>`<option value="${esc(x)}" ${statusFilter===x?'selected':''}>${esc(x)}</option>`).join('')}</select>
@@ -4498,7 +4602,7 @@ function renderDocuments(){
   </div>
   ${driveDocs.length && (expired||expiring)?`<div class="notice" style="margin-top:10px;"><b>Document attention:</b> ${expired?`${expired} expired`:''}${expired&&expiring?' · ':''}${expiring?`${expiring} expiring within 30 days`:''}. Use the filters above to review them.</div>`:''}
   <div class="tablewrap"><table class="data-table"><thead><tr><th>Document</th><th>Employee</th><th>Category</th><th>Storage</th><th>Source</th><th>Status</th><th>Expiry</th><th style="text-align:right;">Actions</th></tr></thead><tbody>
-    ${filtered.length?filtered.map(d=>{const expiry=documentExpiryInfo(d);const storageBadge=d.storage==='Google Drive'?'b-blue':'b-grey';return `<tr><td><div class="doc-row"><div class="doc-icon">${iDoc(17)}</div><div class="doc-main"><div class="doc-name" title="${esc(d.name)}">${esc(d.name)}</div><div class="doc-meta">${esc(documentFileType(d.name))}${d.driveFileId?' · Drive ID linked':''}</div></div></div></td><td>${esc(d.employee)}</td><td>${esc(d.category||'Other')}</td><td>${statusBadge(d.storage,{'Google Drive':'b-blue','Supabase':'b-grey'})}</td><td><div class="doc-source">${esc(d.moduleLabel||'—')}${d.recordId?' · '+esc(d.recordId):''}</div></td><td>${statusBadge(d.storage==='Google Drive'?(d.status||'Active'):'Active',{'Active':'b-green','Pending':'b-amber','Expired':'b-red','Archived':'b-grey'})}</td><td><div class="doc-expiry">${statusBadge(expiry.label, {[expiry.label]:expiry.cls})}</div></td><td><div class="doc-actions">${d.storage==='Google Drive'?`${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="openDriveDocumentForm('${esc(d.id)}')">Edit</button>`:''}<button class="btn btn-ghost btn-sm" onclick="openDriveDocument('${esc(d.driveUrl).replace(/'/g,"\\'")}')">Open</button>${canEdit()?`<button class="btn btn-danger btn-sm" onclick="deleteDriveDocument('${esc(d.id)}')">Remove</button>`:''}`:`<button class="btn btn-ghost btn-sm" onclick="openStoredDocument('${esc(d.path)}','${esc(d.name).replace(/'/g,"\\'")}')">Open</button><button class="btn btn-ghost btn-sm" onclick="downloadAttachment('${esc(d.path)}','${esc(d.name).replace(/'/g,"\\'")}')">Download</button>`}</div></td></tr>`;}).join(''):`<tr><td colspan="8"><div class="empty"><b>No documents found</b>${docs.length?'Try another search or filter.':'Register a Google Drive document or attach a file to an existing HR record.'}</div></td></tr>`}
+    ${filtered.length?filtered.map(d=>{const expiry=documentExpiryInfo(d);const storageBadge=d.storage==='Google Drive'?'b-blue':'b-grey';return `<tr><td><div class="doc-row"><div class="doc-icon">${iDoc(17)}</div><div class="doc-main"><div class="doc-name" title="${esc(d.name)}">${esc(d.name)}</div><div class="doc-meta">${esc(documentFileType(d.name))}${d.driveFileId?' · Drive ID linked':''}</div></div></div></td><td>${esc(d.employee)}</td><td>${esc(d.category||'Other')}</td><td>${statusBadge(d.storage,{'Google Drive':'b-blue','Supabase':'b-grey'})}</td><td><div class="doc-source">${esc(d.moduleLabel||'—')}${d.recordId?' · '+esc(d.recordId):''}</div></td><td>${statusBadge(d.storage==='Google Drive'?(d.status||'Active'):'Active',{'Active':'b-green','Pending':'b-amber','Expired':'b-red','Archived':'b-grey'})}</td><td><div class="doc-expiry">${statusBadge(expiry.label, {[expiry.label]:expiry.cls})}</div></td><td><div class="doc-actions rowactions">${d.storage==='Google Drive'?`${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="openDriveDocumentForm('${esc(d.id)}')">Edit</button>`:''}<button class="btn btn-ghost btn-sm" onclick="openDriveDocument('${esc(d.driveUrl).replace(/'/g,"\\'")}')">Open</button>${canEdit()?`<button class="btn btn-danger btn-sm" onclick="deleteDriveDocument('${esc(d.id)}')">Remove</button>`:''}`:`<button class="btn btn-ghost btn-sm" onclick="openStoredDocument('${esc(d.path)}','${esc(d.name).replace(/'/g,"\\'")}')">Open</button><button class="btn btn-ghost btn-sm" onclick="downloadAttachment('${esc(d.path)}','${esc(d.name).replace(/'/g,"\\'")}')">Download</button>`}</div></td></tr>`;}).join(''):`<tr><td colspan="8"><div class="empty"><b>No documents found</b>${docs.length?'Try another search or filter.':'Register a Google Drive document or attach a file to an existing HR record.'}</div></td></tr>`}
   </tbody></table></div>
   <div class="doc-note">Google Drive files remain outside the Supabase database. Supabase stores document metadata and references. Existing Supabase Storage attachments remain readable for backward compatibility.</div>`;
   document.getElementById('content').innerHTML=html;
@@ -4679,7 +4783,7 @@ async function renderCases(){
   document.getElementById('content').innerHTML=`
     <div class="sectionhead"><div><h2>HR Cases</h2><p>${rows.length} case${rows.length===1?'':'s'} shown${STATE.filter?' · filtered by status':''}.</p></div>${canEdit()?`<button class="btn btn-brass" onclick="openCaseForm()">${iPlus(15)} New HR Case</button>`:''}</div>
     <div class="notice"><b>Case file:</b> A case groups related HR records into one trackable matter. Priority and deadlines help HR staff focus follow-ups before opening the full case file.</div>
-    <div class="toolbar"><div class="search">${iSearch(15)}<input placeholder="Search case number, employee, subject…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderCases()"></div><select onchange="STATE.filter=this.value; renderCases()"><option value="">All Statuses</option>${Object.keys(CASE_STATUS_MAP).map(x=>`<option value="${esc(x)}" ${STATE.filter===x?'selected':''}>${esc(x)}</option>`).join('')}</select><div class="spacer"></div></div>
+    <div class="toolbar"><div class="search">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search case number, employee, subject…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderCases)"></div><select onchange="STATE.filter=this.value; renderCases()"><option value="">All Statuses</option>${Object.keys(CASE_STATUS_MAP).map(x=>`<option value="${esc(x)}" ${STATE.filter===x?'selected':''}>${esc(x)}</option>`).join('')}</select><div class="spacer"></div></div>
     <div class="tablewrap"><table class="data-table"><thead><tr><th>Case No.</th><th>Employee</th><th>Priority</th><th>Status</th><th>Due</th><th>Assigned To</th><th style="text-align:right;">Actions</th></tr></thead>
     <tbody>${rows.length?rows.map(c=>{const ass=DB.users.find(u=>u.id===c.assigned_to);const dl=caseDeadlineInfo(c.due_date,c.status); return `<tr><td><b class="mono">${esc(c.case_number)}</b><div class="small">${esc(c.subject||'HR Case')}</div></td><td><b>${esc(c.employee_name)}</b><div class="small">${esc(c.department||'Unassigned')}</div></td><td>${casePriorityBadge(c.priority)}</td><td>${statusBadge(c.status,CASE_STATUS_MAP)}</td><td><span class="case-deadline ${dl.cls}">${dl.label}</span><div class="small">${c.due_date?fmtDate(c.due_date):'No date'}</div></td><td>${esc(ass?.fullName||'Unassigned')}</td><td><div class="rowactions"><button class="iconbtn" title="Open case" onclick="openCaseDetails('${c.id}')">${iDoc(14)}</button>${canEdit()?`<button class="iconbtn" title="Edit case" onclick="openCaseForm('${c.id}')">${iEdit(14)}</button><button class="iconbtn" title="Delete case" onclick="deleteCase('${c.id}')">${iTrash(14)}</button>`:''}</div></td></tr>`;}).join(''):`<tr><td colspan="8"><div class="empty"><b>No HR cases yet</b>${canEdit()?'Create your first case to begin linking HR records.':'No cases are available for viewing.'}</div></td></tr>`}</tbody></table></div>`;
 }
@@ -4876,6 +4980,11 @@ document.addEventListener('click', e=>{
 });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeNotificationPanel(); });
 document.getElementById('login-form').addEventListener('keydown', e=>{ if(document.getElementById('auth-error').style.display==='block') document.getElementById('auth-error').style.display='none'; });
+const ROW_ACTION_OBSERVER=new MutationObserver(()=>requestAnimationFrame(enhanceRowActionMenus));
+['content','modal'].forEach(id=>{
+  const root=document.getElementById(id);
+  if(root) ROW_ACTION_OBSERVER.observe(root,{childList:true,subtree:true});
+});
 
 // The app is an ES module, while the existing UI uses inline onclick/onsubmit
 // handlers. Expose the application handlers on window so GitHub Pages/Vercel
@@ -4897,11 +5006,11 @@ Object.assign(window, {
   loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
   openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard,
-  renderDisciplinary, renderEmployees, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
+  renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, queueSearchRender, cancelSearchRender, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, setTitle, shiftDate, statusBadge, switchAuthTab, toCSV,
-  toast, todayISO, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, resetAllTablePages, enhanceDataTables, paginationMeta, paginationHTML, paginationReset, paginateRows
+  toast, todayISO, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, paginationMeta, paginationHTML, paginationReset, paginateRows
 });
 
 (async function initSupabase(){
