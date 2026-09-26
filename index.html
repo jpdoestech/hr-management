@@ -217,6 +217,21 @@ tbody tr:hover{background:#FAF9F5;}
 .attach-preview span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .attach-cell{display:flex;align-items:center;gap:6px;font-size:12.5px;}
 .attach-cell .iconbtn{flex:none;}
+
+/* ---------- Document Center ---------- */
+.doc-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;}
+.doc-stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);}
+.doc-stat .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--slate);font-weight:700;}
+.doc-stat .v{font-size:24px;font-family:'Source Serif 4',serif;font-weight:700;margin-top:4px;}
+.doc-stat .s{font-size:11px;color:var(--slate);margin-top:2px;}
+.doc-row{display:flex;align-items:center;gap:12px;}
+.doc-icon{width:36px;height:36px;border-radius:9px;background:var(--paper);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:none;color:var(--ink);}
+.doc-main{min-width:0;flex:1;}
+.doc-name{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.doc-meta{font-size:11px;color:var(--slate);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.doc-actions{display:flex;gap:5px;flex:none;}
+.doc-note{margin-top:12px;font-size:11.5px;color:var(--slate);}
+@media (max-width:760px){.doc-stats{grid-template-columns:1fr;}.doc-row{align-items:flex-start;}.doc-actions{margin-left:auto;}}
 .checklist{display:flex;flex-direction:column;gap:7px;max-height:190px;overflow-y:auto;border:1px solid var(--line-2);border-radius:7px;padding:10px 12px;background:#fff;}
 .checkrow{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;}
 .checkrow input{width:auto;margin:0;}
@@ -619,6 +634,7 @@ const NAV = [
   ]},
   {sec:'Records', items:[
     {v:'cases', label:'HR Cases', icon:iShield},
+    {v:'documents', label:'Document Center', icon:iDoc, count:()=>countStoredDocuments()},
     {v:'employees', label:'Employee Information', icon:iUsers, count:()=>DB.employees.length},
     {v:'leaves', label:'Leave Tracker', icon:iCal, count:()=>DB.leaves.length},
     {v:'disciplinary', label:'Disciplinary Action', icon:iShield, count:()=>DB.disciplinary.length},
@@ -2436,6 +2452,107 @@ async function saveSettings(){
 }
 
 /* ================================================================
+   DOCUMENT CENTER (virtual index over referenced Supabase Storage files)
+   ================================================================ */
+const DOCUMENT_MODULES = ['employees','leaves','disciplinary','nte','memos','nod','oncall','transfers','cvr','incidents','prf','evaluations','atd'];
+
+function collectStoredDocuments(){
+  const docs=[];
+  DOCUMENT_MODULES.forEach(module=>{
+    (DB[module]||[]).forEach(rec=>{
+      Object.keys(rec||{}).forEach(key=>{
+        if(!key.endsWith('Data') || key==='attachmentData' && !rec[key]) return;
+        const path=rec[key];
+        if(typeof path!=='string' || !path) return;
+        const name=rec[key.slice(0,-4)];
+        if(typeof name!=='string' || !name) return;
+        docs.push({
+          id:`${module}:${rec.id}:${key}`,
+          module,
+          moduleLabel:caseModuleLabel(module),
+          recordId:String(rec.id),
+          name,
+          path,
+          employee:rec.employeeName||rec.name||'—',
+          department:rec.department||'—',
+          date:caseRecordDate(module,rec)||rec.updated_at||'',
+          label:caseRecordLabel(module,rec)
+        });
+      });
+      if(module==='atd'){
+        (rec.payments||[]).forEach(payment=>{
+          if(payment.payslipData && payment.payslip){
+            docs.push({
+              id:`atd:${rec.id}:payment:${payment.id}:payslip`,
+              module:'atd', moduleLabel:'ATD Monitoring', recordId:String(rec.id),
+              name:payment.payslip, path:payment.payslipData,
+              employee:rec.employeeName||'—', department:rec.department||'—',
+              date:payment.dateRecorded||rec.atdDate||'',
+              label:`ATD payment — ${payment.month||''} ${payment.cutoff||''}`.trim()
+            });
+          }
+        });
+      }
+    });
+  });
+  const seen=new Set();
+  return docs.filter(d=>{
+    if(seen.has(d.id)) return false;
+    seen.add(d.id); return true;
+  }).sort((a,b)=>(b.date||'').localeCompare(a.date||'') || a.name.localeCompare(b.name));
+}
+function countStoredDocuments(){ return collectStoredDocuments().length; }
+function documentFileType(name){
+  const ext=(String(name||'').split('.').pop()||'').toLowerCase();
+  if(ext==='pdf') return 'PDF';
+  if(['jpg','jpeg','png','webp','gif'].includes(ext)) return 'Image';
+  if(['doc','docx'].includes(ext)) return 'Word';
+  if(['xls','xlsx'].includes(ext)) return 'Excel';
+  return ext ? ext.toUpperCase() : 'File';
+}
+async function openStoredDocument(path,name){
+  if(!path){toast('No stored file for this document.',true);return;}
+  const {data,error}=await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(path,120);
+  if(error){toast('Could not create secure preview link: '+error.message,true);return;}
+  window.open(data.signedUrl,'_blank','noopener,noreferrer');
+}
+function renderDocuments(){
+  setTitle('Document Center','Central index of documents referenced by HR records and stored securely in Supabase Storage.');
+  const docs=collectStoredDocuments();
+  const q=(STATE.search||'').toLowerCase();
+  const filtered=docs.filter(d=>!q || [d.name,d.employee,d.department,d.moduleLabel,d.label].some(v=>String(v||'').toLowerCase().includes(q)) && (!STATE.filter || d.module===STATE.filter));
+  const moduleOptions=[...new Set(docs.map(d=>d.module))].sort((a,b)=>caseModuleLabel(a).localeCompare(caseModuleLabel(b)));
+  const uniqueEmployees=new Set(docs.map(d=>d.employee)).size;
+  const typeCount={}; docs.forEach(d=>typeCount[documentFileType(d.name)]=(typeCount[documentFileType(d.name)]||0)+1);
+  const topType=Object.entries(typeCount).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—';
+  const html=`
+  <div class="sectionhead">
+    <div><h2>Document Center</h2><p>${docs.length} stored document${docs.length===1?'':'s'} referenced by HR records.</p></div>
+  </div>
+  <div class="doc-stats">
+    <div class="doc-stat"><div class="k">Stored Documents</div><div class="v">${docs.length}</div><div class="s">Referenced files in the application</div></div>
+    <div class="doc-stat"><div class="k">Employees with Files</div><div class="v">${uniqueEmployees}</div><div class="s">Employees represented in the document index</div></div>
+    <div class="doc-stat"><div class="k">Common File Type</div><div class="v">${esc(topType)}</div><div class="s">Based on referenced document names</div></div>
+  </div>
+  <div class="toolbar">
+    <div class="search">${iSearch(15)}<input placeholder="Search filename, employee, or module…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderDocuments()"></div>
+    <select onchange="STATE.filter=this.value; renderDocuments()"><option value="">All Modules</option>${moduleOptions.map(m=>`<option value="${esc(m)}" ${STATE.filter===m?'selected':''}>${esc(caseModuleLabel(m))}</option>`).join('')}</select>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Document</th><th>Employee</th><th>Module</th><th>Record</th><th>Date</th><th>Type</th><th style="text-align:right;">Actions</th></tr></thead>
+    <tbody>
+      ${filtered.length?filtered.map(d=>`<tr>
+        <td><div class="doc-row"><div class="doc-icon">${iDoc(17)}</div><div class="doc-main"><div class="doc-name" title="${esc(d.name)}">${esc(d.name)}</div><div class="doc-meta">${esc(d.label||'Linked HR record')}</div></div></div></td>
+        <td>${esc(d.employee)}</td><td>${esc(d.moduleLabel)}</td><td>${esc(d.recordId)}</td><td>${d.date?fmtDate(String(d.date).slice(0,10)):'—'}</td><td>${statusBadge(documentFileType(d.name),{'PDF':'b-red','Image':'b-blue','Word':'b-blue','Excel':'b-green'})}</td>
+        <td><div class="doc-actions"><button class="btn btn-ghost btn-sm" onclick="openStoredDocument('${esc(d.path)}','${esc(d.name).replace(/'/g,"\\'")}')">Open</button><button class="btn btn-ghost btn-sm" onclick="downloadAttachment('${esc(d.path)}','${esc(d.name).replace(/'/g,"\\'")}')">Download</button></div></td>
+      </tr>`).join(''):`<tr><td colspan="7"><div class="empty"><b>No documents found</b>${docs.length?'Try a different search or module filter.':'Attach a document from an HR record to have it appear here.'}</div></td></tr>`}
+    </tbody></table></div>
+  <div class="doc-note">Documents are kept in the private <b>${esc(STORAGE_BUCKET)}</b> bucket. Open/Download creates a short-lived signed URL; the Document Center does not expose the bucket publicly. To replace or remove a document, use the source HR record where the attachment was added.</div>
+  `;
+  document.getElementById('content').innerHTML=html;
+}
+
+/* ================================================================
    HR CASES (central case tracking + linked HR records)
    ================================================================ */
 const CASE_STATUS_MAP = {
@@ -2684,6 +2801,7 @@ async function deleteCase(id){
 const RENDERERS = {
   dashboard: renderDashboard,
   cases: renderCases,
+  documents: renderDocuments,
   employees: renderEmployees,
   leaves: renderLeaves,
   disciplinary: renderDisciplinary,
@@ -2713,6 +2831,7 @@ document.getElementById('login-form').addEventListener('keydown', e=>{ if(docume
 Object.assign(window, {
   addDaysISO, atdComputeStatus, atdFillEmployee, atdPayslipCellHTML, atdRemaining, atdToggleCategory, atdTotalPaid,
   caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, setCaseWorkflowStatus,
+  countStoredDocuments, renderDocuments, openStoredDocument, collectStoredDocuments,
   attachCellHTML, attachPreviewHTML, authErr, bootAuthenticated, calShift, canEdit, classify, clearFileField, closeModal,
   consequenceFor, cvrOffenseLevel, cvrOffenseSummaryHTML, daysBetweenInclusive, defaultOffenseCatalog, deleteATDPayment,
   deleteATDRecord, deleteCVR, deleteEmployee, deleteIncident, deleteRecord, doLogin, doLogout, doRegister, donut,
