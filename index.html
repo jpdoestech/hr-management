@@ -10,8 +10,8 @@
 <style>
 :root{
   /* Strellas-inspired palette: deep navy, warm gold, cool gray */
-  --ink:#194082; --ink-2:#12356F; --paper:#F3F5F8; --panel:#FFFFFF;
-  --brass:#C08A37; --brass-dk:#9D6D24; --gold-soft:#F4D971; --navy-deep:#001670;
+  --ink:#0B2E63; --ink-2:#08244C; --paper:#F3F5F8; --panel:#FFFFFF;
+  --brass:#C08A37; --brass-dk:#9D6D24; --gold-soft:#F4D971; --navy-deep:#041A36;
   --forest:#3B6955; --rust:#A94435; --amber:#C89A36; --slate:#687384;
   --line:#DCE2EA; --line-2:#C8D0DB;
   --shadow: 0 1px 2px rgba(15,36,72,.06), 0 8px 24px rgba(15,36,72,.07);
@@ -211,7 +211,7 @@ a{color:inherit;}
 
 /* ---------- Phase 6: Employee 360 Profile ---------- */
 .profile-hero{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;padding:18px;border:1px solid var(--line);background:linear-gradient(135deg,#fff 0%,#f8fbff 72%,#eef3f9 100%);border-radius:12px;margin-bottom:14px;}
-.profile-avatar{width:56px;height:56px;border-radius:15px;background:linear-gradient(135deg,var(--ink),var(--navy-deep));color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;box-shadow:0 8px 18px rgba(25,64,130,.18);}
+.profile-avatar{width:56px;height:56px;border-radius:15px;background:linear-gradient(135deg,var(--ink),var(--navy-deep));color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;box-shadow:0 8px 18px rgba(10,42,90,.18);}
 .profile-title{font-size:20px;font-weight:800;letter-spacing:-.01em;}
 .profile-sub{font-size:12px;color:var(--slate);margin-top:3px;}
 .profile-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
@@ -236,6 +236,67 @@ a{color:inherit;}
 .data-warning .mark{width:8px;height:8px;border-radius:50%;background:var(--brass);margin-top:4px;flex:none;}
 @media (max-width:900px){.profile-hero{grid-template-columns:auto 1fr;}.profile-hero .profile-actions{grid-column:1/-1;}.profile-grid{grid-template-columns:1fr;}.profile-kpis{grid-template-columns:repeat(2,1fr);}}
 @media (max-width:540px){.profile-hero{gap:11px;padding:14px;}.profile-avatar{width:48px;height:48px;border-radius:12px;}.profile-title{font-size:18px;}.profile-kpis{grid-template-columns:1fr 1fr;}.profile-detail{grid-template-columns:1fr;}.profile-list-row{flex-direction:column;}.profile-list-row .right{text-align:left;}}
+
+
+/* ---------- Phase 7: Action Center ---------- */
+.action-center-hero{display:flex;justify-content:space-between;gap:16px;align-items:flex-end;margin-bottom:16px;}
+.action-center-hero h1{margin:0;font-size:24px;letter-spacing:-.01em;}
+.action-center-hero p{margin:5px 0 0;color:var(--slate);font-size:12.5px;line-height:1.5;}
+.action-center-count{display:inline-flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--slate);font-size:11.5px;font-weight:700;white-space:nowrap;}
+.action-center-count b{color:var(--ink);font-size:16px;}
+.action-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;margin-bottom:16px;}
+.action-list{display:flex;flex-direction:column;gap:8px;}
+.action-item{display:flex;align-items:flex-start;gap:11px;padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;cursor:pointer;transition:border-color .12s ease,box-shadow .12s ease,transform .06s ease;}
+.action-item:hover{border-color:#B8C4D4;box-shadow:0 5px 18px rgba(10,42,90,.07);}
+.action-item:active{transform:translateY(1px);}
+.action-item .flag{width:9px;height:9px;border-radius:50%;margin-top:5px;flex:none;background:var(--brass);}
+.action-item.danger .flag{background:var(--rust);}
+.action-item.info .flag{background:var(--ink);}
+.action-item .body{min-width:0;flex:1;}
+.action-item .title{font-size:12.5px;font-weight:700;color:var(--ink);line-height:1.35;}
+.action-item .detail{font-size:11px;color:var(--slate);margin-top:3px;line-height:1.45;}
+.action-item .meta{font-size:10px;color:var(--slate);margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;}
+.action-item .meta span{padding:2px 6px;border-radius:20px;background:var(--paper);border:1px solid var(--line);}
+.action-side{display:flex;flex-direction:column;gap:12px;}
+.action-summary{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+.action-summary .metric-card{padding:13px;}
+.action-summary .metric-card .v{font-size:22px;}
+.action-tip{padding:12px 13px;border:1px dashed var(--line-2);border-radius:9px;background:#FBFCFE;font-size:11px;color:var(--slate);line-height:1.5;}
+.action-empty{padding:26px 16px;border:1px dashed var(--line-2);border-radius:9px;text-align:center;background:#FBFCFE;color:var(--slate);font-size:12px;}
+@media (max-width:960px){.action-grid{grid-template-columns:1fr;}}
+@media (max-width:700px){.action-center-hero{flex-direction:column;align-items:flex-start;}.action-center-hero h1{font-size:21px;}.action-summary{grid-template-columns:1fr 1fr;}}
+@media (max-width:480px){.action-center-count{width:100%;justify-content:space-between;}.action-summary{grid-template-columns:1fr 1fr;}.action-item{padding:10px;}}
+
+
+/* ---------- Phase 8: Employee Master Data ---------- */
+.employee-master-note{padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:#F8FAFD;color:var(--slate);font-size:11px;line-height:1.45;margin-bottom:12px;}
+.field input[readonly]{background:#F5F7FA;color:#475467;font-weight:700;cursor:not-allowed;}
+@media (max-width:720px){.employee-master-note{font-size:10.5px;}.profile-detail .item[style*='grid-column']{grid-column:1/-1!important;}}
+
+/* ---------- Phase 8: Employee Operations ---------- */
+.employee-completeness{display:flex;align-items:center;gap:10px;margin-top:10px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:#FBFCFE;}
+.employee-completeness .bar{flex:1;height:7px;background:#E7EBF1;border-radius:999px;overflow:hidden;}
+.employee-completeness .fill{height:100%;background:var(--brass);border-radius:999px;}
+.employee-completeness .pct{font-size:11px;font-weight:700;color:var(--ink);min-width:34px;text-align:right;}
+.employee-history{display:flex;flex-direction:column;gap:0;}
+.employee-history-row{display:grid;grid-template-columns:10px 110px 1fr auto;gap:10px;align-items:start;padding:11px 0;border-bottom:1px solid var(--line);font-size:12px;}
+.employee-history-row:last-child{border-bottom:none;}
+.employee-history-row .dot{width:8px;height:8px;border-radius:50%;background:var(--ink);margin-top:4px;}
+.employee-history-row .date{font-size:10.5px;color:var(--slate);white-space:nowrap;}
+.employee-history-row .title{font-weight:700;color:var(--ink);}
+.employee-history-row .meta{font-size:10.5px;color:var(--slate);margin-top:3px;line-height:1.4;}
+.employee-quick-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px;}
+.employee-quick-actions .btn{flex:0 0 auto;}
+.employee-filter-row{display:flex;gap:8px;flex:1;min-width:0;flex-wrap:wrap;}
+.employee-filter-row select{min-width:145px;}
+@media (max-width:720px){
+  .employee-history-row{grid-template-columns:8px 1fr;gap:8px;}
+  .employee-history-row .date{grid-column:2;}
+  .employee-history-row .right{grid-column:2;justify-self:start;}
+  .employee-filter-row{width:100%;}
+  .employee-filter-row select{flex:1 1 140px;}
+  .employee-quick-actions .btn{flex:1 1 150px;}
+}
 
 /* ---------- Responsive shell / touch layout ---------- */
 .topbar-left{display:flex;align-items:center;gap:10px;min-width:0;}
@@ -389,7 +450,7 @@ tbody tr:hover{background:#FAF9F5;}
 .notice{background:#FBF1E1;border:1px solid #EBD7AE;color:#7A5A16;font-size:12.5px;padding:10px 13px;border-radius:8px;margin-bottom:16px;line-height:1.55;}
 .notice b{color:#5D440E;}
 .sectionhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;}
-.case-modal{max-width:860px;}
+.case-modal{max-width:980px;}
 .case-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
 .case-summary .mini{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:10px 12px;}
 .case-summary .mini .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--slate);font-weight:700;}
@@ -401,6 +462,43 @@ tbody tr:hover{background:#FAF9F5;}
 .case-link .title{font-size:13px;font-weight:600;}
 .case-link .meta{font-size:11px;color:var(--slate);margin-top:2px;}
 .case-link .actions{display:flex;align-items:center;gap:4px;flex:none;}
+
+/* ---------- Phase 9: HR Case Intelligence ---------- */
+.case-intel-grid{display:grid;grid-template-columns:1.35fr .65fr;gap:14px;margin-bottom:14px;}
+.case-intel-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;}
+.case-intel-card{padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;min-width:0;}
+.case-intel-card .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--slate);font-weight:700;}
+.case-intel-card .v{font-size:13px;font-weight:700;margin-top:4px;word-break:break-word;}
+.case-priority{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;padding:4px 8px;border-radius:999px;border:1px solid var(--line);background:#fff;}
+.case-priority .dot{width:7px;height:7px;border-radius:50%;background:var(--slate);}
+.case-priority.high{border-color:#E8D19A;background:#FFFBEE;color:#6F571D;}
+.case-priority.high .dot{background:var(--amber);}
+.case-priority.urgent{border-color:#E8C4BD;background:#FEF1EF;color:#8A3228;}
+.case-priority.urgent .dot{background:var(--rust);}
+.case-deadline{font-size:11px;font-weight:700;}
+.case-deadline.overdue{color:var(--rust);}
+.case-deadline.soon{color:#8B681D;}
+.case-deadline.ok{color:var(--forest);}
+.case-activity{position:relative;display:flex;flex-direction:column;gap:10px;padding-left:4px;}
+.case-activity::before{content:"";position:absolute;left:17px;top:7px;bottom:7px;width:1px;background:var(--line);}
+.case-activity-item{position:relative;display:grid;grid-template-columns:28px 1fr;gap:10px;align-items:flex-start;}
+.case-activity-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--ink);color:#fff;z-index:1;font-size:11px;font-weight:700;}
+.case-activity-body{border:1px solid var(--line);border-radius:9px;background:#fff;padding:10px 12px;min-width:0;}
+.case-activity-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;}
+.case-activity-title{font-size:12.5px;font-weight:700;}
+.case-activity-meta{font-size:10.5px;color:var(--slate);margin-top:2px;}
+.case-activity-note{font-size:11.5px;color:var(--ink-2);margin-top:7px;line-height:1.5;white-space:pre-wrap;word-break:break-word;}
+.case-note-box{display:flex;gap:8px;align-items:flex-end;}
+.case-note-box textarea{flex:1;min-height:76px;resize:vertical;}
+.case-progress{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin:12px 0 16px;}
+.case-progress-step{padding:8px 7px;border:1px solid var(--line);border-radius:8px;background:#fff;text-align:center;min-width:0;}
+.case-progress-step .dot{width:9px;height:9px;border-radius:50%;margin:0 auto 5px;background:var(--line-2);}
+.case-progress-step.active{border-color:#AABBD4;background:#F7FAFE;}
+.case-progress-step.active .dot{background:var(--ink);}
+.case-progress-step.current{box-shadow:inset 0 0 0 1px var(--brass);}
+.case-progress-step .label{font-size:9.5px;color:var(--slate);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+@media (max-width:900px){.case-intel-grid{grid-template-columns:1fr;}.case-intel-cards{grid-template-columns:repeat(2,1fr);}.case-progress{grid-template-columns:repeat(3,1fr);}}
+@media (max-width:560px){.case-intel-cards{grid-template-columns:1fr 1fr;}.case-summary{grid-template-columns:1fr 1fr!important;}.case-priority{font-size:10px;}.case-note-box{flex-direction:column;align-items:stretch;}.case-progress{grid-template-columns:repeat(2,1fr);}}
 @media (max-width:760px){.case-modal{max-width:100%;}.case-summary{grid-template-columns:1fr 1fr;}.case-link{align-items:flex-start;}.case-link .actions{margin-left:auto;}}
 .sectionhead h2{margin:0;font-size:19px;}
 .sectionhead p{margin:3px 0 0;font-size:12.5px;color:var(--slate);}
@@ -526,7 +624,7 @@ if(!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('YOUR_PRO
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 /* =========================================================================
-   SCPA HR MANAGEMENT & DISCIPLINARY DASHBOARD — GitHub Pages + Vercel + Supabase
+   SLSC HR MANAGEMENT & Online System — GitHub Pages + Vercel + Supabase
    Phase 2: record-level Postgres persistence, Supabase Auth, and private Storage.
    ========================================================================= */
 
@@ -535,7 +633,7 @@ let DB_SNAPSHOT = null;
 let SAVE_QUEUE = Promise.resolve();
 
 function blankDB(){
-  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],settings:{orgName:'SCPA',probationDays:180},audit:[],users:[]};
+  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],settings:{orgName:'SLSC',probationDays:180},audit:[],users:[]};
 }
 
 async function loadDB(){
@@ -584,7 +682,7 @@ async function saveDBInternal(state){
       if(error) throw error;
     }
   }
-  const {error:settingsError}=await supabase.from('hr_settings').upsert({id:'singleton',data:state.settings||{orgName:'SCPA',probationDays:180},updated_at:now,updated_by:SESSION?.id||null},{onConflict:'id'});
+  const {error:settingsError}=await supabase.from('hr_settings').upsert({id:'singleton',data:state.settings||{orgName:'SLSC',probationDays:180},updated_at:now,updated_by:SESSION?.id||null},{onConflict:'id'});
   if(settingsError) throw settingsError;
   DB_SNAPSHOT=JSON.parse(JSON.stringify(state));
 }
@@ -773,16 +871,36 @@ function seedDB(){
   ];
   return {
     users, employees, leaves, disciplinary, nte, memos, nod, oncall, transfers, offenseCatalog, cvr, incidents, prf, evaluations, atd,
-    settings:{orgName:'SCPA', probationDays:180},
+    settings:{orgName:'SLSC', probationDays:180},
     audit:[{ts:new Date().toISOString(), user:'System', action:'Seeded initial demo data'}]
   };
 }
+function nextEmployeeNumber(list){
+  const nums=(list||[]).map(e=>{ const m=String(e.employeeNo||'').match(/^EMP-(\d+)$/i); return m?parseInt(m[1],10):0; });
+  const next=(Math.max(0,...nums)+1);
+  return 'EMP-'+String(next).padStart(4,'0');
+}
+function normalizeEmployeeMasterData(){
+  let changed=false;
+  const used=new Set();
+  (DB.employees||[]).forEach(e=>{
+    if(!e.employeeNo || used.has(String(e.employeeNo).toUpperCase())){ e.employeeNo=nextEmployeeNumber(DB.employees.filter(x=>x!==e && x.employeeNo)); changed=true; }
+    used.add(String(e.employeeNo).toUpperCase());
+    ['birthDate','civilStatus','mobileNumber','personalEmail','address','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'].forEach(k=>{ if(e[k]===undefined){ e[k]=''; changed=true; } });
+    if(!Array.isArray(e.employmentHistory)){
+      e.employmentHistory=[{type:'Employment Status',from:'',to:e.status||'Newly Hired',effectiveDate:e.statusDate||e.dateHired||'',remarks:'Initial employee record',changedAt:new Date().toISOString(),changedBy:'System'}];
+      changed=true;
+    }
+  });
+  return changed;
+}
+
 function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); }
 
 let DB = seedDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'' };
+let STATE = { view:'dashboard', search:'', filter:'', employeeStatusFilter:'', employeeClassFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'' };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
@@ -844,7 +962,9 @@ async function bootAuthenticated(user){
     const hasAny=RECORD_MODULES.some(k=>(state[k]||[]).length);
     if(!hasAny){ DB=seedDB(); await saveDB(); } else DB=state;
     if(!DB.audit) DB.audit=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];});
+    const employeeMasterChanged=normalizeEmployeeMasterData();
     DB_SNAPSHOT=JSON.parse(JSON.stringify(DB));
+    if(employeeMasterChanged) await saveDB();
     await loadProfiles();
     const profile=DB.users.find(x=>x.id===user.id);
     SESSION=profile || {id:user.id,fullName:user.user_metadata?.full_name||user.email,username:user.user_metadata?.username||'',email:user.email,role:'HR Staff'};
@@ -869,10 +989,97 @@ function enterApp(){
   go('dashboard');
 }
 
+/* ---------------- Phase 7: Action Center ---------------- */
+function actionCenterItems(caseRows){
+  const today=todayISO();
+  const next7=addDaysISO(today,7);
+  const next14=addDaysISO(today,14);
+  const items=[];
+  const activeCases=(caseRows||[]).filter(c=>!['Closed','Cancelled','Resolved'].includes(c.status));
+  activeCases.forEach(c=>{
+    const age=analyticsDaysOpen(c.opened_at,c.closed_at);
+    if(age>=30) items.push({level:'danger',title:`${c.case_number} has been open ${age} days`,detail:`${c.employee_name} · ${c.status}${c.department?' · '+c.department:''}`,meta:['HR Case','30+ days'],view:'cases',id:c.id});
+    if(c.status==='For Decision') items.push({level:'warning',title:`${c.case_number} is ready for decision`,detail:`${c.employee_name}${c.department?' · '+c.department:''}`,meta:['HR Case','For Decision'],view:'cases',id:c.id});
+    if(!c.assigned_to) items.push({level:'warning',title:`${c.case_number} is unassigned`,detail:`${c.employee_name}${c.department?' · '+c.department:''}`,meta:['HR Case','Unassigned'],view:'cases',id:c.id});
+  });
+
+  const pendingLeaves=DB.leaves.filter(l=>l.status==='Pending').sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
+  pendingLeaves.slice(0,8).forEach(l=>items.push({level:'warning',title:`Leave request pending: ${l.employeeName}`,detail:`${fmtDate(l.startDate)} – ${fmtDate(l.endDate)}${l.department?' · '+l.department:''}`,meta:['Leave','Pending'],view:'leaves'}));
+
+  const evalItems=[];
+  DB.employees.filter(e=>classify(e)==='Probationary' && e.dateHired).forEach(e=>EVAL_MILESTONES.forEach(m=>{
+    const st=evalStatusInfo(e,m);
+    if(st.label==='Overdue') evalItems.push({level:'danger',title:`Overdue evaluation: ${e.name}`,detail:`${m.label||m.key||m} due ${fmtDate(st.due)}`,meta:['Evaluation','Overdue'],view:'evaluations'});
+    else if(st.label==='Due Soon' && st.due<=next14) evalItems.push({level:'warning',title:`Evaluation due soon: ${e.name}`,detail:`${m.label||m.key||m} due ${fmtDate(st.due)}`,meta:['Evaluation','Due soon'],view:'evaluations'});
+  }));
+  items.push(...evalItems.slice(0,10));
+
+  DB.nte.filter(n=>n.status!=='Resolved').slice(0,10).forEach(n=>items.push({level:'warning',title:`NTE needs follow-up: ${n.employeeName}`,detail:`${n.status||'Open'}${n.dateReceived?' · received '+fmtDate(n.dateReceived):''}`,meta:['NTE','Open'],view:'nte'}));
+
+  DB.atd.filter(r=>atdRemaining(r)>0).slice(0,10).forEach(r=>items.push({level:'info',title:`ATD balance outstanding: ${r.employeeName}`,detail:`${peso(atdRemaining(r))} remaining${r.deductionType?' · '+r.deductionType:''}`,meta:['ATD','Balance'],view:'atd'}));
+
+  DB.leaves.filter(l=>l.startDate>today && l.startDate<=next7 && l.status!=='Disapproved').slice(0,8).forEach(l=>items.push({level:'info',title:`Upcoming leave: ${l.employeeName}`,detail:`Starts ${fmtDate(l.startDate)}${l.endDate?' · through '+fmtDate(l.endDate):''}`,meta:['Leave','Next 7 days'],view:'leaves'}));
+
+  const rank={danger:0,warning:1,info:2};
+  return items.sort((a,b)=>(rank[a.level]||9)-(rank[b.level]||9) || (a.title||'').localeCompare(b.title||''));
+}
+function actionCenterCounts(items){
+  return {total:items.length,danger:items.filter(x=>x.level==='danger').length,warning:items.filter(x=>x.level==='warning').length,info:items.filter(x=>x.level==='info').length};
+}
+async function renderActionCenter(){
+  setTitle('Action Center','A prioritized work queue for follow-ups, deadlines, and records needing attention.');
+  document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Loading action items…</div></div>';
+  try{
+    const {data:caseRows,error}=await supabase.from('hr_cases').select('id,case_number,employee_name,department,status,opened_at,closed_at,assigned_to').order('updated_at',{ascending:false}).limit(250);
+    if(error) throw error;
+    const items=actionCenterItems(caseRows||[]);
+    const counts=actionCenterCounts(items);
+    const visible=items.slice(0,30);
+    const html=`
+      <div class="action-center-hero">
+        <div><h1>Action Center</h1><p>One queue for urgent, upcoming, and informational HR follow-ups.</p></div>
+        <div class="action-center-count"><span>Open items</span><b>${counts.total}</b></div>
+      </div>
+      <div class="action-grid">
+        <div class="panel">
+          <div class="dashboard-panel-head"><div><h3>Priority Work Queue</h3><div class="desc">Click an item to open the related module.</div></div></div>
+          <div class="action-list">
+            ${visible.length?visible.map(x=>`<div class="action-item ${x.level}" onclick="go('${x.view}')"><span class="flag"></span><div class="body"><div class="title">${esc(x.title)}</div><div class="detail">${esc(x.detail)}</div><div class="meta">${(x.meta||[]).map(m=>`<span>${esc(m)}</span>`).join('')}</div></div><span style="font-size:16px;color:var(--slate);">›</span></div>`).join(''):'<div class="action-empty"><b>No active follow-ups.</b><div style="margin-top:5px;">The current records do not show outstanding action items.</div></div>'}
+          </div>
+          ${items.length>30?`<div class="analytics-note">Showing the first 30 items. Use the source modules for complete record-level review.</div>`:''}
+        </div>
+        <div class="action-side">
+          <div class="panel">
+            <h3>Queue Summary</h3><div class="desc">Grouped by urgency.</div>
+            <div class="action-summary">
+              <div class="metric-card"><div class="k">Urgent</div><div class="v">${counts.danger}</div><div class="s">Overdue / aged</div></div>
+              <div class="metric-card"><div class="k">Attention</div><div class="v">${counts.warning}</div><div class="s">Needs follow-up</div></div>
+              <div class="metric-card"><div class="k">Info</div><div class="v">${counts.info}</div><div class="s">Upcoming / balance</div></div>
+              <div class="metric-card"><div class="k">Total</div><div class="v">${counts.total}</div><div class="s">Current queue</div></div>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Quick Access</h3><div class="desc">Jump directly to high-use work areas.</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+              <button class="btn btn-ghost btn-sm" onclick="go('cases')">HR Cases</button>
+              <button class="btn btn-ghost btn-sm" onclick="go('evaluations')">Evaluations</button>
+              <button class="btn btn-ghost btn-sm" onclick="go('nte')">NTE</button>
+              <button class="btn btn-ghost btn-sm" onclick="go('atd')">ATD</button>
+              <button class="btn btn-ghost btn-sm" onclick="go('leaves')">Leaves</button>
+            </div>
+          </div>
+          <div class="action-tip"><b>Review note:</b> Action Center items are generated from current HR records. They are reminders for workflow review, not automatic determinations about an employee or case.</div>
+        </div>
+      </div>`;
+    document.getElementById('content').innerHTML=html;
+  }catch(e){document.getElementById('content').innerHTML=`<div class="panel"><h3>Action Center</h3><div class="notice"><b>Could not load action items.</b> ${esc(e.message||e)}</div></div>`;}
+}
+
 /* ---------------- nav ---------------- */
 const NAV = [
   {sec:'Overview', items:[
     {v:'dashboard', label:'Dashboard', icon:iGrid},
+    {v:'actionCenter', label:'Action Center', icon:iShield},
     {v:'analytics', label:'Management Analytics', icon:iChart},
     {v:'weeklyReport', label:'Weekly Report', icon:iChart},
   ]},
@@ -932,6 +1139,7 @@ function closeSidebar(){
 }
 function go(view){
   STATE.view=view; STATE.search=''; STATE.filter='';
+  closeSidebar();
   renderNav();
   closeSidebar();
   RENDERERS[view]();
@@ -1023,7 +1231,7 @@ function fieldHTML(f, val){
       <div class="computed-note" style="margin-top:6px;">Uploaded securely to Supabase Storage (max ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB per file).</div>
       </div>`;
   }
-  return `<div class="field ${f.full?'full':''}"><label>${f.label}${f.required?' *':''}</label><input type="${f.type}" id="f_${f.key}" value="${esc(v)}" ${f.required?'required':''}></div>`;
+  return `<div class="field ${f.full?'full':''}"><label>${f.label}${f.required?' *':''}</label><input type="${f.type}" id="f_${f.key}" value="${esc(v)}" ${f.required?'required':''} ${f.readonly?'readonly':''}></div>`;
 }
 function readFields(fields){
   const out={};
@@ -1286,9 +1494,12 @@ async function linkNewRecordToCase(caseId, module, rec){
   }
   const newStatus = module==='nte'?'NTE Issued' : module==='memos'?'Memo Issued' : module==='nod'?'For Decision' : null;
   if(newStatus){
+    const {data:beforeCase}=await supabase.from('hr_cases').select('status,due_date').eq('id',caseId).maybeSingle();
     const {error:statusError}=await supabase.from('hr_cases').update({status:newStatus,updated_by:SESSION?.id||null}).eq('id',caseId);
     if(statusError) console.warn('Case status update failed',statusError);
+    else await addCaseActivity(caseId,'status',`Status changed from ${beforeCase?.status||'—'} to ${newStatus} after creating ${caseModuleLabel(module)}.`,beforeCase?.status||null,newStatus,beforeCase?.due_date||null);
   }
+  await addCaseActivity(caseId,'linked',`Linked ${caseModuleLabel(module)}: ${label}.`);
   logAudit(`Linked ${caseModuleLabel(module)} to HR case`);
   return true;
 }
@@ -1397,35 +1608,53 @@ const ONCALL_STATUS_MAP = {'Active':'b-green','Completed':'b-grey','Cancelled':'
    EMPLOYEES (custom view — has classification logic)
    ================================================================ */
 function renderEmployees(){
-  setTitle('Employee Information', 'Encode, view, and manage employee records across all departments.');
+  setTitle('Employee Information', 'Master employee directory and HR operations.');
   const q=(STATE.search||'').toLowerCase();
   const deptFilter = STATE.filter;
+  const statusFilter = STATE.employeeStatusFilter||'';
+  const classFilter = STATE.employeeClassFilter||'';
   let rows = DB.employees.filter(e=>{
-    const matches = !q || e.name.toLowerCase().includes(q) || (e.position||'').toLowerCase().includes(q);
+    const hay=[e.employeeNo,e.name,e.position,e.department,e.mobileNumber,e.personalEmail].map(v=>String(v||'').toLowerCase());
+    const matches = !q || hay.some(v=>v.includes(q));
     const deptOk = !deptFilter || e.department===deptFilter;
-    return matches && deptOk;
+    const statusOk = !statusFilter || e.status===statusFilter;
+    const classOk = !classFilter || classify(e)===classFilter;
+    return matches && deptOk && statusOk && classOk;
   });
   const depts = [...new Set(DB.employees.map(e=>e.department).filter(Boolean))];
+  const statusOptions=[...new Set(DB.employees.map(e=>e.status).filter(Boolean))];
 
   const html = `
   <div class="sectionhead">
-    <div><h2>Employee Information</h2><p>${DB.employees.length} employees on record across ${depts.length} departments.</p></div>
+    <div><h2>Employee Information</h2><p>${rows.length} of ${DB.employees.length} employees shown across ${depts.length} departments.</p></div>
     ${canEdit()? `<button class="btn btn-brass" onclick="openEmployeeForm()">${iPlus(15)} Add Employee</button>`:''}
   </div>
   <div class="toolbar">
-    <div class="search">${iSearch(15)}<input placeholder="Search by name or position…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderEmployees()"></div>
-    <select onchange="STATE.filter=this.value; renderEmployees()">
-      <option value="">All Departments</option>
-      ${depts.map(d=>`<option value="${esc(d)}" ${STATE.filter===d?'selected':''}>${esc(d)}</option>`).join('')}
-    </select>
+    <div class="search">${iSearch(15)}<input placeholder="Search employee no., name, position, contact…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderEmployees()"></div>
+    <div class="employee-filter-row">
+      <select onchange="STATE.filter=this.value; renderEmployees()">
+        <option value="">All Departments</option>
+        ${depts.map(d=>`<option value="${esc(d)}" ${STATE.filter===d?'selected':''}>${esc(d)}</option>`).join('')}
+      </select>
+      <select onchange="STATE.employeeStatusFilter=this.value; renderEmployees()">
+        <option value="">All Statuses</option>
+        ${statusOptions.map(v=>`<option value="${esc(v)}" ${statusFilter===v?'selected':''}>${esc(v)}</option>`).join('')}
+      </select>
+      <select onchange="STATE.employeeClassFilter=this.value; renderEmployees()">
+        <option value="">All Classifications</option>
+        <option value="Probationary" ${classFilter==='Probationary'?'selected':''}>Probationary</option>
+        <option value="Regular" ${classFilter==='Regular'?'selected':''}>Regular</option>
+      </select>
+    </div>
     <div class="spacer"></div>
     <button class="btn btn-ghost btn-sm" onclick="exportEmployeesCSV()">${iDownload(14)} Export CSV</button>
   </div>
   <div class="tablewrap">
     <table>
-      <thead><tr><th>Name</th><th>Position</th><th>Department</th><th>Date Hired</th><th>Gender</th><th>Status</th><th>Classification</th><th style="text-align:right;">Actions</th></tr></thead>
+      <thead><tr><th>Employee No.</th><th>Name</th><th>Position</th><th>Department</th><th>Date Hired</th><th>Gender</th><th>Status</th><th>Classification</th><th style="text-align:right;">Actions</th></tr></thead>
       <tbody>
         ${rows.length? rows.map(e=>`<tr>
+          <td class="mono">${esc(e.employeeNo||'—')}</td>
           <td><b>${esc(e.name)}</b></td>
           <td>${esc(e.position||'—')}</td>
           <td>${esc(e.department||'—')}</td>
@@ -1437,23 +1666,33 @@ function renderEmployees(){
             <button class="iconbtn" onclick="openEmployeeProfile('${e.id}')" title="View employee profile">${iUser(14)}</button>
             ${canEdit()? `<button class="iconbtn" onclick="openEmployeeForm('${e.id}')" title="Edit">${iEdit(14)}</button>
             <button class="iconbtn" onclick="openTransferForEmployee('${e.id}')" title="Record Department Transfer">${iSwap(14)}</button>
+            <button class="iconbtn" onclick="openEmployeeStatusForm('${e.id}')" title="Update Employment Status">${iShield(14)}</button>
             <button class="iconbtn" onclick="deleteEmployee('${e.id}')" title="Delete">${iTrash(14)}</button>`:''}
           </div></td>
-        </tr>`).join('') : `<tr><td colspan="8"><div class="empty"><b>No employees found</b>Try a different search or add a new employee.</div></td></tr>`}
+        </tr>`).join('') : `<tr><td colspan="9"><div class="empty"><b>No employees found</b>Try a different search or add a new employee.</div></td></tr>`}
       </tbody>
     </table>
   </div>`;
   document.getElementById('content').innerHTML = html;
 }
 const EMP_FIELDS = [
+  {key:'employeeNo', label:'Employee No.', type:'text', readonly:true},
   {key:'name', label:'Employee Name', type:'text', required:true},
   {key:'position', label:'Position', type:'text', required:true},
   {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
   {key:'dateHired', label:'Date Hired', type:'date', required:true},
+  {key:'birthDate', label:'Birth Date', type:'date'},
   {key:'gender', label:'Gender', type:'select', options:['Male','Female'], required:true},
+  {key:'civilStatus', label:'Civil Status', type:'select', options:['Single','Married','Widowed','Separated','Other',''], required:false},
   {key:'status', label:'Employment Status', type:'select', options:EMP_STATUS, required:true},
   {key:'statusDate', label:'Status Effective Date (resignation/AWOL/separation/etc.)', type:'date'},
   {key:'prfNumber', label:'PRF Number (if applicable)', type:'text'},
+  {key:'mobileNumber', label:'Mobile Number', type:'tel'},
+  {key:'personalEmail', label:'Personal / Contact Email', type:'email'},
+  {key:'address', label:'Home Address', type:'text', full:true},
+  {key:'emergencyContactName', label:'Emergency Contact Name', type:'text'},
+  {key:'emergencyContactRelationship', label:'Emergency Contact Relationship', type:'text'},
+  {key:'emergencyContactPhone', label:'Emergency Contact Phone', type:'tel'},
   {key:'classOverride', label:'Classification', type:'select', options:['Auto','Probationary','Regular'], required:true},
 ];
 function openEmployeeForm(id){
@@ -1462,8 +1701,9 @@ function openEmployeeForm(id){
     <div class="modal-head"><h3>${existing?'Edit':'Add'} Employee</h3><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
       <div class="formgrid">
-        ${EMP_FIELDS.map(f=>fieldHTML(f, existing? existing[f.key]:(f.key==='status'?'Newly Hired':f.key==='classOverride'?'Auto':''))).join('')}
+        ${EMP_FIELDS.map(f=>fieldHTML(f, existing? existing[f.key] : (f.key==='employeeNo'?nextEmployeeNumber(DB.employees):f.key==='status'?'Newly Hired':f.key==='classOverride'?'Auto':''))).join('')}
       </div>
+      <div class="employee-master-note"><b>Employee master data:</b> Employee No. is system-generated. Contact and emergency information is optional and can be completed later.</div>
       <div class="computed-note">Classification is calculated automatically from Date Hired against the ${DB.settings.probationDays}-day regularization threshold (set in Settings). Choose "Auto" unless you need to manually correct a record.</div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployee('${id||''}')">Save Employee</button></div>
@@ -1480,16 +1720,25 @@ async function saveEmployee(id){
   const missing = EMP_FIELDS.filter(f=>f.required && !vals[f.key]);
   if(missing.length){ toast('Please complete: '+missing.map(f=>f.label).join(', ')); return; }
   if(vals.dateHired>todayISO()){ toast('Date Hired cannot be in the future.'); return; }
+  if(vals.birthDate && vals.birthDate>todayISO()){ toast('Birth Date cannot be in the future.'); return; }
   if(vals.statusDate && vals.statusDate<vals.dateHired){ toast('Status Effective Date cannot be before Date Hired.'); return; }
+  if(vals.employeeNo && DB.employees.some(e=>e.id!==id && String(e.employeeNo||'').toUpperCase()===String(vals.employeeNo).toUpperCase())){ vals.employeeNo=nextEmployeeNumber(DB.employees); }
   const duplicateCandidates=findEmployeeDuplicates(vals,id);
   if(duplicateCandidates.length){
     const sample=duplicateCandidates.slice(0,3).map(e=>e.name+' — '+e.department).join('; ');
     if(!confirm('Possible duplicate employee record found: '+sample+'. Continue saving anyway?')) return;
   }
-  const rec=id?DB.employees.find(e=>e.id===id):{id:uid(), ...vals};
+  const rec=id?DB.employees.find(e=>e.id===id):{id:uid(), employmentHistory:[], ...vals};
   const oldStoragePaths=recordStoragePaths(id?rec:null);
+  const previousStatus=id?rec.status:'';
+  const previousStatusDate=id?rec.statusDate:'';
   Object.assign(rec, vals);
-  if(!id) DB.employees.push(rec);
+  if(!Array.isArray(rec.employmentHistory)) rec.employmentHistory=[];
+  if(!id){
+    rec.employmentHistory.push({type:'Employment Status',from:'',to:rec.status,effectiveDate:rec.statusDate||rec.dateHired,remarks:'Initial employee record',changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
+  } else if(previousStatus!==rec.status || previousStatusDate!==rec.statusDate){
+    rec.employmentHistory.push({type:'Employment Status',from:previousStatus||'',to:rec.status||'',effectiveDate:rec.statusDate||todayISO(),remarks:'Updated from Employee Information',changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
+  }
   logAudit((id?'Updated':'Added new')+' employee record: '+vals.name);
   toast('Employee '+(id?'updated.':'added.'));
   await saveDB();
@@ -1542,10 +1791,67 @@ function saveEmployeeTransfer(id){
   saveDB(); closeModal(); renderNav(); renderEmployees();
   toast('Transfer recorded.');
 }
+function employeeCompleteness(emp){
+  const keys=['employeeNo','name','position','department','dateHired','birthDate','gender','civilStatus','mobileNumber','personalEmail','address','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'];
+  const filled=keys.filter(k=>String(emp?.[k]??'').trim()!=='').length;
+  return Math.round((filled/keys.length)*100);
+}
+function employeeTenureText(emp){
+  if(!emp?.dateHired) return 'Tenure unavailable';
+  const start=new Date(emp.dateHired+'T00:00:00');
+  const end=new Date();
+  if(isNaN(start)) return 'Tenure unavailable';
+  let months=(end.getFullYear()-start.getFullYear())*12+(end.getMonth()-start.getMonth());
+  if(end.getDate()<start.getDate()) months--;
+  if(months<1){ const days=Math.max(0,Math.floor((end-start)/86400000)); return `${days} day${days===1?'':'s'} in service`; }
+  const years=Math.floor(months/12), rem=months%12;
+  return years? `${years} yr${years===1?'':'s'}${rem?` ${rem} mo${rem===1?'':'s'}`:''} in service` : `${rem} mo${rem===1?'':'s'} in service`;
+}
+function openEmployeeStatusForm(id){
+  if(!canEdit()) return;
+  const emp=DB.employees.find(e=>e.id===id); if(!emp) return;
+  openModal(`
+    <div class="modal-head"><div><h3>Update Employment Status</h3><div class="small">${esc(emp.employeeNo||'—')} · ${esc(emp.name)}</div></div><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body">
+      <div class="formgrid">
+        <div class="field"><label>Current Status</label><input value="${esc(emp.status||'—')}" disabled style="background:var(--paper);"></div>
+        <div class="field"><label>New Status *</label><select id="es_status">${EMP_STATUS.map(s=>`<option value="${esc(s)}" ${s===emp.status?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
+        <div class="field"><label>Effective Date *</label><input type="date" id="es_date" value="${esc(emp.statusDate||todayISO())}"></div>
+        <div class="field full"><label>Remarks</label><textarea id="es_remarks" rows="3" placeholder="Reason, supporting note, or HR reference…"></textarea></div>
+      </div>
+      <div class="computed-note">This update becomes part of the employee's employment history. Department transfers should continue to be recorded through the Transfer workflow.</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployeeStatus('${id}')">Save Status</button></div>
+  `);
+}
+async function saveEmployeeStatus(id){
+  if(!canEdit()) return;
+  const emp=DB.employees.find(e=>e.id===id); if(!emp) return;
+  const status=document.getElementById('es_status').value;
+  const effectiveDate=document.getElementById('es_date').value;
+  const remarks=document.getElementById('es_remarks').value.trim();
+  if(!effectiveDate){ toast('Please set an effective date.'); return; }
+  if(effectiveDate<emp.dateHired){ toast('Status Effective Date cannot be before Date Hired.'); return; }
+  if(status===emp.status && effectiveDate===(emp.statusDate||'')){ toast('No status change was made.'); return; }
+  const from=emp.status||'';
+  emp.status=status;
+  emp.statusDate=effectiveDate;
+  if(!Array.isArray(emp.employmentHistory)) emp.employmentHistory=[];
+  emp.employmentHistory.push({type:'Employment Status',from,to:status,effectiveDate,remarks,changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
+  logAudit(`Updated employment status for ${emp.name}: ${from||'—'} → ${status}`);
+  await saveDB();
+  closeModal();
+  renderNav();
+  renderEmployees();
+  toast('Employment status updated.');
+}
+
 function exportEmployeesCSV(){
   const csv = toCSV(DB.employees, [
-    {label:'Name', get:r=>r.name},{label:'Position', get:r=>r.position},{label:'Department', get:r=>r.department},
-    {label:'Date Hired', get:r=>r.dateHired},{label:'Gender', get:r=>r.gender},{label:'Status', get:r=>r.status},
+    {label:'Employee No.', get:r=>r.employeeNo},{label:'Name', get:r=>r.name},{label:'Position', get:r=>r.position},{label:'Department', get:r=>r.department},
+    {label:'Date Hired', get:r=>r.dateHired},{label:'Birth Date', get:r=>r.birthDate},{label:'Gender', get:r=>r.gender},{label:'Civil Status', get:r=>r.civilStatus},
+    {label:'Mobile', get:r=>r.mobileNumber},{label:'Email', get:r=>r.personalEmail},{label:'Emergency Contact', get:r=>r.emergencyContactName},{label:'Emergency Phone', get:r=>r.emergencyContactPhone},
+    {label:'Status', get:r=>r.status},
     {label:'Classification', get:r=>classify(r)},
   ]);
   downloadCSV('employees_export.csv', csv);
@@ -1580,7 +1886,8 @@ async function openEmployeeProfile(id){
   ].filter(x=>x.date).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,14);
   const statusMap=EMP_STATUS_MAP;
   openModal(`<div class="modal-head"><div><h3>Employee 360 Profile</h3><div class="small">${esc(emp.id)}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body">
-    <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(emp.name)}</div><div class="profile-sub">${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div></div><div class="profile-actions">${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="closeModal(); openEmployeeForm('${emp.id}')">${iEdit(13)} Edit Employee</button>`:''}</div></div>
+    <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(emp.name)}</div><div class="profile-sub">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div><div class="small" style="margin-top:6px;">${esc(employeeTenureText(emp))}</div></div><div class="profile-actions">${canEdit()?`<div class="employee-quick-actions"><button class="btn btn-ghost btn-sm" onclick="closeModal(); openEmployeeForm('${emp.id}')">${iEdit(13)} Edit</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeStatusForm('${emp.id}')">${iShield(13)} Status</button><button class="btn btn-ghost btn-sm" onclick="openTransferForEmployee('${emp.id}')">${iSwap(13)} Transfer</button></div>`:''}</div></div>
+    <div class="employee-completeness"><div style="min-width:0;"><div style="font-size:11px;font-weight:700;color:var(--ink);">Master Data Completion</div><div style="font-size:10px;color:var(--slate);">${employeeCompleteness(emp)}% of standard employee fields completed</div></div><div class="bar"><div class="fill" style="width:${employeeCompleteness(emp)}%;"></div></div><div class="pct">${employeeCompleteness(emp)}%</div></div>
     <div class="profile-kpis">
       <div class="profile-kpi"><div class="k">HR Cases</div><div class="v">${cases.length}</div><div class="s">Case history</div></div>
       <div class="profile-kpi"><div class="k">Leave Records</div><div class="v">${leaves.length}</div><div class="s">Requests on file</div></div>
@@ -1589,6 +1896,7 @@ async function openEmployeeProfile(id){
     </div>
     <div class="profile-grid">
       <div class="panel"><h3>Employment Information</h3><div class="desc">Current employee master record.</div><div class="profile-detail">
+        <div class="item"><div class="label">Employee No.</div><div class="value mono">${esc(emp.employeeNo||'—')}</div></div>
         <div class="item"><div class="label">Employee Name</div><div class="value">${esc(emp.name)}</div></div>
         <div class="item"><div class="label">Position</div><div class="value">${esc(emp.position||'—')}</div></div>
         <div class="item"><div class="label">Department</div><div class="value">${esc(emp.department||'—')}</div></div>
@@ -1598,12 +1906,25 @@ async function openEmployeeProfile(id){
         <div class="item"><div class="label">Status Effective Date</div><div class="value">${fmtDate(emp.statusDate)}</div></div>
         <div class="item"><div class="label">PRF Number</div><div class="value">${esc(emp.prfNumber||'—')}</div></div>
       </div></div>
+      <div class="panel"><h3>Contact &amp; Emergency Information</h3><div class="desc">Personal contact details recorded for HR operations.</div><div class="profile-detail">
+        <div class="item"><div class="label">Birth Date</div><div class="value">${fmtDate(emp.birthDate)}</div></div>
+        <div class="item"><div class="label">Civil Status</div><div class="value">${esc(emp.civilStatus||'—')}</div></div>
+        <div class="item"><div class="label">Mobile</div><div class="value">${esc(emp.mobileNumber||'—')}</div></div>
+        <div class="item"><div class="label">Email</div><div class="value">${esc(emp.personalEmail||'—')}</div></div>
+        <div class="item" style="grid-column:1/-1;"><div class="label">Home Address</div><div class="value">${esc(emp.address||'—')}</div></div>
+        <div class="item"><div class="label">Emergency Contact</div><div class="value">${esc(emp.emergencyContactName||'—')}</div></div>
+        <div class="item"><div class="label">Relationship</div><div class="value">${esc(emp.emergencyContactRelationship||'—')}</div></div>
+        <div class="item"><div class="label">Emergency Phone</div><div class="value">${esc(emp.emergencyContactPhone||'—')}</div></div>
+      </div></div>
       <div class="panel"><h3>Record Summary</h3><div class="desc">Activity across connected HR modules.</div><div class="profile-statline">
         <div class="profile-detail"><div class="item"><div class="label">NTE</div><div class="value">${nte.length}</div></div><div class="item"><div class="label">Memoranda</div><div class="value">${memos.length}</div></div></div>
         <div class="profile-detail"><div class="item"><div class="label">NOD</div><div class="value">${nod.length}</div></div><div class="item"><div class="label">Evaluations</div><div class="value">${evaluations.length}</div></div></div>
         <div class="profile-detail"><div class="item"><div class="label">Transfers</div><div class="value">${transfers.length}</div></div><div class="item"><div class="label">On-File CVR</div><div class="value">${cvr.length}</div></div></div>
         <div class="profile-detail"><div class="item"><div class="label">Incidents</div><div class="value">${incidents.length}</div></div><div class="item"><div class="label">ATD Records</div><div class="value">${atd.length}</div></div></div>
       </div></div>
+    </div>
+    <div class="panel" style="margin-top:14px;"><div class="dashboard-panel-head"><div><h3>Employment History</h3><div class="desc">Status changes recorded from the employee master record.</div></div></div>
+      ${Array.isArray(emp.employmentHistory)&&emp.employmentHistory.length?`<div class="employee-history">${emp.employmentHistory.slice().reverse().slice(0,12).map(h=>`<div class="employee-history-row"><div class="dot"></div><div class="date">${fmtDate(h.effectiveDate||String(h.changedAt||'').slice(0,10))}</div><div><div class="title">${esc(h.from||'Initial')} ${h.from?'→ ':''}${esc(h.to||'—')}</div><div class="meta">${esc(h.remarks||'No remarks')} · ${esc(h.changedBy||'System')}</div></div><div class="right">${statusBadge(h.to||'—',EMP_STATUS_MAP)}</div></div>`).join('')}</div>`:'<div class="empty"><b>No employment history</b>Status changes will appear here as they are recorded.</div>'}
     </div>
     <div class="panel" style="margin-top:14px;"><div class="dashboard-panel-head"><div><h3>Recent HR Activity</h3><div class="desc">Latest records across the employee's HR history.</div></div></div>
       ${activities.length?`<div class="profile-list">${activities.map(a=>`<div class="profile-list-row"><div class="main"><div class="title">${esc(a.type)} · ${esc(a.title)}</div><div class="meta">${esc(a.meta||'')}</div></div><div class="right">${fmtDate(String(a.date).slice(0,10))}</div></div>`).join('')}</div>`:'<div class="empty"><b>No HR activity yet</b>This employee does not have additional records across the tracked modules.</div>'}
@@ -3136,7 +3457,7 @@ function renderSettings(){
   `;
 }
 async function saveSettings(){
-  DB.settings.orgName = document.getElementById('s_org').value.trim()||'SCPA';
+  DB.settings.orgName = document.getElementById('s_org').value.trim()||'SLSC';
   DB.settings.probationDays = parseInt(document.getElementById('s_prob').value,10)||180;
   logAudit('Updated organization settings');
   if(await saveDB()) toast('Settings saved.'); enterApp(); go('settings');
@@ -3358,20 +3679,64 @@ async function nextCaseNumber(){
   const next=(match?parseInt(match[1],10):0)+1;
   return `${prefix}${String(next).padStart(4,'0')}`;
 }
+function casePriorityBadge(priority){
+  const p=priority||'Normal';
+  const cls=p==='Urgent'?'urgent':p==='High'?'high':'';
+  return `<span class="case-priority ${cls}"><span class="dot"></span>${esc(p)}</span>`;
+}
+function caseDeadlineInfo(dueDate,status){
+  if(!dueDate || ['Closed','Cancelled','Resolved'].includes(status)) return {label:'No deadline',cls:''};
+  const today=new Date(todayISO()+'T00:00:00');
+  const due=new Date(dueDate+'T00:00:00');
+  const days=Math.ceil((due-today)/86400000);
+  if(days<0) return {label:`Overdue ${Math.abs(days)}d`,cls:'overdue'};
+  if(days===0) return {label:'Due today',cls:'overdue'};
+  if(days<=7) return {label:`Due in ${days}d`,cls:'soon'};
+  return {label:`Due in ${days}d`,cls:'ok'};
+}
+function caseWorkflowSteps(status){
+  const steps=['Open','NTE Issued','Memo Issued','For Decision','Resolved','Closed'];
+  const idx=Math.max(0,steps.indexOf(status));
+  return `<div class="case-progress">${steps.map((st,i)=>`<div class="case-progress-step ${i<=idx?'active':''} ${i===idx?'current':''}"><div class="dot"></div><div class="label">${esc(st)}</div></div>`).join('')}</div>`;
+}
+function caseActivityLabel(a){
+  const labels={created:'Case Created',updated:'Case Updated',status:'Status Changed',linked:'Record Linked',unlinked:'Record Unlinked',note:'Case Note',deadline:'Deadline Updated',assignment:'Assignment Updated',priority:'Priority Updated'};
+  return labels[a.activity_type] || a.activity_type || 'Case Activity';
+}
+function caseActivityIcon(a){
+  const m={created:iPlus(12),updated:iEdit(12),status:iShield(12),linked:iDoc(12),unlinked:iTrash(12),note:iDoc(12),deadline:iCal(12),assignment:iUser(12),priority:iShield(12)};
+  return m[a.activity_type] || iDoc(12);
+}
+async function addCaseActivity(caseId,activityType,note='',statusFrom=null,statusTo=null,dueDate=null){
+  if(!caseId||!SESSION?.id) return false;
+  const {error}=await supabase.from('hr_case_activity').insert({case_id:caseId,activity_type:activityType,note:note||null,status_from:statusFrom||null,status_to:statusTo||null,due_date:dueDate||null,created_by:SESSION.id});
+  if(error){ console.warn('Case activity save failed',error); return false; }
+  return true;
+}
+async function addCaseNote(caseId){
+  if(SESSION?.role==='Viewer') return;
+  const el=document.getElementById('case-note-input');
+  const note=(el?.value||'').trim();
+  if(!note){toast('Enter a case note first.');return;}
+  if(await addCaseActivity(caseId,'note',note)){
+    logAudit('Added a case note');
+    await openCaseDetails(caseId);
+  }
+}
 async function renderCases(){
   setTitle('HR Cases','Central case file linking incidents, violations, notices, decisions, and related HR records.');
   const q=(STATE.search||'').toLowerCase();
-  let query=supabase.from('hr_cases').select('id,case_number,employee_record_id,employee_name,department,subject,status,opened_at,closed_at,assigned_to,remarks,updated_at').order('updated_at',{ascending:false});
+  let query=supabase.from('hr_cases').select('id,case_number,employee_record_id,employee_name,department,subject,status,opened_at,closed_at,assigned_to,priority,due_date,remarks,updated_at').order('updated_at',{ascending:false});
   if(STATE.filter) query=query.eq('status',STATE.filter);
   const {data:cases,error}=await query;
   if(error){ document.getElementById('content').innerHTML=`<div class="notice"><b>Could not load HR cases.</b> ${esc(error.message)}</div>`; return; }
-  const rows=(cases||[]).filter(c=>!q || [c.case_number,c.employee_name,c.department,c.subject,c.status].some(v=>String(v||'').toLowerCase().includes(q)));
+  const rows=(cases||[]).filter(c=>!q || [c.case_number,c.employee_name,c.department,c.subject,c.status,c.priority].some(v=>String(v||'').toLowerCase().includes(q)));
   document.getElementById('content').innerHTML=`
     <div class="sectionhead"><div><h2>HR Cases</h2><p>${rows.length} case${rows.length===1?'':'s'} shown${STATE.filter?' · filtered by status':''}.</p></div>${canEdit()?`<button class="btn btn-brass" onclick="openCaseForm()">${iPlus(15)} New HR Case</button>`:''}</div>
-    <div class="notice"><b>Case file:</b> A case groups related HR records into one trackable matter. Existing records are not duplicated; they are linked to the case.</div>
+    <div class="notice"><b>Case file:</b> A case groups related HR records into one trackable matter. Priority and deadlines help HR staff focus follow-ups before opening the full case file.</div>
     <div class="toolbar"><div class="search">${iSearch(15)}<input placeholder="Search case number, employee, subject…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderCases()"></div><select onchange="STATE.filter=this.value; renderCases()"><option value="">All Statuses</option>${Object.keys(CASE_STATUS_MAP).map(x=>`<option value="${esc(x)}" ${STATE.filter===x?'selected':''}>${esc(x)}</option>`).join('')}</select><div class="spacer"></div></div>
-    <div class="tablewrap"><table><thead><tr><th>Case No.</th><th>Employee</th><th>Subject</th><th>Status</th><th>Opened</th><th>Assigned To</th><th style="text-align:right;">Actions</th></tr></thead>
-    <tbody>${rows.length?rows.map(c=>{const ass=DB.users.find(u=>u.id===c.assigned_to); return `<tr><td><b class="mono">${esc(c.case_number)}</b></td><td><b>${esc(c.employee_name)}</b><div class="small">${esc(c.department||'Unassigned')}</div></td><td>${esc(c.subject||'—')}</td><td>${statusBadge(c.status,CASE_STATUS_MAP)}</td><td>${fmtDate(c.opened_at)}</td><td>${esc(ass?.fullName||'Unassigned')}</td><td><div class="rowactions"><button class="iconbtn" title="Open case" onclick="openCaseDetails('${c.id}')">${iDoc(14)}</button>${canEdit()?`<button class="iconbtn" title="Edit case" onclick="openCaseForm('${c.id}')">${iEdit(14)}</button><button class="iconbtn" title="Delete case" onclick="deleteCase('${c.id}')">${iTrash(14)}</button>`:''}</div></td></tr>`;}).join(''):`<tr><td colspan="7"><div class="empty"><b>No HR cases yet</b>${canEdit()?'Create your first case to begin linking HR records.':'No cases are available for viewing.'}</div></td></tr>`}</tbody></table></div>`;
+    <div class="tablewrap"><table><thead><tr><th>Case No.</th><th>Employee</th><th>Priority</th><th>Status</th><th>Due</th><th>Assigned To</th><th style="text-align:right;">Actions</th></tr></thead>
+    <tbody>${rows.length?rows.map(c=>{const ass=DB.users.find(u=>u.id===c.assigned_to);const dl=caseDeadlineInfo(c.due_date,c.status); return `<tr><td><b class="mono">${esc(c.case_number)}</b><div class="small">${esc(c.subject||'HR Case')}</div></td><td><b>${esc(c.employee_name)}</b><div class="small">${esc(c.department||'Unassigned')}</div></td><td>${casePriorityBadge(c.priority)}</td><td>${statusBadge(c.status,CASE_STATUS_MAP)}</td><td><span class="case-deadline ${dl.cls}">${dl.label}</span><div class="small">${c.due_date?fmtDate(c.due_date):'No date'}</div></td><td>${esc(ass?.fullName||'Unassigned')}</td><td><div class="rowactions"><button class="iconbtn" title="Open case" onclick="openCaseDetails('${c.id}')">${iDoc(14)}</button>${canEdit()?`<button class="iconbtn" title="Edit case" onclick="openCaseForm('${c.id}')">${iEdit(14)}</button><button class="iconbtn" title="Delete case" onclick="deleteCase('${c.id}')">${iTrash(14)}</button>`:''}</div></td></tr>`;}).join(''):`<tr><td colspan="7"><div class="empty"><b>No HR cases yet</b>${canEdit()?'Create your first case to begin linking HR records.':'No cases are available for viewing.'}</div></td></tr>`}</tbody></table></div>`;
 }
 function openCaseForm(id){
   if(SESSION?.role==='Viewer'){ toast('Viewer accounts have read-only access.',true); return; }
@@ -3385,48 +3750,76 @@ function openCaseFormMarkup(existing){
     <div class="field full"><label>Employee *</label><select id="case_employee"><option value="">Select employee…</option>${employees.map(e=>`<option value="${esc(e.id)}" data-name="${esc(e.name)}" data-dept="${esc(e.department||'')}" ${existing&&existing.employee_record_id===e.id?'selected':''}>${esc(e.name)}${e.department?' — '+esc(e.department):''}</option>`).join('')}</select></div>
     <div class="field"><label>Case Number</label><input value="${esc(existing?.case_number||'Generated on save')}" disabled style="background:var(--paper);"></div>
     <div class="field"><label>Status</label><select id="case_status">${Object.keys(CASE_STATUS_MAP).map(x=>`<option ${existing?.status===x||(!existing&&x==='Open')?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
+    <div class="field"><label>Priority</label><select id="case_priority">${['Low','Normal','High','Urgent'].map(x=>`<option ${existing?.priority===x||(!existing&&x==='Normal')?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
     <div class="field"><label>Opened Date *</label><input type="date" id="case_opened" value="${esc(existing?.opened_at||todayISO())}"></div>
+    <div class="field"><label>Due Date</label><input type="date" id="case_due" value="${esc(existing?.due_date||'')}"></div>
     <div class="field"><label>Closed Date</label><input type="date" id="case_closed" value="${esc(existing?.closed_at||'')}"></div>
     <div class="field"><label>Assigned To</label><select id="case_assigned"><option value="">Unassigned</option>${assigned.map(u=>`<option value="${esc(u.id)}" ${existing?.assigned_to===u.id?'selected':''}>${esc(u.fullName)} · ${esc(u.role)}</option>`).join('')}</select></div>
     <div class="field full"><label>Subject / Matter</label><input id="case_subject" value="${esc(existing?.subject||'')}" placeholder="e.g. Attendance violation — repeated unauthorized absence"></div>
     <div class="field full"><label>Remarks</label><textarea id="case_remarks" rows="3" placeholder="Case notes, context, or internal remarks…">${esc(existing?.remarks||'')}</textarea></div>
-  </div><div class="computed-note">Case numbers are generated sequentially per calendar year. Related records are linked after the case is created.</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveCase('${existing?.id||''}')">Save Case</button></div>`);
+  </div><div class="computed-note">Case numbers are generated sequentially per calendar year. Priority and due date drive the Action Center and case deadline indicators.</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveCase('${existing?.id||''}')">Save Case</button></div>`);
 }
 async function saveCase(id){
   if(SESSION?.role==='Viewer') return;
   const emp=document.getElementById('case_employee'); const opt=emp?.options[emp.selectedIndex];
   const employeeRecordId=emp?.value||''; const employeeName=opt?.dataset?.name||''; const department=opt?.dataset?.dept||'';
-  const status=document.getElementById('case_status').value; const openedAt=document.getElementById('case_opened').value; const closedAt=document.getElementById('case_closed').value||null;
+  const status=document.getElementById('case_status').value; const priority=document.getElementById('case_priority').value;
+  const openedAt=document.getElementById('case_opened').value; const dueDate=document.getElementById('case_due').value||null; const closedAt=document.getElementById('case_closed').value||null;
   const subject=document.getElementById('case_subject').value.trim(); const remarks=document.getElementById('case_remarks').value.trim(); const assignedTo=document.getElementById('case_assigned').value||null;
   if(!employeeRecordId||!employeeName||!openedAt){toast('Please select an employee and opened date.');return;}
+  if(dueDate&&dueDate<openedAt){toast('Due date cannot be before the opened date.');return;}
   if(closedAt&&closedAt<openedAt){toast('Closed date cannot be before the opened date.');return;}
   if(status==='Closed'&&!closedAt){toast('Please enter the closed date for a Closed case.');return;}
+  if(dueDate&&closedAt&&closedAt<dueDate&&status!=='Closed'){toast('An open case cannot have a closed date earlier than its due date.');return;}
   try{
     if(id){
-      const {error}=await supabase.from('hr_cases').update({employee_record_id:employeeRecordId,employee_name:employeeName,department,subject,status,opened_at:openedAt,closed_at:closedAt,assigned_to:assignedTo,updated_by:SESSION?.id||null,remarks}).eq('id',id); if(error) throw error;
+      const {data:before,error:beforeError}=await supabase.from('hr_cases').select('status,priority,due_date,assigned_to,remarks').eq('id',id).maybeSingle(); if(beforeError) throw beforeError;
+      const {error}=await supabase.from('hr_cases').update({employee_record_id:employeeRecordId,employee_name:employeeName,department,subject,status,opened_at:openedAt,closed_at:closedAt,assigned_to:assignedTo,priority,due_date:dueDate,updated_by:SESSION?.id||null,remarks}).eq('id',id); if(error) throw error;
+      if(before?.status!==status) await addCaseActivity(id,'status',`Status changed from ${before?.status||'—'} to ${status}.`,before?.status||null,status,dueDate);
+      if(before?.priority!==priority) await addCaseActivity(id,'priority',`Priority changed to ${priority}.`,null,null,dueDate);
+      if((before?.due_date||null)!==(dueDate||null)) await addCaseActivity(id,'deadline',dueDate?`Case deadline set to ${fmtDate(dueDate)}.`:'Case deadline cleared.',null,null,dueDate);
+      if((before?.assigned_to||null)!==(assignedTo||null)){ const ass=DB.users.find(u=>u.id===assignedTo); await addCaseActivity(id,'assignment',assignedTo?`Assigned to ${ass?.fullName||'HR staff'}.`:'Case assignment cleared.'); }
+      if((before?.remarks||'')!==remarks && remarks) await addCaseActivity(id,'updated','Case remarks updated.');
       logAudit('Updated an HR case'); closeModal(); toast('HR case updated.'); await renderCases();
     }else{
       const caseNumber=await nextCaseNumber();
-      const {data,error}=await supabase.from('hr_cases').insert({case_number:caseNumber,employee_record_id:employeeRecordId,employee_name:employeeName,department,subject,status,opened_at:openedAt,closed_at:closedAt,assigned_to:assignedTo,created_by:SESSION?.id||null,updated_by:SESSION?.id||null,remarks}).select('id').single(); if(error) throw error;
+      const {data,error}=await supabase.from('hr_cases').insert({case_number:caseNumber,employee_record_id:employeeRecordId,employee_name:employeeName,department,subject,status,opened_at:openedAt,closed_at:closedAt,assigned_to:assignedTo,priority,due_date:dueDate,created_by:SESSION?.id||null,updated_by:SESSION?.id||null,remarks}).select('id').single(); if(error) throw error;
+      await addCaseActivity(data.id,'created',`Case created for ${employeeName}.`,null,status,dueDate);
+      if(assignedTo){ const ass=DB.users.find(u=>u.id===assignedTo); await addCaseActivity(data.id,'assignment',`Assigned to ${ass?.fullName||'HR staff'}.`); }
+      if(dueDate) await addCaseActivity(data.id,'deadline',`Case deadline set to ${fmtDate(dueDate)}.`,null,null,dueDate);
+      if(priority!=='Normal') await addCaseActivity(data.id,'priority',`Case priority set to ${priority}.`);
       logAudit(`Created HR case ${caseNumber}`); closeModal(); toast(`HR case ${caseNumber} created.`); await openCaseDetails(data.id);
     }
   }catch(e){toast('Could not save HR case: '+e.message,true);}
 }
 async function openCaseDetails(id){
-  const [{data:caseRec,error:caseError},{data:links,error:linkError}]=await Promise.all([
+  const [{data:caseRec,error:caseError},{data:links,error:linkError},{data:activity,error:activityError}]=await Promise.all([
     supabase.from('hr_cases').select('*').eq('id',id).maybeSingle(),
-    supabase.from('hr_case_links').select('case_id,module,record_id,label,linked_at').eq('case_id',id).order('linked_at',{ascending:true})
+    supabase.from('hr_case_links').select('case_id,module,record_id,label,linked_at').eq('case_id',id).order('linked_at',{ascending:true}),
+    supabase.from('hr_case_activity').select('*').eq('case_id',id).order('created_at',{ascending:false})
   ]);
   if(caseError||!caseRec){toast('Could not load case details.',true);return;}
   if(linkError){toast('Could not load linked records: '+linkError.message,true);return;}
+  if(activityError){toast('Could not load case activity. Please run the Phase 9 SQL first: '+activityError.message,true);return;}
   const assigned=DB.users.find(u=>u.id===caseRec.assigned_to);
+  const deadline=caseDeadlineInfo(caseRec.due_date,caseRec.status);
+  const age=analyticsDaysOpen(caseRec.opened_at,caseRec.closed_at);
   const linkRows=(links||[]).map((ln,i)=>{const rec=(DB[ln.module]||[]).find(r=>String(r.id)===String(ln.record_id));const label=ln.label||caseRecordLabel(ln.module,rec);const date=caseRecordDate(ln.module,rec);return `<div class="case-link"><div class="stage">${i+1}</div><div class="body"><div class="title">${esc(caseModuleLabel(ln.module))}</div><div class="meta">${esc(label)}${date?' · '+esc(fmtDate(date)):''} · Linked ${new Date(ln.linked_at).toLocaleString()}</div></div><div class="actions">${canEdit()?`<button class="iconbtn" title="Remove link" onclick="unlinkCaseRecord('${id}','${esc(ln.module)}','${esc(ln.record_id)}')">${iTrash(13)}</button>`:''}</div></div>`;}).join('');
+  const activityRows=(activity||[]).map(a=>{const actor=DB.users.find(u=>u.id===a.created_by); return `<div class="case-activity-item"><div class="case-activity-dot">${caseActivityIcon(a)}</div><div class="case-activity-body"><div class="case-activity-head"><div><div class="case-activity-title">${esc(caseActivityLabel(a))}</div><div class="case-activity-meta">${esc(actor?.fullName||'System')} · ${new Date(a.created_at).toLocaleString()}</div></div>${a.status_to?statusBadge(a.status_to,CASE_STATUS_MAP):''}</div>${a.note?`<div class="case-activity-note">${esc(a.note)}</div>`:''}</div></div>`;}).join('');
+  const currentStep=['Open','NTE Issued','Memo Issued','For Decision','Resolved','Closed'].includes(caseRec.status)?caseRec.status:'Open';
   openModal(`<div class="modal-head"><div><h3>${esc(caseRec.case_number)}</h3><div class="small">${esc(caseRec.subject||'HR Case File')}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body">
     <div class="case-summary"><div class="mini"><div class="k">Employee</div><div class="v">${esc(caseRec.employee_name)}</div></div><div class="mini"><div class="k">Department</div><div class="v">${esc(caseRec.department||'—')}</div></div><div class="mini"><div class="k">Status</div><div class="v">${statusBadge(caseRec.status,CASE_STATUS_MAP)}</div></div><div class="mini"><div class="k">Assigned To</div><div class="v">${esc(assigned?.fullName||'Unassigned')}</div></div></div>
+    ${caseWorkflowSteps(currentStep)}
+    <div class="case-intel-grid">
+      <div class="panel" style="padding:14px;"><div class="dashboard-panel-head"><div><h3>Case Intelligence</h3><div class="desc">Key tracking details for this case.</div></div></div><div class="case-intel-cards"><div class="case-intel-card"><div class="k">Priority</div><div class="v">${casePriorityBadge(caseRec.priority)}</div></div><div class="case-intel-card"><div class="k">Age</div><div class="v">${age} day${age===1?'':'s'}</div></div><div class="case-intel-card"><div class="k">Deadline</div><div class="v"><span class="case-deadline ${deadline.cls}">${esc(deadline.label)}</span><div class="small" style="margin-top:3px;">${caseRec.due_date?fmtDate(caseRec.due_date):'No deadline'}</div></div></div><div class="case-intel-card"><div class="k">Opened</div><div class="v">${fmtDate(caseRec.opened_at)}</div></div><div class="case-intel-card"><div class="k">Updated</div><div class="v">${fmtDate(String(caseRec.updated_at).slice(0,10))}</div></div><div class="case-intel-card"><div class="k">Records</div><div class="v">${links?.length||0}</div></div></div></div>
+      <div class="panel" style="padding:14px;"><h3>Internal Case Note</h3><div class="desc">Append a dated note to the case timeline.</div>${canEdit()?`<div class="case-note-box"><textarea id="case-note-input" placeholder="Add investigation notes, follow-up details, reminders, or handover information…"></textarea><button class="btn btn-primary" onclick="addCaseNote('${id}')">Add Note</button></div>`:'<div class="small">Viewer accounts can read case notes but cannot add them.</div>'}</div>
+    </div>
     ${canEdit()?`<div class="panel" style="padding:14px;margin-bottom:14px;"><div class="sectionhead" style="margin-bottom:10px;"><div><h3>Case Workflow</h3><div class="desc" style="margin-bottom:0;">Create the next HR document directly from this case. New records are automatically linked back to this case.</div></div></div><div style="display:flex;flex-wrap:wrap;gap:8px;"><button class="btn btn-ghost btn-sm" onclick="openWorkflowRecordForm('nte','${id}')">${iPlus(13)} New NTE</button><button class="btn btn-ghost btn-sm" onclick="openWorkflowRecordForm('memos','${id}')">${iPlus(13)} New Memorandum</button><button class="btn btn-ghost btn-sm" onclick="openWorkflowRecordForm('nod','${id}')">${iPlus(13)} New NOD</button><button class="btn btn-ghost btn-sm" onclick="openWorkflowATDForm('${id}')">${iPlus(13)} New ATD</button><button class="btn btn-ghost btn-sm" onclick="openCaseLinkForm('${id}')">${iPlus(13)} Link Existing Record</button><button class="btn btn-ghost btn-sm" onclick="setCaseWorkflowStatus('${id}','Resolved')">Mark Resolved</button><button class="btn btn-ghost btn-sm" onclick="setCaseWorkflowStatus('${id}','Closed')">Close Case</button></div></div>`:''}
-    <div class="sectionhead" style="margin-bottom:10px;"><div><h2 style="font-size:16px;">Case Timeline</h2><p>${links?.length||0} linked record${(links?.length||0)===1?'':'s'}.</p></div></div>
-    <div class="case-links">${linkRows||'<div class="empty"><b>No records linked yet</b>Use the workflow buttons above or link an existing Incident, CVR, Disciplinary, NTE, Memo, NOD, ATD, or another HR record to build the case history.</div>'}</div>
-    <div style="margin-top:16px;" class="panel"><h3>Case Information</h3><div class="small" style="margin-top:6px;line-height:1.7;">Opened: <b>${fmtDate(caseRec.opened_at)}</b> · Closed: <b>${fmtDate(caseRec.closed_at)}</b><br>Remarks: ${esc(caseRec.remarks||'—')}</div></div>
+    <div class="analytics-grid equal">
+      <div class="panel" style="padding:14px;"><div class="sectionhead" style="margin-bottom:10px;"><div><h2 style="font-size:16px;">Linked HR Records</h2><p>${links?.length||0} linked record${(links?.length||0)===1?'':'s'}.</p></div></div><div class="case-links">${linkRows||'<div class="empty"><b>No records linked yet</b>Use the workflow buttons or link an existing record to build the case history.</div>'}</div></div>
+      <div class="panel" style="padding:14px;"><div class="sectionhead" style="margin-bottom:10px;"><div><h2 style="font-size:16px;">Activity Timeline</h2><p>Chronological case actions and internal notes.</p></div></div><div class="case-activity">${activityRows||'<div class="empty"><b>No activity yet</b>Case activity will appear here as the file progresses.</div>'}</div></div>
+    </div>
+    <div style="margin-top:14px;" class="panel"><h3>Case Information</h3><div class="small" style="margin-top:6px;line-height:1.7;">Opened: <b>${fmtDate(caseRec.opened_at)}</b> · Due: <b>${fmtDate(caseRec.due_date)}</b> · Closed: <b>${fmtDate(caseRec.closed_at)}</b><br>Priority: <b>${esc(caseRec.priority||'Normal')}</b> · Assigned: <b>${esc(assigned?.fullName||'Unassigned')}</b><br>Remarks: ${esc(caseRec.remarks||'—')}</div></div>
   </div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal(); renderCases();">Close</button>${canEdit()?`<button class="btn btn-primary" onclick="openCaseForm('${id}')">Edit Case</button>`:''}</div>`);
   document.getElementById('modal').classList.add('case-modal');
 }
@@ -3446,9 +3839,12 @@ async function setCaseWorkflowStatus(caseId,status){
   if(SESSION?.role==='Viewer') return;
   if(status==='Closed' && !confirm('Close this HR case? You can still view its history afterward.')) return;
   if(status==='Resolved' && !confirm('Mark this HR case as Resolved?')) return;
+  const {data:before,error:beforeError}=await supabase.from('hr_cases').select('status,due_date').eq('id',caseId).maybeSingle();
+  if(beforeError){toast('Could not load case status: '+beforeError.message,true);return;}
   const closed_at=status==='Closed'?todayISO():null;
   const {error}=await supabase.from('hr_cases').update({status,closed_at,updated_by:SESSION?.id||null}).eq('id',caseId);
   if(error){toast('Could not update case status: '+error.message,true);return;}
+  await addCaseActivity(caseId,'status',`Status changed from ${before?.status||'—'} to ${status}.`,before?.status||null,status,before?.due_date||null);
   logAudit(`Changed HR case status to ${status}`);
   await openCaseDetails(caseId);
 }
@@ -3468,7 +3864,8 @@ async function linkCaseRecord(caseId){
   const {error}=await supabase.from('hr_case_links').insert({case_id:caseId,module,record_id:String(recordId),label,linked_by:SESSION?.id||null});
   if(error){toast(error.code==='23505'?'That record is already linked to this case.':'Could not link record: '+error.message,true);return;}
   const newStatus=module==='nte'?'NTE Issued':module==='memos'?'Memo Issued':module==='nod'?'For Decision':null;
-  if(newStatus){const {error:statusError}=await supabase.from('hr_cases').update({status:newStatus,updated_by:SESSION?.id||null}).eq('id',caseId);if(statusError){console.warn('Case status update failed',statusError);}}
+  if(newStatus){const {data:beforeCase}=await supabase.from('hr_cases').select('status,due_date').eq('id',caseId).maybeSingle(); const {error:statusError}=await supabase.from('hr_cases').update({status:newStatus,updated_by:SESSION?.id||null}).eq('id',caseId);if(statusError){console.warn('Case status update failed',statusError);} else await addCaseActivity(caseId,'status',`Status changed from ${beforeCase?.status||'—'} to ${newStatus} after linking ${caseModuleLabel(module)}.`,beforeCase?.status||null,newStatus,beforeCase?.due_date||null);}
+  await addCaseActivity(caseId,'linked',`Linked ${caseModuleLabel(module)}: ${label}.`);
   logAudit(`Linked ${caseModuleLabel(module)} to HR case`); await openCaseDetails(caseId);
 }
 async function unlinkCaseRecord(caseId,module,recordId){
@@ -3476,6 +3873,7 @@ async function unlinkCaseRecord(caseId,module,recordId){
   if(!confirm('Remove this record from the case? The original HR record will remain unchanged.')) return;
   const {error}=await supabase.from('hr_case_links').delete().eq('case_id',caseId).eq('module',module).eq('record_id',recordId);
   if(error){toast('Could not remove link: '+error.message,true);return;}
+  await addCaseActivity(caseId,'unlinked',`Unlinked ${caseModuleLabel(module)}: ${caseRecordLabel(module,(DB[module]||[]).find(r=>String(r.id)===String(recordId)))}.`);
   logAudit(`Unlinked ${caseModuleLabel(module)} from HR case`); await openCaseDetails(caseId);
 }
 async function deleteCase(id){
@@ -3491,6 +3889,7 @@ async function deleteCase(id){
    ================================================================ */
 const RENDERERS = {
   dashboard: renderDashboard,
+  actionCenter: renderActionCenter,
   analytics: renderAnalytics,
   cases: renderCases,
   documents: renderDocuments,
@@ -3522,7 +3921,7 @@ document.getElementById('login-form').addEventListener('keydown', e=>{ if(docume
 // can execute those handlers normally.
 Object.assign(window, {
   addDaysISO, atdComputeStatus, atdFillEmployee, atdPayslipCellHTML, atdRemaining, atdToggleCategory, atdTotalPaid,
-  caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, setCaseWorkflowStatus,
+  addCaseActivity, addCaseNote, caseActivityIcon, caseActivityLabel, caseDeadlineInfo, casePriorityBadge, caseWorkflowSteps, caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, setCaseWorkflowStatus,
   countStoredDocuments, renderDocuments, openStoredDocument, collectStoredDocuments,
   attachCellHTML, attachPreviewHTML, authErr, bootAuthenticated, calShift, canEdit, classify, clearFileField, closeModal,
   consequenceFor, cvrOffenseLevel, cvrOffenseSummaryHTML, daysBetweenInclusive, defaultOffenseCatalog, deleteATDPayment,
@@ -3531,11 +3930,11 @@ Object.assign(window, {
   evalStatusInfo, exportATDCSV, exportCVRCSV, exportEmployeesCSV, exportIncidentsCSV, exportModuleCSV, exportWeeklyCSV,
   fieldHTML, fmtDate, getEvalRecord, go, handleFileInput, incidentTypeOccurrence, incidentTypeSummaryHTML,
   toggleSidebar, closeSidebar, applyReportFilters, exportReportEmployees, exportReportActivity, exportReportATD, exportReportCases,
-  loadDB, loadProfiles, logAudit, mondayOf, nthLabel, offenseLevelFor, openATDForm, openATDPaymentForm,
+  loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
   openATDPayments, openCVRForm, openEmployeeForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard,
   renderDisciplinary, renderEmployees, renderEvaluations, renderIncidents, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords,
-  renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderOffenseSummary, renderReports, renderSettings,
+  renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
   renderUsers, renderWeeklyReport, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, setTitle, shiftDate, statusBadge, switchAuthTab, toCSV,
   toast, todayISO, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek
