@@ -131,6 +131,233 @@ body.data-confirm-open{overflow:hidden;}
   .data-confirm-actions{align-items:stretch;flex-direction:column-reverse;}
   .data-confirm-actions .btn{width:100%;}
 }
+
+/* Authentication workspace */
+#auth-screen{
+  position:relative;
+  isolation:isolate;
+  min-height:100vh;
+  min-height:100dvh;
+  display:grid;
+  place-items:center;
+  overflow:auto;
+  padding:108px 28px 92px;
+  background:#CBE9FA url('../assets/slsc-campus-auth.webp') center center/cover no-repeat;
+}
+#auth-screen::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:-1;
+  background:rgba(6,30,66,.18);
+}
+.auth-brandbar{
+  position:absolute;
+  top:0;
+  left:0;
+  right:0;
+  z-index:2;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:20px;
+  padding:24px 30px;
+  color:#fff;
+  text-shadow:0 1px 18px rgba(4,24,49,.45);
+}
+.auth-brandlockup{display:flex;align-items:center;gap:11px;min-width:0;}
+.auth-brandlockup>span:last-child{display:grid;line-height:1.25;}
+.auth-brandlockup b{font-size:13px;font-weight:800;}
+.auth-brandlockup small{font-size:10px;color:rgba(255,255,255,.82);}
+.auth-brandmark{
+  width:36px;
+  height:36px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex:none;
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.42);
+  border-radius:8px;
+  background:rgba(255,255,255,.94);
+  box-shadow:0 8px 24px rgba(3,24,51,.14);
+}
+.auth-brandmark img{width:29px;height:29px;object-fit:contain;}
+.auth-brandmark.auth-brandmark-wide{width:174px;height:55px;padding:5px 7px;}
+.auth-brandmark.auth-brandmark-wide img{width:100%;height:100%;object-fit:contain;}
+.auth-secure{display:flex;align-items:center;gap:8px;font-size:10.5px;font-weight:700;letter-spacing:.02em;}
+.auth-secure span{width:7px;height:7px;border-radius:50%;background:#79D2A5;box-shadow:0 0 0 4px rgba(121,210,165,.18);}
+.auth-stage{position:relative;z-index:1;width:100%;display:flex;justify-content:center;align-items:center;}
+#auth-screen .auth-card{
+  width:min(100%,420px);
+  max-width:none;
+  max-height:calc(100dvh - 160px);
+  overflow:auto;
+  border:1px solid rgba(255,255,255,.82);
+  border-radius:8px;
+  background:rgba(255,255,255,.94);
+  box-shadow:0 24px 70px rgba(5,32,68,.22),0 2px 8px rgba(5,32,68,.08);
+  backdrop-filter:blur(18px) saturate(115%);
+  transition:width .2s ease;
+}
+#auth-screen .auth-card.registering{width:min(100%,570px);}
+#auth-screen .auth-head{
+  padding:28px 32px 12px;
+  color:var(--text);
+  background:transparent;
+  text-align:center;
+}
+.auth-emblem{
+  width:52px;
+  height:52px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  margin:0 auto 14px;
+  overflow:hidden;
+  border:1px solid #E3E7ED;
+  border-radius:8px;
+  background:#fff;
+  box-shadow:0 8px 24px rgba(15,45,81,.09);
+}
+.auth-emblem img{width:43px;height:43px;object-fit:contain;}
+.auth-emblem.auth-wordmark{width:220px;height:69px;padding:7px 10px;}
+.auth-emblem.auth-wordmark img{width:100%;height:100%;object-fit:contain;}
+.auth-eyebrow{margin-bottom:7px;color:#64748B;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;}
+#auth-screen .auth-head h1{margin:0;color:#102A4C;font-family:'Plus Jakarta Sans',sans-serif;font-size:23px;font-weight:800;letter-spacing:0;}
+#auth-screen .auth-head p{margin:7px auto 0;max-width:330px;color:#718096;font-size:11.5px;line-height:1.5;}
+#auth-screen .auth-body{padding:13px 32px 27px;}
+#auth-screen .auth-tabs{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:3px;
+  margin-bottom:19px;
+  padding:3px;
+  border:1px solid #E5E9EF;
+  border-radius:7px;
+  background:#F3F6F9;
+}
+#auth-screen .auth-tab{
+  min-height:36px;
+  padding:7px 10px;
+  border:0;
+  border-radius:5px;
+  background:transparent;
+  color:#718096;
+  font-size:11px;
+  font-weight:700;
+}
+#auth-screen .auth-tab.active{background:#fff;color:#12345B;box-shadow:0 1px 4px rgba(16,42,76,.10);}
+#auth-screen .auth-field{margin-bottom:13px;}
+#auth-screen .auth-field label{margin-bottom:6px;color:#35465B;font-size:10.5px;font-weight:700;}
+#auth-screen .auth-field input{
+  height:43px;
+  padding:0 12px;
+  border:1px solid #D9E0E8;
+  border-radius:6px;
+  background:rgba(255,255,255,.9);
+  color:#162C49;
+  font-size:12px;
+  box-shadow:none;
+}
+#auth-screen .auth-field input::placeholder{color:#9AA8B7;}
+#auth-screen .auth-field input:focus{border-color:#3E6FAD;outline:0;box-shadow:0 0 0 3px rgba(44,91,148,.11);}
+.auth-password{position:relative;}
+#auth-screen .auth-password input{padding-right:58px;}
+.auth-password button{
+  position:absolute;
+  top:50%;
+  right:8px;
+  transform:translateY(-50%);
+  min-width:42px;
+  padding:6px;
+  border:0;
+  background:transparent;
+  color:#365D8D;
+  font-size:9.5px;
+  font-weight:800;
+}
+.auth-register-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;}
+.auth-register-grid .auth-wide{grid-column:1/-1;}
+#auth-screen .auth-submit{
+  min-height:44px;
+  margin-top:3px;
+  border-radius:6px;
+  background:#0C315E;
+  color:#fff;
+  font-size:11.5px;
+  font-weight:800;
+  box-shadow:0 8px 18px rgba(12,49,94,.18);
+}
+#auth-screen .auth-submit:hover{background:#09284E;}
+#auth-screen .auth-error{margin:0 0 14px;padding:9px 11px;border-radius:6px;font-size:10.5px;line-height:1.45;}
+#auth-screen .auth-hint{
+  display:flex;
+  align-items:flex-start;
+  gap:9px;
+  margin-top:16px;
+  padding:14px 0 0;
+  border-top:1px solid #E5E9EF;
+  color:#718096;
+  font-size:9.5px;
+  line-height:1.5;
+}
+#auth-screen .auth-hint b{color:#35465B;}
+.auth-hint-mark{width:19px;height:19px;display:flex;align-items:center;justify-content:center;flex:none;border-radius:50%;background:#E6F4EE;color:#277A65;font-size:10px;font-weight:900;}
+.auth-scene-copy{
+  position:absolute;
+  left:clamp(28px,6vw,96px);
+  bottom:82px;
+  z-index:1;
+  width:min(330px,26vw);
+  color:#fff;
+  text-shadow:0 2px 22px rgba(2,22,47,.58);
+}
+.auth-scene-copy span{display:block;margin-bottom:8px;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;}
+.auth-scene-copy h2{margin:0 0 9px;font-family:'Plus Jakarta Sans',sans-serif;font-size:25px;line-height:1.18;letter-spacing:0;}
+.auth-scene-copy p{margin:0;color:rgba(255,255,255,.9);font-size:11px;line-height:1.6;}
+#auth-screen:has(.auth-card.registering) .auth-scene-copy{display:none;}
+.auth-footer{
+  position:absolute;
+  left:30px;
+  right:30px;
+  bottom:22px;
+  z-index:1;
+  display:flex;
+  justify-content:space-between;
+  gap:18px;
+  color:rgba(255,255,255,.82);
+  font-size:9.5px;
+  font-weight:600;
+  text-shadow:0 1px 12px rgba(2,22,47,.6);
+}
+@media (max-width:1080px){
+  .auth-scene-copy{display:none;}
+}
+@media (max-width:680px){
+  #auth-screen{display:block;padding:88px 14px 74px;background-position:62% center;}
+  #auth-screen::before{background:rgba(6,30,66,.28);}
+  .auth-brandbar{padding:18px 16px;}
+  .auth-brandmark.auth-brandmark-wide{width:142px;height:45px;}
+  .auth-brandlockup>span:last-child{display:none;}
+  .auth-secure{display:none;}
+  .auth-stage{min-height:calc(100dvh - 162px);}
+  #auth-screen .auth-card,#auth-screen .auth-card.registering{width:100%;max-height:none;}
+  #auth-screen .auth-head{padding:24px 20px 10px;}
+  #auth-screen .auth-body{padding:12px 20px 23px;}
+  .auth-register-grid{grid-template-columns:1fr;gap:0;}
+  .auth-register-grid .auth-wide{grid-column:auto;}
+  .auth-footer{left:17px;right:17px;bottom:17px;justify-content:center;text-align:center;}
+  .auth-footer span:last-child{display:none;}
+}
+@media (max-height:720px) and (min-width:681px){
+  #auth-screen{padding-top:86px;padding-bottom:66px;align-items:start;}
+  #auth-screen .auth-card{max-height:calc(100dvh - 130px);}
+  .auth-brandbar{padding-top:18px;padding-bottom:18px;}
+  .auth-scene-copy{bottom:62px;}
+  .auth-footer{bottom:17px;}
+}
+
 .tablewrap{background:#fff;overflow:auto;border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);}
 .tablewrap table{min-width:780px;border-collapse:separate;border-spacing:0;}
 .tablewrap thead th{background:#F7F9FC;position:sticky;top:0;z-index:2;box-shadow:0 1px 0 var(--border);}
@@ -358,3 +585,6 @@ body{background:var(--page);color:var(--text);}
 .chart-fill.alt,.analytics-trend .bar.secondary{background:var(--success);}
 .chart-fill.warn,.analytics-trend .bar.tertiary{background:var(--warning);}
 .chart-fill.danger{background:var(--danger);}
+
+/* Final auth cascade: retain the generated campus scene over legacy theme defaults. */
+#auth-screen{background:#CBE9FA url('../assets/slsc-campus-auth.webp') center center/cover no-repeat;}

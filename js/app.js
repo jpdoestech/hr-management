@@ -310,7 +310,19 @@ function switchAuthTab(tab){
   registerTab.setAttribute('aria-selected',String(!isLogin));
   document.getElementById('login-form').style.display = tab==='login'?'block':'none';
   document.getElementById('register-form').style.display = tab==='register'?'block':'none';
+  document.querySelector('#auth-screen .auth-card')?.classList.toggle('registering',!isLogin);
+  document.getElementById('auth-title').textContent=isLogin?'Welcome back':'Create your account';
+  document.getElementById('auth-subtitle').textContent=isLogin?'Sign in to continue to your HR workspace.':'Register for secure access to SLSC people operations.';
   document.getElementById('auth-error').style.display='none';
+}
+function togglePasswordVisibility(inputId,button){
+  const input=document.getElementById(inputId);
+  if(!input) return;
+  const reveal=input.type==='password';
+  input.type=reveal?'text':'password';
+  button.textContent=reveal?'Hide':'Show';
+  button.setAttribute('aria-label',reveal?'Hide password':'Show password');
+  input.focus();
 }
 function authErr(msg){ const e=document.getElementById('auth-error'); e.textContent=msg; e.style.display='block'; }
 
@@ -5256,7 +5268,7 @@ Object.assign(window, {
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, setTitle, shiftDate, statusBadge, switchAuthTab, toCSV,
-  toast, todayISO, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, paginationMeta, paginationHTML, paginationReset, paginateRows
+  toast, todayISO, togglePasswordVisibility, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, paginationMeta, paginationHTML, paginationReset, paginateRows
 });
 
 (async function initSupabase(){

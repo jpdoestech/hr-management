@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
 <link rel="stylesheet" href="css/app.css?v=20260926-6">
-<link rel="stylesheet" href="css/professional.css?v=20260926-7">
+<link rel="stylesheet" href="css/professional.css?v=20260926-8">
 <meta name="theme-color" content="#062451">
 <link rel="icon" href="assets/slsc-mark.svg" type="image/svg+xml">
 </head>
@@ -17,41 +17,58 @@
 
 <!-- ============ AUTH SCREEN ============ -->
 <div id="auth-screen">
-  <div class="auth-card">
-    <div class="auth-head">
-      <div class="badge">S</div>
-      <h1>SLSC HR Management</h1>
-      <p>&amp; Online System</p>
+  <header class="auth-brandbar">
+    <div class="auth-brandlockup">
+      <span class="auth-brandmark auth-brandmark-wide"><img src="assets/logo.png" alt="Strellas Labor Service Cooperative" width="174" height="55"></span>
+      <span><b>HR Management</b><small>Secure online system</small></span>
     </div>
-    <div class="auth-body">
-      <div class="auth-tabs" role="tablist" aria-label="Account access">
-        <button class="auth-tab active" id="tab-login" type="button" role="tab" aria-selected="true" aria-controls="login-form" onclick="switchAuthTab('login')">Log In</button>
-        <button class="auth-tab" id="tab-register" type="button" role="tab" aria-selected="false" aria-controls="register-form" onclick="switchAuthTab('register')">Register</button>
+    <div class="auth-secure"><span aria-hidden="true"></span>Private HR workspace</div>
+  </header>
+
+  <div class="auth-stage">
+    <section class="auth-card" aria-labelledby="auth-title">
+      <div class="auth-head">
+        <div class="auth-emblem auth-wordmark"><img src="assets/logo.png" alt="Strellas Labor Service Cooperative" width="220" height="69"></div>
+        <div class="auth-eyebrow">SLSC People Operations</div>
+        <h1 id="auth-title">Welcome back</h1>
+        <p id="auth-subtitle">Sign in to continue to your HR workspace.</p>
       </div>
+      <div class="auth-body">
+        <div class="auth-tabs" role="tablist" aria-label="Account access">
+          <button class="auth-tab active" id="tab-login" type="button" role="tab" aria-selected="true" aria-controls="login-form" onclick="switchAuthTab('login')">Sign in</button>
+          <button class="auth-tab" id="tab-register" type="button" role="tab" aria-selected="false" aria-controls="register-form" onclick="switchAuthTab('register')">Create account</button>
+        </div>
 
-      <div id="auth-error" class="auth-error" role="alert" aria-live="polite" style="display:none;"></div>
+        <div id="auth-error" class="auth-error" role="alert" aria-live="polite" style="display:none;"></div>
 
-      <form id="login-form" role="tabpanel" aria-labelledby="tab-login" onsubmit="return doLogin(event)">
-        <div class="field"><label for="li-user">Email or Username</label><input id="li-user" type="text" placeholder="name@company.com or username" autocomplete="username" required></div>
-        <div class="field"><label for="li-pass">Password</label><input id="li-pass" type="password" placeholder="••••••••" autocomplete="current-password" required></div>
-        <button type="submit" class="btn btn-primary btn-block">Log In</button>
-      </form>
+        <form id="login-form" role="tabpanel" aria-labelledby="tab-login" onsubmit="return doLogin(event)">
+          <div class="field auth-field"><label for="li-user">Email or username</label><input id="li-user" type="text" placeholder="Enter your email or username" autocomplete="username" required></div>
+          <div class="field auth-field"><label for="li-pass">Password</label><div class="auth-password"><input id="li-pass" type="password" placeholder="Enter your password" autocomplete="current-password" required><button type="button" onclick="togglePasswordVisibility('li-pass',this)" aria-label="Show password">Show</button></div></div>
+          <button type="submit" class="btn btn-primary btn-block auth-submit">Sign in securely</button>
+        </form>
 
-      <form id="register-form" role="tabpanel" aria-labelledby="tab-register" style="display:none;" onsubmit="return doRegister(event)">
-        <div class="field"><label for="rg-name">Complete Name</label><input id="rg-name" type="text" placeholder="Juan Dela Cruz" autocomplete="name" required></div>
-        <div class="field"><label for="rg-user">Username</label><input id="rg-user" type="text" placeholder="jdelacruz" autocomplete="username" required></div>
-        <div class="field"><label for="rg-email">Email</label><input id="rg-email" type="email" placeholder="name@company.com" autocomplete="email" required></div>
-        <div class="field"><label for="rg-pass">Password</label><input id="rg-pass" type="password" autocomplete="new-password" required></div>
-        <div class="field"><label for="rg-pass2">Confirm Password</label><input id="rg-pass2" type="password" autocomplete="new-password" required></div>
-        <button type="submit" class="btn btn-brass btn-block">Create Account</button>
-      </form>
+        <form id="register-form" role="tabpanel" aria-labelledby="tab-register" style="display:none;" onsubmit="return doRegister(event)">
+          <div class="auth-register-grid">
+            <div class="field auth-field auth-wide"><label for="rg-name">Complete name</label><input id="rg-name" type="text" placeholder="Juan Dela Cruz" autocomplete="name" required></div>
+            <div class="field auth-field"><label for="rg-user">Username</label><input id="rg-user" type="text" placeholder="jdelacruz" autocomplete="username" required></div>
+            <div class="field auth-field"><label for="rg-email">Work email</label><input id="rg-email" type="email" placeholder="name@company.com" autocomplete="email" required></div>
+            <div class="field auth-field"><label for="rg-pass">Password</label><div class="auth-password"><input id="rg-pass" type="password" placeholder="Create a password" autocomplete="new-password" required><button type="button" onclick="togglePasswordVisibility('rg-pass',this)" aria-label="Show password">Show</button></div></div>
+            <div class="field auth-field"><label for="rg-pass2">Confirm password</label><div class="auth-password"><input id="rg-pass2" type="password" placeholder="Repeat your password" autocomplete="new-password" required><button type="button" onclick="togglePasswordVisibility('rg-pass2',this)" aria-label="Show password">Show</button></div></div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block auth-submit">Create HR account</button>
+        </form>
 
-      <div class="auth-hint">
-         <b>Supabase authentication:</b> use your organization email and password. New registrations start as <b>HR Staff</b>; an Administrator can change roles after setup.<br>
-         Records are shared through Supabase, so authorized users see the same HR data across devices.
-       </div>
-    </div>
+        <div class="auth-hint"><span class="auth-hint-mark" aria-hidden="true">✓</span><span><b>Protected access.</b> New accounts begin with HR Staff permissions and can be reviewed by an Administrator.</span></div>
+      </div>
+    </section>
   </div>
+
+  <div class="auth-scene-copy">
+    <span>Human resources, thoughtfully managed</span>
+    <h2>People records deserve clarity and care.</h2>
+    <p>One secure workspace for employee information, approvals, cases, documents, and workforce operations.</p>
+  </div>
+  <footer class="auth-footer"><span>SLSC Human Resources Information System</span><span>Authorized personnel only</span></footer>
 </div>
 
 <!-- ============ APP SHELL ============ -->
@@ -120,6 +137,6 @@
 </div>
 <div class="toast" id="toast"></div>
 
-<script type="module" src="js/app.js?v=20260926-7"></script>
+<script type="module" src="js/app.js?v=20260926-8"></script>
 </body>
 </html>
