@@ -533,6 +533,48 @@ tbody tr:hover{background:#FAF9F5;}
 @media (max-width:760px){.case-modal{max-width:100%;}.case-summary{grid-template-columns:1fr 1fr;}.case-link{align-items:flex-start;}.case-link .actions{margin-left:auto;}}
 
 
+/* ---------- Workflow & Approval Center ---------- */
+.workflow-hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:16px;}
+.workflow-hero h1{margin:0;font-size:27px;line-height:1.08;}
+.workflow-hero p{margin:6px 0 0;font-size:12.5px;color:var(--slate);}
+.workflow-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end;}
+.workflow-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px;}
+.workflow-kpi{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 13px;box-shadow:var(--shadow);min-width:0;position:relative;overflow:hidden;}
+.workflow-kpi::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--accent,var(--ink));}
+.workflow-kpi .k{font-size:9.8px;text-transform:uppercase;letter-spacing:.055em;color:var(--slate);font-weight:700;}
+.workflow-kpi .v{font:700 23px/1 'Source Serif 4',Georgia,serif;margin-top:6px;}
+.workflow-kpi .s{font-size:10.5px;color:var(--slate);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.workflow-panel{background:#fff;border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow);overflow:hidden;}
+.workflow-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px;border-bottom:1px solid var(--line);background:#FBFCFE;}
+.workflow-toolbar .search{flex:1 1 260px;min-width:220px;}
+.workflow-list{display:flex;flex-direction:column;gap:8px;padding:10px;}
+.workflow-row{display:grid;grid-template-columns:10px minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:9px;background:#fff;}
+.workflow-row:hover{border-color:#B8C6D9;background:#FBFCFE;}
+.workflow-row .dot{width:9px;height:9px;border-radius:50%;background:var(--slate);}
+.workflow-row.danger .dot{background:var(--rust);}
+.workflow-row.warning .dot{background:var(--amber);}
+.workflow-row.success .dot{background:var(--forest);}
+.workflow-row .main{min-width:0;}
+.workflow-row .title{font-size:12.5px;font-weight:750;}
+.workflow-row .meta{font-size:10.5px;color:var(--slate);margin-top:3px;line-height:1.45;white-space:normal;}
+.workflow-row .right{text-align:right;white-space:nowrap;}
+.workflow-row .due{font-size:10.5px;color:var(--slate);margin-top:4px;}
+.workflow-row .actions{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;}
+.workflow-empty{padding:40px 18px;text-align:center;color:var(--slate);}
+.workflow-empty b{display:block;color:var(--ink);font-size:14px;margin-bottom:5px;}
+.workflow-detail{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;}
+.workflow-detail .item{border:1px solid var(--line);border-radius:8px;padding:10px 11px;background:#FBFCFE;}
+.workflow-detail .label{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);font-weight:700;}
+.workflow-detail .value{font-size:12px;font-weight:700;margin-top:4px;line-height:1.4;}
+.workflow-rule{padding:10px 11px;border:1px dashed var(--line-2);border-radius:8px;background:#FAFBFD;font-size:10.8px;color:var(--slate);line-height:1.55;}
+.workflow-steps{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+.workflow-step{display:inline-flex;align-items:center;gap:6px;padding:6px 8px;border-radius:99px;border:1px solid var(--line);background:#fff;font-size:10px;color:var(--slate);}
+.workflow-step.active{border-color:#AABBD4;background:#F7FAFE;color:var(--ink);font-weight:700;}
+.workflow-step.done{border-color:#BFD3C7;background:#F5FAF7;color:var(--forest);}
+@media (max-width:1100px){.workflow-kpis{grid-template-columns:repeat(3,1fr);}.workflow-row{grid-template-columns:10px minmax(0,1fr) auto;}.workflow-row .right{grid-column:2;text-align:left;}.workflow-row .actions{grid-column:3;grid-row:1/3;align-self:center;}}
+@media (max-width:720px){.workflow-hero{flex-direction:column;align-items:flex-start;}.workflow-actions{justify-content:flex-start;}.workflow-kpis{grid-template-columns:1fr 1fr;}.workflow-detail{grid-template-columns:1fr;}.workflow-row{grid-template-columns:10px 1fr;}.workflow-row .right,.workflow-row .actions{grid-column:2;grid-row:auto;text-align:left;justify-content:flex-start;}}
+@media (max-width:460px){.workflow-kpis{grid-template-columns:1fr 1fr;gap:7px;}.workflow-kpi{padding:10px;}.workflow-kpi .v{font-size:20px;}}
+
 /* ---------- Phase 11: HR Operations Workspace ---------- */
 .ops-hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:16px;}
 .ops-hero h1{margin:0;font-size:27px;line-height:1.08;}
@@ -752,12 +794,12 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
    Phase 2: record-level Postgres persistence, Supabase Auth, and private Storage.
    ========================================================================= */
 
-const RECORD_MODULES = ['employees','leaves','disciplinary','nte','memos','nod','oncall','transfers','offenseCatalog','cvr','incidents','prf','evaluations','atd'];
+const RECORD_MODULES = ['employees','leaves','disciplinary','nte','memos','nod','oncall','transfers','offenseCatalog','cvr','incidents','prf','evaluations','atd','workflowTasks'];
 let DB_SNAPSHOT = null;
 let SAVE_QUEUE = Promise.resolve();
 
 function blankDB(){
-  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],settings:{orgName:'SLSC',probationDays:180},audit:[],users:[]};
+  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],settings:{orgName:'SLSC',probationDays:180},audit:[],users:[]};
 }
 
 async function loadDB(){
@@ -920,6 +962,8 @@ const INCIDENT_SEVERITY_MAP = {'Minor':'b-grey','Moderate':'b-amber','Major':'b-
 const INCIDENT_STATUS = ['Reported','Under Investigation','Resolved','Closed'];
 const INCIDENT_STATUS_MAP = {'Reported':'b-amber','Under Investigation':'b-blue','Resolved':'b-green','Closed':'b-grey'};
 const PRF_CLASS = ['Replacement for Resigned Personnel','Replacement for AWOL Personnel','Replacement for Separated Personnel','Replacement for Other Reasons','Additional Manpower (Add-On)'];
+const PRF_STATUS = ['Draft','Pending Approval','Approved','Rejected','Filled','Closed'];
+const PRF_STATUS_MAP = {'Draft':'b-grey','Pending Approval':'b-amber','Approved':'b-green','Rejected':'b-red','Filled':'b-blue','Closed':'b-grey'};
 const EVAL_MILESTONES = [{key:'1st', label:'1st Month', days:30},{key:'3rd', label:'3rd Month', days:90},{key:'6th', label:'6th Month', days:180}];
 const ATD_CATEGORIES = ['Uniforms/Expenses','Charges'];
 const ATD_STATUS_MAP = {'Pending':'b-amber','Ongoing':'b-blue','Paid':'b-green'};
@@ -1024,7 +1068,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = seedDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'' };
+let STATE = { view:'dashboard', search:'', filter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'' };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
@@ -1085,13 +1129,14 @@ async function bootAuthenticated(user){
     let state=await loadDB();
     const hasAny=RECORD_MODULES.some(k=>(state[k]||[]).length);
     if(!hasAny){ DB=seedDB(); await saveDB(); } else DB=state;
-    if(!DB.audit) DB.audit=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];});
+    if(!DB.audit) DB.audit=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; DB.prf.forEach(p=>{if(!p.status)p.status='Draft';}); if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; if(!DB.workflowTasks) DB.workflowTasks=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];});
     const employeeMasterChanged=normalizeEmployeeMasterData();
     DB_SNAPSHOT=JSON.parse(JSON.stringify(DB));
     if(employeeMasterChanged) await saveDB();
     await loadProfiles();
     const profile=DB.users.find(x=>x.id===user.id);
     SESSION=profile || {id:user.id,fullName:user.user_metadata?.full_name||user.email,username:user.user_metadata?.username||'',email:user.email,role:'HR Staff'};
+    await workflowSyncTasks({silent:true});
     enterApp();
   }catch(e){ authErr('Could not load the HR database: '+e.message); await supabase.auth.signOut(); }
 }
@@ -1457,6 +1502,7 @@ const NAV = [
   {sec:'Overview', items:[
     {v:'dashboard', label:'Dashboard', icon:iGrid},
     {v:'actionCenter', label:'Action Center', icon:iShield},
+    {v:'workflow', label:'Workflow & Approvals', icon:iCheck, count:()=>workflowPendingCount()},
     {v:'operations', label:'HR Operations', icon:iGrid},
     {v:'analytics', label:'Management Analytics', icon:iChart},
     {v:'weeklyReport', label:'Weekly Report', icon:iChart},
@@ -1529,6 +1575,7 @@ function iGrid(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fi
 function iUsers(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17.5" cy="8.5" r="2.4"/><path d="M15 14.3c2.7.2 4.7 2.2 4.9 5.7"/></svg>`;}
 function iCal(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="4.5" width="17" height="16" rx="2"/><path d="M3.5 9.5h17M8 3v3M16 3v3"/></svg>`;}
 function iShield(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v6c0 4.5-3 7.7-7 9-4-1.3-7-4.5-7-9V6l7-3z"/></svg>`;}
+function iCheck(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12.5l4.2 4.2L19 7"/></svg>`;}
 function iDoc(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/></svg>`;}
 function iSwap(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h13M17 8l-3-3M17 8l-3 3M20 16H7M7 16l3-3M7 16l3 3"/></svg>`;}
 function iChart(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>`;}
@@ -1931,6 +1978,7 @@ async function saveRecord(key, id){
     toast(cfg.singular+' added.');
   }
   await saveDB();
+  await workflowSyncTasks({silent:true});
   const newStoragePaths=recordStoragePaths(rec);
   rememberCommittedRecordFiles(rec);
   await deleteStorageObjects([...oldStoragePaths].filter(path=>!newStoragePaths.has(path)));
@@ -3364,6 +3412,7 @@ async function saveEval(employeeId, milestoneKey){
   logAudit(`Updated evaluation (${milestoneKey}) for employee`);
   await saveDB(); const newStoragePaths=recordStoragePaths(rec); rememberCommittedRecordFiles(rec);
   await deleteStorageObjects([...oldStoragePaths].filter(path=>!newStoragePaths.has(path)));
+  await workflowSyncTasks({silent:true});
   await closeModal([...newStoragePaths]); renderEvaluations();
   toast('Evaluation saved.');
 }
@@ -3396,6 +3445,344 @@ function renderOffenseSummary(){
     </div>`;
   }).join('') : '<div class="empty"><b>No offenses recorded yet</b></div>'}`;
   document.getElementById('content').innerHTML = html;
+}
+
+/* ================================================================
+   WORKFLOW & APPROVAL CENTER
+   Uses the existing hr_records persistence layer for durable task state.
+   Source records remain the system of record; workflowTasks stores task,
+   assignment, decision, and completion metadata around those records.
+   ================================================================ */
+const WORKFLOW_STATUS = ['Pending','Completed','Rejected','Cancelled'];
+const WORKFLOW_TYPES = ['Approval','Review','Task'];
+const WORKFLOW_STEP_LABELS = {
+  leave_review:'Leave Approval',
+  prf_review:'PRF Approval',
+  case_review:'HR Case Workflow',
+  evaluation_review:'Probation Evaluation',
+  nte_review:'NTE Review',
+  cvr_review:'CVR Review',
+  incident_review:'Incident Review',
+  manual:'HR Task'
+};
+function workflowTaskId(module,recordId,step='action'){
+  const raw=`wf_${module}_${recordId}_${step}`;
+  return raw.replace(/[^a-zA-Z0-9_-]+/g,'_');
+}
+function workflowTaskKey(module,recordId){ return `${module}:${recordId}`; }
+function workflowExistingTask(module,recordId){ return (DB.workflowTasks||[]).find(t=>t.workflowKey===workflowTaskKey(module,recordId)); }
+function workflowPendingCount(){ return (DB.workflowTasks||[]).filter(t=>t.status==='Pending' && workflowVisibleToSession(t)).length; }
+function workflowTaskSeverity(task){
+  if(task.status!=='Pending') return task.status==='Completed'?'success':'';
+  if(task.dueDate && task.dueDate<todayISO()) return 'danger';
+  if(task.priority==='Urgent'||task.priority==='High') return 'danger';
+  if(task.dueDate && task.dueDate<=addDaysISO(todayISO(),3)) return 'warning';
+  return '';
+}
+function workflowDueText(task){
+  if(!task.dueDate) return 'No deadline set';
+  const d=task.dueDate;
+  if(task.status==='Pending' && d<todayISO()) return `Overdue · ${fmtDate(d)}`;
+  if(task.status==='Pending' && d<=addDaysISO(todayISO(),7)) return `Due ${fmtDate(d)}`;
+  return fmtDate(d);
+}
+function workflowPriorityBadge(priority){
+  const map={Urgent:'b-red',High:'b-red',Normal:'b-blue',Low:'b-grey'};
+  return statusBadge(priority||'Normal',map);
+}
+function workflowVisibleToSession(task){
+  if(!SESSION || SESSION.role==='Administrator') return true;
+  if(SESSION.role==='Viewer') return true;
+  return !task.assigneeId || String(task.assigneeId)===String(SESSION.id);
+}
+function workflowActionable(task){ return task?.status==='Pending' && SESSION?.role!=='Viewer' && canEdit(); }
+function workflowUpsertDesired(desired, module, recordId, patch){
+  const key=workflowTaskKey(module,recordId);
+  let task=(DB.workflowTasks||[]).find(t=>t.workflowKey===key);
+  if(!task){
+    task={id:workflowTaskId(module,recordId,patch.stepKey||'action'),workflowKey:key,createdAt:new Date().toISOString(),createdBy:SESSION?.id||null,status:'Pending'};
+    DB.workflowTasks.push(task);
+    desired.push(task);
+  } else desired.push(task);
+  Object.assign(task,patch,{workflowKey:key});
+  return task;
+}
+async function workflowSyncTasks({silent=false}={}){
+  if(!DB.workflowTasks) DB.workflowTasks=[];
+  const before=JSON.stringify(DB.workflowTasks);
+  const today=todayISO();
+
+  // Cases live in hr_cases, so read the current workflow source directly.
+  try{
+    const {data:cases,error}=await supabase.from('hr_cases').select('id,case_number,employee_record_id,employee_name,department,subject,status,opened_at,closed_at,assigned_to,priority,due_date,updated_at').order('updated_at',{ascending:false}).limit(500);
+    if(!error){
+      (cases||[]).forEach(c=>{
+        const closed=['Closed','Cancelled','Resolved'].includes(c.status);
+        const forDecision=c.status==='For Decision';
+        const title=closed?`Case closed — ${c.case_number||'HR Case'}`:forDecision?`Decision required — ${c.case_number||'HR Case'}`:c.assigned_to?`Review case — ${c.case_number||'HR Case'}`:`Assign case — ${c.case_number||'HR Case'}`;
+        const existing=workflowExistingTask('cases',c.id);
+        const preservedStatus=existing?.status==='Completed' && existing.sourceStatus===c.status ? 'Completed' : existing?.status==='Rejected' && existing.sourceStatus===c.status ? 'Rejected' : 'Pending';
+        const task=workflowUpsertDesired([], 'cases', c.id, {
+          stepKey:'action',workflowType:forDecision?'Approval':'Review',title,
+          description:c.subject||'Review and advance the HR case workflow.',module:'cases',recordId:c.id,
+          employeeRecordId:c.employee_record_id||'',employeeName:c.employee_name||'',department:c.department||'',
+          priority:c.priority||'Normal',dueDate:c.due_date||'',assigneeId:c.assigned_to||'',
+          sourceStatus:c.status||'',sourceUpdatedAt:c.updated_at||'',actionType:closed?'none':forDecision?'case_decision':c.assigned_to?'case_review':'case_assign',
+          status:closed?'Completed':preservedStatus
+        });
+        if(closed){ task.status='Completed'; task.completedAt=task.completedAt||c.closed_at||new Date().toISOString(); }
+      });
+    }
+  }catch(e){ if(!silent) console.warn('Workflow case sync failed',e); }
+
+  const ensureRecordTask=(module,rec,patch)=>{
+    const existing=workflowExistingTask(module,rec.id);
+    const closed=patch.closed;
+    const task=workflowUpsertDesired([],module,rec.id,{...patch,sourceUpdatedAt:patch.sourceUpdatedAt||'',status:closed?'Completed':(existing?.status||'Pending')});
+    if(closed){ task.status='Completed'; task.completedAt=task.completedAt||new Date().toISOString(); }
+    return task;
+  };
+
+  (DB.leaves||[]).forEach(l=>{
+    const pending=l.status==='Pending';
+    if(pending || workflowExistingTask('leaves',l.id)) ensureRecordTask('leaves',l,{
+      stepKey:'approval',workflowType:'Approval',title:`Review leave request — ${l.employeeName||'Employee'}`,
+      description:`${l.leaveType||'Leave'} · ${fmtDate(l.startDate)}–${fmtDate(l.endDate)}`,
+      module:'leaves',recordId:l.id,employeeName:l.employeeName||'',department:l.department||'',priority:'Normal',
+      dueDate:l.startDate||l.dateApplied||'',assigneeId:'',actionType:pending?'leave_decision':'none',closed:!pending
+    });
+  });
+
+  (DB.prf||[]).forEach(p=>{
+    const pending=p.status==='Pending Approval';
+    if(pending || workflowExistingTask('prf',p.id)) ensureRecordTask('prf',p,{
+      stepKey:'approval',workflowType:'Approval',title:`Review PRF — ${p.prfNumber||p.employeeName||'Request'}`,
+      description:p.reasonForRequest||'Personnel requisition request awaiting review.',module:'prf',recordId:p.id,
+      employeeName:p.employeeName||'',department:p.department||'',priority:'Normal',dueDate:p.dateOfRequest||'',assigneeId:'',
+      actionType:pending?'prf_decision':'none',closed:!pending
+    });
+  });
+
+  (DB.evaluations||[]).forEach(ev=>{
+    const emp=DB.employees.find(e=>String(e.id)===String(ev.employeeId));
+    if(!emp) return;
+    const pending=!ev.completedDate && classify(emp)==='Probationary';
+    if(pending || workflowExistingTask('evaluations',ev.id)){
+      const m=EVAL_MILESTONES.find(x=>x.key===ev.milestone);
+      const due=emp.dateHired&&m?evalDueDate(emp.dateHired,m.days):'';
+      ensureRecordTask('evaluations',ev,{
+        stepKey:'completion',workflowType:'Task',title:`Complete ${m?.label||ev.milestone||'evaluation'} — ${emp.name}`,
+        description:`Probationary evaluation milestone for ${emp.name}.`,module:'evaluations',recordId:ev.id,
+        employeeName:emp.name,employeeRecordId:emp.id,department:emp.department||'',priority:due&&due<today?'High':'Normal',dueDate:due||'',assigneeId:'',
+        actionType:pending?'evaluation_review':'none',closed:!pending
+      });
+    }
+  });
+
+  (DB.nte||[]).forEach(r=>{
+    const pending=['Explanation Submitted','Under Review'].includes(r.status);
+    if(pending || workflowExistingTask('nte',r.id)) ensureRecordTask('nte',r,{
+      stepKey:'review',workflowType:'Review',title:`Review NTE response — ${r.employeeName||'Employee'}`,
+      description:r.violation||'NTE response requires HR review.',module:'nte',recordId:r.id,employeeName:r.employeeName||'',department:r.department||'',priority:'High',dueDate:'',assigneeId:'',
+      actionType:pending?'nte_review':'none',closed:!pending
+    });
+  });
+
+  (DB.cvr||[]).forEach(r=>{
+    const pending=r.status==='Pending Review';
+    if(pending || workflowExistingTask('cvr',r.id)) ensureRecordTask('cvr',r,{
+      stepKey:'review',workflowType:'Review',title:`Review CVR — ${r.employeeName||'Employee'}`,
+      description:r.remarks||r.otherOffense||'CVR requires HR review.',module:'cvr',recordId:r.id,employeeName:r.employeeName||'',department:r.department||'',priority:'Normal',dueDate:'',assigneeId:'',
+      actionType:pending?'cvr_review':'none',closed:!pending
+    });
+  });
+
+  (DB.incidents||[]).forEach(r=>{
+    const pending=['Reported','Under Investigation'].includes(r.status);
+    if(pending || workflowExistingTask('incidents',r.id)) ensureRecordTask('incidents',r,{
+      stepKey:'review',workflowType:'Review',title:`Review incident — ${r.employeeName||'Employee'}`,
+      description:r.incidentType||'Incident report requires review.',module:'incidents',recordId:r.id,employeeName:r.employeeName||'',department:r.department||'',priority:r.severity==='Critical'||r.severity==='Major'?'High':'Normal',dueDate:'',assigneeId:'',
+      actionType:pending?'incident_review':'none',closed:!pending
+    });
+  });
+
+  const after=JSON.stringify(DB.workflowTasks);
+  if(before!==after){
+    try{ await saveDB(); }
+    catch(e){ if(!silent) toast('Workflow synchronization could not be saved: '+e.message,true); }
+  }
+  renderNav();
+  return DB.workflowTasks;
+}
+function taskStatusPreserved(task){ return !!task && ['Completed','Rejected','Cancelled'].includes(task.status); }
+function workflowFindTask(id){ return (DB.workflowTasks||[]).find(t=>String(t.id)===String(id)); }
+function workflowOpenSource(task){
+  if(!task) return;
+  if(task.module==='cases'){ closeModal(); openCaseDetails(task.recordId); return; }
+  if(task.module==='evaluations'){
+    const ev=DB.evaluations.find(x=>String(x.id)===String(task.recordId));
+    if(ev) { closeModal(); openEvalForm(ev.employeeId,ev.milestone); }
+    return;
+  }
+  const route=task.module;
+  if(RENDERERS[route]){ closeModal(); go(route); }
+}
+function openWorkflowTask(id){
+  const task=workflowFindTask(id); if(!task) return;
+  const actionable=workflowActionable(task);
+  const due=workflowDueText(task);
+  const steps=[];
+  if(task.workflowType==='Approval') steps.push('<span class="workflow-step done">Request</span>','<span class="workflow-step active">Review / Decision</span>','<span class="workflow-step">Completion</span>');
+  else if(task.workflowType==='Review') steps.push('<span class="workflow-step done">Record</span>','<span class="workflow-step active">Review</span>','<span class="workflow-step">Next Action</span>');
+  else steps.push('<span class="workflow-step done">Created</span>','<span class="workflow-step active">Action Required</span>','<span class="workflow-step">Completed</span>');
+  openModal(`<div class="modal-head"><div><h3>${esc(task.title)}</h3><div class="small">${esc(WORKFLOW_STEP_LABELS[task.actionType==='leave_decision'?'leave_review':task.actionType==='prf_decision'?'prf_review':task.actionType==='evaluation_review'?'evaluation_review':task.actionType==='case_decision'||task.actionType==='case_review'||task.actionType==='case_assign'?'case_review':task.actionType==='nte_review'?'nte_review':task.actionType==='cvr_review'?'cvr_review':task.actionType==='incident_review'?'incident_review':'manual'])}</div></div><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body">
+      <div class="workflow-detail">
+        <div class="item"><div class="label">Status</div><div class="value">${statusBadge(task.status,{Pending:'b-amber',Completed:'b-green',Rejected:'b-red',Cancelled:'b-grey'})}</div></div>
+        <div class="item"><div class="label">Priority</div><div class="value">${workflowPriorityBadge(task.priority)}</div></div>
+        <div class="item"><div class="label">Due</div><div class="value">${esc(due)}</div></div>
+        <div class="item"><div class="label">Employee</div><div class="value">${esc(task.employeeName||'—')}</div></div>
+        <div class="item"><div class="label">Department</div><div class="value">${esc(task.department||'—')}</div></div>
+        <div class="item"><div class="label">Assigned To</div><div class="value">${esc((DB.users.find(u=>String(u.id)===String(task.assigneeId))?.fullName)||'Unassigned')}</div></div>
+      </div>
+      <div class="field"><label>Workflow Note</label><textarea id="wf_task_note" rows="4" placeholder="Add an internal workflow note or decision remark…">${esc(task.remarks||'')}</textarea></div>
+      <div class="workflow-rule"><b>Source of record:</b> ${esc(caseModuleLabel(task.module)||task.module)}. Workflow changes coordinate the work around the record; they do not replace the underlying HR record.</div>
+      <div class="workflow-steps">${steps.join('')}</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button>${task.status==='Pending'&&canEdit()?`<button class="btn btn-ghost" onclick="workflowAssignTask('${task.id}')">Assign</button><button class="btn btn-ghost" onclick="workflowOpenSource(workflowFindTask('${task.id}'))">Open Record</button>${task.actionType==='case_assign'?`<button class="btn btn-primary" onclick="workflowAssignTask('${task.id}')">Assign Owner</button>`:task.workflowType==='Approval'?`<button class="btn btn-danger" onclick="workflowDecideTask('${task.id}','Rejected')">Reject / Return</button><button class="btn btn-brass" onclick="workflowDecideTask('${task.id}','Approved')">Approve</button>`:`<button class="btn btn-primary" onclick="workflowCompleteTask('${task.id}')">Complete Task</button>`}`:''}</div>`);
+}
+async function workflowSaveTaskNote(id){
+  const task=workflowFindTask(id); if(!task) return;
+  task.remarks=(document.getElementById('wf_task_note')?.value||'').trim();
+  task.lastActionAt=new Date().toISOString(); task.lastActionBy=SESSION?.id||null;
+  await saveDB();
+}
+function workflowAssignTask(id){
+  const task=workflowFindTask(id); if(!task) return;
+  const users=(DB.users||[]).filter(u=>u.role!=='Viewer');
+  openModal(`<div class="modal-head"><div><h3>Assign Workflow Task</h3><div class="small">${esc(task.title)}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="field"><label>Assigned To *</label><select id="wf_assign_to"><option value="">Unassigned</option>${users.map(u=>`<option value="${esc(u.id)}" ${String(task.assigneeId||'')===String(u.id)?'selected':''}>${esc(u.fullName)} · ${esc(u.role)}</option>`).join('')}</select></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="workflowSaveAssignment('${task.id}')">Save Assignment</button></div>`);
+}
+async function workflowSaveAssignment(id){
+  if(!canEdit()) return;
+  const task=workflowFindTask(id); if(!task) return;
+  const assigneeId=document.getElementById('wf_assign_to')?.value||'';
+  task.assigneeId=assigneeId; task.assignedAt=new Date().toISOString(); task.assignedBy=SESSION?.id||null;
+  await saveDB(); logAudit(`Assigned workflow task: ${task.title}`); toast(assigneeId?'Workflow task assigned.':'Workflow task unassigned.'); closeModal(); await workflowSyncTasks({silent:true}); if(STATE.view==='workflow') renderWorkflowCenter(); else renderNav();
+}
+async function workflowCompleteTask(id){
+  if(!canEdit()) return;
+  const task=workflowFindTask(id); if(!task||task.status!=='Pending') return;
+  if(task.actionType==='case_assign'){ workflowAssignTask(id); return; }
+  if(task.module==='evaluations'){
+    const ev=DB.evaluations.find(x=>String(x.id)===String(task.recordId));
+    if(!ev?.completedDate){ toast('Complete the evaluation record before closing this task.'); workflowOpenSource(task); return; }
+  }
+  await workflowSaveTaskNote(id);
+  task.status='Completed'; task.completedAt=new Date().toISOString(); task.completedBy=SESSION?.id||null; task.decision='Completed';
+  await saveDB(); logAudit(`Completed workflow task: ${task.title}`); toast('Workflow task completed.'); closeModal(); await workflowSyncTasks({silent:true}); renderWorkflowCenter();
+}
+async function workflowDecideTask(id,decision){
+  if(!canEdit()) return;
+  const task=workflowFindTask(id); if(!task||task.status!=='Pending') return;
+  await workflowSaveTaskNote(id);
+  if(task.module==='leaves'){
+    const rec=DB.leaves.find(x=>String(x.id)===String(task.recordId)); if(!rec) return;
+    rec.status=decision==='Approved'?'Approved':'Disapproved';
+  } else if(task.module==='prf'){
+    const rec=DB.prf.find(x=>String(x.id)===String(task.recordId)); if(!rec) return;
+    rec.status=decision==='Approved'?'Approved':'Rejected';
+  } else if(task.module==='cases'){
+    const {data:caseRec,error}=await supabase.from('hr_cases').select('id,status,due_date').eq('id',task.recordId).maybeSingle();
+    if(error||!caseRec){ toast('Could not load the case for this decision.',true); return; }
+    const next=decision==='Approved'?'Resolved':'Under Review';
+    const {error:updateError}=await supabase.from('hr_cases').update({status:next,closed_at:next==='Resolved'?todayISO():null,updated_by:SESSION?.id||null}).eq('id',task.recordId);
+    if(updateError){toast('Case decision failed: '+updateError.message,true);return;}
+    try{ await addCaseActivity(task.recordId,'status',`Workflow ${decision==='Approved'?'approved the case decision':'returned the case to review'}.`,caseRec.status,next,caseRec.due_date||null); }catch(e){}
+  } else {
+    task.decision=decision;
+  }
+  task.status=decision==='Approved'?'Completed':'Rejected'; task.completedAt=new Date().toISOString(); task.completedBy=SESSION?.id||null; task.decision=decision;
+  await saveDB();
+  logAudit(`${decision==='Approved'?'Approved':'Returned'} workflow task: ${task.title}`);
+  toast(decision==='Approved'?'Workflow approval completed.':'Workflow item returned for further review.');
+  closeModal(); await workflowSyncTasks({silent:true}); renderNav(); renderWorkflowCenter();
+}
+function workflowSourceTitle(task){
+  if(task.module==='cases') return `Case ${task.recordId||''}`;
+  if(task.module==='prf') return 'PRF';
+  if(task.module==='leaves') return 'Leave';
+  if(task.module==='evaluations') return 'Evaluation';
+  if(task.module==='nte') return 'NTE';
+  if(task.module==='cvr') return 'CVR';
+  if(task.module==='incidents') return 'Incident';
+  return 'HR Task';
+}
+function workflowActionButtons(task){
+  const a=workflowActionable(task); if(!a) return `<button class="btn btn-ghost btn-sm" onclick="openWorkflowTask('${esc(task.id)}')">View</button>`;
+  let html=`<button class="btn btn-ghost btn-sm" onclick="openWorkflowTask('${esc(task.id)}')">Open</button>`;
+  if(task.actionType==='case_assign') html+=`<button class="btn btn-primary btn-sm" onclick="workflowAssignTask('${esc(task.id)}')">Assign</button>`;
+  else if(task.workflowType==='Approval') html+=`<button class="btn btn-brass btn-sm" onclick="workflowDecideTask('${esc(task.id)}','Approved')">Approve</button>`;
+  else html+=`<button class="btn btn-primary btn-sm" onclick="workflowCompleteTask('${esc(task.id)}')">Complete</button>`;
+  return html;
+}
+async function openWorkflowCreateForm(){
+  if(!canEdit()) return;
+  const users=(DB.users||[]).filter(u=>u.role!=='Viewer');
+  openModal(`<div class="modal-head"><div><h3>Create HR Task</h3><div class="small">Manual tasks can be used for work that does not yet have a dedicated workflow.</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="formgrid">
+    <div class="field full"><label>Task Title *</label><input id="wf_new_title" placeholder="e.g. Confirm employee clearance documents"></div>
+    <div class="field"><label>Priority</label><select id="wf_new_priority"><option>Normal</option><option>Low</option><option>High</option><option>Urgent</option></select></div>
+    <div class="field"><label>Due Date</label><input type="date" id="wf_new_due" value="${todayISO()}"></div>
+    <div class="field"><label>Assign To</label><select id="wf_new_assignee"><option value="">Unassigned</option>${users.map(u=>`<option value="${esc(u.id)}">${esc(u.fullName)} · ${esc(u.role)}</option>`).join('')}</select></div>
+    <div class="field full"><label>Description / Notes</label><textarea id="wf_new_desc" rows="4" placeholder="Describe the action required and the expected result…"></textarea></div>
+  </div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveWorkflowManualTask()">Create Task</button></div>`);
+}
+async function saveWorkflowManualTask(){
+  if(!canEdit()) return;
+  const title=document.getElementById('wf_new_title')?.value.trim();
+  if(!title){toast('Enter a task title.');return;}
+  const task={id:uid(),workflowKey:`manual:${uid()}`,createdAt:new Date().toISOString(),createdBy:SESSION?.id||null,workflowType:'Task',title,description:document.getElementById('wf_new_desc')?.value.trim()||'',module:'manual',recordId:'',employeeName:'',department:'',priority:document.getElementById('wf_new_priority')?.value||'Normal',dueDate:document.getElementById('wf_new_due')?.value||'',assigneeId:document.getElementById('wf_new_assignee')?.value||'',actionType:'manual',status:'Pending'};
+  DB.workflowTasks.push(task); await saveDB(); logAudit(`Created workflow task: ${title}`); toast('HR task created.'); closeModal(); renderNav(); renderWorkflowCenter();
+}
+async function renderWorkflowCenter(){
+  setTitle('Workflow & Approvals','A unified work queue for approvals, reviews, deadlines, and HR tasks.');
+  document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Synchronizing current HR workflow items…</div></div>';
+  await workflowSyncTasks({silent:true});
+  const all=DB.workflowTasks||[];
+  const pending=all.filter(t=>t.status==='Pending');
+  const visible=all.filter(workflowVisibleToSession);
+  const today=todayISO(), next7=addDaysISO(today,7);
+  const overdue=visible.filter(t=>t.status==='Pending'&&t.dueDate&&t.dueDate<today);
+  const due7=visible.filter(t=>t.status==='Pending'&&t.dueDate&&t.dueDate>=today&&t.dueDate<=next7);
+  const my=visible.filter(t=>t.status==='Pending'&&String(t.assigneeId||'')===String(SESSION?.id||''));
+  const unassigned=visible.filter(t=>t.status==='Pending'&&!t.assigneeId);
+  const q=(STATE.search||'').toLowerCase();
+  let rows=visible.filter(t=>{
+    const searchOk=!q||[t.title,t.description,t.employeeName,t.department,t.module,t.priority].some(v=>String(v||'').toLowerCase().includes(q));
+    let statusOk=STATE.workflowStatus==='All'||t.status===STATE.workflowStatus;
+    let typeOk=!STATE.workflowType||t.workflowType===STATE.workflowType;
+    let scopeOk=true;
+    if(STATE.workflowFilter==='mine') scopeOk=String(t.assigneeId||'')===String(SESSION?.id||'');
+    if(STATE.workflowFilter==='queue') scopeOk=t.status==='Pending';
+    if(STATE.workflowFilter==='unassigned') scopeOk=t.status==='Pending'&&!t.assigneeId;
+    return searchOk&&statusOk&&typeOk&&scopeOk;
+  }).sort((a,b)=>{
+    const pa={Urgent:0,High:1,Normal:2,Low:3};
+    if(a.status!==b.status) return a.status==='Pending'?-1:1;
+    if((pa[a.priority]??2)!==(pa[b.priority]??2)) return (pa[a.priority]??2)-(pa[b.priority]??2);
+    return String(a.dueDate||'9999').localeCompare(String(b.dueDate||'9999'));
+  });
+  const html=`<div class="workflow-hero"><div><h1>Workflow &amp; Approvals</h1><p>${visible.filter(t=>t.status==='Pending').length} pending workflow item${visible.filter(t=>t.status==='Pending').length===1?'':'s'} across cases, leave, PRF, evaluations, and HR reviews.</p></div><div class="workflow-actions">${canEdit()?`<button class="btn btn-brass" onclick="openWorkflowCreateForm()">${iPlus(15)} New HR Task</button>`:''}<button class="btn btn-ghost" onclick="go('actionCenter')">Action Center</button></div></div>
+    <div class="workflow-kpis">
+      <div class="workflow-kpi" style="--accent:var(--amber)"><div class="k">Pending Queue</div><div class="v">${pending.length}</div><div class="s">All workflow items</div></div>
+      <div class="workflow-kpi" style="--accent:var(--ink)"><div class="k">My Work</div><div class="v">${my.length}</div><div class="s">Assigned to me</div></div>
+      <div class="workflow-kpi" style="--accent:${overdue.length?'var(--rust)':'var(--forest)'}"><div class="k">Overdue</div><div class="v">${overdue.length}</div><div class="s">Past due date</div></div>
+      <div class="workflow-kpi" style="--accent:var(--brass)"><div class="k">Due · 7d</div><div class="v">${due7.length}</div><div class="s">Upcoming deadlines</div></div>
+      <div class="workflow-kpi" style="--accent:var(--forest)"><div class="k">Unassigned</div><div class="v">${unassigned.length}</div><div class="s">Needs an owner</div></div>
+    </div>
+    <div class="workflow-panel"><div class="workflow-toolbar"><div class="search">${iSearch(15)}<input placeholder="Search tasks, employees, departments…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderWorkflowCenter()"></div><select onchange="STATE.workflowFilter=this.value; renderWorkflowCenter()"><option value="queue" ${STATE.workflowFilter==='queue'?'selected':''}>Pending Queue</option><option value="mine" ${STATE.workflowFilter==='mine'?'selected':''}>My Work</option><option value="unassigned" ${STATE.workflowFilter==='unassigned'?'selected':''}>Unassigned</option><option value="all" ${STATE.workflowFilter==='all'?'selected':''}>All Tasks</option></select><select onchange="STATE.workflowStatus=this.value; renderWorkflowCenter()"><option value="Pending" ${STATE.workflowStatus==='Pending'?'selected':''}>Pending</option><option value="Completed" ${STATE.workflowStatus==='Completed'?'selected':''}>Completed</option><option value="Rejected" ${STATE.workflowStatus==='Rejected'?'selected':''}>Rejected</option><option value="Cancelled" ${STATE.workflowStatus==='Cancelled'?'selected':''}>Cancelled</option><option value="All" ${STATE.workflowStatus==='All'?'selected':''}>All Statuses</option></select><select onchange="STATE.workflowType=this.value; renderWorkflowCenter()"><option value="" ${!STATE.workflowType?'selected':''}>All Types</option>${WORKFLOW_TYPES.map(t=>`<option value="${t}" ${STATE.workflowType===t?'selected':''}>${t}</option>`).join('')}</select></div>
+    ${rows.length?`<div class="workflow-list">${rows.map(t=>{const sev=workflowTaskSeverity(t);return `<div class="workflow-row ${sev}"><span class="dot"></span><div class="main"><div class="title">${esc(t.title)}</div><div class="meta">${esc(t.employeeName||workflowSourceTitle(t))}${t.department?' · '+esc(t.department):''} · ${esc(t.description||'')} ${t.assigneeId?' · '+esc(DB.users.find(u=>String(u.id)===String(t.assigneeId))?.fullName||'Assigned'): ' · Unassigned'}</div></div><div class="right"><div>${workflowPriorityBadge(t.priority)}</div><div class="due">${esc(workflowDueText(t))}</div></div><div class="actions">${workflowActionButtons(t)}</div></div>`;}).join('')}</div>`:`<div class="workflow-empty"><b>No workflow items match this view.</b>Try another filter or create a manual HR task.</div>`}</div>
+    <div class="notice" style="margin-top:12px;"><b>Workflow rule:</b> Source records remain the system of record. Approvals and task state coordinate HR work around those records and are retained in the audit trail.</div>`;
+  document.getElementById('content').innerHTML=html;
 }
 
 /* ================================================================
@@ -3594,6 +3981,7 @@ const MODULES = {
       {key:'reasonForRequest', label:'Reason for Manpower Request', type:'text', full:true, required:true},
       {key:'classification', label:'Classification', type:'select', options:PRF_CLASS, required:true},
       {key:'employeeReplaced', label:'Employee Being Replaced (if applicable)', type:'text'},
+      {key:'status', label:'Workflow Status', type:'select', options:PRF_STATUS, required:true, default:()=>PRF_STATUS[1]},
       {key:'attachment', label:'Uploaded PRF Document', type:'file', full:true},
       {key:'remarks', label:'Remarks', type:'textarea'},
     ],
@@ -3604,6 +3992,7 @@ const MODULES = {
       {key:'classification', label:'Classification'},
       {key:'employeeReplaced', label:'Replacing'},
       {key:'dateOfRequest', label:'Date', render:r=>fmtDate(r.dateOfRequest)},
+      {key:'status', label:'Status', render:r=>statusBadge(r.status||'Draft',PRF_STATUS_MAP)},
       {key:'attachment', label:'Attachment', render:r=>attachCellHTML('prf',r,'attachment'), csv:r=>r.attachment||''},
     ],
   },
@@ -4439,6 +4828,7 @@ async function deleteCase(id){
 const RENDERERS = {
   dashboard: renderDashboard,
   actionCenter: renderActionCenter,
+  workflow: renderWorkflowCenter,
   operations: renderOperationsWorkspace,
   analytics: renderAnalytics,
   cases: renderCases,
@@ -4478,6 +4868,7 @@ document.getElementById('login-form').addEventListener('keydown', e=>{ if(docume
 Object.assign(window, {
   addDaysISO, atdComputeStatus, atdFillEmployee, atdPayslipCellHTML, atdRemaining, atdToggleCategory, atdTotalPaid,
   addCaseActivity, addCaseNote, caseActivityIcon, caseActivityLabel, caseDeadlineInfo, casePriorityBadge, caseWorkflowSteps, caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, setCaseWorkflowStatus, buildNotificationItems, closeNotificationPanel, markAllNotificationsRead, openNotification, refreshNotificationBadge, renderNotificationPanel, toggleNotificationPanel,
+  workflowSyncTasks, workflowPendingCount, workflowFindTask, workflowOpenSource, workflowSaveTaskNote, workflowAssignTask, workflowSaveAssignment, workflowCompleteTask, workflowDecideTask, openWorkflowTask, openWorkflowCreateForm, saveWorkflowManualTask, renderWorkflowCenter, workflowActionButtons, workflowPriorityBadge, workflowDueText,
   countStoredDocuments, renderDocuments, openStoredDocument, collectStoredDocuments,
   attachCellHTML, attachPreviewHTML, authErr, bootAuthenticated, calShift, canEdit, classify, clearFileField, closeModal,
   consequenceFor, cvrOffenseLevel, cvrOffenseSummaryHTML, daysBetweenInclusive, defaultOffenseCatalog, deleteATDPayment,
