@@ -127,6 +127,39 @@ a{color:inherit;}
 .barfill{height:100%;background:linear-gradient(90deg,var(--brass),var(--brass-dk));border-radius:6px;}
 .barrow .amt{text-align:right;font-weight:600;}
 
+
+/* ---------- Management Analytics ---------- */
+.analytics-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px;}
+.metric-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;min-width:0;}
+.metric-card .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--slate);font-weight:700;}
+.metric-card .v{font-family:'Source Serif 4',serif;font-size:25px;font-weight:700;margin-top:5px;}
+.metric-card .s{font-size:11px;color:var(--slate);margin-top:3px;line-height:1.35;}
+.analytics-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:16px;margin-bottom:16px;}
+.analytics-grid.equal{grid-template-columns:1fr 1fr;}
+.chart-list{display:flex;flex-direction:column;gap:10px;}
+.chart-row{display:grid;grid-template-columns:150px 1fr 42px;align-items:center;gap:10px;font-size:12.5px;}
+.chart-row .label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--slate);}
+.chart-track{height:10px;border-radius:8px;background:var(--paper);overflow:hidden;}
+.chart-fill{height:100%;border-radius:8px;background:linear-gradient(90deg,var(--brass),var(--brass-dk));}
+.chart-fill.alt{background:linear-gradient(90deg,var(--forest),#2D5840);}
+.chart-fill.warn{background:linear-gradient(90deg,var(--amber),#9C6F22);}
+.chart-fill.danger{background:linear-gradient(90deg,var(--rust),#8E3727);}
+.chart-count{text-align:right;font-weight:700;}
+.analytics-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.analytics-table th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);padding:9px 10px;border-bottom:1px solid var(--line);background:#FAFAF7;}
+.analytics-table td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle;}
+.analytics-table tr:last-child td{border-bottom:none;}
+.attention-list{display:flex;flex-direction:column;gap:8px;}
+.attention-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;}
+.attention-item .mark{width:8px;height:8px;border-radius:50%;background:var(--amber);flex:none;}
+.attention-item.danger .mark{background:var(--rust);}
+.attention-item .body{min-width:0;flex:1;}
+.attention-item .title{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.attention-item .meta{font-size:11px;color:var(--slate);margin-top:2px;}
+.analytics-note{font-size:11px;color:var(--slate);padding-top:10px;margin-top:12px;border-top:1px dashed var(--line-2);line-height:1.5;}
+@media (max-width:1180px){.analytics-kpis{grid-template-columns:repeat(3,1fr);}.analytics-grid,.analytics-grid.equal{grid-template-columns:1fr;}}
+@media (max-width:700px){.analytics-kpis{grid-template-columns:1fr 1fr;}.chart-row{grid-template-columns:105px 1fr 34px;}}
+
 /* ---------- toolbar / tables ---------- */
 .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
 .toolbar .search{position:relative;flex:1;min-width:180px;max-width:320px;}
@@ -668,6 +701,7 @@ function enterApp(){
 const NAV = [
   {sec:'Overview', items:[
     {v:'dashboard', label:'Dashboard', icon:iGrid},
+    {v:'analytics', label:'Management Analytics', icon:iChart},
     {v:'weeklyReport', label:'Weekly Report', icon:iChart},
   ]},
   {sec:'Records', items:[
@@ -2389,6 +2423,150 @@ const MODULES = {
 };
 
 /* ================================================================
+   MANAGEMENT ANALYTICS
+   ================================================================ */
+function analyticsDateFor(module,rec){
+  if(module==='employees') return rec.dateHired||'';
+  if(module==='leaves') return rec.startDate||rec.dateApplied||'';
+  if(module==='disciplinary') return rec.dateOfIncident||'';
+  if(module==='nte') return rec.dateIssued||rec.dateReceived||'';
+  if(module==='memos') return rec.dateOfMemo||rec.dateReceived||'';
+  if(module==='nod') return rec.dateOfNod||rec.dateReceived||'';
+  if(module==='oncall') return rec.startDate||'';
+  if(module==='transfers') return rec.toDate||rec.fromDate||'';
+  if(module==='cvr') return rec.dateOfCVR||'';
+  if(module==='incidents') return rec.dateOfIncident||'';
+  if(module==='prf') return rec.dateOfRequest||'';
+  if(module==='evaluations') return rec.completedDate||'';
+  if(module==='atd') return rec.atdDate||'';
+  return '';
+}
+function analyticsMonthLabel(date){
+  if(!date) return '';
+  const d=new Date(date+'T00:00:00');
+  if(Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US',{month:'short',year:'numeric'});
+}
+function analyticsDaysOpen(openedAt, closedAt){
+  if(!openedAt) return 0;
+  const end=closedAt||todayISO();
+  const a=new Date(openedAt+'T00:00:00'), b=new Date(end+'T00:00:00');
+  return Math.max(0,Math.floor((b-a)/86400000));
+}
+function analyticsEsc(value){ return esc(value==null?'':value); }
+async function renderAnalytics(){
+  setTitle('Management Analytics','Management-level view of workforce, cases, HR activity, and items requiring attention.');
+  document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Loading management analytics…</div></div>';
+  try{
+    const [{data:cases,error:caseError}]=await Promise.all([
+      supabase.from('hr_cases').select('id,case_number,employee_name,department,status,opened_at,closed_at,updated_at').order('updated_at',{ascending:false}).limit(500)
+    ]);
+    if(caseError) throw caseError;
+    const allCases=cases||[];
+    const activeCases=allCases.filter(c=>!['Closed','Cancelled','Resolved'].includes(c.status));
+    const agedCases=activeCases.filter(c=>analyticsDaysOpen(c.opened_at,c.closed_at)>=30);
+    const resolvedCases=allCases.filter(c=>c.status==='Resolved');
+    const caseStatus={}; allCases.forEach(c=>caseStatus[c.status]=(caseStatus[c.status]||0)+1);
+    const caseDept={}; activeCases.forEach(c=>{const d=c.department||'Unassigned'; caseDept[d]=(caseDept[d]||0)+1;});
+
+    const activityModules=[
+      ['incidents','Incident Reports'],['cvr','CVR'],['disciplinary','Disciplinary'],['nte','NTE'],['memos','Memoranda'],['nod','NOD'],['leaves','Leaves']
+    ];
+    const since=addDaysISO(todayISO(),-89);
+    const activityCounts=activityModules.map(([key,label])=>({key,label,count:(DB[key]||[]).filter(r=>analyticsDateFor(key,r)>=since).length}));
+    const totalActivity90=activityCounts.reduce((sum,x)=>sum+x.count,0);
+
+    const probationary=DB.employees.filter(e=>classify(e)==='Probationary').length;
+    const evalOverdue=DB.employees.filter(e=>classify(e)==='Probationary' && e.dateHired).reduce((sum,e)=>sum+EVAL_MILESTONES.filter(m=>evalStatusInfo(e,m).label==='Overdue').length,0);
+    const openNTE=DB.nte.filter(n=>n.status!=='Resolved').length;
+    const openATD=DB.atd.filter(r=>atdRemaining(r)>0).length;
+    const outstandingATD=DB.atd.reduce((sum,r)=>sum+atdRemaining(r),0);
+    const pendingOnCall=DB.oncall.filter(r=>r.status==='Active').length;
+
+    const deptEmp={}; DB.employees.forEach(e=>{const d=e.department||'Unassigned'; deptEmp[d]=(deptEmp[d]||0)+1;});
+    const deptRows=Object.entries(deptEmp).sort((a,b)=>b[1]-a[1]);
+    const maxDept=Math.max(...deptRows.map(x=>x[1]),1);
+    const maxActivity=Math.max(...activityCounts.map(x=>x.count),1);
+
+    const recentCases=allCases.slice(0,7);
+    const attention=[];
+    agedCases.slice(0,5).forEach(c=>attention.push({danger:true,title:`${c.case_number} — ${c.employee_name}`,meta:`${c.status} · ${analyticsDaysOpen(c.opened_at)} days open`}));
+    if(evalOverdue) attention.push({title:`${evalOverdue} probationary evaluation(s) overdue`,meta:'Review the Probationary Evaluations module.'});
+    if(openNTE) attention.push({title:`${openNTE} NTE record(s) still open`,meta:'Review Notice to Explain status.'});
+    if(outstandingATD>0) attention.push({title:`${peso(outstandingATD)} outstanding ATD balance`,meta:`${openATD} ATD record(s) with remaining balance.`});
+
+    const html=`
+      <div class="analytics-kpis">
+        <div class="metric-card"><div class="k">Employees</div><div class="v">${DB.employees.length}</div><div class="s">${probationary} currently probationary</div></div>
+        <div class="metric-card"><div class="k">Active Cases</div><div class="v">${activeCases.length}</div><div class="s">${agedCases.length} open 30+ days</div></div>
+        <div class="metric-card"><div class="k">90-Day HR Activity</div><div class="v">${totalActivity90}</div><div class="s">Across incidents, violations, notices, and leaves</div></div>
+        <div class="metric-card"><div class="k">Open NTEs</div><div class="v">${openNTE}</div><div class="s">Not yet resolved</div></div>
+        <div class="metric-card"><div class="k">ATD Outstanding</div><div class="v" style="font-size:21px;">${peso(outstandingATD)}</div><div class="s">${openATD} record(s) with balance remaining</div></div>
+      </div>
+
+      <div class="analytics-grid">
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;"><div><h3>Active Cases by Department</h3><div class="desc">Current open case workload.</div></div><button class="btn btn-ghost btn-sm" onclick="go('cases')">Open HR Cases</button></div>
+          <div class="chart-list">
+            ${Object.keys(caseDept).length?Object.entries(caseDept).sort((a,b)=>b[1]-a[1]).map(([d,c],i)=>`<div class="chart-row"><div class="label" title="${analyticsEsc(d)}">${analyticsEsc(d)}</div><div class="chart-track"><div class="chart-fill ${i===0?'alt':''}" style="width:${Math.round(c/maxDept*100)}%"></div></div><div class="chart-count">${c}</div></div>`).join(''):'<div class="small">No active cases yet.</div>'}
+          </div>
+        </div>
+        <div class="panel">
+          <h3>Case Status</h3><div class="desc">Distribution across all HR cases.</div>
+          <div class="chart-list">
+            ${Object.keys(CASE_STATUS_MAP).map(status=>{const c=caseStatus[status]||0; const pct=allCases.length?Math.round(c/allCases.length*100):0; const cls=status==='Resolved'||status==='Closed'?'alt':(status==='Cancelled'?'danger':'warn'); return `<div class="chart-row"><div class="label">${analyticsEsc(status)}</div><div class="chart-track"><div class="chart-fill ${cls}" style="width:${pct}%"></div></div><div class="chart-count">${c}</div></div>`;}).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="analytics-grid equal">
+        <div class="panel">
+          <h3>90-Day HR Activity</h3><div class="desc">Records created or recorded within the last 90 days, based on their module date.</div>
+          <div class="chart-list">
+            ${activityCounts.map((x,i)=>`<div class="chart-row"><div class="label">${analyticsEsc(x.label)}</div><div class="chart-track"><div class="chart-fill ${i%3===1?'alt':i%3===2?'warn':''}" style="width:${Math.round(x.count/maxActivity*100)}%"></div></div><div class="chart-count">${x.count}</div></div>`).join('')}
+          </div>
+        </div>
+        <div class="panel">
+          <h3>Employee Distribution by Department</h3><div class="desc">Current headcount distribution.</div>
+          <div class="chart-list">
+            ${deptRows.length?deptRows.map(([d,c],i)=>`<div class="chart-row"><div class="label" title="${analyticsEsc(d)}">${analyticsEsc(d)}</div><div class="chart-track"><div class="chart-fill ${i===0?'alt':''}" style="width:${Math.round(c/maxDept*100)}%"></div></div><div class="chart-count">${c}</div></div>`).join(''):'<div class="small">No employees on record.</div>'}
+          </div>
+        </div>
+      </div>
+
+      <div class="analytics-grid equal">
+        <div class="panel">
+          <h3>Items Requiring Attention</h3><div class="desc">Operational follow-ups surfaced from current records.</div>
+          <div class="attention-list">
+            ${attention.length?attention.slice(0,8).map(a=>`<div class="attention-item ${a.danger?'danger':''}"><span class="mark"></span><div class="body"><div class="title">${analyticsEsc(a.title)}</div><div class="meta">${analyticsEsc(a.meta)}</div></div></div>`).join(''):'<div class="small">No attention items detected.</div>'}
+          </div>
+        </div>
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;"><div><h3>Latest HR Cases</h3><div class="desc">Most recently updated case files.</div></div><button class="btn btn-ghost btn-sm" onclick="go('cases')">View All</button></div>
+          <div class="tablewrap"><table class="analytics-table"><thead><tr><th>Case</th><th>Employee</th><th>Status</th><th>Age</th></tr></thead><tbody>
+            ${recentCases.length?recentCases.map(c=>`<tr><td><b>${analyticsEsc(c.case_number)}</b></td><td>${analyticsEsc(c.employee_name)}</td><td>${statusBadge(c.status,CASE_STATUS_MAP)}</td><td>${analyticsDaysOpen(c.opened_at,c.closed_at)}d</td></tr>`).join(''):'<tr><td colspan="4"><div class="empty">No cases yet.</div></td></tr>'}
+          </tbody></table></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;"><div><h3>Management Snapshot</h3><div class="desc">Quick operational figures to support review meetings and weekly HR reporting.</div></div><div style="display:flex;gap:8px;"><button class="btn btn-ghost btn-sm" onclick="go('weeklyReport')">Weekly Report</button><button class="btn btn-ghost btn-sm" onclick="go('reports')">Reports</button></div></div>
+        <div class="grid cols-4" style="margin-top:8px;">
+          <div class="metric-card"><div class="k">Resolved Cases</div><div class="v">${resolvedCases.length}</div><div class="s">All cases currently marked Resolved</div></div>
+          <div class="metric-card"><div class="k">Overdue Evaluations</div><div class="v">${evalOverdue}</div><div class="s">30 / 90 / 180-day probation checks</div></div>
+          <div class="metric-card"><div class="k">Active On-Call</div><div class="v">${pendingOnCall}</div><div class="s">Current active replacement assignments</div></div>
+          <div class="metric-card"><div class="k">Cases 30+ Days</div><div class="v">${agedCases.length}</div><div class="s">Based on opened date and current date</div></div>
+        </div>
+        <div class="analytics-note">Analytics are descriptive summaries of the records currently stored in the system. Case aging is calculated from the case opened date; it is a management metric, not a determination of legal or procedural compliance.</div>
+      </div>
+    `;
+    document.getElementById('content').innerHTML=html;
+  }catch(e){
+    document.getElementById('content').innerHTML=`<div class="panel"><h3>Management Analytics</h3><div class="notice"><b>Could not load analytics.</b> ${analyticsEsc(e.message||e)}</div></div>`;
+  }
+}
+
+/* ================================================================
    REPORTS
    ================================================================ */
 function renderReports(){
@@ -2865,6 +3043,7 @@ async function deleteCase(id){
    ================================================================ */
 const RENDERERS = {
   dashboard: renderDashboard,
+  analytics: renderAnalytics,
   cases: renderCases,
   documents: renderDocuments,
   employees: renderEmployees,
@@ -2905,7 +3084,7 @@ Object.assign(window, {
   fieldHTML, fmtDate, getEvalRecord, go, handleFileInput, incidentTypeOccurrence, incidentTypeSummaryHTML,
   loadDB, loadProfiles, logAudit, mondayOf, nthLabel, offenseLevelFor, openATDForm, openATDPaymentForm,
   openATDPayments, openCVRForm, openEmployeeForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
-  openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderCVR, renderDashboard,
+  openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard,
   renderDisciplinary, renderEmployees, renderEvaluations, renderIncidents, renderLeaveCalendar, renderLeaveRecords,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderOffenseSummary, renderReports, renderSettings,
   renderUsers, renderWeeklyReport, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
