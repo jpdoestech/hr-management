@@ -237,6 +237,7 @@ label.opt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--s
       <form id="register-form" style="display:none;" onsubmit="return doRegister(event)">
         <div class="field"><label>Complete Name</label><input id="rg-name" type="text" placeholder="Juan Dela Cruz" required></div>
         <div class="field"><label>Username</label><input id="rg-user" type="text" placeholder="jdelacruz" required></div>
+        <div class="field"><label>Email</label><input id="rg-email" type="email" placeholder="name@company.com" autocomplete="email" required></div>
         <div class="field"><label>Password</label><input id="rg-pass" type="password" required></div>
         <div class="field"><label>Confirm Password</label><input id="rg-pass2" type="password" required></div>
         <button type="submit" class="btn btn-brass btn-block">Create Account</button>
@@ -284,13 +285,13 @@ label.opt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--s
 
 <script type="module">
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './supabase-config.js';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase-config.js';
 
-if(!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('YOUR_PROJECT_REF')){
+if(!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL.includes('YOUR_PROJECT_REF')){
   document.body.innerHTML = '<div style="font-family:system-ui;padding:40px;max-width:760px;margin:auto"><h2>Supabase configuration missing</h2><p>Edit <b>supabase-config.js</b> with your Supabase project URL and publishable/anon key.</p></div>';
   throw new Error('Supabase configuration missing');
 }
-const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* =========================================================================
    SCPA HR MANAGEMENT & DISCIPLINARY DASHBOARD — GitHub Pages + Vercel + Supabase
@@ -2380,6 +2381,27 @@ const RENDERERS = {
 };
 
 document.getElementById('login-form').addEventListener('keydown', e=>{ if(document.getElementById('auth-error').style.display==='block') document.getElementById('auth-error').style.display='none'; });
+
+// The app is an ES module, while the existing UI uses inline onclick/onsubmit
+// handlers. Expose the application handlers on window so GitHub Pages/Vercel
+// can execute those handlers normally.
+Object.assign(window, {
+  addDaysISO, atdComputeStatus, atdFillEmployee, atdPayslipCellHTML, atdRemaining, atdToggleCategory, atdTotalPaid,
+  attachCellHTML, attachPreviewHTML, authErr, bootAuthenticated, calShift, canEdit, classify, clearFileField, closeModal,
+  consequenceFor, cvrOffenseLevel, cvrOffenseSummaryHTML, daysBetweenInclusive, defaultOffenseCatalog, deleteATDPayment,
+  deleteATDRecord, deleteCVR, deleteEmployee, deleteIncident, deleteRecord, doLogin, doLogout, doRegister, donut,
+  downloadATDPayslip, downloadAttachment, downloadCSV, downloadRecordAttachment, ensure, enterApp, esc, evalDueDate,
+  evalStatusInfo, exportATDCSV, exportCVRCSV, exportEmployeesCSV, exportIncidentsCSV, exportModuleCSV, exportWeeklyCSV,
+  fieldHTML, fmtDate, getEvalRecord, go, handleFileInput, incidentTypeOccurrence, incidentTypeSummaryHTML,
+  leavesOn, loadDB, loadProfiles, logAudit, mondayOf, nthLabel, offenseLevelFor, openATDForm, openATDPaymentForm,
+  openATDPayments, openCVRForm, openEmployeeForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
+  openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderCVR, renderDashboard,
+  renderDisciplinary, renderEmployees, renderEvaluations, renderIncidents, renderLeaveCalendar, renderLeaveRecords,
+  renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderOffenseSummary, renderReports, renderSettings,
+  renderUsers, renderWeeklyReport, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
+  saveEval, saveIncident, saveRecord, saveSettings, saveUser, setTitle, shiftDate, statusBadge, switchAuthTab, toCSV,
+  toast, todayISO, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek
+});
 
 (async function initSupabase(){
   const {data}=await supabase.auth.getSession();
