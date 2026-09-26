@@ -1062,7 +1062,114 @@ async function closeModal(keepUploads=[]){
   await deleteStorageObjects(pending);
 }
 document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeModal(); });
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&document.getElementById('overlay').classList.contains('on')) closeModal(); });
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape') return;
+  if(document.getElementById('data-confirm-overlay')?.classList.contains('on')) return;
+  if(document.getElementById('overlay').classList.contains('on')) closeModal();
+});
+
+const DATA_CHANGE_HANDLER_PATTERN=/\b(?:save[A-Z]\w*|delete[A-Z]\w*|doRegister|createCaseFromRecord|linkRecordToExistingCase|linkCaseRecord|unlinkCaseRecord|addCaseNote|setCaseWorkflowStatus|workflowCompleteTask|workflowDecideTask|runAutomationEngine|toggleAutomationRule)\s*\(/;
+const CONFIRMED_CHANGE_TARGETS=new WeakSet();
+let DATA_CONFIRM_PENDING=null;
+let DATA_CONFIRM_TRIGGER=null;
+function dataChangeIntent(target,eventType='click'){
+  if(!target || target.closest?.('#data-confirm-overlay')) return null;
+  if(target.dataset?.confirmChange==='false') return null;
+  const attr=eventType==='submit'?'onsubmit':eventType==='change'?'onchange':'onclick';
+  const handler=target.getAttribute?.(attr)||'';
+  if(target.dataset?.confirmChange!=='true' && !DATA_CHANGE_HANDLER_PATTERN.test(handler)) return null;
+  const submitLabel=eventType==='submit'?target.querySelector?.('button[type="submit"],input[type="submit"]')?.textContent:'';
+  const rawLabel=(target.dataset?.confirmLabel||target.getAttribute?.('title')||submitLabel||target.textContent||'Save changes').replace(/\s+/g,' ').trim();
+  const label=rawLabel||'Save changes';
+  const danger=/delete|remove|reject|unlink|close case/i.test(`${label} ${handler}`);
+  return {
+    title:danger?'Confirm destructive change':'Confirm data change',
+    message:`You are about to ${label.toLowerCase()}. This will update stored system data${danger?' and may not be reversible':''}. Do you want to continue?`,
+    confirmLabel:danger?(label.match(/delete|remove|reject|unlink|close/i)?.[0]||'Confirm'):'Confirm',
+    danger,
+  };
+}
+function confirmDataChange({title='Confirm data change',message='This action will update stored system data. Do you want to continue?',confirmLabel='Confirm',danger=false}={}){
+  if(DATA_CONFIRM_PENDING) DATA_CONFIRM_PENDING(false);
+  const overlay=document.getElementById('data-confirm-overlay');
+  const accept=document.getElementById('data-confirm-accept');
+  DATA_CONFIRM_TRIGGER=document.activeElement instanceof HTMLElement?document.activeElement:null;
+  document.getElementById('data-confirm-title').textContent=title;
+  document.getElementById('data-confirm-message').textContent=message;
+  accept.textContent=confirmLabel;
+  accept.className=`btn ${danger?'btn-danger':'btn-primary'}`;
+  overlay.classList.toggle('danger',danger);
+  overlay.classList.add('on');
+  overlay.setAttribute('aria-hidden','false');
+  document.body.classList.add('data-confirm-open');
+  return new Promise(resolve=>{
+    DATA_CONFIRM_PENDING=resolve;
+    requestAnimationFrame(()=>document.getElementById('data-confirm-cancel')?.focus());
+  });
+}
+function resolveDataChangeConfirmation(confirmed){
+  if(!DATA_CONFIRM_PENDING) return;
+  const resolve=DATA_CONFIRM_PENDING;
+  DATA_CONFIRM_PENDING=null;
+  const overlay=document.getElementById('data-confirm-overlay');
+  overlay.classList.remove('on','danger');
+  overlay.setAttribute('aria-hidden','true');
+  document.body.classList.remove('data-confirm-open');
+  if(DATA_CONFIRM_TRIGGER?.isConnected) DATA_CONFIRM_TRIGGER.focus();
+  DATA_CONFIRM_TRIGGER=null;
+  resolve(Boolean(confirmed));
+}
+document.getElementById('data-confirm-cancel').addEventListener('click',()=>resolveDataChangeConfirmation(false));
+document.getElementById('data-confirm-accept').addEventListener('click',()=>resolveDataChangeConfirmation(true));
+document.getElementById('data-confirm-overlay').addEventListener('click',event=>{
+  if(event.target.id==='data-confirm-overlay') resolveDataChangeConfirmation(false);
+});
+document.addEventListener('keydown',event=>{
+  if(event.key==='Escape'&&document.getElementById('data-confirm-overlay').classList.contains('on')){
+    event.preventDefault();
+    resolveDataChangeConfirmation(false);
+  }
+});
+document.addEventListener('click',async event=>{
+  const target=event.target.closest?.('button,[role="button"]');
+  if(!target) return;
+  if(CONFIRMED_CHANGE_TARGETS.has(target)){CONFIRMED_CHANGE_TARGETS.delete(target);return;}
+  const intent=dataChangeIntent(target,'click');
+  if(!intent) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if(await confirmDataChange(intent)){
+    CONFIRMED_CHANGE_TARGETS.add(target);
+    target.click();
+  }
+},true);
+document.addEventListener('submit',async event=>{
+  const form=event.target;
+  if(CONFIRMED_CHANGE_TARGETS.has(form)){CONFIRMED_CHANGE_TARGETS.delete(form);return;}
+  const intent=dataChangeIntent(form,'submit');
+  if(!intent) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if(await confirmDataChange(intent)){
+    CONFIRMED_CHANGE_TARGETS.add(form);
+    form.requestSubmit();
+  }
+},true);
+document.addEventListener('change',async event=>{
+  const target=event.target;
+  if(CONFIRMED_CHANGE_TARGETS.has(target)){CONFIRMED_CHANGE_TARGETS.delete(target);return;}
+  const intent=dataChangeIntent(target,'change');
+  if(!intent) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  const desiredChecked=target.checked;
+  if(target.type==='checkbox'||target.type==='radio') target.checked=!desiredChecked;
+  if(await confirmDataChange(intent)){
+    if(target.type==='checkbox'||target.type==='radio') target.checked=desiredChecked;
+    CONFIRMED_CHANGE_TARGETS.add(target);
+    target.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+},true);
 
 const ROW_ACTION_MENUS=new Map();
 let ROW_ACTION_MENU_ID=0;
@@ -1121,6 +1228,8 @@ function openRowActionMenu(id){
 async function runRowAction(id,index){
   const action=ROW_ACTION_MENUS.get(id)?.actions[index];
   if(!action) return;
+  const intent=dataChangeIntent(action.button,'click');
+  if(intent && !(await confirmDataChange(intent))) return;
   await closeModal();
   action.button.click();
 }
@@ -1485,7 +1594,6 @@ async function saveRecord(key, id){
 }
 async function deleteRecord(key,id){
   const cfg = MODULES[key];
-  if(!confirm('Delete this record? This cannot be undone.')) return;
   const old=DB[key].find(r=>r.id===id);
   const storagePaths=recordStoragePaths(old);
   DB[key] = DB[key].filter(r=>r.id!==id);
@@ -1830,7 +1938,7 @@ async function saveEmployee(id){
   const duplicateCandidates=findEmployeeDuplicates(vals,id);
   if(duplicateCandidates.length){
     const sample=duplicateCandidates.slice(0,3).map(e=>e.name+' — '+e.department).join('; ');
-    if(!confirm('Possible duplicate employee record found: '+sample+'. Continue saving anyway?')) return;
+    if(!(await confirmDataChange({title:'Possible duplicate employee',message:`A similar employee record was found: ${sample}. Save this employee anyway?`,confirmLabel:'Save anyway'}))) return;
   }
   const rec=id?DB.employees.find(e=>e.id===id):{id:uid(), employmentHistory:[], ...vals};
   const oldStoragePaths=recordStoragePaths(id?rec:null);
@@ -1851,7 +1959,6 @@ async function saveEmployee(id){
   await closeModal([...newStoragePaths]); renderNav(); renderEmployees();
 }
 async function deleteEmployee(id){
-  if(!confirm('Delete this employee record? This cannot be undone.')) return;
   const emp = DB.employees.find(e=>e.id===id);
   const storagePaths=recordStoragePaths(emp);
   DB.employees = DB.employees.filter(e=>e.id!==id);
@@ -2316,7 +2423,6 @@ async function saveCVR(id){
   await closeModal([...newStoragePaths]); renderNav(); renderCVR();
 }
 function deleteCVR(id){
-  if(!confirm('Delete this CVR record? This cannot be undone.')) return;
   DB.cvr = DB.cvr.filter(c=>c.id!==id);
   logAudit('Deleted a CVR record');
   saveDB(); renderNav(); renderCVR(); toast('CVR deleted.');
@@ -2442,7 +2548,6 @@ async function saveIncident(id){
   await closeModal([...newStoragePaths]); renderNav(); renderIncidents();
 }
 function deleteIncident(id){
-  if(!confirm('Delete this incident report? This cannot be undone.')) return;
   DB.incidents = DB.incidents.filter(i=>i.id!==id);
   logAudit('Deleted an incident report');
   saveDB(); renderNav(); renderIncidents(); toast('Incident report deleted.');
@@ -2754,7 +2859,6 @@ async function saveATDRecord(id){
   }
 }
 async function deleteATDRecord(id){
-  if(!confirm('Delete this ATD record and its full payment history? This cannot be undone.')) return;
   const rec=DB.atd.find(r=>r.id===id); const storagePaths=recordStoragePaths(rec);
   DB.atd = DB.atd.filter(r=>r.id!==id);
   logAudit('Deleted an ATD record'); await saveDB(); await deleteStorageObjects(storagePaths); renderNav(); renderATD(); toast('ATD record deleted.');
@@ -2837,7 +2941,6 @@ async function saveATDPayment(atdId, paymentId){
 }
 async function deleteATDPayment(atdId, paymentId){
   const rec = DB.atd.find(r=>r.id===atdId); if(!rec) return;
-  if(!confirm('Delete this payment entry?')) return;
   const payment=rec.payments?.find(p=>p.id===paymentId); const storagePaths=recordStoragePaths(payment);
   rec.payments = (rec.payments||[]).filter(p=>p.id!==paymentId);
   rec.status = atdComputeStatus(rec);
@@ -4556,7 +4659,6 @@ async function saveDriveDocument(id=''){
 async function deleteDriveDocument(id){
   if(SESSION?.role==='Viewer') return;
   const rec=documentRecordById(id); if(!rec) return;
-  if(!confirm(`Remove "${rec.name||'this document'}" from the HR document index? The Google Drive file itself will not be deleted.`)) return;
   DB.documents=DB.documents.filter(d=>String(d.id)!==String(id));
   logAudit(`Removed Google Drive document reference: ${rec.name||'Document'}`);
   if(!(await saveDB())) return;
@@ -4886,8 +4988,6 @@ async function openWorkflowATDForm(caseId){
 
 async function setCaseWorkflowStatus(caseId,status){
   if(SESSION?.role==='Viewer') return;
-  if(status==='Closed' && !confirm('Close this HR case? You can still view its history afterward.')) return;
-  if(status==='Resolved' && !confirm('Mark this HR case as Resolved?')) return;
   const {data:before,error:beforeError}=await supabase.from('hr_cases').select('status,due_date').eq('id',caseId).maybeSingle();
   if(beforeError){toast('Could not load case status: '+beforeError.message,true);return;}
   const closed_at=status==='Closed'?todayISO():null;
@@ -4919,7 +5019,6 @@ async function linkCaseRecord(caseId){
 }
 async function unlinkCaseRecord(caseId,module,recordId){
   if(SESSION?.role==='Viewer') return;
-  if(!confirm('Remove this record from the case? The original HR record will remain unchanged.')) return;
   const {error}=await supabase.from('hr_case_links').delete().eq('case_id',caseId).eq('module',module).eq('record_id',recordId);
   if(error){toast('Could not remove link: '+error.message,true);return;}
   await addCaseActivity(caseId,'unlinked',`Unlinked ${caseModuleLabel(module)}: ${caseRecordLabel(module,(DB[module]||[]).find(r=>String(r.id)===String(recordId)))}.`);
@@ -4927,7 +5026,6 @@ async function unlinkCaseRecord(caseId,module,recordId){
 }
 async function deleteCase(id){
   if(SESSION?.role==='Viewer') return;
-  if(!confirm('Delete this HR case and all of its links? The original HR records will not be deleted.')) return;
   const {error}=await supabase.from('hr_cases').delete().eq('id',id);
   if(error){toast('Could not delete case: '+error.message,true);return;}
   logAudit('Deleted an HR case');toast('HR case deleted.');await renderCases();
