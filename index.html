@@ -673,6 +673,17 @@ tbody tr:hover{background:#FAF9F5;}
 .doc-meta{font-size:11px;color:var(--slate);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .doc-actions{display:flex;gap:5px;flex:none;}
 .doc-note{margin-top:12px;font-size:11.5px;color:var(--slate);}
+.doc-toolbar-extra{display:flex;gap:7px;flex-wrap:wrap;align-items:center;}
+.doc-drive-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:999px;background:#F8F2E7;border:1px solid #E8D6B6;color:var(--brass-dk);font-size:10px;font-weight:800;}
+.doc-scope{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--slate);}
+.doc-expiry{font-size:10.5px;white-space:nowrap;}
+.doc-source{font-size:10.5px;color:var(--slate);line-height:1.35;}
+.doc-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;}
+.doc-card .main{min-width:0;flex:1;}
+.doc-card .title{font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.doc-card .meta{font-size:10.5px;color:var(--slate);margin-top:3px;line-height:1.45;}
+.doc-config{display:grid;grid-template-columns:1.4fr .6fr;gap:12px;}
+@media (max-width:760px){.doc-config{grid-template-columns:1fr;}.doc-card{align-items:flex-start;}.doc-card .actions{margin-left:auto;}.doc-toolbar-extra{width:100%;}}
 @media (max-width:760px){.doc-stats{grid-template-columns:1fr;}.doc-row{align-items:flex-start;}.doc-actions{margin-left:auto;}}
 .checklist{display:flex;flex-direction:column;gap:7px;max-height:190px;overflow-y:auto;border:1px solid var(--line-2);border-radius:7px;padding:10px 12px;background:#fff;}
 .checkrow{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;}
@@ -794,12 +805,12 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
    Phase 2: record-level Postgres persistence, Supabase Auth, and private Storage.
    ========================================================================= */
 
-const RECORD_MODULES = ['employees','leaves','disciplinary','nte','memos','nod','oncall','transfers','offenseCatalog','cvr','incidents','prf','evaluations','atd','workflowTasks'];
+const RECORD_MODULES = ['employees','leaves','disciplinary','nte','memos','nod','oncall','transfers','offenseCatalog','cvr','incidents','prf','evaluations','atd','workflowTasks','documents'];
 let DB_SNAPSHOT = null;
 let SAVE_QUEUE = Promise.resolve();
 
 function blankDB(){
-  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],settings:{orgName:'SLSC',probationDays:180},audit:[],users:[]};
+  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],documents:[],settings:{orgName:'SLSC',probationDays:180},audit:[],users:[]};
 }
 
 async function loadDB(){
@@ -1068,7 +1079,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = seedDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'' };
+let STATE = { view:'dashboard', search:'', filter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'' };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
@@ -1129,7 +1140,7 @@ async function bootAuthenticated(user){
     let state=await loadDB();
     const hasAny=RECORD_MODULES.some(k=>(state[k]||[]).length);
     if(!hasAny){ DB=seedDB(); await saveDB(); } else DB=state;
-    if(!DB.audit) DB.audit=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; DB.prf.forEach(p=>{if(!p.status)p.status='Draft';}); if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; if(!DB.workflowTasks) DB.workflowTasks=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];});
+    if(!DB.audit) DB.audit=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; DB.prf.forEach(p=>{if(!p.status)p.status='Draft';}); if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; if(!DB.workflowTasks) DB.workflowTasks=[]; if(!DB.documents) DB.documents=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];});
     const employeeMasterChanged=normalizeEmployeeMasterData();
     DB_SNAPSHOT=JSON.parse(JSON.stringify(DB));
     if(employeeMasterChanged) await saveDB();
@@ -1240,6 +1251,15 @@ async function buildNotificationItems(){
   DB.nte.filter(n=>n.status!=='Resolved').slice(0,8).forEach(n=>items.push(notificationItem(`nte-${n.id}`,'warning',`NTE needs follow-up: ${n.employeeName||'Employee'}`,`${n.status||'Open'}${n.dateReceived?' · Received '+fmtDate(n.dateReceived):''}`,'nte')));
   DB.incidents.filter(r=>['Reported','Under Investigation'].includes(r.status)).slice(0,8).forEach(r=>items.push(notificationItem(`incident-${r.id}`,'danger',`Incident requires review: ${r.employeeName||'Employee'}`,`${r.status} · ${r.incidentType||r.incidentTypes?.join(', ')||'Incident report'}`,'incidents')));
   DB.atd.filter(r=>atdRemaining(r)>0 && r.status==='Ongoing').slice(0,6).forEach(r=>items.push(notificationItem(`atd-${r.id}`,'info',`ATD balance outstanding: ${r.employeeName||'Employee'}`,`${peso(atdRemaining(r))} remaining${r.deductionType?' · '+r.deductionType:''}`,'atd')));
+
+  const docToday=today;
+  const docNext30=addDaysISO(docToday,30);
+  (DB.documents||[]).filter(d=>d.expirationDate && d.status!=='Archived').forEach(d=>{
+    const emp=DB.employees.find(e=>String(e.id)===String(d.employeeId));
+    const owner=emp?.name||d.employeeName||'HR document';
+    if(d.expirationDate<docToday) items.push(notificationItem(`doc-expired-${d.id}`,'danger',`Document expired: ${d.name||'Untitled document'}`,`${owner} · Expired ${fmtDate(d.expirationDate)}`,'documents'));
+    else if(d.expirationDate<=docNext30) items.push(notificationItem(`doc-expiring-${d.id}`,'warning',`Document expiring soon: ${d.name||'Untitled document'}`,`${owner} · Expires ${fmtDate(d.expirationDate)}`,'documents'));
+  });
 
   const seen=new Set();
   return items.filter(x=>{ if(seen.has(x.id)) return false; seen.add(x.id); return true; })
@@ -2544,7 +2564,7 @@ function renderLeaves(){
     <div><h2>Leave Tracker</h2><p>${DB.leaves.length} leave requests on record.</p></div>
     ${canEdit()? `<button class="btn btn-brass" onclick="openRecordForm('leaves')">${iPlus(15)} Add Leave Record</button>`:''}
   </div>
-  <div class="notice"><b>Note:</b> Uploaded leave forms are stored as the actual file (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each) in this browser's local storage, so you can download them back — but nothing is sent to a server, and automatic OCR/text extraction from the document isn't performed; all fields here are entered or confirmed manually.</div>
+  <div class="notice"><b>Note:</b> Uploaded leave forms are stored securely in the private Supabase Storage bucket (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each). Automatic OCR/text extraction is not performed; all fields here are entered or confirmed manually.</div>
   <div class="tabs">
     <button class="tabbtn ${tab==='records'?'active':''}" onclick="STATE.leaveTab='records'; renderLeaves()">Leave Records</button>
     <button class="tabbtn ${tab==='calendar'?'active':''}" onclick="STATE.leaveTab='calendar'; renderLeaves()">Leave Calendar</button>
@@ -2682,7 +2702,7 @@ function renderDisciplinary(){
       <td>${statusBadge(offenseLevelFor(d.employeeName,d.violation,d.id), {}) }</td>
       <td>${fmtDate(d.dateOfIncident)}</td><td>${esc(d.action||'—')}</td>
       <td><div class="rowactions">${canEdit()?`<button class="iconbtn" title="HR Case" onclick="openRecordCaseDialog('disciplinary','${d.id}')">${iShield(14)}</button><button class="iconbtn" onclick="openRecordForm('disciplinary','${d.id}')">${iEdit(14)}</button><button class="iconbtn" onclick="deleteRecord('disciplinary','${d.id}')">${iTrash(14)}</button>`:'<span class="small">View only</span>'}</div></td>
-    </tr>`).join('') : `<tr><td colspan="7"><div class="empty"><b>No disciplinary records</b>Add a record to begin tracking violations.</div></td></tr>`}
+    </tr>`).join('') : `<tr><td colspan="8"><div class="empty"><b>No disciplinary records</b>Add a record to begin tracking violations.</div></td></tr>`}
     </tbody></table></div>
   <div class="panel" style="margin-top:16px;">
     <h3>Offense Count by Employee</h3>
@@ -2743,7 +2763,7 @@ function renderCVR(){
       <td>${attachCellHTML('cvr',c,'attachment')}</td>
       <td>${statusBadge(c.status, CVR_STATUS_MAP)}</td>
       <td><div class="rowactions">${canEdit()?`<button class="iconbtn" title="HR Case" onclick="openRecordCaseDialog('cvr','${c.id}')">${iShield(14)}</button><button class="iconbtn" onclick="openCVRForm('${c.id}')">${iEdit(14)}</button><button class="iconbtn" onclick="deleteCVR('${c.id}')">${iTrash(14)}</button>`:'<span class="small">View only</span>'}</div></td>
-    </tr>`).join('') : `<tr><td colspan="7"><div class="empty"><b>No CVRs yet</b>Add a CVR to begin tracking checked or written offenses.</div></td></tr>`}
+    </tr>`).join('') : `<tr><td colspan="8"><div class="empty"><b>No CVRs yet</b>Add a CVR to begin tracking checked or written offenses.</div></td></tr>`}
     </tbody></table></div>
   <div class="panel" style="margin-top:16px;">
     <h3>Repeated Offenses by Employee</h3>
@@ -3107,7 +3127,7 @@ function renderATD(){
     <div><h2>ATD Monitoring</h2><p>${totalRecords} record(s) — uniform/expense and charge deductions.</p></div>
     ${canEdit()? `<button class="btn btn-brass" onclick="openATDForm()">${iPlus(15)} New ATD Record</button>`:''}
   </div>
-  <div class="notice"><b>Note:</b> ATD form, Incident Report and quotation/SOA documents are stored as the actual file (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each) in this browser's local storage — nothing is sent to a server. Payment status, cumulative paid and remaining balance are calculated automatically from the recorded payments.</div>
+  <div class="notice"><b>Note:</b> ATD form, Incident Report and quotation/SOA documents are stored securely in the private Supabase Storage bucket (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each). Payment status, cumulative paid and remaining balance are calculated automatically from the recorded payments.</div>
   <div class="grid cols-4" style="margin-bottom:16px;">
     <div class="stat" style="--accent:var(--brass)"><div class="lbl">Total ATD Records</div><div class="val">${totalRecords}</div><div class="sub">${byCat['Uniforms/Expenses']} Uniforms/Expenses · ${byCat['Charges']} Charges</div></div>
     <div class="stat" style="--accent:var(--ink)"><div class="lbl">Total Amount Due</div><div class="val" style="font-size:20px;">${peso(totalOutstanding)}</div></div>
@@ -3841,7 +3861,7 @@ const MODULES = {
   },
   nte:{ title:'Notice to Explain (NTE)', subtitle:'Track NTE issuance, receipt, and employee explanations.', singular:'NTE Record', addLabel:'Add NTE',
     searchFields:['employeeName','violation'], sortKey:'dateIssued', filterField:'status', filterOptions:NTE_STATUS, filterLabel:'Status',
-    notice:`Uploaded NTE documents are stored as the actual file (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB) in this browser's local storage and can be downloaded back — but extraction of dates or text from the document itself is not performed automatically here.`,
+    notice:`Uploaded NTE documents are stored securely in the private Supabase Storage bucket (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each). Dates and text are not extracted automatically here.`,
     fields:[
       {key:'employeeName', label:'Employee Name', type:'text', required:true},
       {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
@@ -4378,6 +4398,7 @@ function renderSettings(){
         <h3>Organization</h3>
         <div class="desc">Applied across the dashboard header and reports.</div>
         <div class="field"><label>Organization Name</label><input id="s_org" value="${esc(DB.settings.orgName)}"></div>
+        <div class="field"><label>Google Drive Root Folder URL</label><input id="s_drive_root" type="url" value="${esc(DB.settings.googleDriveRootUrl||'')}" placeholder="https://drive.google.com/drive/folders/..."><div class="computed-note">Optional workspace link used by the Document Center. The actual files remain in Google Drive.</div></div>
         <div class="field"><label>Probation → Regularization Threshold (days)</label><input id="s_prob" type="number" value="${DB.settings.probationDays}">
           <div class="computed-note">Default is 180 days (the standard Philippine probationary period). Employee classification recalculates automatically wherever it is displayed.</div>
         </div>
@@ -4391,115 +4412,236 @@ function renderSettings(){
         </div>
       </div>
     </div>
-    <div class="notice" style="margin-top:16px;"><b>Supabase deployment:</b> HR records are stored in Supabase Postgres and uploaded documents are stored in the private <b>hr-documents</b> Storage bucket. Row Level Security should remain enabled. No OCR/text extraction is performed on uploaded documents.</div>
+    <div class="notice" style="margin-top:16px;"><b>Document architecture:</b> Existing uploads remain in the private <b>hr-documents</b> Supabase Storage bucket. New Google Drive records store only document metadata and the Drive reference in Supabase; the actual HR file stays in Google Drive.</div>
   `;
 }
 async function saveSettings(){
   DB.settings.orgName = document.getElementById('s_org').value.trim()||'SLSC';
   DB.settings.probationDays = parseInt(document.getElementById('s_prob').value,10)||180;
+  DB.settings.googleDriveRootUrl = document.getElementById('s_drive_root')?.value.trim()||'';
   logAudit('Updated organization settings');
   if(await saveDB()) toast('Settings saved.'); enterApp(); go('settings');
 }
 
 /* ================================================================
-   DOCUMENT CENTER (virtual index over referenced Supabase Storage files)
+   DOCUMENT CENTER / GOOGLE DRIVE READY ARCHITECTURE
+   Supabase continues to hold application metadata. Actual files can live
+   outside the database (Google Drive). Existing Supabase Storage files remain
+   visible for backward compatibility while Drive-linked documents use the
+   documents record set below.
    ================================================================ */
 const DOCUMENT_MODULES = ['employees','leaves','disciplinary','nte','memos','nod','oncall','transfers','cvr','incidents','prf','evaluations','atd'];
+const DOCUMENT_CATEGORIES = ['Employment','Identity','Leave','Attendance','Incident','Disciplinary','Case','Evaluation','Transfer','Payroll / ATD','Other'];
+const DOCUMENT_STATUS = ['Active','Pending','Expired','Archived'];
 
+function documentDriveFileId(url){
+  const value=String(url||'').trim();
+  if(!value) return '';
+  const patterns=[/\/file\/d\/([a-zA-Z0-9_-]+)/i,/id=([a-zA-Z0-9_-]+)/i,/\/folders\/([a-zA-Z0-9_-]+)/i];
+  for(const re of patterns){ const m=value.match(re); if(m) return m[1]; }
+  return '';
+}
+function isGoogleDriveUrl(url){
+  try{
+    const host=new URL(String(url||'')).hostname.toLowerCase();
+    return host==='drive.google.com' || host==='docs.google.com' || host.endsWith('.googleusercontent.com');
+  }catch(e){ return false; }
+}
+function documentExpiryInfo(doc){
+  if(!doc?.expirationDate) return {label:'No expiry',cls:'b-grey'};
+  const t=todayISO(), d=String(doc.expirationDate).slice(0,10), n=addDaysISO(t,30);
+  if(d<t) return {label:`Expired ${fmtDate(d)}`,cls:'b-red'};
+  if(d<=n) return {label:`Expires ${fmtDate(d)}`,cls:'b-amber'};
+  return {label:`Expires ${fmtDate(d)}`,cls:'b-green'};
+}
+function documentOwner(doc){
+  const emp=DB.employees.find(e=>String(e.id)===String(doc?.employeeId));
+  return emp?.name || doc?.employeeName || '—';
+}
+function documentSourceLabel(doc){
+  if(!doc?.sourceModule) return 'Employee file';
+  const source=caseModuleLabel(doc.sourceModule);
+  return doc.sourceRecordId ? `${source} · ${doc.sourceRecordId}` : source;
+}
+function documentRecordById(id){ return (DB.documents||[]).find(d=>String(d.id)===String(id)); }
+function countDriveDocuments(){ return (DB.documents||[]).length; }
 function collectStoredDocuments(){
   const docs=[];
   DOCUMENT_MODULES.forEach(module=>{
     (DB[module]||[]).forEach(rec=>{
       Object.keys(rec||{}).forEach(key=>{
-        if(!key.endsWith('Data') || key==='attachmentData' && !rec[key]) return;
+        if(!key.endsWith('Data') || (key==='attachmentData' && !rec[key])) return;
         const path=rec[key];
         if(typeof path!=='string' || !path) return;
         const name=rec[key.slice(0,-4)];
         if(typeof name!=='string' || !name) return;
         docs.push({
-          id:`${module}:${rec.id}:${key}`,
-          module,
-          moduleLabel:caseModuleLabel(module),
-          recordId:String(rec.id),
-          name,
-          path,
-          employee:rec.employeeName||rec.name||'—',
-          department:rec.department||'—',
-          date:caseRecordDate(module,rec)||rec.updated_at||'',
-          label:caseRecordLabel(module,rec)
+          id:`${module}:${rec.id}:${key}`, storage:'Supabase', module, moduleLabel:caseModuleLabel(module),
+          recordId:String(rec.id), name, path, employee:rec.employeeName||rec.name||'—',
+          employeeId:rec.employeeId||'', department:rec.department||'—', date:caseRecordDate(module,rec)||rec.updated_at||'',
+          label:caseRecordLabel(module,rec), category:'Legacy Attachment', expirationDate:'',
+          driveUrl:'', driveFileId:''
         });
       });
       if(module==='atd'){
         (rec.payments||[]).forEach(payment=>{
           if(payment.payslipData && payment.payslip){
-            docs.push({
-              id:`atd:${rec.id}:payment:${payment.id}:payslip`,
-              module:'atd', moduleLabel:'ATD Monitoring', recordId:String(rec.id),
-              name:payment.payslip, path:payment.payslipData,
-              employee:rec.employeeName||'—', department:rec.department||'—',
-              date:payment.dateRecorded||rec.atdDate||'',
-              label:`ATD payment — ${payment.month||''} ${payment.cutoff||''}`.trim()
-            });
+            docs.push({id:`atd:${rec.id}:payment:${payment.id}:payslip`,storage:'Supabase',module:'atd',moduleLabel:'ATD Monitoring',recordId:String(rec.id),name:payment.payslip,path:payment.payslipData,employee:rec.employeeName||'—',employeeId:rec.employeeId||'',department:rec.department||'—',date:payment.dateRecorded||rec.atdDate||'',label:`ATD payment — ${payment.month||''} ${payment.cutoff||''}`.trim(),category:'Payroll / ATD',expirationDate:'',driveUrl:'',driveFileId:''});
           }
         });
       }
     });
   });
   const seen=new Set();
-  return docs.filter(d=>{
-    if(seen.has(d.id)) return false;
-    seen.add(d.id); return true;
-  }).sort((a,b)=>(b.date||'').localeCompare(a.date||'') || a.name.localeCompare(b.name));
+  return docs.filter(d=>{if(seen.has(d.id)) return false;seen.add(d.id);return true;}).sort((a,b)=>(b.date||'').localeCompare(a.date||'')||a.name.localeCompare(b.name));
 }
-function countStoredDocuments(){ return collectStoredDocuments().length; }
+function collectDocumentIndex(){
+  const legacy=collectStoredDocuments();
+  const drive=(DB.documents||[]).map(d=>({
+    ...d, storage:'Google Drive', module:d.sourceModule||'employees', moduleLabel:caseModuleLabel(d.sourceModule||'employees'),
+    recordId:d.sourceRecordId||'', name:d.name||'Untitled document', employee:documentOwner(d),
+    department:(DB.employees.find(e=>String(e.id)===String(d.employeeId))?.department)||d.department||'—',
+    label:d.description||'Google Drive document', category:d.category||'Other', date:d.createdAt||d.updatedAt||'',
+    driveFileId:d.driveFileId||documentDriveFileId(d.driveUrl||''), path:'', expirationDate:d.expirationDate||'', driveUrl:d.driveUrl||''
+  }));
+  return [...legacy,...drive].sort((a,b)=>(b.date||'').localeCompare(a.date||'')||a.name.localeCompare(b.name));
+}
+function countStoredDocuments(){ return collectDocumentIndex().length; }
 function documentFileType(name){
   const ext=(String(name||'').split('.').pop()||'').toLowerCase();
   if(ext==='pdf') return 'PDF';
   if(['jpg','jpeg','png','webp','gif'].includes(ext)) return 'Image';
   if(['doc','docx'].includes(ext)) return 'Word';
   if(['xls','xlsx'].includes(ext)) return 'Excel';
+  if(['ppt','pptx'].includes(ext)) return 'PowerPoint';
   return ext ? ext.toUpperCase() : 'File';
 }
 async function openStoredDocument(path,name){
-  if(!path){toast('No stored file for this document.',true);return;}
+  if(!path){toast('No Supabase Storage file is attached to this document.',true);return;}
   const {data,error}=await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(path,120);
   if(error){toast('Could not create secure preview link: '+error.message,true);return;}
   window.open(data.signedUrl,'_blank','noopener,noreferrer');
 }
+function openDriveDocument(url){
+  if(!url){toast('No Google Drive URL is available.',true);return;}
+  if(!isGoogleDriveUrl(url)){toast('The saved URL is not recognized as a Google Drive/Docs URL.',true);return;}
+  window.open(url,'_blank','noopener,noreferrer');
+}
+function documentEmployeeOptions(selected=''){
+  return DB.employees.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(e=>`<option value="${esc(e.id)}" ${String(e.id)===String(selected)?'selected':''}>${esc(e.employeeNo||'—')} · ${esc(e.name)}</option>`).join('');
+}
+function documentSourceModuleOptions(selected=''){
+  const modules=['employees','cases','leaves','disciplinary','nte','memos','nod','cvr','incidents','prf','evaluations','atd','transfers','oncall'];
+  return modules.map(m=>{const label=m==='cases'?'HR Case':caseModuleLabel(m); return `<option value="${esc(m)}" ${String(m)===String(selected)?'selected':''}>${esc(label)}</option>`;}).join('');
+}
+function openDriveDocumentForm(id=''){
+  if(SESSION?.role==='Viewer') return;
+  const rec=id?documentRecordById(id):null;
+  const title=rec?'Edit Google Drive Document':'Register Google Drive Document';
+  const driveFolder=(DB.settings?.googleDriveRootUrl||'');
+  openModal(`
+    <div class="modal-head"><div><h3>${title}</h3><div class="small">Store document metadata in Supabase and keep the actual file in Google Drive.</div></div><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body">
+      <div class="panel" style="padding:13px;margin-bottom:14px;background:#FBFCFE;"><div class="doc-drive-badge">Google Drive metadata</div><div class="small" style="margin-top:7px;line-height:1.5;">This records the Drive file reference, employee/case relationship, category, and expiration date. The actual file is not stored in the HR database.</div></div>
+      <div class="formgrid">
+        <div class="field full"><label>Document Name *</label><input id="gd_name" value="${esc(rec?.name||'')}" placeholder="e.g. Signed Employment Contract"></div>
+        <div class="field"><label>Employee *</label><select id="gd_employee"><option value="">Select employee</option>${documentEmployeeOptions(rec?.employeeId||'')}</select></div>
+        <div class="field"><label>Category</label><select id="gd_category">${DOCUMENT_CATEGORIES.map(x=>`<option value="${esc(x)}" ${x===(rec?.category||'Other')?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
+        <div class="field"><label>Related Module</label><select id="gd_module">${documentSourceModuleOptions(rec?.sourceModule||'employees')}</select></div>
+        <div class="field"><label>Source Record ID</label><input id="gd_source_record" value="${esc(rec?.sourceRecordId||'')}" placeholder="Optional record ID / case ID"></div>
+        <div class="field full"><label>Google Drive URL *</label><input id="gd_url" type="url" value="${esc(rec?.driveUrl||'')}" placeholder="https://drive.google.com/..." autocomplete="off"></div>
+        <div class="field"><label>Expiration Date</label><input id="gd_expiry" type="date" value="${esc(rec?.expirationDate||'')}"></div>
+        <div class="field"><label>Status</label><select id="gd_status">${DOCUMENT_STATUS.map(x=>`<option value="${esc(x)}" ${x===(rec?.status||'Active')?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
+        <div class="field full"><label>Description / Notes</label><textarea id="gd_notes" rows="3" placeholder="Optional document context, retention note, or instructions">${esc(rec?.description||'')}</textarea></div>
+      </div>
+      ${driveFolder?`<div class="notice" style="margin-top:10px;"><b>Configured Drive workspace:</b> <a href="${esc(driveFolder)}" target="_blank" rel="noopener noreferrer">Open root folder</a></div>`:''}
+      <div class="notice" style="margin-top:10px;"><b>Access control:</b> Keep sensitive HR files restricted in Google Drive. This application stores the URL/reference, not the file contents.</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveDriveDocument('${esc(id)}')">Save Document</button></div>
+  `);
+}
+async function saveDriveDocument(id=''){
+  if(SESSION?.role==='Viewer') return;
+  const name=document.getElementById('gd_name')?.value.trim();
+  const employeeId=document.getElementById('gd_employee')?.value||'';
+  const driveUrl=document.getElementById('gd_url')?.value.trim();
+  if(!name||!employeeId||!driveUrl){toast('Document name, employee, and Google Drive URL are required.',true);return;}
+  if(!isGoogleDriveUrl(driveUrl)){toast('Enter a valid Google Drive or Google Docs URL.',true);return;}
+  const before=documentRecordById(id);
+  const now=new Date().toISOString();
+  const employee=DB.employees.find(e=>String(e.id)===String(employeeId));
+  const payload={
+    id:id||uid(), name, employeeId, employeeName:employee?.name||'', department:employee?.department||'',
+    category:document.getElementById('gd_category').value, sourceModule:document.getElementById('gd_module').value,
+    sourceRecordId:document.getElementById('gd_source_record').value.trim(), driveUrl, driveFileId:documentDriveFileId(driveUrl),
+    expirationDate:document.getElementById('gd_expiry').value||'', status:document.getElementById('gd_status').value,
+    description:document.getElementById('gd_notes').value.trim(), createdAt:before?.createdAt||now, updatedAt:now, createdBy:before?.createdBy||SESSION?.id||null, updatedBy:SESSION?.id||null
+  };
+  if(before) Object.assign(before,payload); else (DB.documents||(DB.documents=[])).push(payload);
+  logAudit(`${before?'Updated':'Registered'} Google Drive document: ${name}`);
+  if(!(await saveDB())) return;
+  await closeModal();
+  renderDocuments(); renderNav(); refreshNotificationBadge();
+  toast(before?'Document updated.':'Google Drive document registered.');
+}
+async function deleteDriveDocument(id){
+  if(SESSION?.role==='Viewer') return;
+  const rec=documentRecordById(id); if(!rec) return;
+  if(!confirm(`Remove "${rec.name||'this document'}" from the HR document index? The Google Drive file itself will not be deleted.`)) return;
+  DB.documents=DB.documents.filter(d=>String(d.id)!==String(id));
+  logAudit(`Removed Google Drive document reference: ${rec.name||'Document'}`);
+  if(!(await saveDB())) return;
+  renderDocuments(); renderNav(); refreshNotificationBadge(); toast('Document reference removed.');
+}
 function renderDocuments(){
-  setTitle('Document Center','Central index of documents referenced by HR records and stored securely in Supabase Storage.');
-  const docs=collectStoredDocuments();
+  setTitle('Document Center','Central document index for employee/case records, with Google Drive references and legacy Supabase attachments.');
+  const docs=collectDocumentIndex();
   const q=(STATE.search||'').toLowerCase();
-  const filtered=docs.filter(d=>!q || [d.name,d.employee,d.department,d.moduleLabel,d.label].some(v=>String(v||'').toLowerCase().includes(q)) && (!STATE.filter || d.module===STATE.filter));
-  const moduleOptions=[...new Set(docs.map(d=>d.module))].sort((a,b)=>caseModuleLabel(a).localeCompare(caseModuleLabel(b)));
-  const uniqueEmployees=new Set(docs.map(d=>d.employee)).size;
-  const typeCount={}; docs.forEach(d=>typeCount[documentFileType(d.name)]=(typeCount[documentFileType(d.name)]||0)+1);
-  const topType=Object.entries(typeCount).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—';
+  const storageFilter=STATE.documentStorage||'';
+  const categoryFilter=STATE.documentCategory||'';
+  const expiryFilter=STATE.documentExpiry||'';
+  const statusFilter=STATE.documentStatus||'';
+  const filtered=docs.filter(d=>{
+    const searchHit=!q || [d.name,d.employee,d.department,d.moduleLabel,d.label,d.category,d.sourceRecordId].some(v=>String(v||'').toLowerCase().includes(q));
+    const storageHit=!storageFilter || d.storage===storageFilter;
+    const categoryHit=!categoryFilter || d.category===categoryFilter;
+    const statusHit=!statusFilter || (d.storage==='Google Drive' ? (d.status||'Active')===statusFilter : statusFilter==='Active');
+    let expiryHit=true;
+    if(expiryFilter){
+      const info=documentExpiryInfo(d);
+      expiryHit=expiryFilter==='expired'?info.cls==='b-red':expiryFilter==='soon'?info.cls==='b-amber':expiryFilter==='noexpiry'&&info.cls==='b-grey';
+    }
+    return searchHit&&storageHit&&categoryHit&&statusHit&&expiryHit;
+  });
+  const driveDocs=docs.filter(d=>d.storage==='Google Drive');
+  const expired=driveDocs.filter(d=>documentExpiryInfo(d).cls==='b-red').length;
+  const expiring=driveDocs.filter(d=>documentExpiryInfo(d).cls==='b-amber').length;
+  const uniqueEmployees=new Set(docs.filter(d=>d.employee&&d.employee!=='—').map(d=>d.employee)).size;
   const html=`
-  <div class="sectionhead">
-    <div><h2>Document Center</h2><p>${docs.length} stored document${docs.length===1?'':'s'} referenced by HR records.</p></div>
-  </div>
+  <div class="sectionhead"><div><h2>Document Center</h2><p>${docs.length} indexed document${docs.length===1?'':'s'} across employee and HR records.</p></div><div class="doc-toolbar-extra">${canEdit()?`<button class="btn btn-primary btn-sm" onclick="openDriveDocumentForm()">${iDoc(13)} Register Drive Document</button>`:''}${DB.settings?.googleDriveRootUrl?`<button class="btn btn-ghost btn-sm" onclick="openDriveWorkspace()">Open Drive Workspace</button>`:''}</div></div>
   <div class="doc-stats">
-    <div class="doc-stat"><div class="k">Stored Documents</div><div class="v">${docs.length}</div><div class="s">Referenced files in the application</div></div>
+    <div class="doc-stat"><div class="k">Indexed Documents</div><div class="v">${docs.length}</div><div class="s">Drive references + existing attachments</div></div>
+    <div class="doc-stat"><div class="k">Google Drive</div><div class="v">${driveDocs.length}</div><div class="s">Metadata records using external file storage</div></div>
     <div class="doc-stat"><div class="k">Employees with Files</div><div class="v">${uniqueEmployees}</div><div class="s">Employees represented in the document index</div></div>
-    <div class="doc-stat"><div class="k">Common File Type</div><div class="v">${esc(topType)}</div><div class="s">Based on referenced document names</div></div>
   </div>
   <div class="toolbar">
-    <div class="search">${iSearch(15)}<input placeholder="Search filename, employee, or module…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderDocuments()"></div>
-    <select onchange="STATE.filter=this.value; renderDocuments()"><option value="">All Modules</option>${moduleOptions.map(m=>`<option value="${esc(m)}" ${STATE.filter===m?'selected':''}>${esc(caseModuleLabel(m))}</option>`).join('')}</select>
+    <div class="search">${iSearch(15)}<input placeholder="Search document, employee, case, or category…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderDocuments()"></div>
+    <select onchange="STATE.documentStorage=this.value; renderDocuments()"><option value="">All Storage</option><option value="Google Drive" ${storageFilter==='Google Drive'?'selected':''}>Google Drive</option><option value="Supabase" ${storageFilter==='Supabase'?'selected':''}>Supabase Storage</option></select>
+    <select onchange="STATE.documentCategory=this.value; renderDocuments()"><option value="">All Categories</option>${[...DOCUMENT_CATEGORIES,'Legacy Attachment'].map(x=>`<option value="${esc(x)}" ${categoryFilter===x?'selected':''}>${esc(x)}</option>`).join('')}</select>
+    <select onchange="STATE.documentStatus=this.value; renderDocuments()"><option value="">All Status</option>${DOCUMENT_STATUS.map(x=>`<option value="${esc(x)}" ${statusFilter===x?'selected':''}>${esc(x)}</option>`).join('')}</select>
+    <select onchange="STATE.documentExpiry=this.value; renderDocuments()"><option value="">All Expiry</option><option value="expired" ${expiryFilter==='expired'?'selected':''}>Expired</option><option value="soon" ${expiryFilter==='soon'?'selected':''}>Expiring ≤ 30 days</option><option value="noexpiry" ${expiryFilter==='noexpiry'?'selected':''}>No expiry</option></select>
   </div>
-  <div class="tablewrap"><table>
-    <thead><tr><th>Document</th><th>Employee</th><th>Module</th><th>Record</th><th>Date</th><th>Type</th><th style="text-align:right;">Actions</th></tr></thead>
-    <tbody>
-      ${filtered.length?filtered.map(d=>`<tr>
-        <td><div class="doc-row"><div class="doc-icon">${iDoc(17)}</div><div class="doc-main"><div class="doc-name" title="${esc(d.name)}">${esc(d.name)}</div><div class="doc-meta">${esc(d.label||'Linked HR record')}</div></div></div></td>
-        <td>${esc(d.employee)}</td><td>${esc(d.moduleLabel)}</td><td>${esc(d.recordId)}</td><td>${d.date?fmtDate(String(d.date).slice(0,10)):'—'}</td><td>${statusBadge(documentFileType(d.name),{'PDF':'b-red','Image':'b-blue','Word':'b-blue','Excel':'b-green'})}</td>
-        <td><div class="doc-actions"><button class="btn btn-ghost btn-sm" onclick="openStoredDocument('${esc(d.path)}','${esc(d.name).replace(/'/g,"\\'")}')">Open</button><button class="btn btn-ghost btn-sm" onclick="downloadAttachment('${esc(d.path)}','${esc(d.name).replace(/'/g,"\\'")}')">Download</button></div></td>
-      </tr>`).join(''):`<tr><td colspan="7"><div class="empty"><b>No documents found</b>${docs.length?'Try a different search or module filter.':'Attach a document from an HR record to have it appear here.'}</div></td></tr>`}
-    </tbody></table></div>
-  <div class="doc-note">Documents are kept in the private <b>${esc(STORAGE_BUCKET)}</b> bucket. Open/Download creates a short-lived signed URL; the Document Center does not expose the bucket publicly. To replace or remove a document, use the source HR record where the attachment was added.</div>
-  `;
+  ${driveDocs.length && (expired||expiring)?`<div class="notice" style="margin-top:10px;"><b>Document attention:</b> ${expired?`${expired} expired`:''}${expired&&expiring?' · ':''}${expiring?`${expiring} expiring within 30 days`:''}. Use the filters above to review them.</div>`:''}
+  <div class="tablewrap"><table><thead><tr><th>Document</th><th>Employee</th><th>Category</th><th>Storage</th><th>Source</th><th>Status</th><th>Expiry</th><th style="text-align:right;">Actions</th></tr></thead><tbody>
+    ${filtered.length?filtered.map(d=>{const expiry=documentExpiryInfo(d);const storageBadge=d.storage==='Google Drive'?'b-blue':'b-grey';return `<tr><td><div class="doc-row"><div class="doc-icon">${iDoc(17)}</div><div class="doc-main"><div class="doc-name" title="${esc(d.name)}">${esc(d.name)}</div><div class="doc-meta">${esc(documentFileType(d.name))}${d.driveFileId?' · Drive ID linked':''}</div></div></div></td><td>${esc(d.employee)}</td><td>${esc(d.category||'Other')}</td><td>${statusBadge(d.storage,{'Google Drive':'b-blue','Supabase':'b-grey'})}</td><td><div class="doc-source">${esc(d.moduleLabel||'—')}${d.recordId?' · '+esc(d.recordId):''}</div></td><td>${statusBadge(d.storage==='Google Drive'?(d.status||'Active'):'Active',{'Active':'b-green','Pending':'b-amber','Expired':'b-red','Archived':'b-grey'})}</td><td><div class="doc-expiry">${statusBadge(expiry.label, {[expiry.label]:expiry.cls})}</div></td><td><div class="doc-actions">${d.storage==='Google Drive'?`${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="openDriveDocumentForm('${esc(d.id)}')">Edit</button>`:''}<button class="btn btn-ghost btn-sm" onclick="openDriveDocument('${esc(d.driveUrl).replace(/'/g,"\\'")}')">Open</button>${canEdit()?`<button class="btn btn-danger btn-sm" onclick="deleteDriveDocument('${esc(d.id)}')">Remove</button>`:''}`:`<button class="btn btn-ghost btn-sm" onclick="openStoredDocument('${esc(d.path)}','${esc(d.name).replace(/'/g,"\\'")}')">Open</button><button class="btn btn-ghost btn-sm" onclick="downloadAttachment('${esc(d.path)}','${esc(d.name).replace(/'/g,"\\'")}')">Download</button>`}</div></td></tr>`;}).join(''):`<tr><td colspan="8"><div class="empty"><b>No documents found</b>${docs.length?'Try another search or filter.':'Register a Google Drive document or attach a file to an existing HR record.'}</div></td></tr>`}
+  </tbody></table></div>
+  <div class="doc-note">Google Drive files remain outside the Supabase database. Supabase stores document metadata and references. Existing Supabase Storage attachments remain readable for backward compatibility.</div>`;
   document.getElementById('content').innerHTML=html;
+}
+function openDriveWorkspace(){
+  const url=DB.settings?.googleDriveRootUrl||'';
+  if(url && isGoogleDriveUrl(url)) window.open(url,'_blank','noopener,noreferrer');
+  else toast('Configure a Google Drive workspace URL in Settings first.',true);
 }
 
 /* ================================================================
@@ -4674,7 +4816,7 @@ async function renderCases(){
     <div class="notice"><b>Case file:</b> A case groups related HR records into one trackable matter. Priority and deadlines help HR staff focus follow-ups before opening the full case file.</div>
     <div class="toolbar"><div class="search">${iSearch(15)}<input placeholder="Search case number, employee, subject…" value="${esc(STATE.search)}" oninput="STATE.search=this.value; renderCases()"></div><select onchange="STATE.filter=this.value; renderCases()"><option value="">All Statuses</option>${Object.keys(CASE_STATUS_MAP).map(x=>`<option value="${esc(x)}" ${STATE.filter===x?'selected':''}>${esc(x)}</option>`).join('')}</select><div class="spacer"></div></div>
     <div class="tablewrap"><table><thead><tr><th>Case No.</th><th>Employee</th><th>Priority</th><th>Status</th><th>Due</th><th>Assigned To</th><th style="text-align:right;">Actions</th></tr></thead>
-    <tbody>${rows.length?rows.map(c=>{const ass=DB.users.find(u=>u.id===c.assigned_to);const dl=caseDeadlineInfo(c.due_date,c.status); return `<tr><td><b class="mono">${esc(c.case_number)}</b><div class="small">${esc(c.subject||'HR Case')}</div></td><td><b>${esc(c.employee_name)}</b><div class="small">${esc(c.department||'Unassigned')}</div></td><td>${casePriorityBadge(c.priority)}</td><td>${statusBadge(c.status,CASE_STATUS_MAP)}</td><td><span class="case-deadline ${dl.cls}">${dl.label}</span><div class="small">${c.due_date?fmtDate(c.due_date):'No date'}</div></td><td>${esc(ass?.fullName||'Unassigned')}</td><td><div class="rowactions"><button class="iconbtn" title="Open case" onclick="openCaseDetails('${c.id}')">${iDoc(14)}</button>${canEdit()?`<button class="iconbtn" title="Edit case" onclick="openCaseForm('${c.id}')">${iEdit(14)}</button><button class="iconbtn" title="Delete case" onclick="deleteCase('${c.id}')">${iTrash(14)}</button>`:''}</div></td></tr>`;}).join(''):`<tr><td colspan="7"><div class="empty"><b>No HR cases yet</b>${canEdit()?'Create your first case to begin linking HR records.':'No cases are available for viewing.'}</div></td></tr>`}</tbody></table></div>`;
+    <tbody>${rows.length?rows.map(c=>{const ass=DB.users.find(u=>u.id===c.assigned_to);const dl=caseDeadlineInfo(c.due_date,c.status); return `<tr><td><b class="mono">${esc(c.case_number)}</b><div class="small">${esc(c.subject||'HR Case')}</div></td><td><b>${esc(c.employee_name)}</b><div class="small">${esc(c.department||'Unassigned')}</div></td><td>${casePriorityBadge(c.priority)}</td><td>${statusBadge(c.status,CASE_STATUS_MAP)}</td><td><span class="case-deadline ${dl.cls}">${dl.label}</span><div class="small">${c.due_date?fmtDate(c.due_date):'No date'}</div></td><td>${esc(ass?.fullName||'Unassigned')}</td><td><div class="rowactions"><button class="iconbtn" title="Open case" onclick="openCaseDetails('${c.id}')">${iDoc(14)}</button>${canEdit()?`<button class="iconbtn" title="Edit case" onclick="openCaseForm('${c.id}')">${iEdit(14)}</button><button class="iconbtn" title="Delete case" onclick="deleteCase('${c.id}')">${iTrash(14)}</button>`:''}</div></td></tr>`;}).join(''):`<tr><td colspan="8"><div class="empty"><b>No HR cases yet</b>${canEdit()?'Create your first case to begin linking HR records.':'No cases are available for viewing.'}</div></td></tr>`}</tbody></table></div>`;
 }
 function openCaseForm(id){
   if(SESSION?.role==='Viewer'){ toast('Viewer accounts have read-only access.',true); return; }
@@ -4869,7 +5011,7 @@ Object.assign(window, {
   addDaysISO, atdComputeStatus, atdFillEmployee, atdPayslipCellHTML, atdRemaining, atdToggleCategory, atdTotalPaid,
   addCaseActivity, addCaseNote, caseActivityIcon, caseActivityLabel, caseDeadlineInfo, casePriorityBadge, caseWorkflowSteps, caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, setCaseWorkflowStatus, buildNotificationItems, closeNotificationPanel, markAllNotificationsRead, openNotification, refreshNotificationBadge, renderNotificationPanel, toggleNotificationPanel,
   workflowSyncTasks, workflowPendingCount, workflowFindTask, workflowOpenSource, workflowSaveTaskNote, workflowAssignTask, workflowSaveAssignment, workflowCompleteTask, workflowDecideTask, openWorkflowTask, openWorkflowCreateForm, saveWorkflowManualTask, renderWorkflowCenter, workflowActionButtons, workflowPriorityBadge, workflowDueText,
-  countStoredDocuments, renderDocuments, openStoredDocument, collectStoredDocuments,
+  countStoredDocuments, renderDocuments, openStoredDocument, collectStoredDocuments, collectDocumentIndex, openDriveDocument, openDriveDocumentForm, saveDriveDocument, deleteDriveDocument, countDriveDocuments, documentExpiryInfo, openDriveWorkspace,
   attachCellHTML, attachPreviewHTML, authErr, bootAuthenticated, calShift, canEdit, classify, clearFileField, closeModal,
   consequenceFor, cvrOffenseLevel, cvrOffenseSummaryHTML, daysBetweenInclusive, defaultOffenseCatalog, deleteATDPayment,
   deleteATDRecord, deleteCVR, deleteEmployee, deleteIncident, deleteRecord, doLogin, doLogout, doRegister, donut,
