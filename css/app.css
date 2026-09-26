@@ -23,7 +23,7 @@ a{color:inherit;}
 ::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:8px;}
 
 /* ---------- Auth Screen ---------- */
-#auth-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+#auth-screen{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px;
   background:
     radial-gradient(1200px 600px at 15% -10%, rgba(244,217,113,.16), transparent 60%),
     linear-gradient(180deg,var(--navy-deep) 0%, var(--ink-2) 100%);
@@ -375,6 +375,8 @@ a{color:inherit;}
   .dashboard-kpis{grid-template-columns:repeat(2,1fr);}
 }
 @media (max-width:720px){
+  .btn,.auth-tab,.field input,.field select,.field textarea{min-height:44px;}
+  .iconbtn,.mobile-menu,.notification-btn{min-width:44px;min-height:44px;}
   #topbar{align-items:flex-start;min-height:70px;}
   #topbar h2{font-size:17px;line-height:1.15;}
   #topbar .sub{font-size:11px;max-width:54vw;}

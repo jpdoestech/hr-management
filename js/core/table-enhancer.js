@@ -1,3 +1,5 @@
+import { paginationHTML, paginationMeta } from './pagination.js';
+
 export function installTableEnhancer({getState, getContent}) {
   function tableSignature(table){
     return Array.from(table.querySelectorAll('tbody tr')).map(r=>Array.from(r.cells).map(c=>c.textContent.trim()).join(' ')).join('¦').slice(0,20000);
