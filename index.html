@@ -501,6 +501,48 @@ tbody tr:hover{background:#FAF9F5;}
 @media (max-width:560px){.case-intel-cards{grid-template-columns:1fr 1fr;}.case-summary{grid-template-columns:1fr 1fr!important;}.case-priority{font-size:10px;}.case-note-box{flex-direction:column;align-items:stretch;}.case-progress{grid-template-columns:repeat(2,1fr);}}
 @media (max-width:760px){.case-modal{max-width:100%;}.case-summary{grid-template-columns:1fr 1fr;}.case-link{align-items:flex-start;}.case-link .actions{margin-left:auto;}}
 
+
+/* ---------- Phase 11: HR Operations Workspace ---------- */
+.ops-hero{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:16px;}
+.ops-hero h1{margin:0;font-size:27px;line-height:1.08;}
+.ops-hero p{margin:6px 0 0;font-size:12.5px;color:var(--slate);}
+.ops-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end;}
+.ops-layout{display:grid;grid-template-columns:1.15fr .85fr;gap:14px;margin-bottom:14px;}
+.ops-stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+.ops-stat{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 13px;box-shadow:var(--shadow);min-width:0;}
+.ops-stat .k{font-size:9.8px;text-transform:uppercase;letter-spacing:.055em;color:var(--slate);font-weight:700;}
+.ops-stat .v{font:700 23px/1 'Source Serif 4',Georgia,serif;margin-top:6px;}
+.ops-stat .s{font-size:10.5px;color:var(--slate);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ops-employee-card{padding:14px;border:1px solid var(--line);border-radius:11px;background:linear-gradient(135deg,#fff 0%,#f8fbff 100%);}
+.ops-employee-head{display:flex;align-items:center;gap:11px;}
+.ops-avatar{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--ink),var(--navy-deep));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;flex:none;}
+.ops-employee-main{min-width:0;flex:1;}
+.ops-employee-name{font-size:15px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ops-employee-meta{font-size:11px;color:var(--slate);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ops-employee-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px;}
+.ops-action-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.ops-action{display:flex;align-items:center;gap:9px;padding:10px 11px;border:1px solid var(--line);border-radius:9px;background:#fff;cursor:pointer;text-align:left;transition:transform .08s ease,border-color .12s ease,box-shadow .12s ease;}
+.ops-action:hover{transform:translateY(-1px);border-color:#B8C6D9;box-shadow:var(--shadow);}
+.ops-action .ico{width:29px;height:29px;border-radius:8px;background:var(--paper);color:var(--ink);display:flex;align-items:center;justify-content:center;flex:none;}
+.ops-action .title{font-size:11.5px;font-weight:700;}
+.ops-action .meta{font-size:10px;color:var(--slate);margin-top:2px;}
+.ops-work-list{display:flex;flex-direction:column;gap:7px;}
+.ops-work-row{display:flex;align-items:flex-start;gap:9px;padding:10px 11px;border:1px solid var(--line);border-radius:9px;background:#fff;cursor:pointer;}
+.ops-work-row:hover{border-color:#B8C6D9;background:#FBFCFE;}
+.ops-work-row .flag{width:8px;height:8px;border-radius:50%;background:var(--amber);margin-top:5px;flex:none;}
+.ops-work-row.danger .flag{background:var(--rust);}
+.ops-work-row .main{min-width:0;flex:1;}
+.ops-work-row .title{font-size:12px;font-weight:700;}
+.ops-work-row .meta{font-size:10.5px;color:var(--slate);margin-top:2px;line-height:1.4;}
+.ops-work-row .right{font-size:10.5px;color:var(--slate);text-align:right;white-space:nowrap;}
+.ops-section-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:10px;}
+.ops-section-head h3{margin:0 0 3px;}
+.ops-section-head .desc{margin:0;}
+.ops-employee-select{max-width:330px;}
+@media (max-width:1050px){.ops-layout{grid-template-columns:1fr;}.ops-stat-grid{grid-template-columns:repeat(2,1fr);}}
+@media (max-width:720px){.ops-hero{flex-direction:column;align-items:flex-start;}.ops-actions{justify-content:flex-start;}.ops-action-grid{grid-template-columns:1fr 1fr;}.ops-section-head{flex-direction:column;}.ops-employee-select{max-width:none;width:100%;}}
+@media (max-width:460px){.ops-stat-grid{grid-template-columns:1fr 1fr;gap:7px;}.ops-stat{padding:10px;}.ops-stat .v{font-size:20px;}.ops-action-grid{grid-template-columns:1fr;}.ops-employee-head{align-items:flex-start;}.ops-employee-actions .btn{flex:1 1 140px;}}
+
 /* ---------- Phase 10: Employee Lifecycle ---------- */
 .lifecycle-kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px;}
 .lifecycle-kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:13px 14px;min-width:0;position:relative;overflow:hidden;}
@@ -935,7 +977,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = seedDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'' };
+let STATE = { view:'dashboard', search:'', filter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'' };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
@@ -1110,11 +1152,121 @@ async function renderActionCenter(){
   }catch(e){document.getElementById('content').innerHTML=`<div class="panel"><h3>Action Center</h3><div class="notice"><b>Could not load action items.</b> ${esc(e.message||e)}</div></div>`;}
 }
 
+/* ---------------- Phase 11: HR Operations Workspace ---------------- */
+function opsInitials(name){ return String(name||'').split(/\s+/).map(x=>x[0]||'').slice(0,2).join('').toUpperCase(); }
+function opsOpenItems(){
+  const today=todayISO();
+  const next7=addDaysISO(today,7);
+  const items=[];
+  const openCases=[];
+  const casePromise=supabase.from('hr_cases').select('id,case_number,employee_name,department,status,priority,due_date,assigned_to,opened_at').order('updated_at',{ascending:false}).limit(250);
+  return casePromise.then(({data,error})=>{
+    if(error) throw error;
+    (data||[]).forEach(c=>{
+      if(['Closed','Cancelled','Resolved'].includes(c.status)) return;
+      openCases.push(c);
+      if(c.assigned_to===SESSION?.id || SESSION?.role==='Administrator'){
+        const age=analyticsDaysOpen(c.opened_at,null);
+        const due=c.due_date?caseDeadlineInfo(c.due_date,c.status):null;
+        items.push({level:age>=30||due?.cls==='overdue'?'danger':'warning',view:'cases',id:c.id,title:`${c.case_number} · ${c.employee_name}`,meta:`${c.status} · ${c.priority||'Normal'}${c.due_date?' · '+(due?.label||''):''}`,right:'HR Case'});
+      }
+    });
+    DB.leaves.filter(l=>l.status==='Pending').slice(0,8).forEach(l=>items.push({level:'warning',view:'leaves',title:`Pending leave · ${l.employeeName}`,meta:`${fmtDate(l.startDate)} – ${fmtDate(l.endDate)}${l.department?' · '+l.department:''}`,right:'Leave'}));
+    DB.atd.filter(r=>atdRemaining(r)>0).slice(0,8).forEach(r=>items.push({level:'info',view:'atd',title:`Outstanding ATD · ${r.employeeName}`,meta:`${peso(atdRemaining(r))} remaining${r.deductionType?' · '+r.deductionType:''}`,right:'ATD'}));
+    DB.nte.filter(n=>n.status!=='Resolved').slice(0,8).forEach(n=>items.push({level:'warning',view:'nte',title:`NTE follow-up · ${n.employeeName}`,meta:`${n.status||'Open'}${n.dateReceived?' · received '+fmtDate(n.dateReceived):''}`,right:'NTE'}));
+    DB.employees.filter(e=>classify(e)==='Probationary' && e.dateHired).forEach(e=>EVAL_MILESTONES.forEach(m=>{
+      const st=evalStatusInfo(e,m);
+      if(st.label==='Overdue') items.push({level:'danger',view:'evaluations',title:`Overdue evaluation · ${e.name}`,meta:`${m.label} due ${fmtDate(st.due)}`,right:'Evaluation'});
+      else if(st.label==='Due Soon' && st.due<=next7) items.push({level:'warning',view:'evaluations',title:`Evaluation due · ${e.name}`,meta:`${m.label} due ${fmtDate(st.due)}`,right:'Evaluation'});
+    }));
+    const rank={danger:0,warning:1,info:2};
+    return {openCases,items:items.sort((a,b)=>(rank[a.level]??9)-(rank[b.level]??9)).slice(0,18)};
+  });
+}
+function opsPrefill(module,emp){
+  if(!emp) return;
+  const setVal=(id,val)=>{const el=document.getElementById(id); if(el && val!=null){el.value=val; el.dispatchEvent(new Event('change',{bubbles:true}));}};
+  setVal('f_employeeName',emp.name);
+  setVal('f_department',emp.department||'');
+  setVal('in_employeeName',emp.name); setVal('in_department',emp.department||'');
+  setVal('cv_employeeName',emp.name); setVal('cv_department',emp.department||'');
+  setVal('case_employee',emp.id);
+}
+function openEmployeeOperation(module,employeeId){
+  if(SESSION?.role==='Viewer') return;
+  const emp=DB.employees.find(e=>e.id===employeeId); if(!emp) return;
+  closeModal();
+  if(module==='profile'){ openEmployeeProfile(employeeId); return; }
+  if(module==='status'){ openEmployeeStatusForm(employeeId); return; }
+  if(module==='lifecycle'){ openEmployeeLifecycleEventForm(employeeId); return; }
+  if(module==='transfer'){ openTransferForEmployee(employeeId); return; }
+  if(module==='evaluations'){
+    const next=EVAL_MILESTONES.find(m=>{const st=evalStatusInfo(emp,m); return st.label!=='Completed';})||EVAL_MILESTONES[EVAL_MILESTONES.length-1];
+    openEvalForm(employeeId,next.key); return;
+  }
+  if(module==='cases'){
+    openCaseForm();
+    setTimeout(()=>opsPrefill('cases',emp),0);
+    return;
+  }
+  if(module==='incidents'){ openIncidentForm(); setTimeout(()=>opsPrefill('incidents',emp),0); return; }
+  if(module==='cvr'){ openCVRForm(); setTimeout(()=>opsPrefill('cvr',emp),0); return; }
+  openRecordForm(module);
+  setTimeout(()=>opsPrefill(module,emp),0);
+}
+async function renderOperationsWorkspace(){
+  setTitle('HR Operations','One workspace for the daily employee, case, leave, evaluation, and follow-up workload.');
+  const employees=DB.employees.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+  const selected=employees.find(e=>String(e.id)===String(STATE.opsEmployeeId))||employees[0]||null;
+  if(selected) STATE.opsEmployeeId=selected.id;
+  const probationary=DB.employees.filter(e=>classify(e)==='Probationary').length;
+  const pendingLeaves=DB.leaves.filter(l=>l.status==='Pending').length;
+  const openNTE=DB.nte.filter(n=>n.status!=='Resolved').length;
+  const outstandingATD=DB.atd.reduce((s,r)=>s+Math.max(0,atdRemaining(r)),0);
+  document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Loading your HR operations queue…</div></div>';
+  try{
+    const {openCases,items}=await opsOpenItems();
+    const myCases=openCases.filter(c=>SESSION?.role==='Administrator'||c.assigned_to===SESSION?.id).length;
+    const selectedCases=selected?openCases.filter(c=>normalizeEmployeeName(c.employee_name)===normalizeEmployeeName(selected.name)):[];
+    const selectedLeaves=selected?DB.leaves.filter(l=>normalizeEmployeeName(l.employeeName)===normalizeEmployeeName(selected.name)):[];
+    const selectedAtd=selected?DB.atd.filter(r=>normalizeEmployeeName(r.employeeName)===normalizeEmployeeName(selected.name)):[];
+    const selectedCasesRows=selectedCases.slice(0,6).map(c=>`<div class="ops-work-row" onclick="openCaseDetails('${c.id}')"><span class="flag"></span><div class="main"><div class="title">${esc(c.case_number)} · ${esc(c.subject||'HR Case')}</div><div class="meta">${esc(c.status)} · ${esc(c.priority||'Normal')}${c.due_date?' · Due '+fmtDate(c.due_date):''}</div></div><div class="right">Case</div></div>`).join('');
+    const selectedLeaveRows=selectedLeaves.slice(0,5).map(l=>`<div class="ops-work-row" onclick="go('leaves')"><span class="flag"></span><div class="main"><div class="title">${esc(l.leaveType||'Leave')}</div><div class="meta">${fmtDate(l.startDate)} – ${fmtDate(l.endDate)} · ${esc(l.status||'')}</div></div><div class="right">Leave</div></div>`).join('');
+    const selectedAtdRows=selectedAtd.slice(0,5).map(r=>`<div class="ops-work-row" onclick="go('atd')"><span class="flag"></span><div class="main"><div class="title">${esc(r.deductionType||'ATD')}</div><div class="meta">${esc(r.status||'')} · ${peso(atdRemaining(r))} remaining</div></div><div class="right">ATD</div></div>`).join('');
+    const html=`<div class="ops-hero"><div><div class="dashboard-hero-eyebrow"></div><h1>HR Operations Workspace</h1><p>Daily workbench for employee actions, cases, approvals, and follow-ups.</p></div><div class="ops-actions">${canEdit()?`<button class="btn btn-brass btn-sm" onclick="openEmployeeForm()">${iPlus(14)} New Employee</button><button class="btn btn-ghost btn-sm" onclick="openCaseForm()">${iShield(14)} New Case</button>`:''}<button class="btn btn-ghost btn-sm" onclick="go('actionCenter')">Action Center</button></div></div>
+      <div class="ops-stat-grid">
+        <div class="ops-stat"><div class="k">Open Cases</div><div class="v">${openCases.length}</div><div class="s">${myCases} in my work scope</div></div>
+        <div class="ops-stat"><div class="k">Probationary</div><div class="v">${probationary}</div><div class="s">Review milestones</div></div>
+        <div class="ops-stat"><div class="k">Pending Leaves</div><div class="v">${pendingLeaves}</div><div class="s">Awaiting action</div></div>
+        <div class="ops-stat"><div class="k">ATD Outstanding</div><div class="v" style="font-size:20px;">${peso(outstandingATD)}</div><div class="s">Current remaining balance</div></div>
+      </div>
+      <div class="ops-layout">
+        <div class="panel"><div class="ops-section-head"><div><h3>Employee Workspace</h3><div class="desc">Select an employee and launch the most common HR operations without leaving this page.</div></div><select class="ops-employee-select" onchange="STATE.opsEmployeeId=this.value; renderOperationsWorkspace()">${employees.map(e=>`<option value="${esc(e.id)}" ${String(e.id)===String(selected?.id)?'selected':''}>${esc(e.employeeNo||'—')} · ${esc(e.name)}</option>`).join('')}</select></div>
+          ${selected?`<div class="ops-employee-card"><div class="ops-employee-head"><div class="ops-avatar">${esc(opsInitials(selected.name))}</div><div class="ops-employee-main"><div class="ops-employee-name">${esc(selected.name)}</div><div class="ops-employee-meta">${esc(selected.employeeNo||'—')} · ${esc(selected.position||'—')} · ${esc(selected.department||'Unassigned')}</div><div style="margin-top:7px;display:flex;gap:6px;flex-wrap:wrap;">${statusBadge(selected.status,EMP_STATUS_MAP)} ${statusBadge(classify(selected),classify(selected)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div></div></div><div class="ops-employee-actions"><button class="btn btn-primary btn-sm" onclick="openEmployeeOperation('profile','${selected.id}')">${iUser(13)} Employee 360</button>${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="openEmployeeOperation('cases','${selected.id}')">${iShield(13)} New Case</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeOperation('leaves','${selected.id}')">${iCal(13)} Leave</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeOperation('incidents','${selected.id}')">${iShield(13)} Incident</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeOperation('disciplinary','${selected.id}')">${iShield(13)} Discipline</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeOperation('nte','${selected.id}')">${iDoc(13)} NTE</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeOperation('evaluations','${selected.id}')">${iChart(13)} Evaluation</button>`:''}</div></div>`:'<div class="empty"><b>No employees available</b>Create an employee first to use the workspace.</div>'}
+          <div class="ops-section-head" style="margin-top:14px;"><div><h3>Quick Actions</h3><div class="desc">Common HR tasks for the selected employee.</div></div></div>
+          <div class="ops-action-grid">${selected?`
+            <button class="ops-action" onclick="openEmployeeOperation('status','${selected.id}')"><span class="ico">${iShield(14)}</span><span><span class="title">Update Status</span><br><span class="meta">Employment lifecycle</span></span></button>
+            <button class="ops-action" onclick="openEmployeeOperation('lifecycle','${selected.id}')"><span class="ico">${iPlus(14)}</span><span><span class="title">Lifecycle Event</span><br><span class="meta">Record milestone</span></span></button>
+            <button class="ops-action" onclick="openEmployeeOperation('transfer','${selected.id}')"><span class="ico">${iSwap(14)}</span><span><span class="title">Department Transfer</span><br><span class="meta">Move / reassignment</span></span></button>
+          `:''}</div>
+        </div>
+        <div class="panel"><div class="ops-section-head"><div><h3>Selected Employee Snapshot</h3><div class="desc">Current operational records for this employee.</div></div></div>${selected?`<div class="ops-stat-grid" style="grid-template-columns:1fr 1fr;margin-bottom:0;"><div class="ops-stat"><div class="k">Open Cases</div><div class="v">${selectedCases.length}</div></div><div class="ops-stat"><div class="k">Leave Records</div><div class="v">${selectedLeaves.length}</div></div><div class="ops-stat"><div class="k">ATD Balance</div><div class="v" style="font-size:19px;">${peso(selectedAtd.reduce((sum,r)=>sum+Math.max(0,atdRemaining(r)),0))}</div></div><div class="ops-stat"><div class="k">Completion</div><div class="v">${employeeCompleteness(selected)}%</div></div></div><div class="dashboard-footnote">Open ${esc(selected.name)}'s Employee 360 profile for complete history across HR modules.</div>`:'<div class="small">Select an employee.</div>'}</div>
+      </div>
+      <div class="ops-layout">
+        <div class="panel"><div class="ops-section-head"><div><h3>Employee Work History</h3><div class="desc">Cases, leave, and ATD items for the selected employee.</div></div></div><div class="ops-work-list">${selectedCasesRows||selectedLeaveRows||selectedAtdRows||'<div class="empty"><b>No recent operational records</b>No cases, leave, or ATD items were found for this employee.</div>'}</div></div>
+        <div class="panel"><div class="ops-section-head"><div><h3>My Priority Work</h3><div class="desc">Items currently requiring attention.</div></div><button class="btn btn-ghost btn-sm" onclick="go('actionCenter')">View All</button></div><div class="ops-work-list">${items.length?items.slice(0,8).map(x=>`<div class="ops-work-row ${x.level==='danger'?'danger':''}" onclick="${x.id?`openCaseDetails('${x.id}')`:`go('${x.view}')`}"><span class="flag"></span><div class="main"><div class="title">${esc(x.title)}</div><div class="meta">${esc(x.meta)}</div></div><div class="right">${esc(x.right)}</div></div>`).join(''):'<div class="empty"><b>No priority work</b>Your current queue is clear.</div>'}</div></div>
+      </div>
+      <div class="panel"><div class="ops-section-head"><div><h3>HR Operations Guide</h3><div class="desc">A simple daily sequence for handling an employee matter.</div></div></div><div class="case-progress" style="grid-template-columns:repeat(6,1fr);"><div class="case-progress-step active"><div class="dot"></div><div class="label">Employee</div></div><div class="case-progress-step"><div class="dot"></div><div class="label">Incident</div></div><div class="case-progress-step"><div class="dot"></div><div class="label">Case</div></div><div class="case-progress-step"><div class="dot"></div><div class="label">NTE / Memo</div></div><div class="case-progress-step"><div class="dot"></div><div class="label">Decision</div></div><div class="case-progress-step"><div class="dot"></div><div class="label">Resolution</div></div></div><div class="dashboard-footnote">The guide is a workflow aid only. The underlying case and HR records remain the source of record.</div></div>`;
+    document.getElementById('content').innerHTML=html;
+  }catch(e){document.getElementById('content').innerHTML=`<div class="panel"><h3>HR Operations</h3><div class="notice"><b>Could not load the workspace.</b> ${esc(e.message||e)}</div></div>`;}
+}
+
 /* ---------------- nav ---------------- */
 const NAV = [
   {sec:'Overview', items:[
     {v:'dashboard', label:'Dashboard', icon:iGrid},
     {v:'actionCenter', label:'Action Center', icon:iShield},
+    {v:'operations', label:'HR Operations', icon:iGrid},
     {v:'analytics', label:'Management Analytics', icon:iChart},
     {v:'weeklyReport', label:'Weekly Report', icon:iChart},
   ]},
@@ -2091,7 +2243,7 @@ async function openEmployeeProfile(id){
   ].filter(x=>x.date).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,14);
   const statusMap=EMP_STATUS_MAP;
   openModal(`<div class="modal-head"><div><h3>Employee 360 Profile</h3><div class="small">${esc(emp.id)}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body">
-    <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(emp.name)}</div><div class="profile-sub">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div><div class="small" style="margin-top:6px;">${esc(employeeTenureText(emp))}</div></div><div class="profile-actions">${canEdit()?`<div class="employee-quick-actions"><button class="btn btn-ghost btn-sm" onclick="closeModal(); openEmployeeForm('${emp.id}')">${iEdit(13)} Edit</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeStatusForm('${emp.id}')">${iShield(13)} Status</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeLifecycleEventForm('${emp.id}')">${iPlus(13)} Lifecycle</button><button class="btn btn-ghost btn-sm" onclick="openTransferForEmployee('${emp.id}')">${iSwap(13)} Transfer</button></div>`:''}</div></div>
+    <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(emp.name)}</div><div class="profile-sub">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div><div class="small" style="margin-top:6px;">${esc(employeeTenureText(emp))}</div></div><div class="profile-actions">${canEdit()?`<div class="employee-quick-actions"><button class="btn btn-ghost btn-sm" onclick="closeModal(); openEmployeeForm('${emp.id}')">${iEdit(13)} Edit</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeStatusForm('${emp.id}')">${iShield(13)} Status</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeLifecycleEventForm('${emp.id}')">${iPlus(13)} Lifecycle</button><button class="btn btn-ghost btn-sm" onclick="openTransferForEmployee('${emp.id}')">${iSwap(13)} Transfer</button><button class="btn btn-brass btn-sm" onclick="openEmployeeOperation('cases','${emp.id}')">${iShield(13)} New Case</button></div>`:''}</div></div>
     <div class="employee-completeness"><div style="min-width:0;"><div style="font-size:11px;font-weight:700;color:var(--ink);">Master Data Completion</div><div style="font-size:10px;color:var(--slate);">${employeeCompleteness(emp)}% of standard employee fields completed</div></div><div class="bar"><div class="fill" style="width:${employeeCompleteness(emp)}%;"></div></div><div class="pct">${employeeCompleteness(emp)}%</div></div>
     <div class="profile-kpis">
       <div class="profile-kpi"><div class="k">HR Cases</div><div class="v">${cases.length}</div><div class="s">Case history</div></div>
@@ -4095,6 +4247,7 @@ async function deleteCase(id){
 const RENDERERS = {
   dashboard: renderDashboard,
   actionCenter: renderActionCenter,
+  operations: renderOperationsWorkspace,
   analytics: renderAnalytics,
   cases: renderCases,
   documents: renderDocuments,
@@ -4141,7 +4294,7 @@ Object.assign(window, {
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard,
   renderDisciplinary, renderEmployees, renderEvaluations, renderIncidents, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
-  renderUsers, renderWeeklyReport, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
+  renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, setTitle, shiftDate, statusBadge, switchAuthTab, toCSV,
   toast, todayISO, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek
 });
