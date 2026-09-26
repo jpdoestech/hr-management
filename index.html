@@ -190,6 +190,36 @@ a{color:inherit;}
 .attention-item .title{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .attention-item .meta{font-size:11px;color:var(--slate);margin-top:2px;}
 .analytics-note{font-size:11px;color:var(--slate);padding-top:10px;margin-top:12px;border-top:1px dashed var(--line-2);line-height:1.5;}
+.analytics-toolbar{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:16px;padding:14px 16px;border:1px solid var(--line);border-radius:var(--radius);background:linear-gradient(180deg,#fff,#FBFCFE);box-shadow:var(--shadow);}
+.analytics-toolbar .range-buttons{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+.analytics-toolbar .range-btn{border:1px solid var(--line);background:#fff;color:var(--slate);padding:8px 11px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;}
+.analytics-toolbar .range-btn.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+.analytics-toolbar .range-fields{display:grid;grid-template-columns:135px 135px 190px auto;gap:8px;align-items:end;min-width:min(100%,560px);}
+.analytics-toolbar .field{margin:0;}
+.analytics-toolbar label{font-size:10px;}
+.analytics-toolbar select,.analytics-toolbar input{height:36px;}
+.analytics-trend{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;align-items:end;min-height:190px;padding-top:10px;}
+.analytics-trend .month{display:flex;flex-direction:column;gap:7px;min-width:0;}
+.analytics-trend .bars{display:flex;align-items:flex-end;justify-content:center;gap:5px;height:145px;padding:0 5px;border-bottom:1px solid var(--line);}
+.analytics-trend .bar{width:13px;min-height:2px;border-radius:4px 4px 0 0;background:linear-gradient(180deg,var(--brass),var(--brass-dk));}
+.analytics-trend .bar.secondary{background:linear-gradient(180deg,var(--forest),#2D5840);}
+.analytics-trend .bar.tertiary{background:linear-gradient(180deg,var(--amber),#9C6F22);}
+.analytics-trend .month-label{text-align:center;font-size:10px;color:var(--slate);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.analytics-trend .month-total{text-align:center;font-size:10px;font-weight:700;color:var(--ink);}
+.analytics-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:10.5px;color:var(--slate);margin-top:9px;}
+.analytics-legend span{display:inline-flex;align-items:center;gap:5px;}
+.analytics-legend i{width:8px;height:8px;border-radius:2px;display:inline-block;background:var(--brass);}
+.analytics-legend i.secondary{background:var(--forest);}.analytics-legend i.tertiary{background:var(--amber);}
+.analytics-rank-list{display:flex;flex-direction:column;gap:8px;}
+.analytics-rank{display:grid;grid-template-columns:26px 1fr auto;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;}
+.analytics-rank .num{width:24px;height:24px;border-radius:7px;background:var(--paper);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:var(--ink);}
+.analytics-rank .name{font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.analytics-rank .meta{font-size:10px;color:var(--slate);margin-top:2px;}
+.analytics-rank .count{font:700 16px 'Source Serif 4',Georgia,serif;color:var(--ink);}
+.analytics-aging{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.analytics-aging .bucket{padding:12px;border:1px solid var(--line);border-radius:8px;background:#FBFCFE;}.analytics-aging .bucket .v{font:700 22px 'Source Serif 4',Georgia,serif;}.analytics-aging .bucket .k{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate);font-weight:700;margin-top:3px;}
+.analytics-empty{padding:24px 12px;text-align:center;color:var(--slate);font-size:11.5px;border:1px dashed var(--line-2);border-radius:8px;background:#FBFCFE;}
+@media (max-width:900px){.analytics-toolbar .range-fields{grid-template-columns:1fr 1fr;min-width:100%;}.analytics-trend{gap:6px;}.analytics-aging{grid-template-columns:1fr 1fr;}}
+@media (max-width:700px){.analytics-trend{grid-template-columns:repeat(3,1fr);}.analytics-trend .month:nth-child(n+4){margin-top:8px;}.analytics-toolbar .range-fields{grid-template-columns:1fr;}.analytics-aging{grid-template-columns:1fr 1fr;}}
 @media (max-width:1180px){.analytics-kpis{grid-template-columns:repeat(3,1fr);}.analytics-grid,.analytics-grid.equal{grid-template-columns:1fr;}}
 @media (max-width:700px){.analytics-kpis{grid-template-columns:1fr 1fr;}.chart-row{grid-template-columns:105px 1fr 34px;}}
 
@@ -1079,7 +1109,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = seedDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'' };
+let STATE = { view:'dashboard', search:'', filter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'' };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
@@ -4050,110 +4080,206 @@ function analyticsDaysOpen(openedAt, closedAt){
   return Math.max(0,Math.floor((b-a)/86400000));
 }
 function analyticsEsc(value){ return esc(value==null?'':value); }
+function analyticsPresetRange(preset){
+  const end=todayISO();
+  const starts={
+    '30d':addDaysISO(end,-29),
+    '90d':addDaysISO(end,-89),
+    '180d':addDaysISO(end,-179),
+    '365d':addDaysISO(end,-364)
+  };
+  return {start:starts[preset]||STATE.analyticsStart||addDaysISO(end,-89),end};
+}
+function analyticsApplyFilters(){
+  const start=document.getElementById('analytics-start')?.value||todayISO();
+  const end=document.getElementById('analytics-end')?.value||todayISO();
+  const dept=document.getElementById('analytics-dept')?.value||'';
+  if(end<start){toast('Analytics end date cannot be before the start date.',true);return;}
+  STATE.analyticsStart=start; STATE.analyticsEnd=end; STATE.analyticsDept=dept; STATE.analyticsRange='custom'; renderAnalytics();
+}
+function analyticsSetPreset(preset){
+  const r=analyticsPresetRange(preset); STATE.analyticsRange=preset; STATE.analyticsStart=r.start; STATE.analyticsEnd=r.end;
+  renderAnalytics();
+}
+function analyticsMonthKey(date){
+  const s=String(date||'').slice(0,7); return /^\d{4}-\d{2}$/.test(s)?s:'';
+}
+function analyticsMonthLabelFromKey(key){
+  if(!key) return '';
+  const d=new Date(key+'-01T00:00:00'); return Number.isNaN(d.getTime())?'':d.toLocaleDateString('en-US',{month:'short'});
+}
+function analyticsMonthRange(endISO,count=6){
+  const end=new Date(String(endISO||todayISO()).slice(0,10)+'T00:00:00');
+  const out=[];
+  for(let i=count-1;i>=0;i--){const d=new Date(end); d.setMonth(d.getMonth()-i); out.push(d.toISOString().slice(0,7));}
+  return out;
+}
+function analyticsStatusMap(rows,key){
+  const o={}; (rows||[]).forEach(r=>{const v=r?.[key]||'Unspecified';o[v]=(o[v]||0)+1;}); return o;
+}
+function analyticsDeptFilterRows(module,start,end,dept){
+  return (DB[module]||[]).filter(r=>{
+    const d=reportDateFor(module,r); if(!reportInRange(d,start,end)) return false;
+    return reportDeptMatch(r,dept);
+  });
+}
+async function exportAnalyticsSnapshot(){
+  const start=STATE.analyticsStart||addDaysISO(todayISO(),-89), end=STATE.analyticsEnd||todayISO(), dept=STATE.analyticsDept||'';
+  const employees=DB.employees.filter(e=>reportDeptMatch(e,dept));
+  const cases=(REPORT_CACHE.cases||[]).filter(c=>!dept||(c.department||'Unassigned')===dept);
+  const openCases=cases.filter(c=>!['Closed','Cancelled','Resolved'].includes(c.status));
+  const rows=[
+    {section:'Scope',metric:'Start Date',value:start,detail:dept||'All Departments'},
+    {section:'Scope',metric:'End Date',value:end,detail:dept||'All Departments'},
+    {section:'Workforce',metric:'Current Headcount',value:employees.length,detail:'Current employee records'},
+    {section:'Workforce',metric:'Probationary',value:employees.filter(e=>classify(e)==='Probationary').length,detail:'Current classification'},
+    {section:'Workforce',metric:'New Hires in Period',value:employees.filter(e=>reportInRange(e.dateHired,start,end)).length,detail:'Date hired'},
+    {section:'Workforce',metric:'Separations in Period',value:employees.filter(e=>['Resigned','AWOL','Separated'].includes(e.status)&&reportInRange(e.statusDate,start,end)).length,detail:'Status date'},
+    {section:'Cases',metric:'Open Cases',value:openCases.length,detail:'Current open cases'},
+    {section:'Cases',metric:'Cases in Period',value:cases.filter(c=>reportInRange(String(c.opened_at||c.updated_at||'').slice(0,10),start,end)).length,detail:'Opened/updated'},
+    {section:'Cases',metric:'30+ Days Open',value:openCases.filter(c=>analyticsDaysOpen(c.opened_at)>=30).length,detail:'Current aging'},
+    {section:'Leave',metric:'Leave Records in Period',value:analyticsDeptFilterRows('leaves',start,end,dept).length,detail:'Selected period'},
+    {section:'Attendance',metric:'ATD Records in Period',value:analyticsDeptFilterRows('atd',start,end,dept).length,detail:'Selected period'},
+    {section:'Discipline',metric:'Disciplinary Records in Period',value:analyticsDeptFilterRows('disciplinary',start,end,dept).length,detail:'Selected period'},
+  ];
+  exportReportRows(`hr_analytics_${start}_to_${end}.csv`,rows,[{label:'Section',get:r=>r.section},{label:'Metric',get:r=>r.metric},{label:'Value',get:r=>r.value},{label:'Detail',get:r=>r.detail}]);
+}
 async function renderAnalytics(){
-  setTitle('Management Analytics','Management-level view of workforce, cases, HR activity, and items requiring attention.');
-  document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Loading management analytics…</div></div>';
+  setTitle('Management Analytics','A decision-support view of workforce, cases, HR activity, and trends across the selected reporting period.');
+  document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Loading advanced analytics…</div></div>';
   try{
-    const [{data:cases,error:caseError}]=await Promise.all([
-      supabase.from('hr_cases').select('id,case_number,employee_name,department,status,opened_at,closed_at,updated_at').order('updated_at',{ascending:false}).limit(500)
-    ]);
+    const start=STATE.analyticsStart||addDaysISO(todayISO(),-89), end=STATE.analyticsEnd||todayISO(), dept=STATE.analyticsDept||'';
+    if(end<start){document.getElementById('content').innerHTML='<div class="panel"><div class="notice"><b>Invalid analytics period.</b> The end date must be on or after the start date.</div></div>';return;}
+    const {data:cases,error:caseError}=await supabase.from('hr_cases').select('id,case_number,employee_name,department,status,priority,due_date,opened_at,closed_at,updated_at,assigned_to').order('updated_at',{ascending:false}).limit(1500);
     if(caseError) throw caseError;
-    const allCases=cases||[];
-    const activeCases=allCases.filter(c=>!['Closed','Cancelled','Resolved'].includes(c.status));
-    const agedCases=activeCases.filter(c=>analyticsDaysOpen(c.opened_at,c.closed_at)>=30);
-    const resolvedCases=allCases.filter(c=>c.status==='Resolved');
-    const caseStatus={}; allCases.forEach(c=>caseStatus[c.status]=(caseStatus[c.status]||0)+1);
-    const caseDept={}; activeCases.forEach(c=>{const d=c.department||'Unassigned'; caseDept[d]=(caseDept[d]||0)+1;});
-
-    const activityModules=[
-      ['incidents','Incident Reports'],['cvr','CVR'],['disciplinary','Disciplinary'],['nte','NTE'],['memos','Memoranda'],['nod','NOD'],['leaves','Leaves']
+    const allCases=cases||[]; REPORT_CACHE.cases=allCases;
+    const caseScope=allCases.filter(c=>!dept||(c.department||'Unassigned')===dept);
+    const periodCases=caseScope.filter(c=>reportInRange(String(c.opened_at||c.updated_at||'').slice(0,10),start,end));
+    const openCases=caseScope.filter(c=>!['Closed','Cancelled','Resolved'].includes(c.status));
+    const overdueCases=openCases.filter(c=>c.due_date && c.due_date<todayISO());
+    const agingBuckets=[
+      ['0–7 days',openCases.filter(c=>analyticsDaysOpen(c.opened_at)<=7).length],
+      ['8–30 days',openCases.filter(c=>{const d=analyticsDaysOpen(c.opened_at);return d>=8&&d<=30;}).length],
+      ['31–60 days',openCases.filter(c=>{const d=analyticsDaysOpen(c.opened_at);return d>=31&&d<=60;}).length],
+      ['61+ days',openCases.filter(c=>analyticsDaysOpen(c.opened_at)>=61).length]
     ];
-    const since=addDaysISO(todayISO(),-89);
-    const activityCounts=activityModules.map(([key,label])=>({key,label,count:(DB[key]||[]).filter(r=>analyticsDateFor(key,r)>=since).length}));
-    const totalActivity90=activityCounts.reduce((sum,x)=>sum+x.count,0);
+    const employees=DB.employees.filter(e=>reportDeptMatch(e,dept));
+    const hired=employees.filter(e=>reportInRange(e.dateHired,start,end));
+    const separated=employees.filter(e=>['Resigned','AWOL','Separated'].includes(e.status)&&reportInRange(e.statusDate,start,end));
+    const activeEmployees=employees.filter(e=>e.status==='Active'||e.status==='Newly Hired');
+    const probationary=employees.filter(e=>classify(e)==='Probationary');
+    const evalOverdue=probationary.reduce((sum,e)=>sum+EVAL_MILESTONES.filter(m=>evalStatusInfo(e,m).label==='Overdue').length,0);
+    const leaveRows=analyticsDeptFilterRows('leaves',start,end,dept);
+    const incidentRows=analyticsDeptFilterRows('incidents',start,end,dept);
+    const cvrRows=analyticsDeptFilterRows('cvr',start,end,dept);
+    const discRows=analyticsDeptFilterRows('disciplinary',start,end,dept);
+    const nteRows=analyticsDeptFilterRows('nte',start,end,dept);
+    const memoRows=analyticsDeptFilterRows('memos',start,end,dept);
+    const nodRows=analyticsDeptFilterRows('nod',start,end,dept);
+    const transferRows=analyticsDeptFilterRows('transfers',start,end,dept);
+    const atdRows=analyticsDeptFilterRows('atd',start,end,dept);
+    const activityTotal=incidentRows.length+cvrRows.length+discRows.length+nteRows.length+memoRows.length+nodRows.length+leaveRows.length+transferRows.length+atdRows.length;
 
-    const probationary=DB.employees.filter(e=>classify(e)==='Probationary').length;
-    const evalOverdue=DB.employees.filter(e=>classify(e)==='Probationary' && e.dateHired).reduce((sum,e)=>sum+EVAL_MILESTONES.filter(m=>evalStatusInfo(e,m).label==='Overdue').length,0);
-    const openNTE=DB.nte.filter(n=>n.status!=='Resolved').length;
-    const openATD=DB.atd.filter(r=>atdRemaining(r)>0).length;
-    const outstandingATD=DB.atd.reduce((sum,r)=>sum+atdRemaining(r),0);
-    const pendingOnCall=DB.oncall.filter(r=>r.status==='Active').length;
-
-    const deptEmp={}; DB.employees.forEach(e=>{const d=e.department||'Unassigned'; deptEmp[d]=(deptEmp[d]||0)+1;});
-    const deptRows=Object.entries(deptEmp).sort((a,b)=>b[1]-a[1]);
-    const maxDept=Math.max(...deptRows.map(x=>x[1]),1);
-    const maxActivity=Math.max(...activityCounts.map(x=>x.count),1);
-
-    const recentCases=allCases.slice(0,7);
+    const monthKeys=analyticsMonthRange(end,6);
+    const monthly=monthKeys.map(k=>{
+      const monthRows=(module,rows)=>rows.filter(r=>analyticsMonthKey(reportDateFor(module,r))===k).length;
+      const hiresMonth=employees.filter(e=>analyticsMonthKey(e.dateHired)===k).length;
+      const sepMonth=employees.filter(e=>['Resigned','AWOL','Separated'].includes(e.status)&&analyticsMonthKey(e.statusDate)===k).length;
+      const casesMonth=periodCases.filter(c=>analyticsMonthKey(String(c.opened_at||c.updated_at||'').slice(0,10))===k).length;
+      const activityMonth=monthRows('incidents',incidentRows)+monthRows('cvr',cvrRows)+monthRows('disciplinary',discRows)+monthRows('nte',nteRows)+monthRows('memos',memoRows)+monthRows('nod',nodRows)+monthRows('leaves',leaveRows)+monthRows('transfers',transferRows)+monthRows('atd',atdRows);
+      return {k,hires:hiresMonth,separations:sepMonth,cases:casesMonth,activity:activityMonth};
+    });
+    const maxTrend=Math.max(1,...monthly.flatMap(m=>[m.hires,m.separations,m.cases]));
+    const statusCounts=analyticsStatusMap(employees,'status');
+    const classCounts={}; employees.forEach(e=>{const c=classify(e);classCounts[c]=(classCounts[c]||0)+1;});
+    const deptCounts={}; employees.forEach(e=>{const d=e.department||'Unassigned';deptCounts[d]=(deptCounts[d]||0)+1;});
+    const topDepts=Object.entries(deptCounts).sort((a,b)=>b[1]-a[1]).slice(0,8);
+    const maxDept=Math.max(1,...topDepts.map(x=>x[1]));
+    const caseStatus=analyticsStatusMap(periodCases,'status');
+    const casePriority=analyticsStatusMap(openCases,'priority');
+    const maxCaseStatus=Math.max(1,...Object.values(caseStatus));
+    const openNTE=nteRows.filter(n=>n.status!=='Resolved').length;
+    const atdOutstanding=atdRows.reduce((sum,r)=>sum+Math.max(0,atdRemaining(r)),0);
+    const activityModules=[['Incidents',incidentRows.length],['CVR',cvrRows.length],['Disciplinary',discRows.length],['NTE',nteRows.length],['Memoranda',memoRows.length],['NOD',nodRows.length],['Leaves',leaveRows.length],['Transfers',transferRows.length],['ATD',atdRows.length]];
+    const maxActivity=Math.max(1,...activityModules.map(x=>x[1]));
+    const latestCases=periodCases.slice(0,8);
     const attention=[];
-    agedCases.slice(0,5).forEach(c=>attention.push({danger:true,title:`${c.case_number} — ${c.employee_name}`,meta:`${c.status} · ${analyticsDaysOpen(c.opened_at)} days open`}));
-    if(evalOverdue) attention.push({title:`${evalOverdue} probationary evaluation(s) overdue`,meta:'Review the Probationary Evaluations module.'});
-    if(openNTE) attention.push({title:`${openNTE} NTE record(s) still open`,meta:'Review Notice to Explain status.'});
-    if(outstandingATD>0) attention.push({title:`${peso(outstandingATD)} outstanding ATD balance`,meta:`${openATD} ATD record(s) with remaining balance.`});
+    overdueCases.slice(0,5).forEach(c=>attention.push({danger:true,title:`${c.case_number} — ${c.employee_name}`,meta:`${c.status} · due ${fmtDate(c.due_date)}`,action:`openCaseDetails('${c.id}')`}));
+    if(evalOverdue) attention.push({title:`${evalOverdue} probationary evaluation checkpoint(s) overdue`,meta:'Review the Probationary Evaluations workspace.',action:"go('evaluations')"});
+    if(openNTE) attention.push({title:`${openNTE} NTE record(s) still open`,meta:'Review outstanding Notice to Explain records.',action:"go('nte')"});
+    if(atdOutstanding>0) attention.push({title:`${peso(atdOutstanding)} ATD balance remaining`,meta:'Review current ATD collection records.',action:"go('atd')"});
 
+    const rangeButtons=[['30d','30D'],['90d','90D'],['180d','180D'],['365d','1Y']];
     const html=`
+      <div class="sectionhead">
+        <div><h2>Management Analytics</h2><p>${fmtDate(start)} – ${fmtDate(end)}${dept?' · '+esc(dept):' · All Departments'}</p></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-ghost btn-sm" onclick="exportAnalyticsSnapshot()">${iDownload(14)} Export Snapshot</button><button class="btn btn-brass btn-sm" onclick="go('reports')">Reports</button></div>
+      </div>
+      <div class="analytics-toolbar">
+        <div><div class="small" style="font-weight:800;color:var(--ink);margin-bottom:7px;">Reporting range</div><div class="range-buttons">${rangeButtons.map(([v,l])=>`<button class="range-btn ${STATE.analyticsRange===v?'active':''}" onclick="analyticsSetPreset('${v}')">${l}</button>`).join('')}<button class="range-btn ${STATE.analyticsRange==='custom'?'active':''}" onclick="STATE.analyticsRange='custom';document.getElementById('analytics-start')?.focus()">Custom</button></div></div>
+        <div class="range-fields">
+          <div class="field"><label>From</label><input id="analytics-start" type="date" value="${esc(start)}"></div>
+          <div class="field"><label>To</label><input id="analytics-end" type="date" value="${esc(end)}"></div>
+          <div class="field"><label>Department</label><select id="analytics-dept"><option value="">All Departments</option>${reportDepartments().map(d=>`<option value="${esc(d)}" ${dept===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+          <button class="btn btn-primary" onclick="analyticsApplyFilters()">Apply</button>
+        </div>
+      </div>
+
       <div class="analytics-kpis">
-        <div class="metric-card"><div class="k">Employees</div><div class="v">${DB.employees.length}</div><div class="s">${probationary} currently probationary</div></div>
-        <div class="metric-card"><div class="k">Active Cases</div><div class="v">${activeCases.length}</div><div class="s">${agedCases.length} open 30+ days</div></div>
-        <div class="metric-card"><div class="k">90-Day HR Activity</div><div class="v">${totalActivity90}</div><div class="s">Across incidents, violations, notices, and leaves</div></div>
-        <div class="metric-card"><div class="k">Open NTEs</div><div class="v">${openNTE}</div><div class="s">Not yet resolved</div></div>
-        <div class="metric-card"><div class="k">ATD Outstanding</div><div class="v" style="font-size:21px;">${peso(outstandingATD)}</div><div class="s">${openATD} record(s) with balance remaining</div></div>
+        <div class="metric-card"><div class="k">Current Headcount</div><div class="v">${employees.length}</div><div class="s">${activeEmployees.length} active / newly hired</div></div>
+        <div class="metric-card"><div class="k">New Hires</div><div class="v">${hired.length}</div><div class="s">Within selected period</div></div>
+        <div class="metric-card"><div class="k">Separations</div><div class="v">${separated.length}</div><div class="s">Resigned / AWOL / separated</div></div>
+        <div class="metric-card"><div class="k">Open Cases</div><div class="v">${openCases.length}</div><div class="s">${overdueCases.length} currently overdue</div></div>
+        <div class="metric-card"><div class="k">HR Activity</div><div class="v">${activityTotal}</div><div class="s">Selected period across modules</div></div>
       </div>
 
-      <div class="analytics-grid">
-        <div class="panel">
-          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;"><div><h3>Active Cases by Department</h3><div class="desc">Current open case workload.</div></div><button class="btn btn-ghost btn-sm" onclick="go('cases')">Open HR Cases</button></div>
-          <div class="chart-list">
-            ${Object.keys(caseDept).length?Object.entries(caseDept).sort((a,b)=>b[1]-a[1]).map(([d,c],i)=>`<div class="chart-row"><div class="label" title="${analyticsEsc(d)}">${analyticsEsc(d)}</div><div class="chart-track"><div class="chart-fill ${i===0?'alt':''}" style="width:${Math.round(c/maxDept*100)}%"></div></div><div class="chart-count">${c}</div></div>`).join(''):'<div class="small">No active cases yet.</div>'}
-          </div>
+      <div class="analytics-grid equal">
+        <div class="panel"><div class="dashboard-panel-head"><div><h3>Six-Month Workforce & Case Trend</h3><div class="desc">Monthly new hires, separations, and cases based on available record dates.</div></div></div>
+          <div class="analytics-trend">${monthly.map(m=>`<div class="month"><div class="month-total">${m.hires+m.separations+m.cases}</div><div class="bars"><div class="bar" title="${m.hires} hires" style="height:${Math.max(2,Math.round(m.hires/maxTrend*125))}px"></div><div class="bar secondary" title="${m.separations} separations" style="height:${Math.max(2,Math.round(m.separations/maxTrend*125))}px"></div><div class="bar tertiary" title="${m.cases} cases" style="height:${Math.max(2,Math.round(m.cases/maxTrend*125))}px"></div></div><div class="month-label">${esc(analyticsMonthLabelFromKey(m.k))}</div></div>`).join('')}</div>
+          <div class="analytics-legend"><span><i></i>New hires</span><span><i class="secondary"></i>Separations</span><span><i class="tertiary"></i>Cases</span></div>
         </div>
-        <div class="panel">
-          <h3>Case Status</h3><div class="desc">Distribution across all HR cases.</div>
-          <div class="chart-list">
-            ${Object.keys(CASE_STATUS_MAP).map(status=>{const c=caseStatus[status]||0; const pct=allCases.length?Math.round(c/allCases.length*100):0; const cls=status==='Resolved'||status==='Closed'?'alt':(status==='Cancelled'?'danger':'warn'); return `<div class="chart-row"><div class="label">${analyticsEsc(status)}</div><div class="chart-track"><div class="chart-fill ${cls}" style="width:${pct}%"></div></div><div class="chart-count">${c}</div></div>`;}).join('')}
-          </div>
+        <div class="panel"><div class="dashboard-panel-head"><div><h3>Current Case Aging</h3><div class="desc">Age distribution of currently open cases.</div></div><button class="btn btn-ghost btn-sm" onclick="go('cases')">Open Cases</button></div>
+          <div class="analytics-aging">${agingBuckets.map((x,i)=>`<div class="bucket"><div class="v">${x[1]}</div><div class="k">${esc(x[0])}</div></div>`).join('')}</div>
+          <div class="chart-list" style="margin-top:14px;">${agingBuckets.map((x,i)=>`<div class="chart-row"><div class="label">${esc(x[0])}</div><div class="chart-track"><div class="chart-fill ${i===3?'danger':i===2?'warn':''}" style="width:${Math.round(x[1]/Math.max(openCases.length,1)*100)}%"></div></div><div class="chart-count">${x[1]}</div></div>`).join('')}</div>
         </div>
       </div>
 
       <div class="analytics-grid equal">
-        <div class="panel">
-          <h3>90-Day HR Activity</h3><div class="desc">Records created or recorded within the last 90 days, based on their module date.</div>
-          <div class="chart-list">
-            ${activityCounts.map((x,i)=>`<div class="chart-row"><div class="label">${analyticsEsc(x.label)}</div><div class="chart-track"><div class="chart-fill ${i%3===1?'alt':i%3===2?'warn':''}" style="width:${Math.round(x.count/maxActivity*100)}%"></div></div><div class="chart-count">${x.count}</div></div>`).join('')}
-          </div>
+        <div class="panel"><div class="dashboard-panel-head"><div><h3>Workforce by Department</h3><div class="desc">Current employee distribution within the selected scope.</div></div></div>
+          <div class="chart-list">${topDepts.length?topDepts.map(([d,c],i)=>`<div class="chart-row"><div class="label" title="${esc(d)}">${esc(d)}</div><div class="chart-track"><div class="chart-fill ${i===0?'alt':''}" style="width:${Math.round(c/maxDept*100)}%"></div></div><div class="chart-count">${c}</div></div>`).join(''):'<div class="analytics-empty">No employee records match the selected scope.</div>'}</div>
         </div>
-        <div class="panel">
-          <h3>Employee Distribution by Department</h3><div class="desc">Current headcount distribution.</div>
-          <div class="chart-list">
-            ${deptRows.length?deptRows.map(([d,c],i)=>`<div class="chart-row"><div class="label" title="${analyticsEsc(d)}">${analyticsEsc(d)}</div><div class="chart-track"><div class="chart-fill ${i===0?'alt':''}" style="width:${Math.round(c/maxDept*100)}%"></div></div><div class="chart-count">${c}</div></div>`).join(''):'<div class="small">No employees on record.</div>'}
-          </div>
+        <div class="panel"><div class="dashboard-panel-head"><div><h3>Employment Classification</h3><div class="desc">Current classification mix using the platform's lifecycle rules.</div></div></div>
+          <div class="chart-list">${Object.entries(classCounts).sort((a,b)=>b[1]-a[1]).map(([k,c],i)=>`<div class="chart-row"><div class="label">${esc(k)}</div><div class="chart-track"><div class="chart-fill ${i===0?'alt':i===1?'warn':''}" style="width:${Math.round(c/Math.max(employees.length,1)*100)}%"></div></div><div class="chart-count">${c}</div></div>`).join('')||'<div class="analytics-empty">No employee records in scope.</div>'}</div>
+          <div class="analytics-note" style="margin-top:10px;">${probationary.length} probationary employee(s); ${evalOverdue} evaluation checkpoint(s) currently overdue.</div>
         </div>
       </div>
 
       <div class="analytics-grid equal">
-        <div class="panel">
-          <h3>Items Requiring Attention</h3><div class="desc">Operational follow-ups surfaced from current records.</div>
-          <div class="attention-list">
-            ${attention.length?attention.slice(0,8).map(a=>`<div class="attention-item ${a.danger?'danger':''}"><span class="mark"></span><div class="body"><div class="title">${analyticsEsc(a.title)}</div><div class="meta">${analyticsEsc(a.meta)}</div></div></div>`).join(''):'<div class="small">No attention items detected.</div>'}
-          </div>
+        <div class="panel"><div class="dashboard-panel-head"><div><h3>Case Status in Period</h3><div class="desc">Cases opened or updated during the selected period.</div></div></div>
+          <div class="chart-list">${Object.keys(CASE_STATUS_MAP).map((status,i)=>{const c=caseStatus[status]||0;return `<div class="chart-row"><div class="label">${esc(status)}</div><div class="chart-track"><div class="chart-fill ${status==='Cancelled'?'danger':status==='Resolved'||status==='Closed'?'alt':'warn'}" style="width:${Math.round(c/maxCaseStatus*100)}%"></div></div><div class="chart-count">${c}</div></div>`;}).join('')}</div>
         </div>
-        <div class="panel">
-          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;"><div><h3>Latest HR Cases</h3><div class="desc">Most recently updated case files.</div></div><button class="btn btn-ghost btn-sm" onclick="go('cases')">View All</button></div>
-          <div class="tablewrap"><table class="analytics-table"><thead><tr><th>Case</th><th>Employee</th><th>Status</th><th>Age</th></tr></thead><tbody>
-            ${recentCases.length?recentCases.map(c=>`<tr><td><b>${analyticsEsc(c.case_number)}</b></td><td>${analyticsEsc(c.employee_name)}</td><td>${statusBadge(c.status,CASE_STATUS_MAP)}</td><td>${analyticsDaysOpen(c.opened_at,c.closed_at)}d</td></tr>`).join(''):'<tr><td colspan="4"><div class="empty">No cases yet.</div></td></tr>'}
-          </tbody></table></div>
+        <div class="panel"><div class="dashboard-panel-head"><div><h3>HR Activity by Module</h3><div class="desc">Operational volume within the selected period.</div></div></div>
+          <div class="chart-list">${activityModules.map((x,i)=>`<div class="chart-row"><div class="label">${esc(x[0])}</div><div class="chart-track"><div class="chart-fill ${i%3===1?'alt':i%3===2?'warn':''}" style="width:${Math.round(x[1]/maxActivity*100)}%"></div></div><div class="chart-count">${x[1]}</div></div>`).join('')}</div>
         </div>
       </div>
 
-      <div class="panel">
-        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;"><div><h3>Management Snapshot</h3><div class="desc">Quick operational figures to support review meetings and weekly HR reporting.</div></div><div style="display:flex;gap:8px;"><button class="btn btn-ghost btn-sm" onclick="go('weeklyReport')">Weekly Report</button><button class="btn btn-ghost btn-sm" onclick="go('reports')">Reports</button></div></div>
-        <div class="grid cols-4" style="margin-top:8px;">
-          <div class="metric-card"><div class="k">Resolved Cases</div><div class="v">${resolvedCases.length}</div><div class="s">All cases currently marked Resolved</div></div>
-          <div class="metric-card"><div class="k">Overdue Evaluations</div><div class="v">${evalOverdue}</div><div class="s">30 / 90 / 180-day probation checks</div></div>
-          <div class="metric-card"><div class="k">Active On-Call</div><div class="v">${pendingOnCall}</div><div class="s">Current active replacement assignments</div></div>
-          <div class="metric-card"><div class="k">Cases 30+ Days</div><div class="v">${agedCases.length}</div><div class="s">Based on opened date and current date</div></div>
+      <div class="analytics-grid equal">
+        <div class="panel"><div class="dashboard-panel-head"><div><h3>Priority & Follow-Up Signals</h3><div class="desc">Current work requiring operational review.</div></div></div>
+          <div class="analytics-rank-list">
+            <div class="analytics-rank"><div class="num">01</div><div><div class="name">Overdue cases</div><div class="meta">Open cases past their recorded due date</div></div><div class="count">${overdueCases.length}</div></div>
+            <div class="analytics-rank"><div class="num">02</div><div><div class="name">30+ day cases</div><div class="meta">Open cases with longer-running age</div></div><div class="count">${openCases.filter(c=>analyticsDaysOpen(c.opened_at)>=30).length}</div></div>
+            <div class="analytics-rank"><div class="num">03</div><div><div class="name">Open NTEs</div><div class="meta">Notice to Explain records not resolved</div></div><div class="count">${openNTE}</div></div>
+            <div class="analytics-rank"><div class="num">04</div><div><div class="name">ATD remaining</div><div class="meta">Current outstanding recorded balance</div></div><div class="count">${peso(atdOutstanding)}</div></div>
+          </div>
         </div>
-        <div class="analytics-note">Analytics are descriptive summaries of the records currently stored in the system. Case aging is calculated from the case opened date; it is a management metric, not a determination of legal or procedural compliance.</div>
+        <div class="panel"><div class="dashboard-panel-head"><div><h3>Latest Cases</h3><div class="desc">Most recently updated cases within the selected scope.</div></div><button class="btn btn-ghost btn-sm" onclick="go('cases')">View All</button></div>
+          <div class="tablewrap"><table class="analytics-table"><thead><tr><th>Case</th><th>Employee</th><th>Status</th><th>Priority</th></tr></thead><tbody>${latestCases.length?latestCases.map(c=>`<tr><td><button class="linkbtn" onclick="openCaseDetails('${c.id}')">${esc(c.case_number)}</button></td><td>${esc(c.employee_name)}</td><td>${statusBadge(c.status,CASE_STATUS_MAP)}</td><td>${casePriorityBadge(c.priority||'Normal')}</td></tr>`).join(''):'<tr><td colspan="4"><div class="empty">No cases in the selected period.</div></td></tr>'}</tbody></table></div>
+        </div>
+      </div>
+
+      <div class="panel"><div class="dashboard-panel-head"><div><h3>Operational Attention</h3><div class="desc">Signals generated from current HR records for follow-up.</div></div><button class="btn btn-ghost btn-sm" onclick="go('actionCenter')">Open Action Center</button></div>
+        <div class="attention-list">${attention.length?attention.slice(0,10).map(a=>`<div class="attention-item ${a.danger?'danger':''}" ${a.action?`onclick="${a.action}" style="cursor:pointer;"`:''}><span class="mark"></span><div class="body"><div class="title">${analyticsEsc(a.title)}</div><div class="meta">${analyticsEsc(a.meta)}</div></div></div>`).join(''):'<div class="analytics-empty">No attention items detected for the current scope.</div>'}</div>
+        <div class="analytics-note">Analytics are descriptive summaries of records currently stored in the system. Metrics such as case age and overdue status are operational indicators and do not independently determine legal, disciplinary, or compliance outcomes.</div>
       </div>
     `;
     document.getElementById('content').innerHTML=html;
@@ -5009,7 +5135,7 @@ document.getElementById('login-form').addEventListener('keydown', e=>{ if(docume
 // can execute those handlers normally.
 Object.assign(window, {
   addDaysISO, atdComputeStatus, atdFillEmployee, atdPayslipCellHTML, atdRemaining, atdToggleCategory, atdTotalPaid,
-  addCaseActivity, addCaseNote, caseActivityIcon, caseActivityLabel, caseDeadlineInfo, casePriorityBadge, caseWorkflowSteps, caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, setCaseWorkflowStatus, buildNotificationItems, closeNotificationPanel, markAllNotificationsRead, openNotification, refreshNotificationBadge, renderNotificationPanel, toggleNotificationPanel,
+  addCaseActivity, addCaseNote, caseActivityIcon, caseActivityLabel, caseDeadlineInfo, casePriorityBadge, caseWorkflowSteps, caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, setCaseWorkflowStatus, buildNotificationItems, closeNotificationPanel, markAllNotificationsRead, openNotification, refreshNotificationBadge, renderNotificationPanel, toggleNotificationPanel, analyticsApplyFilters, analyticsSetPreset, exportAnalyticsSnapshot,
   workflowSyncTasks, workflowPendingCount, workflowFindTask, workflowOpenSource, workflowSaveTaskNote, workflowAssignTask, workflowSaveAssignment, workflowCompleteTask, workflowDecideTask, openWorkflowTask, openWorkflowCreateForm, saveWorkflowManualTask, renderWorkflowCenter, workflowActionButtons, workflowPriorityBadge, workflowDueText,
   countStoredDocuments, renderDocuments, openStoredDocument, collectStoredDocuments, collectDocumentIndex, openDriveDocument, openDriveDocumentForm, saveDriveDocument, deleteDriveDocument, countDriveDocuments, documentExpiryInfo, openDriveWorkspace,
   attachCellHTML, attachPreviewHTML, authErr, bootAuthenticated, calShift, canEdit, classify, clearFileField, closeModal,
