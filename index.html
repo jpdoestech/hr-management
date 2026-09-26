@@ -405,6 +405,37 @@ async function persistStateAndProfiles(){ await saveDB(); await loadProfiles(); 
 /* ---------------- attachments (Supabase Storage) ---------------- */
 const MAX_ATTACH_BYTES = 10*1024*1024;
 const STORAGE_BUCKET = 'hr-documents';
+let PENDING_UPLOADS = new Set();
+
+function recordStoragePaths(value, out=new Set()){
+  if(!value) return out;
+  if(Array.isArray(value)){ value.forEach(v=>recordStoragePaths(v,out)); return out; }
+  if(typeof value==='object'){
+    Object.entries(value).forEach(([key,v])=>{
+      if(key.endsWith('Data') && typeof v==='string' && v) out.add(v);
+      else if(v && typeof v==='object') recordStoragePaths(v,out);
+    });
+  }
+  return out;
+}
+
+async function deleteStorageObject(path){
+  if(!path) return true;
+  const {error}=await supabase.storage.from(STORAGE_BUCKET).remove([path]);
+  if(error){ console.warn('Storage cleanup failed',path,error); return false; }
+  PENDING_UPLOADS.delete(path);
+  return true;
+}
+
+async function deleteStorageObjects(paths){
+  const list=[...new Set((paths||[]).filter(Boolean))];
+  if(!list.length) return;
+  await Promise.all(list.map(path=>deleteStorageObject(path)));
+}
+
+function rememberCommittedRecordFiles(rec){
+  recordStoragePaths(rec).forEach(path=>PENDING_UPLOADS.delete(path));
+}
 
 async function uploadAttachment(file){
   if(!file) return {path:'',name:''};
@@ -413,6 +444,7 @@ async function uploadAttachment(file){
   const path = `${SESSION.id}/${Date.now()}-${uid()}-${safe}`;
   const {error}=await supabase.storage.from(STORAGE_BUCKET).upload(path,file,{upsert:false,contentType:file.type||'application/octet-stream'});
   if(error){ toast('Upload failed: '+error.message,true); throw error; }
+  PENDING_UPLOADS.add(path);
   return {path,name:file.name};
 }
 
@@ -432,9 +464,15 @@ async function handleFileInput(key, inputEl){
     const prev=document.getElementById('f_'+key+'_preview'); if(prev) prev.innerHTML=attachPreviewHTML(key,uploaded.name,uploaded.path);
   }catch(e){ inputEl.value=''; }
 }
-function clearFileField(key){
-  document.getElementById('f_'+key).value=''; document.getElementById('f_'+key+'_data').value='';
+async function clearFileField(key){
+  const dataEl=document.getElementById('f_'+key+'_data');
+  const path=dataEl?.value||'';
+  document.getElementById('f_'+key).value='';
+  dataEl.value='';
   const prev=document.getElementById('f_'+key+'_preview'); if(prev) prev.innerHTML='';
+  // Newly uploaded files are safe to remove immediately. Existing committed
+  // files are deleted only after the edited record successfully saves.
+  if(path && PENDING_UPLOADS.has(path)) await deleteStorageObject(path);
 }
 function attachPreviewHTML(key,name,path){
   if(!name) return '';
@@ -732,7 +770,14 @@ function downloadCSV(filename, csv){
 
 /* ---------------- modal helpers ---------------- */
 function openModal(html){ document.getElementById('modal').classList.remove('case-modal'); document.getElementById('modal').innerHTML=html; document.getElementById('overlay').classList.add('on'); }
-function closeModal(){ document.getElementById('overlay').classList.remove('on'); document.getElementById('modal').innerHTML=''; }
+async function closeModal(keepUploads=[]){
+  const keep=new Set(Array.isArray(keepUploads)?keepUploads:[keepUploads]);
+  const pending=[...PENDING_UPLOADS].filter(path=>!keep.has(path));
+  pending.forEach(path=>PENDING_UPLOADS.delete(path));
+  await deleteStorageObjects(pending);
+  document.getElementById('overlay').classList.remove('on');
+  document.getElementById('modal').innerHTML='';
+}
 document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeModal(); });
 
 function fieldHTML(f, val){
@@ -1007,9 +1052,11 @@ async function saveRecord(key, id){
   const missing = cfg.fields.filter(f=>f.required && !vals[f.key]);
   if(missing.length){ toast('Please complete: '+missing.map(f=>f.label).join(', ')); return; }
   let rec;
+  let oldStoragePaths=new Set();
   const workflowCaseId = CASE_WORKFLOW_CONTEXT?.module===key ? CASE_WORKFLOW_CONTEXT.caseId : null;
   if(id){
     rec = DB[key].find(r=>r.id===id);
+    oldStoragePaths=recordStoragePaths(rec);
     Object.assign(rec, vals);
     logAudit(`Updated ${cfg.singular.toLowerCase()} record for ${vals[cfg.searchFields[0]]||''}`);
     toast(cfg.singular+' updated.');
@@ -1020,7 +1067,10 @@ async function saveRecord(key, id){
     toast(cfg.singular+' added.');
   }
   await saveDB();
-  closeModal(); renderNav();
+  const newStoragePaths=recordStoragePaths(rec);
+  rememberCommittedRecordFiles(rec);
+  await deleteStorageObjects([...oldStoragePaths].filter(path=>!newStoragePaths.has(path)));
+  await closeModal([...newStoragePaths]); renderNav();
   CASE_WORKFLOW_CONTEXT=null;
   if(workflowCaseId && !id){
     await linkNewRecordToCase(workflowCaseId,key,rec);
@@ -1029,12 +1079,16 @@ async function saveRecord(key, id){
     RENDERERS[key]? RENDERERS[key]() : renderModuleView(key);
   }
 }
-function deleteRecord(key,id){
+async function deleteRecord(key,id){
   const cfg = MODULES[key];
   if(!confirm('Delete this record? This cannot be undone.')) return;
+  const old=DB[key].find(r=>r.id===id);
+  const storagePaths=recordStoragePaths(old);
   DB[key] = DB[key].filter(r=>r.id!==id);
   logAudit(`Deleted a ${cfg.singular.toLowerCase()} record`);
-  saveDB(); renderNav(); RENDERERS[key]? RENDERERS[key]() : renderModuleView(key);
+  await saveDB();
+  await deleteStorageObjects(storagePaths);
+  renderNav(); RENDERERS[key]? RENDERERS[key]() : renderModuleView(key);
   toast(cfg.singular+' deleted.');
 }
 function exportModuleCSV(key){
@@ -1141,20 +1195,28 @@ function openEmployeeForm(id){
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployee('${id||''}')">Save Employee</button></div>
   `);
 }
-function saveEmployee(id){
+async function saveEmployee(id){
   const vals = readFields(EMP_FIELDS);
   const missing = EMP_FIELDS.filter(f=>f.required && !vals[f.key]);
   if(missing.length){ toast('Please complete: '+missing.map(f=>f.label).join(', ')); return; }
-  if(id){ Object.assign(DB.employees.find(e=>e.id===id), vals); logAudit('Updated employee record: '+vals.name); toast('Employee updated.'); }
-  else { DB.employees.push({id:uid(), ...vals}); logAudit('Added new employee: '+vals.name); toast('Employee added.'); }
-  saveDB(); closeModal(); renderNav(); renderEmployees();
+  const rec=id?DB.employees.find(e=>e.id===id):{id:uid(), ...vals};
+  const oldStoragePaths=recordStoragePaths(id?rec:null);
+  Object.assign(rec, vals);
+  if(!id) DB.employees.push(rec);
+  logAudit((id?'Updated':'Added new')+' employee record: '+vals.name);
+  toast('Employee '+(id?'updated.':'added.'));
+  await saveDB();
+  const newStoragePaths=recordStoragePaths(rec); rememberCommittedRecordFiles(rec);
+  await deleteStorageObjects([...oldStoragePaths].filter(path=>!newStoragePaths.has(path)));
+  await closeModal([...newStoragePaths]); renderNav(); renderEmployees();
 }
-function deleteEmployee(id){
+async function deleteEmployee(id){
   if(!confirm('Delete this employee record? This cannot be undone.')) return;
   const emp = DB.employees.find(e=>e.id===id);
+  const storagePaths=recordStoragePaths(emp);
   DB.employees = DB.employees.filter(e=>e.id!==id);
   logAudit('Deleted employee record: '+(emp?emp.name:''));
-  saveDB(); renderNav(); renderEmployees(); toast('Employee deleted.');
+  await saveDB(); await deleteStorageObjects(storagePaths); renderNav(); renderEmployees(); toast('Employee deleted.');
 }
 function openTransferForEmployee(id){
   const emp = DB.employees.find(e=>e.id===id);
@@ -1449,7 +1511,7 @@ function openCVRForm(id){
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveCVR('${id||''}')">Save CVR</button></div>
   `);
 }
-function saveCVR(id){
+async function saveCVR(id){
   const employeeName = document.getElementById('cv_employeeName').value.trim();
   const department = document.getElementById('cv_department').value;
   const dateOfCVR = document.getElementById('cv_date').value;
@@ -1461,17 +1523,15 @@ function saveCVR(id){
   const attachmentData = document.getElementById('f_attachment_data').value;
   if(!employeeName || !department || !dateOfCVR){ toast('Please complete employee, department, and date.'); return; }
   if(!offenses.length && !otherOffense){ toast('Check at least one offense, or write one in.'); return; }
-  if(id){
-    const rec = DB.cvr.find(c=>c.id===id);
-    Object.assign(rec, {employeeName, department, dateOfCVR, status, offenses, otherOffense, attachment, attachmentData, remarks});
-    logAudit(`Updated CVR for ${employeeName}`);
-    toast('CVR updated.');
-  } else {
-    DB.cvr.push({id:uid(), employeeName, department, dateOfCVR, status, offenses, otherOffense, attachment, attachmentData, remarks});
-    logAudit(`Added CVR for ${employeeName}`);
-    toast('CVR added.');
-  }
-  saveDB(); closeModal(); renderNav(); renderCVR();
+  const rec=id?DB.cvr.find(c=>c.id===id):{id:uid()};
+  const oldStoragePaths=recordStoragePaths(id?rec:null);
+  Object.assign(rec,{employeeName, department, dateOfCVR, status, offenses, otherOffense, attachment, attachmentData, remarks});
+  if(!id) DB.cvr.push(rec);
+  logAudit(`${id?'Updated':'Added'} CVR for ${employeeName}`); toast(`CVR ${id?'updated.':'added.'}`);
+  await saveDB();
+  const newStoragePaths=recordStoragePaths(rec); rememberCommittedRecordFiles(rec);
+  await deleteStorageObjects([...oldStoragePaths].filter(path=>!newStoragePaths.has(path)));
+  await closeModal([...newStoragePaths]); renderNav(); renderCVR();
 }
 function deleteCVR(id){
   if(!confirm('Delete this CVR record? This cannot be undone.')) return;
@@ -1572,7 +1632,7 @@ function openIncidentForm(id){
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveIncident('${id||''}')">Save Incident Report</button></div>
   `);
 }
-function saveIncident(id){
+async function saveIncident(id){
   const employeeName = document.getElementById('in_employeeName').value.trim();
   const department = document.getElementById('in_department').value;
   const dateOfIncident = document.getElementById('in_date').value;
@@ -1586,17 +1646,15 @@ function saveIncident(id){
   const attachmentData = document.getElementById('f_attachment_data').value;
   if(!employeeName || !department || !dateOfIncident || !description){ toast('Please complete employee, department, date, and description.'); return; }
   if(!incidentTypes.length && !otherType){ toast('Check at least one incident type, or write one in.'); return; }
-  if(id){
-    const rec = DB.incidents.find(i=>i.id===id);
-    Object.assign(rec, {employeeName, department, dateOfIncident, severity, incidentTypes, otherType, description, status, attachment, attachmentData, remarks});
-    logAudit(`Updated Incident Report for ${employeeName}`);
-    toast('Incident report updated.');
-  } else {
-    DB.incidents.push({id:uid(), employeeName, department, dateOfIncident, severity, incidentTypes, otherType, description, status, attachment, attachmentData, remarks});
-    logAudit(`Added Incident Report for ${employeeName}`);
-    toast('Incident report added.');
-  }
-  saveDB(); closeModal(); renderNav(); renderIncidents();
+  const rec=id?DB.incidents.find(i=>i.id===id):{id:uid()};
+  const oldStoragePaths=recordStoragePaths(id?rec:null);
+  Object.assign(rec,{employeeName, department, dateOfIncident, severity, incidentTypes, otherType, description, status, attachment, attachmentData, remarks});
+  if(!id) DB.incidents.push(rec);
+  logAudit(`${id?'Updated':'Added'} Incident Report for ${employeeName}`); toast(`Incident report ${id?'updated.':'added.'}`);
+  await saveDB();
+  const newStoragePaths=recordStoragePaths(rec); rememberCommittedRecordFiles(rec);
+  await deleteStorageObjects([...oldStoragePaths].filter(path=>!newStoragePaths.has(path)));
+  await closeModal([...newStoragePaths]); renderNav(); renderIncidents();
 }
 function deleteIncident(id){
   if(!confirm('Delete this incident report? This cannot be undone.')) return;
@@ -1889,16 +1947,19 @@ async function saveATDRecord(id){
     remarks:document.getElementById('f_remarks').value.trim(),
   };
   let rec;
+  let oldStoragePaths=new Set();
   const workflowCaseId = CASE_WORKFLOW_CONTEXT?.module==='atd' ? CASE_WORKFLOW_CONTEXT.caseId : null;
   if(id){
-    rec=DB.atd.find(r=>r.id===id); Object.assign(rec, vals); rec.status=atdComputeStatus(rec);
+    rec=DB.atd.find(r=>r.id===id); oldStoragePaths=recordStoragePaths(rec); Object.assign(rec, vals); rec.status=atdComputeStatus(rec);
     logAudit('Updated ATD record for '+employeeName); toast('ATD record updated.');
   } else {
     rec={id:uid(), ...vals, payments:[]}; rec.status=atdComputeStatus(rec);
     DB.atd.push(rec); logAudit('Created ATD record for '+employeeName); toast('ATD record created.');
   }
   await saveDB();
-  closeModal(); renderNav();
+  const newStoragePaths=recordStoragePaths(rec); rememberCommittedRecordFiles(rec);
+  await deleteStorageObjects([...oldStoragePaths].filter(path=>!newStoragePaths.has(path)));
+  await closeModal([...newStoragePaths]); renderNav();
   CASE_WORKFLOW_CONTEXT=null;
   if(workflowCaseId && !id){
     await linkNewRecordToCase(workflowCaseId,'atd',rec);
@@ -1907,10 +1968,11 @@ async function saveATDRecord(id){
     renderATD();
   }
 }
-function deleteATDRecord(id){
+async function deleteATDRecord(id){
   if(!confirm('Delete this ATD record and its full payment history? This cannot be undone.')) return;
+  const rec=DB.atd.find(r=>r.id===id); const storagePaths=recordStoragePaths(rec);
   DB.atd = DB.atd.filter(r=>r.id!==id);
-  logAudit('Deleted an ATD record'); saveDB(); renderNav(); renderATD(); toast('ATD record deleted.');
+  logAudit('Deleted an ATD record'); await saveDB(); await deleteStorageObjects(storagePaths); renderNav(); renderATD(); toast('ATD record deleted.');
 }
 
 function openATDPayments(id){
@@ -1970,34 +2032,34 @@ function openATDPaymentForm(atdId, paymentId){
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveATDPayment('${atdId}','${paymentId||''}')">Save Payment</button></div>
   `);
 }
-function saveATDPayment(atdId, paymentId){
+async function saveATDPayment(atdId, paymentId){
   const rec = DB.atd.find(r=>r.id===atdId); if(!rec) return;
   const amountPaid = parseFloat(document.getElementById('p_amountPaid').value)||0;
   if(amountPaid<=0){ toast('Enter an amount paid greater than zero.'); return; }
+  const oldStoragePaths=recordStoragePaths(rec);
   const vals = {
     month:document.getElementById('p_month').value, cutoff:document.getElementById('p_cutoff').value, amountPaid,
     dateRecorded:document.getElementById('p_dateRecorded').value||todayISO(),
     payslip:document.getElementById('f_payslip').value, payslipData:document.getElementById('f_payslip_data').value,
   };
   if(!rec.payments) rec.payments=[];
-  if(paymentId){
-    const p=rec.payments.find(x=>x.id===paymentId); Object.assign(p, vals);
-    logAudit(`Updated ATD payment for ${rec.employeeName} (${vals.month}, ${vals.cutoff})`);
-  } else {
-    rec.payments.push({id:uid(), ...vals});
-    logAudit(`Recorded ATD payment for ${rec.employeeName} (${vals.month}, ${vals.cutoff})`);
-  }
+  if(paymentId){ const p=rec.payments.find(x=>x.id===paymentId); Object.assign(p, vals); logAudit(`Updated ATD payment for ${rec.employeeName} (${vals.month}, ${vals.cutoff})`); }
+  else { rec.payments.push({id:uid(), ...vals}); logAudit(`Recorded ATD payment for ${rec.employeeName} (${vals.month}, ${vals.cutoff})`); }
   rec.status = atdComputeStatus(rec);
-  saveDB(); toast('Payment saved.'); openATDPayments(atdId); renderNav();
+  await saveDB(); const newStoragePaths=recordStoragePaths(rec); rememberCommittedRecordFiles(rec);
+  await deleteStorageObjects([...oldStoragePaths].filter(path=>!newStoragePaths.has(path)));
+  toast('Payment saved.'); await closeModal([...newStoragePaths]); openATDPayments(atdId); renderNav();
 }
-function deleteATDPayment(atdId, paymentId){
+async function deleteATDPayment(atdId, paymentId){
   const rec = DB.atd.find(r=>r.id===atdId); if(!rec) return;
   if(!confirm('Delete this payment entry?')) return;
+  const payment=rec.payments?.find(p=>p.id===paymentId); const storagePaths=recordStoragePaths(payment);
   rec.payments = (rec.payments||[]).filter(p=>p.id!==paymentId);
   rec.status = atdComputeStatus(rec);
   logAudit('Deleted an ATD payment entry for '+rec.employeeName);
-  saveDB(); toast('Payment removed.'); openATDPayments(atdId);
+  await saveDB(); await deleteStorageObjects(storagePaths); toast('Payment removed.'); openATDPayments(atdId);
 }
+
 function exportATDCSV(){
   const rows=[];
   DB.atd.forEach(r=>{
@@ -2069,16 +2131,19 @@ function openEvalForm(employeeId, milestoneKey){
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEval('${employeeId}','${milestoneKey}')">Save Evaluation</button></div>
   `);
 }
-function saveEval(employeeId, milestoneKey){
+async function saveEval(employeeId, milestoneKey){
   const completedDate = document.getElementById('ev_completedDate').value;
   const attachment = document.getElementById('f_attachment').value;
   const attachmentData = document.getElementById('f_attachment_data').value;
   const remarks = document.getElementById('ev_remarks').value.trim();
   let rec = getEvalRecord(employeeId, milestoneKey);
+  const oldStoragePaths=recordStoragePaths(rec);
   if(rec){ Object.assign(rec, {completedDate, attachment, attachmentData, remarks}); }
-  else { DB.evaluations.push({id:uid(), employeeId, milestone:milestoneKey, completedDate, attachment, attachmentData, remarks}); }
+  else { rec={id:uid(), employeeId, milestone:milestoneKey, completedDate, attachment, attachmentData, remarks}; DB.evaluations.push(rec); }
   logAudit(`Updated evaluation (${milestoneKey}) for employee`);
-  saveDB(); closeModal(); renderEvaluations();
+  await saveDB(); const newStoragePaths=recordStoragePaths(rec); rememberCommittedRecordFiles(rec);
+  await deleteStorageObjects([...oldStoragePaths].filter(path=>!newStoragePaths.has(path)));
+  await closeModal([...newStoragePaths]); renderEvaluations();
   toast('Evaluation saved.');
 }
 
