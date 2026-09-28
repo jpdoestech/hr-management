@@ -8,7 +8,9 @@ create table if not exists public.profiles (
   full_name text not null,
   username text not null unique,
   email text not null unique,
-  role text not null default 'HR Staff' check (role in ('Administrator','HR Staff','Viewer')),
+  role text not null default 'Employee' check (role in ('Administrator','HR Staff','Manager','Employee','Viewer')),
+  employee_record_id text,
+  manager_profile_id uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -34,7 +36,7 @@ begin
     coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email,'@',1)),
     lower(coalesce(new.raw_user_meta_data->>'username', split_part(new.email,'@',1))),
     lower(new.email),
-    'HR Staff'
+    'Employee'
   )
   on conflict (id) do update set
     full_name=excluded.full_name,
@@ -93,11 +95,22 @@ alter table public.hr_audit_logs enable row level security;
 alter table public.hr_app_state enable row level security;
 
 drop policy if exists profiles_select on public.profiles;
-create policy profiles_select on public.profiles for select to authenticated using (true);
+create policy profiles_select on public.profiles for select to authenticated using (
+  id=auth.uid()
+  or public.current_profile_role() in ('Administrator','HR Staff')
+  or manager_profile_id=auth.uid()
+);
 drop policy if exists profiles_insert on public.profiles;
-create policy profiles_insert on public.profiles for insert to authenticated with check (id = auth.uid() and role = 'HR Staff');
+create policy profiles_insert on public.profiles for insert to authenticated with check (
+  id=auth.uid()
+  and role='Employee'
+  and employee_record_id is null
+  and manager_profile_id is null
+);
 drop policy if exists profiles_update on public.profiles;
-create policy profiles_update on public.profiles for update to authenticated using (id = auth.uid() or public.current_profile_role() = 'Administrator') with check ((id = auth.uid() and role = (select p.role from public.profiles p where p.id=auth.uid())) or public.current_profile_role() = 'Administrator');
+create policy profiles_update on public.profiles for update to authenticated
+using (public.current_profile_role()='Administrator')
+with check (public.current_profile_role()='Administrator');
 
 drop policy if exists hr_records_select on public.hr_records;
 create policy hr_records_select on public.hr_records for select to authenticated using (true);

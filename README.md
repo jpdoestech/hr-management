@@ -41,6 +41,8 @@ For actual Google Drive file upload/OAuth, use a secure backend/Edge Function fl
 - Search and filter controls across record modules
 - Collapsible navigation groups
 - Employee-centric HR Operations workspace with all 16 operational areas
+- Employee self-service for profile corrections and leave requests
+- Manager and HR request review with role-aware navigation
 - Workflow, automation, document, analytics, and data-quality surfaces integrated into one application shell
 
 ## Deployment automation

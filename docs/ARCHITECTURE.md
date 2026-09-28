@@ -17,6 +17,8 @@ Supabase PostgreSQL remains the record source of truth. The frontend continues u
 
 Google Drive is treated as document storage for future secure server-side upload/link flows; the browser must not contain Google client secrets.
 
+Employee self-service transactions use `hr_service_requests` and validated Supabase RPC functions. Employee and Manager accounts receive only self/team-scoped records through Row Level Security; they do not write directly to the shared HR record store.
+
 ## UX Principles
 
 - More whitespace and clearer hierarchy

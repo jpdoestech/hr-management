@@ -17,9 +17,24 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 const RECORD_MODULES = ['employees','leaves','disciplinary','nte','memos','nod','oncall','transfers','offenseCatalog','cvr','incidents','prf','evaluations','atd','workflowTasks','automationRuns','documents'];
 let DB_SNAPSHOT = null;
 let SAVE_QUEUE = Promise.resolve();
+let SELF_SERVICE_READY = true;
 
 function blankDB(){
-  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],settings:{orgName:'SCPA',probationDays:180},audit:[],users:[]};
+  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],serviceRequests:[],settings:{orgName:'SCPA',probationDays:180},audit:[],users:[]};
+}
+
+function isMissingSelfServiceTable(error){
+  return ['42P01','PGRST205','PGRST204'].includes(error?.code) || /hr_service_requests/i.test(error?.message||'')&&/not find|does not exist|schema cache/i.test(error?.message||'');
+}
+async function loadServiceRequests(target=DB){
+  const {data,error}=await supabase.from('hr_service_requests').select('id,request_type,employee_profile_id,employee_record_id,manager_profile_id,status,payload,employee_note,reviewer_remarks,submitted_at,reviewed_at,reviewed_by,updated_at').order('submitted_at',{ascending:false});
+  if(error){
+    if(isMissingSelfServiceTable(error)){SELF_SERVICE_READY=false;target.serviceRequests=[];return [];}
+    throw error;
+  }
+  SELF_SERVICE_READY=true;
+  target.serviceRequests=data||[];
+  return target.serviceRequests;
 }
 
 async function loadDB(){
@@ -32,12 +47,15 @@ async function loadDB(){
   if(settingsError) throw settingsError;
   if(settings?.data) empty.settings=settings.data;
 
-  const {data:audit,error:auditError}=await supabase.from('hr_audit_logs').select('created_at,user_name,action').order('created_at',{ascending:false}).limit(200);
-  if(auditError) throw auditError;
-  empty.audit=(audit||[]).map(a=>({ts:a.created_at,user:a.user_name||'System',action:a.action}));
+  if(isHRRole()){
+    const {data:audit,error:auditError}=await supabase.from('hr_audit_logs').select('created_at,user_name,action').order('created_at',{ascending:false}).limit(200);
+    if(auditError) throw auditError;
+    empty.audit=(audit||[]).map(a=>({ts:a.created_at,user:a.user_name||'System',action:a.action}));
+  }
+  await loadServiceRequests(empty);
 
   const hasRecords = (rows||[]).length>0;
-  if(!hasRecords){
+  if(!hasRecords&&isHRRole()){
     // Phase 1 migration: if the old singleton exists, import it once.
     const {data:legacy,error:legacyError}=await supabase.from('hr_app_state').select('data').eq('id','singleton').maybeSingle();
     if(legacyError && legacyError.code!=='PGRST116') throw legacyError;
@@ -83,9 +101,9 @@ function saveDB(){
 }
 
 async function loadProfiles(){
-  const {data,error}=await supabase.from('profiles').select('id,full_name,username,email,role,created_at').order('created_at');
+  const {data,error}=await supabase.from('profiles').select('id,full_name,username,email,role,employee_record_id,manager_profile_id,created_at').order('created_at');
   if(error) throw error;
-  DB.users=(data||[]).map(p=>({id:p.id,fullName:p.full_name,username:p.username,email:p.email,role:p.role,createdAt:p.created_at?.slice(0,10)||todayISO()}));
+  DB.users=(data||[]).map(p=>({id:p.id,fullName:p.full_name,username:p.username,email:p.email,role:p.role,employeeRecordId:p.employee_record_id||'',managerProfileId:p.manager_profile_id||'',createdAt:p.created_at?.slice(0,10)||todayISO()}));
 }
 
 async function persistStateAndProfiles(){ await saveDB(); await loadProfiles(); }
@@ -288,7 +306,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = seedDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', tablePages:{}, tablePageSizes:{} };
+let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', tablePages:{}, tablePageSizes:{} };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
@@ -363,18 +381,23 @@ async function doRegister(ev){
 }
 async function bootAuthenticated(user){
   try{
+    const {data:ownProfile,error:profileError}=await supabase.from('profiles').select('id,full_name,username,email,role,employee_record_id,manager_profile_id,created_at').eq('id',user.id).maybeSingle();
+    if(profileError) throw profileError;
+    SESSION=ownProfile?{id:ownProfile.id,fullName:ownProfile.full_name,username:ownProfile.username,email:ownProfile.email,role:ownProfile.role,employeeRecordId:ownProfile.employee_record_id||'',managerProfileId:ownProfile.manager_profile_id||'',createdAt:ownProfile.created_at?.slice(0,10)||todayISO()}:{id:user.id,fullName:user.user_metadata?.full_name||user.email,username:user.user_metadata?.username||'',email:user.email,role:'Employee',employeeRecordId:'',managerProfileId:''};
     let state=await loadDB();
     const hasAny=RECORD_MODULES.some(k=>(state[k]||[]).length);
-    if(!hasAny){ DB=seedDB(); await saveDB(); } else DB=state;
-    if(!DB.audit) DB.audit=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; DB.prf.forEach(p=>{if(!p.status)p.status='Draft';}); if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; if(!DB.workflowTasks) DB.workflowTasks=[]; if(!DB.automationRuns) DB.automationRuns=[]; if(!DB.documents) DB.documents=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];}); if(!DB.settings) DB.settings={orgName:'SCPA',probationDays:180};
-    const employeeMasterChanged=normalizeEmployeeMasterData();
+    if(!hasAny&&isHRRole()){ DB=seedDB(); DB.serviceRequests=state.serviceRequests||[]; await saveDB(); } else DB=state;
+    if(!DB.audit) DB.audit=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; DB.prf.forEach(p=>{if(!p.status)p.status='Draft';}); if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; if(!DB.workflowTasks) DB.workflowTasks=[]; if(!DB.automationRuns) DB.automationRuns=[]; if(!DB.documents) DB.documents=[]; if(!DB.serviceRequests) DB.serviceRequests=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];}); if(!DB.settings) DB.settings={orgName:'SCPA',probationDays:180};
+    const employeeMasterChanged=isHRRole()?normalizeEmployeeMasterData():false;
     DB_SNAPSHOT=JSON.parse(JSON.stringify(DB));
     if(employeeMasterChanged) await saveDB();
     await loadProfiles();
     const profile=DB.users.find(x=>x.id===user.id);
-    SESSION=profile || {id:user.id,fullName:user.user_metadata?.full_name||user.email,username:user.user_metadata?.username||'',email:user.email,role:'HR Staff'};
-    ensureAutomationSettings();
-    await workflowSyncTasks({silent:true});
+    if(profile) SESSION=profile;
+    if(isHRRole()){
+      ensureAutomationSettings();
+      await workflowSyncTasks({silent:true});
+    }
     enterApp();
   }catch(e){ authErr('Could not load the HR database: '+e.message); await supabase.auth.signOut(); }
 }
@@ -389,7 +412,7 @@ async function doLogout(){
   await supabase.auth.signOut();
   SESSION=null;
   document.getElementById('app').classList.remove('on');
-  document.getElementById('auth-screen').style.display='flex';
+  document.getElementById('auth-screen').style.display='';
   document.getElementById('li-user').value=''; document.getElementById('li-pass').value='';
 }
 let NOTIFICATION_TIMER=null;
@@ -550,14 +573,145 @@ function enterApp(initialView='dashboard'){
   document.getElementById('tb-av').textContent = SESSION.fullName.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
   const bell=document.getElementById('notification-bell-icon');
   if(bell) bell.innerHTML=iBell(17);
+  const notificationWrap=document.getElementById('notification-wrap');
+  if(notificationWrap) notificationWrap.style.display=(isHRRole()||SESSION?.role==='Viewer')?'':'none';
   renderNav();
-  go(initialView,{skipUnsaved:true});
-  refreshNotificationBadge();
+  const landing=initialView==='dashboard'&&!isHRRole()&&SESSION?.role!=='Viewer'?(SESSION?.role==='Manager'?'teamApprovals':'selfService'):initialView;
+  go(landing,{skipUnsaved:true});
+  if(isHRRole()||SESSION?.role==='Viewer') refreshNotificationBadge();
   if(NOTIFICATION_TIMER) clearInterval(NOTIFICATION_TIMER);
-  NOTIFICATION_TIMER=setInterval(()=>refreshNotificationBadge(),60000);
+  NOTIFICATION_TIMER=(isHRRole()||SESSION?.role==='Viewer')?setInterval(()=>refreshNotificationBadge(),60000):null;
   if(AUTOMATION_TIMER) clearInterval(AUTOMATION_TIMER);
-  runAutomationEngine({silent:true});
-  AUTOMATION_TIMER=setInterval(()=>runAutomationEngine({silent:true}),300000);
+  if(isHRRole()){
+    runAutomationEngine({silent:true});
+    AUTOMATION_TIMER=setInterval(()=>runAutomationEngine({silent:true}),300000);
+  } else AUTOMATION_TIMER=null;
+}
+
+/* ---------------- Employee self-service / manager approvals ---------------- */
+const SERVICE_REQUEST_STATUS_MAP={Pending:'b-amber',Approved:'b-green',Returned:'b-red',Cancelled:'b-grey'};
+function currentEmployeeRecord(){
+  return DB.employees.find(employee=>String(employee.id)===String(SESSION?.employeeRecordId||''))||null;
+}
+function pendingServiceRequestCount(){
+  const rows=DB.serviceRequests||[];
+  if(SESSION?.role==='Manager') return rows.filter(request=>request.status==='Pending'&&request.manager_profile_id===SESSION.id).length;
+  return canReviewServiceRequests()?rows.filter(request=>request.status==='Pending').length:0;
+}
+function serviceRequestTypeLabel(type){ return type==='leave'?'Leave Request':'Profile Update'; }
+function serviceRequestOwner(request){
+  return DB.users.find(user=>user.id===request.employee_profile_id)?.fullName||DB.employees.find(employee=>String(employee.id)===String(request.employee_record_id))?.name||'Employee';
+}
+function serviceRequestSummary(request){
+  const payload=request.payload||{};
+  if(request.request_type==='leave') return `${payload.leaveType||'Leave'} · ${fmtDate(payload.startDate)} – ${fmtDate(payload.endDate)}`;
+  const labels={mobileNumber:'Mobile number',personalEmail:'Personal email',address:'Home address',civilStatus:'Civil status',emergencyContactName:'Emergency contact',emergencyContactRelationship:'Contact relationship',emergencyContactPhone:'Emergency phone'};
+  const changed=Object.keys(payload).filter(key=>labels[key]).map(key=>labels[key]);
+  return changed.length?changed.join(', '):'Personal information correction';
+}
+async function refreshServiceRequests(){
+  await loadServiceRequests(DB);
+  renderNav();
+}
+function selfServiceSetupNotice(){
+  if(!SELF_SERVICE_READY) return `<div class="notice"><b>Self-service setup required.</b> Run <span class="mono">supabase/phase10-self-service.sql</span> in the Supabase SQL Editor, then reload this page.</div>`;
+  if(!SESSION?.employeeRecordId) return `<div class="self-service-empty"><div class="self-service-empty-icon">${iUser(22)}</div><h2>Your account needs an employee link</h2><p>An Administrator must connect this login to your employee master record before personal information and requests can be displayed.</p></div>`;
+  return '';
+}
+function renderSelfService(){
+  setTitle('My HR Portal','Personal information, requests, and approval status.');
+  const content=document.getElementById('content');
+  const setup=selfServiceSetupNotice();
+  if(setup){content.innerHTML=`<div class="self-service-shell">${setup}</div>`;return;}
+  const employee=currentEmployeeRecord();
+  if(!employee){content.innerHTML=`<div class="self-service-shell"><div class="self-service-empty"><div class="self-service-empty-icon">${iUser(22)}</div><h2>Employee record unavailable</h2><p>The linked employee record could not be loaded. Ask HR to verify the account link and record permissions.</p></div></div>`;return;}
+  const q=String(STATE.selfServiceSearch||'').trim().toLowerCase();
+  const status=STATE.selfServiceStatus||'';
+  const all=(DB.serviceRequests||[]).filter(request=>request.employee_profile_id===SESSION.id);
+  const requests=all.filter(request=>(!status||request.status===status)&&(!q||[serviceRequestTypeLabel(request.request_type),serviceRequestSummary(request),request.status,request.reviewer_remarks].some(value=>String(value||'').toLowerCase().includes(q))));
+  const pending=all.filter(request=>request.status==='Pending').length;
+  const approved=all.filter(request=>request.status==='Approved').length;
+  const nextLeave=DB.leaves.filter(leave=>String(leave.employeeId||'')===String(employee.id)&&leave.status==='Approved'&&leave.endDate>=todayISO()).sort((a,b)=>String(a.startDate).localeCompare(String(b.startDate)))[0];
+  content.innerHTML=`
+    <div class="self-service-shell">
+      <div class="portal-header"><div><div class="eyebrow">Employee Self-Service</div><h1>Hello, ${esc((employee.name||SESSION.fullName).split(' ')[0])}.</h1><p>Review your employment details and send requests directly into the HR approval queue.</p></div><div class="portal-header-actions"><button class="btn btn-ghost" onclick="openProfileChangeRequest()">${iEdit(15)} Request profile update</button><button class="btn btn-primary" onclick="openLeaveRequest()">${iCal(15)} Request leave</button></div></div>
+      <div class="portal-kpis"><div><span>Open requests</span><b>${pending}</b><small>Awaiting review</small></div><div><span>Approved requests</span><b>${approved}</b><small>All-time approvals</small></div><div><span>Employment status</span><b class="portal-kpi-text">${esc(employee.status||'—')}</b><small>${esc(classify(employee))}</small></div><div><span>Next approved leave</span><b class="portal-kpi-text">${nextLeave?fmtDate(nextLeave.startDate):'None scheduled'}</b><small>${nextLeave?esc(nextLeave.leaveType):'No upcoming leave'}</small></div></div>
+      <div class="portal-grid">
+        <section class="panel portal-profile"><div class="portal-section-head"><div><h2>My employment profile</h2><p>Employment fields are maintained by HR. Personal corrections can be submitted for approval.</p></div><button class="btn btn-ghost btn-sm" onclick="openProfileChangeRequest()">Request correction</button></div>
+          <div class="portal-identity"><div class="portal-avatar">${esc((employee.name||'E').split(' ').map(part=>part[0]).slice(0,2).join('').toUpperCase())}</div><div><h3>${esc(employee.name)}</h3><p>${esc(employee.employeeNo||'—')} · ${esc(employee.position||'—')}</p><div>${statusBadge(employee.status||'—',EMP_STATUS_MAP)} ${statusBadge(classify(employee),{'Regular':'b-green','Probationary':'b-amber'})}</div></div></div>
+          <dl class="portal-details"><div><dt>Department</dt><dd>${esc(employee.department||'—')}</dd></div><div><dt>Date hired</dt><dd>${fmtDate(employee.dateHired)}</dd></div><div><dt>Mobile number</dt><dd>${esc(employee.mobileNumber||'Not provided')}</dd></div><div><dt>Personal email</dt><dd>${esc(employee.personalEmail||'Not provided')}</dd></div><div><dt>Home address</dt><dd>${esc(employee.address||'Not provided')}</dd></div><div><dt>Emergency contact</dt><dd>${esc(employee.emergencyContactName||'Not provided')}${employee.emergencyContactPhone?' · '+esc(employee.emergencyContactPhone):''}</dd></div></dl>
+        </section>
+        <section class="panel portal-guide"><div class="portal-section-head"><div><h2>Request center</h2><p>Choose the transaction that matches what you need.</p></div></div><button class="portal-action" onclick="openLeaveRequest()"><span>${iCal(18)}</span><div><b>File a leave request</b><small>Send dates, leave type, and reason for review.</small></div><strong>›</strong></button><button class="portal-action" onclick="openProfileChangeRequest()"><span>${iUser(18)}</span><div><b>Correct personal information</b><small>Update contact, address, or emergency details.</small></div><strong>›</strong></button><div class="portal-security-note">Employment status, position, department, and classification remain HR-controlled fields.</div></section>
+      </div>
+      <section class="portal-history"><div class="portal-section-head"><div><h2>My requests</h2><p>${requests.length} of ${all.length} request${all.length===1?'':'s'} shown.</p></div></div><div class="data-toolbar"><div class="searchbox">${iSearch(16)}<input data-search-key="selfServiceSearch" type="search" placeholder="Search requests…" value="${esc(STATE.selfServiceSearch)}" oninput="queueSearchRender(this,'selfServiceSearch',renderSelfService)"></div><select class="filter-select" onchange="STATE.selfServiceStatus=this.value;STATE.tablePages={};renderSelfService()"><option value="">All statuses</option>${Object.keys(SERVICE_REQUEST_STATUS_MAP).map(value=>`<option value="${value}" ${STATE.selfServiceStatus===value?'selected':''}>${value}</option>`).join('')}</select>${STATE.selfServiceSearch||STATE.selfServiceStatus?`<button class="btn btn-ghost btn-sm" onclick="STATE.selfServiceSearch='';STATE.selfServiceStatus='';renderSelfService()">Clear</button>`:''}</div>
+        <div class="tablewrap"><table class="data-table"><thead><tr><th>Request</th><th>Details</th><th>Submitted</th><th>Status</th><th>Reviewer remarks</th><th class="actions-head">Actions</th></tr></thead><tbody>${requests.length?requests.map(request=>`<tr><td><b>${esc(serviceRequestTypeLabel(request.request_type))}</b></td><td>${esc(serviceRequestSummary(request))}</td><td>${fmtDate(String(request.submitted_at||'').slice(0,10))}</td><td>${statusBadge(request.status,SERVICE_REQUEST_STATUS_MAP)}</td><td>${esc(request.reviewer_remarks||'—')}</td><td><div class="rowactions">${request.status==='Pending'?`<button class="btn btn-ghost btn-sm" data-confirm-change="true" data-confirm-label="Cancel request" onclick="cancelSelfServiceRequest('${request.id}')">Cancel</button>`:'<span class="small">Complete</span>'}</div></td></tr>`).join(''):`<tr><td colspan="6"><div class="empty"><b>No matching requests</b>Your submitted requests and review results will appear here.</div></td></tr>`}</tbody></table></div>
+      </section>
+    </div>`;
+  requestAnimationFrame(()=>enhanceDataTables());
+}
+function openProfileChangeRequest(){
+  const employee=currentEmployeeRecord(); if(!employee){toast('Your account is not linked to an employee record.',true);return;}
+  openModal(`<div class="modal-head"><div><h3>Request Profile Update</h3><div class="small">Changes are applied only after manager or HR approval.</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="formgrid"><div class="field"><label>Mobile Number</label><input id="ss_mobile" value="${esc(employee.mobileNumber||'')}"></div><div class="field"><label>Personal Email</label><input id="ss_email" type="email" value="${esc(employee.personalEmail||'')}"></div><div class="field full"><label>Home Address</label><input id="ss_address" value="${esc(employee.address||'')}"></div><div class="field"><label>Civil Status</label><select id="ss_civil">${['','Single','Married','Widowed','Separated','Other'].map(value=>`<option value="${value}" ${employee.civilStatus===value?'selected':''}>${value||'Select status'}</option>`).join('')}</select></div><div class="field"><label>Emergency Contact Name</label><input id="ss_emergency_name" value="${esc(employee.emergencyContactName||'')}"></div><div class="field"><label>Emergency Contact Relationship</label><input id="ss_emergency_relation" value="${esc(employee.emergencyContactRelationship||'')}"></div><div class="field"><label>Emergency Contact Phone</label><input id="ss_emergency_phone" value="${esc(employee.emergencyContactPhone||'')}"></div><div class="field full"><label>Note for reviewer</label><textarea id="ss_profile_note" rows="3" placeholder="Briefly explain the correction, if needed."></textarea></div></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveProfileChangeRequest()">Submit Request</button></div>`);
+}
+async function saveProfileChangeRequest(){
+  if(!SELF_SERVICE_READY) return;
+  const payload={mobileNumber:document.getElementById('ss_mobile').value.trim(),personalEmail:document.getElementById('ss_email').value.trim(),address:document.getElementById('ss_address').value.trim(),civilStatus:document.getElementById('ss_civil').value,emergencyContactName:document.getElementById('ss_emergency_name').value.trim(),emergencyContactRelationship:document.getElementById('ss_emergency_relation').value.trim(),emergencyContactPhone:document.getElementById('ss_emergency_phone').value.trim(),note:document.getElementById('ss_profile_note').value.trim()};
+  const {error}=await supabase.rpc('submit_hr_service_request',{p_request_type:'profile_update',p_payload:payload});
+  if(error){toast('Could not submit request: '+error.message,true);return;}
+  await closeModal(); await refreshServiceRequests(); toast('Profile update request submitted.'); renderSelfService();
+}
+function openLeaveRequest(){
+  const employee=currentEmployeeRecord(); if(!employee){toast('Your account is not linked to an employee record.',true);return;}
+  openModal(`<div class="modal-head"><div><h3>Request Leave</h3><div class="small">${esc(employee.name)} · ${esc(employee.department||'Unassigned')}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="formgrid"><div class="field full"><label>Type of Leave *</label><select id="ss_leave_type">${LEAVE_TYPES.map(value=>`<option>${esc(value)}</option>`).join('')}</select></div><div class="field"><label>Start Date *</label><input id="ss_leave_start" type="date" min="${todayISO()}"></div><div class="field"><label>End Date *</label><input id="ss_leave_end" type="date" min="${todayISO()}"></div><div class="field full"><label>Reason</label><textarea id="ss_leave_reason" rows="4" placeholder="Provide the reason or relevant context for your reviewer."></textarea></div><div class="field full"><label>Note for reviewer</label><textarea id="ss_leave_note" rows="2" placeholder="Optional handover or scheduling note."></textarea></div></div><div class="computed-note">Submitting creates a pending Leave Tracker record. The status changes only after manager or HR review.</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveLeaveRequest()">Submit Leave Request</button></div>`);
+}
+async function saveLeaveRequest(){
+  const leaveType=document.getElementById('ss_leave_type').value;
+  const startDate=document.getElementById('ss_leave_start').value;
+  const endDate=document.getElementById('ss_leave_end').value;
+  if(!startDate||!endDate){toast('Select both leave dates.',true);return;}
+  if(endDate<startDate){toast('Leave end date cannot be before the start date.',true);return;}
+  const payload={leaveType,startDate,endDate,reason:document.getElementById('ss_leave_reason').value.trim(),note:document.getElementById('ss_leave_note').value.trim()};
+  const {error}=await supabase.rpc('submit_hr_service_request',{p_request_type:'leave',p_payload:payload});
+  if(error){toast('Could not submit leave request: '+error.message,true);return;}
+  await closeModal(); await refreshServiceRequests(); toast('Leave request submitted.'); renderSelfService();
+}
+async function cancelSelfServiceRequest(id){
+  const {error}=await supabase.rpc('cancel_hr_service_request',{p_request_id:id});
+  if(error){toast('Could not cancel request: '+error.message,true);return;}
+  await refreshServiceRequests(); toast('Request cancelled.'); renderSelfService();
+}
+function renderTeamApprovals(){
+  setTitle('Requests & Approvals','Review employee self-service transactions.');
+  const content=document.getElementById('content');
+  if(!canReviewServiceRequests()){content.innerHTML='<div class="notice"><b>Access restricted.</b> This workspace is available to Managers and HR personnel.</div>';return;}
+  if(!SELF_SERVICE_READY){content.innerHTML=`<div class="notice"><b>Self-service setup required.</b> Run <span class="mono">supabase/phase10-self-service.sql</span> in the Supabase SQL Editor, then reload this page.</div>`;return;}
+  const q=String(STATE.serviceApprovalSearch||'').trim().toLowerCase();
+  const status=STATE.serviceApprovalStatus;
+  const all=DB.serviceRequests||[];
+  const rows=all.filter(request=>(!status||request.status===status)&&(!q||[serviceRequestOwner(request),serviceRequestTypeLabel(request.request_type),serviceRequestSummary(request),request.status].some(value=>String(value||'').toLowerCase().includes(q))));
+  const pending=all.filter(request=>request.status==='Pending').length;
+  const approved=all.filter(request=>request.status==='Approved').length;
+  const returned=all.filter(request=>request.status==='Returned').length;
+  content.innerHTML=`<div class="self-service-shell"><div class="portal-header"><div><div class="eyebrow">Manager Workspace</div><h1>Requests &amp; Approvals</h1><p>Review profile corrections and leave submissions assigned to you or HR.</p></div></div><div class="approval-summary"><div><span>Pending</span><b>${pending}</b></div><div><span>Approved</span><b>${approved}</b></div><div><span>Returned</span><b>${returned}</b></div><div><span>Total requests</span><b>${all.length}</b></div></div><section class="portal-history"><div class="data-toolbar"><div class="searchbox">${iSearch(16)}<input data-search-key="serviceApprovalSearch" type="search" placeholder="Search employee or request…" value="${esc(STATE.serviceApprovalSearch)}" oninput="queueSearchRender(this,'serviceApprovalSearch',renderTeamApprovals)"></div><select class="filter-select" onchange="STATE.serviceApprovalStatus=this.value;STATE.tablePages={};renderTeamApprovals()"><option value="" ${STATE.serviceApprovalStatus===''?'selected':''}>All statuses</option>${Object.keys(SERVICE_REQUEST_STATUS_MAP).map(value=>`<option value="${value}" ${STATE.serviceApprovalStatus===value?'selected':''}>${value}</option>`).join('')}</select>${STATE.serviceApprovalSearch||STATE.serviceApprovalStatus!=='Pending'?`<button class="btn btn-ghost btn-sm" onclick="STATE.serviceApprovalSearch='';STATE.serviceApprovalStatus='Pending';renderTeamApprovals()">Reset</button>`:''}</div><div class="tablewrap"><table class="data-table"><thead><tr><th>Employee</th><th>Request</th><th>Details</th><th>Submitted</th><th>Status</th><th class="actions-head">Actions</th></tr></thead><tbody>${rows.length?rows.map(request=>`<tr><td><b>${esc(serviceRequestOwner(request))}</b></td><td>${esc(serviceRequestTypeLabel(request.request_type))}</td><td>${esc(serviceRequestSummary(request))}</td><td>${fmtDate(String(request.submitted_at||'').slice(0,10))}</td><td>${statusBadge(request.status,SERVICE_REQUEST_STATUS_MAP)}</td><td><div class="rowactions"><button class="btn btn-ghost btn-sm" onclick="openServiceRequestReview('${request.id}')">${request.status==='Pending'?'Review':'View'}</button></div></td></tr>`).join(''):`<tr><td colspan="6"><div class="empty"><b>No matching requests</b>Try another status or search term.</div></td></tr>`}</tbody></table></div></section></div>`;
+  requestAnimationFrame(()=>enhanceDataTables());
+}
+function serviceRequestDetailHTML(request){
+  const payload=request.payload||{};
+  if(request.request_type==='leave') return `<dl class="request-review-grid"><div><dt>Leave type</dt><dd>${esc(payload.leaveType||'—')}</dd></div><div><dt>Dates</dt><dd>${fmtDate(payload.startDate)} – ${fmtDate(payload.endDate)}</dd></div><div class="full"><dt>Reason</dt><dd>${esc(payload.reason||'Not provided')}</dd></div><div class="full"><dt>Employee note</dt><dd>${esc(payload.note||request.employee_note||'Not provided')}</dd></div></dl>`;
+  const fields=[['Mobile number','mobileNumber'],['Personal email','personalEmail'],['Home address','address'],['Civil status','civilStatus'],['Emergency contact','emergencyContactName'],['Relationship','emergencyContactRelationship'],['Emergency phone','emergencyContactPhone']];
+  return `<dl class="request-review-grid">${fields.map(([label,key])=>`<div class="${key==='address'?'full':''}"><dt>${label}</dt><dd>${esc(payload[key]||'Not provided')}</dd></div>`).join('')}<div class="full"><dt>Employee note</dt><dd>${esc(payload.note||request.employee_note||'Not provided')}</dd></div></dl>`;
+}
+function openServiceRequestReview(id){
+  const request=(DB.serviceRequests||[]).find(row=>row.id===id); if(!request)return;
+  const pending=request.status==='Pending';
+  openModal(`<div class="modal-head"><div><h3>${esc(serviceRequestTypeLabel(request.request_type))}</h3><div class="small">${esc(serviceRequestOwner(request))} · Submitted ${fmtDate(String(request.submitted_at||'').slice(0,10))}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="request-review-status">${statusBadge(request.status,SERVICE_REQUEST_STATUS_MAP)}<span>${esc(serviceRequestSummary(request))}</span></div>${serviceRequestDetailHTML(request)}${pending?`<div class="field" style="margin-top:16px;"><label>Reviewer remarks ${request.request_type==='profile_update'?'':'(recommended)'}</label><textarea id="sr_review_remarks" rows="4" placeholder="Add context for the employee or HR record."></textarea></div>`:`<div class="computed-note"><b>Reviewer remarks:</b> ${esc(request.reviewer_remarks||'No remarks recorded.')}</div>`}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button>${pending?`<button class="btn btn-danger" data-confirm-change="true" data-confirm-label="Return request" onclick="reviewServiceRequest('${request.id}','Returned')">Return</button><button class="btn btn-primary" data-confirm-change="true" data-confirm-label="Approve request" onclick="reviewServiceRequest('${request.id}','Approved')">Approve</button>`:''}</div>`);
+}
+async function reviewServiceRequest(id,decision){
+  const remarks=document.getElementById('sr_review_remarks')?.value.trim()||'';
+  if(decision==='Returned'&&!remarks){toast('Add reviewer remarks before returning the request.',true);return;}
+  const {error}=await supabase.rpc('review_hr_service_request',{p_request_id:id,p_decision:decision,p_remarks:remarks||null});
+  if(error){toast('Could not review request: '+error.message,true);return;}
+  await closeModal(); await refreshServiceRequests(); toast(`Request ${decision.toLowerCase()}.`); renderTeamApprovals();
 }
 
 /* ---------------- Phase 7: Action Center ---------------- */
@@ -874,6 +1028,10 @@ async function renderOperationsWorkspace(){
   }catch(e){ document.getElementById('content').innerHTML=`<div class="panel"><h3>HR Operations</h3><div class="notice"><b>Could not load the workspace.</b> ${esc(e.message||e)}</div></div>`; }
 }
 const NAV = [
+  {sec:'My Workspace',items:[
+    {v:'selfService',label:'My HR Portal',icon:iUser,roles:['Employee','Manager']},
+    {v:'teamApprovals',label:'Requests & Approvals',icon:iCheck,roles:['Administrator','HR Staff','Manager'],count:()=>pendingServiceRequestCount()},
+  ]},
   {sec:'Overview',items:[
     {v:'dashboard',label:'Dashboard',icon:iGrid},
     {v:'actionCenter',label:'Action Center',icon:iShield},
@@ -912,6 +1070,11 @@ const NAV = [
     {v:'settings',label:'Settings',icon:iGear},
   ]},
 ];
+function navItemVisible(item){
+  const role=SESSION?.role||'HR Staff';
+  if(item.roles) return item.roles.includes(role);
+  return !['Employee','Manager'].includes(role);
+}
 let NAV_COLLAPSED={};
 try{ NAV_COLLAPSED=JSON.parse(localStorage.getItem('scpa_nav_collapsed')||'{}')||{}; }catch(e){ NAV_COLLAPSED={}; }
 function toggleNavGroup(sec){
@@ -922,12 +1085,14 @@ function toggleNavGroup(sec){
 function renderNav(){
   const nav=document.getElementById('nav'); nav.innerHTML='';
   NAV.forEach(group=>{
-    const active=group.items.some(it=>STATE.view===it.v);
+    const items=group.items.filter(navItemVisible);
+    if(!items.length) return;
+    const active=items.some(it=>STATE.view===it.v);
     const collapsed=!active && NAV_COLLAPSED[group.sec]===true;
     const g=document.createElement('section'); g.className='navgroup'+(collapsed?' collapsed':'');
     const head=document.createElement('button'); head.type='button'; head.className='navgroup-head'; head.setAttribute('aria-expanded',collapsed?'false':'true'); head.innerHTML=`<span class="navgroup-title">${esc(group.sec)}</span><span class="navgroup-chevron">${collapsed?'›':'⌄'}</span>`; head.onclick=()=>toggleNavGroup(group.sec); g.appendChild(head);
     const body=document.createElement('div'); body.className='navgroup-items';
-    group.items.forEach(it=>{
+    items.forEach(it=>{
       const b=document.createElement('button');
       b.className='navitem'+(STATE.view===it.v?' active':'');
       b.onclick=()=>go(it.v);
@@ -952,6 +1117,8 @@ function closeSidebar(){
   if(btn) btn.setAttribute('aria-expanded','false');
 }
 async function go(view,{skipUnsaved=false}={}){
+  const navItem=NAV.flatMap(group=>group.items).find(item=>item.v===view);
+  if(navItem&&!navItemVisible(navItem)){toast('This workspace is not available for your role.',true);return;}
   if(!skipUnsaved && !(await requestPageNavigation(view))) return;
   STATE.view=view; STATE.search=''; STATE.filter=''; STATE.filterDept=''; STATE.filterStatus='';
   STATE.tablePages={};
@@ -1017,7 +1184,9 @@ function logAudit(action){
   DB.audit.unshift(entry); DB.audit=DB.audit.slice(0,200);
   supabase.from('hr_audit_logs').insert({user_id:SESSION?.id||null,user_name:entry.user,action:entry.action}).then(({error})=>{ if(error) console.warn('Audit log failed',error); });
 }
-function canEdit(){ return !SESSION || SESSION.role!=='Viewer'; }
+function isHRRole(role=SESSION?.role){ return role==='Administrator'||role==='HR Staff'; }
+function canEdit(){ return !SESSION || isHRRole(); }
+function canReviewServiceRequests(){ return isHRRole()||SESSION?.role==='Manager'; }
 function setTitle(t,sub){ document.getElementById('tb-title').textContent=t; document.getElementById('tb-sub').textContent=sub||''; }
 
 /* ---------------- classification ---------------- */
@@ -1324,6 +1493,8 @@ let ROW_ACTION_MENU_ID=0;
 function rowActionLabel(button,index){
   const explicit=(button.getAttribute('aria-label')||button.title||'').trim();
   if(explicit) return explicit;
+  const visible=(button.textContent||'').replace(/\s+/g,' ').trim();
+  if(visible && !/^action(?:s)?$/i.test(visible)) return visible;
   const handler=(button.getAttribute('onclick')||'').toLowerCase();
   if(handler.includes('delete')||handler.includes('remove')) return 'Delete';
   if(handler.includes('transfer')) return 'Record transfer';
@@ -1354,8 +1525,8 @@ function enhanceRowActionMenus(){
     trigger.title='Actions';
     trigger.setAttribute('aria-label','Open actions');
     trigger.setAttribute('aria-haspopup','dialog');
+    trigger.setAttribute('onclick',`openRowActionMenu('${id}')`);
     trigger.innerHTML=`${iMore(16)}<span>Actions</span>`;
-    trigger.addEventListener('click',event=>{event.stopPropagation();openRowActionMenu(id);});
     group.replaceChildren(trigger);
     group.classList.add('is-menu');
     group.dataset.menuEnhanced='true';
@@ -4564,24 +4735,27 @@ function renderUsers(){
     </div>
     ${SESSION.role!=='Administrator'? `<div class="notice"><b>Note:</b> Only Administrators can change roles or profile details. New users register from the login screen.</div>`:''}
     <div class="tablewrap"><table class="data-table">
-      <thead><tr><th>Full Name</th><th>Username</th><th>Email</th><th>Role</th><th>Created</th><th style="text-align:right;">Actions</th></tr></thead>
+      <thead><tr><th>Full Name</th><th>Username</th><th>Email</th><th>Role</th><th>Employee Link</th><th>Manager</th><th>Created</th><th style="text-align:right;">Actions</th></tr></thead>
       <tbody>
-      ${rows.map(u=>`<tr>
+      ${rows.map(u=>{const linked=DB.employees.find(employee=>String(employee.id)===String(u.employeeRecordId||''));const manager=DB.users.find(user=>user.id===u.managerProfileId);return `<tr>
         <td><b>${esc(u.fullName)}</b>${u.id===SESSION.id?' <span class="pill">You</span>':''}</td>
         <td class="mono">${esc(u.username||'—')}</td>
         <td>${esc(u.email||'—')}</td>
-        <td>${statusBadge(u.role, {'Administrator':'b-blue','HR Staff':'b-green','Viewer':'b-grey'})}</td>
+        <td>${statusBadge(u.role, {'Administrator':'b-blue','HR Staff':'b-green','Manager':'b-amber','Employee':'b-blue','Viewer':'b-grey'})}</td>
+        <td>${linked?`<b>${esc(linked.name)}</b><div class="small">${esc(linked.employeeNo||'—')}</div>`:'<span class="small">Not linked</span>'}</td>
+        <td>${esc(manager?.fullName||'—')}</td>
         <td>${fmtDate(u.createdAt)}</td>
         <td><div class="rowactions">
           ${SESSION.role==='Administrator'? `<button class="iconbtn" onclick="openUserForm('${u.id}')" title="Edit profile">${iEdit(14)}</button>`:'<span class="small">—</span>'}
         </div></td>
-      </tr>`).join('')}
+      </tr>`;}).join('')}
       </tbody></table></div>`;
 }
 function openUserForm(id){
   if(SESSION.role!=='Administrator') return;
   const existing = id? DB.users.find(u=>u.id===id): null;
   if(!existing) return;
+  const managers=DB.users.filter(user=>['Administrator','HR Staff','Manager'].includes(user.role)&&user.id!==id);
   openModal(`
     <div class="modal-head"><h3>Edit User Profile</h3><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
@@ -4592,10 +4766,14 @@ function openUserForm(id){
         <div class="field"><label>Role</label><select id="u_role">
           <option ${existing.role==='Administrator'?'selected':''}>Administrator</option>
           <option ${existing.role==='HR Staff'?'selected':''}>HR Staff</option>
+          <option ${existing.role==='Manager'?'selected':''}>Manager</option>
+          <option ${existing.role==='Employee'?'selected':''}>Employee</option>
           <option ${existing.role==='Viewer'?'selected':''}>Viewer</option>
         </select></div>
+        <div class="field full"><label>Linked Employee Record</label><select id="u_employee"><option value="">Not linked</option>${DB.employees.slice().sort((a,b)=>String(a.name).localeCompare(String(b.name))).map(employee=>`<option value="${esc(employee.id)}" ${String(existing.employeeRecordId||'')===String(employee.id)?'selected':''}>${esc(employee.employeeNo||'—')} · ${esc(employee.name)}</option>`).join('')}</select></div>
+        <div class="field full"><label>Direct Manager</label><select id="u_manager"><option value="">No manager assigned</option>${managers.map(manager=>`<option value="${manager.id}" ${existing.managerProfileId===manager.id?'selected':''}>${esc(manager.fullName)}</option>`).join('')}</select></div>
       </div>
-      <div class="computed-note">Passwords are managed by Supabase Auth. Use the account email's password-reset flow to change a password.</div>
+      <div class="computed-note">Link Employee and Manager accounts to employee master records before enabling self-service. Passwords remain managed by Supabase Auth.</div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveUser('${id}')">Save User</button></div>
   `);
@@ -4605,8 +4783,10 @@ async function saveUser(id){
   const fullName=document.getElementById('u_fullName').value.trim();
   const username=document.getElementById('u_username').value.trim().toLowerCase();
   const role=document.getElementById('u_role').value;
+  const employeeRecordId=document.getElementById('u_employee').value||null;
+  const managerProfileId=document.getElementById('u_manager').value||null;
   if(!fullName||!username){ toast('Please complete all required fields.'); return; }
-  const {error}=await supabase.from('profiles').update({full_name:fullName,username,role}).eq('id',id);
+  const {error}=await supabase.from('profiles').update({full_name:fullName,username,role,employee_record_id:employeeRecordId,manager_profile_id:managerProfileId}).eq('id',id);
   if(error){ toast('Could not update user: '+error.message,true); return; }
   await loadProfiles();
   const updated=DB.users.find(u=>u.id===SESSION.id); if(updated) SESSION=updated;
@@ -5201,6 +5381,8 @@ const {enhanceDataTables,tablePageGo,tablePageSize,resetAllTablePages}=TABLE_ENH
    RENDERERS map + boot
    ================================================================ */
 const RENDERERS = {
+  selfService: renderSelfService,
+  teamApprovals: renderTeamApprovals,
   dashboard: renderDashboard,
   actionCenter: renderActionCenter,
   workflow: renderWorkflowCenter,
@@ -5251,6 +5433,7 @@ Object.assign(window, {
   STATE,
   addDaysISO, atdComputeStatus, atdFillEmployee, atdPayslipCellHTML, atdRemaining, atdToggleCategory, atdTotalPaid,
   addCaseActivity, addCaseNote, caseActivityIcon, caseActivityLabel, caseDeadlineInfo, casePriorityBadge, caseWorkflowSteps, caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, setCaseWorkflowStatus, buildNotificationItems, closeNotificationPanel, markAllNotificationsRead, openNotification, goFromNotifications, refreshNotificationBadge, renderNotificationPanel, toggleNotificationPanel, analyticsApplyFilters, analyticsSetPreset, exportAnalyticsSnapshot,
+  renderSelfService, renderTeamApprovals, openProfileChangeRequest, saveProfileChangeRequest, openLeaveRequest, saveLeaveRequest, cancelSelfServiceRequest, openServiceRequestReview, reviewServiceRequest,
   workflowSyncTasks, workflowPendingCount, workflowFindTask, workflowOpenSource, workflowSaveTaskNote, saveWorkflowTaskNote, workflowAssignTask, workflowSaveAssignment, workflowCompleteTask, workflowDecideTask, openWorkflowTask, openWorkflowCreateForm, saveWorkflowManualTask, renderWorkflowCenter, workflowActionButtons, workflowPriorityBadge, workflowDueText, workflowPageGo, workflowPageSize, automationPageGo, automationPageSize,
   AUTOMATION_RULES, automationPendingCount, ensureAutomationSettings, automationRuleEnabled, runAutomationEngine, toggleAutomationRule, automationOpenTask, renderAutomationCenter,
   countStoredDocuments, renderDocuments, openStoredDocument, collectStoredDocuments, collectDocumentIndex, openDriveDocument, openDriveDocumentForm, saveDriveDocument, deleteDriveDocument, countDriveDocuments, documentExpiryInfo, openDriveWorkspace,

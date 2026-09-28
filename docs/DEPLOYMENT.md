@@ -14,6 +14,8 @@ Import the repository as a static site. No build command is required. `vercel.js
 
 `supabase-config.js` contains the public project URL and publishable frontend key used by the application. Keep service-role or secret keys out of the browser and repository.
 
+For Employee Self-Service and Manager approvals, run `supabase/phase10-self-service.sql` in the Supabase SQL Editor after the Phase 3 and Phase 9 migrations. The migration adds Employee and Manager roles, account-to-employee links, request RPCs, and the required Row Level Security policies.
+
 ## Google Drive
 
 The frontend supports Google Drive document references and metadata. Real Google Drive OAuth/upload operations should be implemented through a secure server-side or Supabase Edge Function flow rather than exposing Google client secrets in `index.html`.

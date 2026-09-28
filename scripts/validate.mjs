@@ -15,7 +15,8 @@ function existsWithExactCase(filePath){
 }
 const required=[
   'index.html','css/app.css','css/professional.css','js/app.js',
-  'js/core/pagination.js','js/core/table-enhancer.js','supabase-config.js'
+  'js/core/pagination.js','js/core/table-enhancer.js','supabase-config.js',
+  'supabase/phase10-self-service.sql'
 ];
 const missing=required.filter(f=>!fs.existsSync(path.join(root,f)));
 if(missing.length){
@@ -44,5 +45,12 @@ if(!app.includes('SUPABASE_PUBLISHABLE_KEY')){
 if(app.includes('SUPABASE_ANON_KEY')){
   console.error('Legacy SUPABASE_ANON_KEY reference found.');
   process.exit(1);
+}
+for(const feature of ['renderSelfService','renderTeamApprovals','submit_hr_service_request','review_hr_service_request']){
+  const source=feature.endsWith('_request')?fs.readFileSync(path.join(root,'supabase/phase10-self-service.sql'),'utf8'):app;
+  if(!source.includes(feature)){
+    console.error(`Self-service feature contract is missing: ${feature}`);
+    process.exit(1);
+  }
 }
 console.log('SLSC HR Platform structural validation passed.');

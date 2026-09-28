@@ -588,3 +588,56 @@ body{background:var(--page);color:var(--text);}
 
 /* Final auth cascade: retain the generated campus scene over legacy theme defaults. */
 #auth-screen{background:#CBE9FA url('../assets/slsc-campus-auth.webp') center center/cover no-repeat;}
+
+/* Employee self-service and manager approvals */
+.self-service-shell{max-width:1440px;margin:0 auto;}
+.portal-header{display:flex;align-items:flex-end;justify-content:space-between;gap:22px;margin-bottom:18px;}
+.portal-header h1{margin:3px 0 5px;color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;font-size:27px;letter-spacing:0;}
+.portal-header p{margin:0;max-width:680px;color:var(--muted);font-size:12px;}
+.portal-header-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+.portal-kpis,.approval-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin-bottom:16px;}
+.portal-kpis>div,.approval-summary>div{min-width:0;padding:14px 16px;border:1px solid var(--border);border-radius:8px;background:#fff;box-shadow:var(--shadow-sm);}
+.portal-kpis span,.approval-summary span{display:block;color:var(--muted);font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;}
+.portal-kpis b,.approval-summary b{display:block;margin:5px 0 1px;color:#12345B;font-size:25px;line-height:1.2;}
+.portal-kpis b.portal-kpi-text{font-size:14px;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.portal-kpis small{display:block;color:var(--muted-2);font-size:9.5px;}
+.portal-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(300px,.75fr);gap:16px;align-items:start;margin-bottom:16px;}
+.portal-profile,.portal-guide{border-radius:8px;box-shadow:var(--shadow-sm);}
+.portal-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:15px;}
+.portal-section-head h2{margin:0 0 3px;color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;letter-spacing:0;}
+.portal-section-head p{margin:0;color:var(--muted);font-size:10.5px;line-height:1.45;}
+.portal-identity{display:flex;align-items:center;gap:13px;padding-bottom:15px;border-bottom:1px solid var(--border);}
+.portal-avatar{width:48px;height:48px;display:flex;align-items:center;justify-content:center;flex:none;border-radius:8px;background:#12345B;color:#fff;font-size:14px;font-weight:800;}
+.portal-identity h3{margin:0 0 3px;color:var(--text);font-size:14px;}
+.portal-identity p{margin:0 0 7px;color:var(--muted);font-size:10.5px;}
+.portal-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;margin:5px 0 0;}
+.portal-details>div{min-width:0;padding:12px 10px 9px 0;border-bottom:1px solid #F0EEF3;}
+.portal-details dt,.request-review-grid dt{margin-bottom:4px;color:var(--muted-2);font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;}
+.portal-details dd,.request-review-grid dd{margin:0;color:var(--text);font-size:11.5px;line-height:1.45;overflow-wrap:anywhere;}
+.portal-action{width:100%;display:grid;grid-template-columns:36px minmax(0,1fr) 16px;align-items:center;gap:10px;padding:12px 0;border:0;border-bottom:1px solid var(--border);background:transparent;color:var(--text);text-align:left;}
+.portal-action>span{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:7px;background:#EEF4FB;color:#24558F;}
+.portal-action b,.portal-action small{display:block;}
+.portal-action b{font-size:11.5px;}.portal-action small{margin-top:2px;color:var(--muted);font-size:9.5px;line-height:1.4;}
+.portal-action strong{color:#8A96A7;font-size:18px;}
+.portal-action:hover,.portal-action:focus-visible{background:#FAFBFD;outline:0;}
+.portal-security-note{margin-top:13px;padding-left:10px;border-left:3px solid #C79339;color:var(--muted);font-size:9.5px;line-height:1.55;}
+.portal-history{overflow:hidden;border:1px solid var(--border);border-radius:8px;background:#fff;box-shadow:var(--shadow-sm);}
+.portal-history>.portal-section-head{margin:0;padding:15px 16px 0;}
+.portal-history>.data-toolbar{margin:0;padding:12px 14px;border:0;border-bottom:1px solid var(--border);border-radius:0;box-shadow:none;}
+.portal-history>.tablewrap{border:0;border-radius:0;box-shadow:none;}
+.approval-summary>div:first-child{border-top:3px solid #C79339;}.approval-summary>div:nth-child(2){border-top:3px solid #277A65;}.approval-summary>div:nth-child(3){border-top:3px solid #B84646;}.approval-summary>div:last-child{border-top:3px solid #24558F;}
+.self-service-empty{max-width:620px;margin:7vh auto;padding:42px 28px;text-align:center;border:1px solid var(--border);border-radius:8px;background:#fff;box-shadow:var(--shadow-sm);}
+.self-service-empty-icon{width:48px;height:48px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;border-radius:8px;background:#EEF4FB;color:#24558F;}
+.self-service-empty h2{margin:0 0 7px;color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;letter-spacing:0;}
+.self-service-empty p{margin:0 auto;max-width:460px;color:var(--muted);font-size:11.5px;line-height:1.6;}
+.request-review-status{display:flex;align-items:center;gap:10px;margin-bottom:15px;padding-bottom:12px;border-bottom:1px solid var(--border);color:var(--muted);font-size:11px;}
+.request-review-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0;}
+.request-review-grid>div{padding:11px 12px;border:1px solid var(--border);border-radius:7px;background:#FCFCFD;}
+.request-review-grid .full{grid-column:1/-1;}
+@media (max-width:1000px){.portal-grid{grid-template-columns:1fr;}.portal-kpis,.approval-summary{grid-template-columns:repeat(2,1fr);}}
+@media (max-width:680px){
+  .portal-header{align-items:flex-start;flex-direction:column;}.portal-header-actions{width:100%;justify-content:stretch;}.portal-header-actions .btn{flex:1;}
+  .portal-kpis,.approval-summary{grid-template-columns:1fr 1fr;gap:8px;}.portal-kpis>div,.approval-summary>div{padding:12px;}.portal-kpis b,.approval-summary b{font-size:21px;}
+  .portal-details,.request-review-grid{grid-template-columns:1fr;}.request-review-grid .full{grid-column:auto;}
+  .portal-section-head{flex-direction:column;}.portal-section-head .btn{width:100%;}
+}
