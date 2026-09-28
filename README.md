@@ -27,6 +27,8 @@ Import the repository as a static site. No build command is required. `vercel.js
 
 The application uses the public Supabase publishable key. Do not replace it with a service-role or secret key in browser code.
 
+For a new deployment, apply the numbered SQL migrations in order. Existing Phase 10 deployments should run `supabase/phase11-lifecycle-checklists.sql` to enable employee lifecycle visibility and authorized manager task updates.
+
 ## Important
 
 This build is intended to preserve the existing application behavior while making the codebase more maintainable, improving data presentation, adding client-side pagination to data tables, and improving HR Operations.
@@ -43,6 +45,8 @@ For actual Google Drive file upload/OAuth, use a secure backend/Edge Function fl
 - Employee-centric HR Operations workspace with all 16 operational areas
 - Employee self-service for profile corrections and leave requests
 - Manager and HR request review with role-aware navigation
+- Template-driven onboarding, regularization, transfer, and separation checklists
+- Employee lifecycle progress with manager-owned tasks, deadlines, notes, and audit history
 - Workflow, automation, document, analytics, and data-quality surfaces integrated into one application shell
 
 ## Deployment automation

@@ -1,4 +1,4 @@
-import { paginationHTML, paginationMeta } from './pagination.js?v=20260928-3';
+import { paginationHTML, paginationMeta } from './pagination.js?v=20260928-4';
 
 export function installTableEnhancer({getState, getContent}) {
   function tableSignature(table){

@@ -1,8 +1,8 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '../supabase-config.js';
-import { paginationMeta, paginationHTML, paginationReset, paginateRows } from './core/pagination.js?v=20260928-3';
-import { installTableEnhancer } from './core/table-enhancer.js?v=20260928-3';
-import { compactRedundantPageIntros } from './core/content-layout.js?v=20260928-3';
+import { paginationMeta, paginationHTML, paginationReset, paginateRows } from './core/pagination.js?v=20260928-4';
+import { installTableEnhancer } from './core/table-enhancer.js?v=20260928-4';
+import { compactRedundantPageIntros } from './core/content-layout.js?v=20260928-4';
 
 if(!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('YOUR_PROJECT_REF')){
   document.body.innerHTML = '<div style="font-family:system-ui;padding:40px;max-width:760px;margin:auto"><h2>Supabase configuration missing</h2><p>Edit <b>supabase-config.js</b> with your Supabase project URL and publishable key.</p></div>';
@@ -15,13 +15,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
    Phase 2: record-level Postgres persistence, Supabase Auth, and private Storage.
    ========================================================================= */
 
-const RECORD_MODULES = ['employees','leaves','disciplinary','nte','memos','nod','oncall','transfers','offenseCatalog','cvr','incidents','prf','evaluations','atd','workflowTasks','automationRuns','documents'];
+const RECORD_MODULES = ['employees','leaves','disciplinary','nte','memos','nod','oncall','transfers','offenseCatalog','cvr','incidents','prf','evaluations','atd','workflowTasks','automationRuns','documents','lifecycleChecklists'];
 let DB_SNAPSHOT = null;
 let SAVE_QUEUE = Promise.resolve();
 let SELF_SERVICE_READY = true;
 
 function blankDB(){
-  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],serviceRequests:[],settings:{orgName:'SCPA',probationDays:180},audit:[],users:[]};
+  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],lifecycleChecklists:[],serviceRequests:[],settings:{orgName:'SCPA',probationDays:180},audit:[],users:[]};
 }
 
 function isMissingSelfServiceTable(error){
@@ -277,7 +277,7 @@ function seedDB(){
       payments:[{id:uid(), month:ATD_MONTHS[new Date().getMonth()], cutoff:'1st Cut-Off', amountPaid:1500, payslip:'payslip_btorres_c1.pdf', payslipData:'', dateRecorded: shiftDate(-4)}]},
   ];
   return {
-    users, employees, leaves, disciplinary, nte, memos, nod, oncall, transfers, offenseCatalog, cvr, incidents, prf, evaluations, atd,
+    users, employees, leaves, disciplinary, nte, memos, nod, oncall, transfers, offenseCatalog, cvr, incidents, prf, evaluations, atd, lifecycleChecklists:[],
     settings:{orgName:'SCPA', probationDays:180},
     audit:[{ts:new Date().toISOString(), user:'System', action:'Seeded initial demo data'}]
   };
@@ -307,7 +307,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = seedDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', tablePages:{}, tablePageSizes:{} };
+let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', checklistSearch:'', checklistType:'', checklistStatus:'Active', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', tablePages:{}, tablePageSizes:{} };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
@@ -388,7 +388,7 @@ async function bootAuthenticated(user){
     let state=await loadDB();
     const hasAny=RECORD_MODULES.some(k=>(state[k]||[]).length);
     if(!hasAny&&isHRRole()){ DB=seedDB(); DB.serviceRequests=state.serviceRequests||[]; await saveDB(); } else DB=state;
-    if(!DB.audit) DB.audit=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; DB.prf.forEach(p=>{if(!p.status)p.status='Draft';}); if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; if(!DB.workflowTasks) DB.workflowTasks=[]; if(!DB.automationRuns) DB.automationRuns=[]; if(!DB.documents) DB.documents=[]; if(!DB.serviceRequests) DB.serviceRequests=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];}); if(!DB.settings) DB.settings={orgName:'SCPA',probationDays:180};
+    if(!DB.audit) DB.audit=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; DB.prf.forEach(p=>{if(!p.status)p.status='Draft';}); if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; if(!DB.workflowTasks) DB.workflowTasks=[]; if(!DB.automationRuns) DB.automationRuns=[]; if(!DB.documents) DB.documents=[]; if(!DB.lifecycleChecklists) DB.lifecycleChecklists=[]; if(!DB.serviceRequests) DB.serviceRequests=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];}); if(!DB.settings) DB.settings={orgName:'SCPA',probationDays:180};
     const employeeMasterChanged=isHRRole()?normalizeEmployeeMasterData():false;
     DB_SNAPSHOT=JSON.parse(JSON.stringify(DB));
     if(employeeMasterChanged) await saveDB();
@@ -633,6 +633,7 @@ function renderSelfService(){
   const pending=all.filter(request=>request.status==='Pending').length;
   const approved=all.filter(request=>request.status==='Approved').length;
   const nextLeave=DB.leaves.filter(leave=>String(leave.employeeId||'')===String(employee.id)&&leave.status==='Approved'&&leave.endDate>=todayISO()).sort((a,b)=>String(a.startDate).localeCompare(String(b.startDate)))[0];
+  const journeys=(DB.lifecycleChecklists||[]).filter(checklist=>String(checklist.employeeId||'')===String(employee.id)&&lifecycleChecklistComputedStatus(checklist)!=='Cancelled').sort((a,b)=>String(a.targetDate||'').localeCompare(String(b.targetDate||'')));
   content.innerHTML=`
     <div class="self-service-shell">
       <div class="portal-header"><div><div class="eyebrow">Employee Self-Service</div><h1>Hello, ${esc((employee.name||SESSION.fullName).split(' ')[0])}.</h1><p>Review your employment details and send requests directly into the HR approval queue.</p></div><div class="portal-header-actions"><button class="btn btn-ghost" onclick="openProfileChangeRequest()">${iEdit(15)} Request profile update</button><button class="btn btn-primary" onclick="openLeaveRequest()">${iCal(15)} Request leave</button></div></div>
@@ -644,6 +645,7 @@ function renderSelfService(){
         </section>
         <section class="panel portal-guide"><div class="portal-section-head"><div><h2>Request center</h2><p>Choose the transaction that matches what you need.</p></div></div><button class="portal-action" onclick="openLeaveRequest()"><span>${iCal(18)}</span><div><b>File a leave request</b><small>Send dates, leave type, and reason for review.</small></div><strong>›</strong></button><button class="portal-action" onclick="openProfileChangeRequest()"><span>${iUser(18)}</span><div><b>Correct personal information</b><small>Update contact, address, or emergency details.</small></div><strong>›</strong></button><div class="portal-security-note">Employment status, position, department, and classification remain HR-controlled fields.</div></section>
       </div>
+      ${journeys.length?`<section class="portal-journeys"><div class="portal-section-head"><div><h2>My lifecycle progress</h2><p>Current onboarding, movement, and employment milestones.</p></div></div><div class="portal-journey-list">${journeys.map(checklist=>{const next=(checklist.items||[]).filter(item=>!item.completed).sort((a,b)=>String(a.dueDate).localeCompare(String(b.dueDate)))[0];const state=lifecycleChecklistComputedStatus(checklist);return `<article class="portal-journey"><div><span>${esc(checklist.type)}</span>${statusBadge(state,LIFECYCLE_STATUS_MAP)}</div>${lifecycleProgressHTML(checklist)}<small>${next?`Next: ${esc(next.title)} · ${fmtDate(next.dueDate)}`:'All tasks completed'}</small></article>`;}).join('')}</div></section>`:''}
       <section class="portal-history"><div class="portal-section-head"><div><h2>My requests</h2><p>${requests.length} of ${all.length} request${all.length===1?'':'s'} shown.</p></div></div><div class="data-toolbar"><div class="searchbox">${iSearch(16)}<input data-search-key="selfServiceSearch" type="search" placeholder="Search requests…" value="${esc(STATE.selfServiceSearch)}" oninput="queueSearchRender(this,'selfServiceSearch',renderSelfService)"></div><select class="filter-select" onchange="STATE.selfServiceStatus=this.value;STATE.tablePages={};renderSelfService()"><option value="">All statuses</option>${Object.keys(SERVICE_REQUEST_STATUS_MAP).map(value=>`<option value="${value}" ${STATE.selfServiceStatus===value?'selected':''}>${value}</option>`).join('')}</select>${STATE.selfServiceSearch||STATE.selfServiceStatus?`<button class="btn btn-ghost btn-sm" onclick="STATE.selfServiceSearch='';STATE.selfServiceStatus='';renderSelfService()">Clear</button>`:''}</div>
         <div class="tablewrap"><table class="data-table"><thead><tr><th>Request</th><th>Details</th><th>Submitted</th><th>Status</th><th>Reviewer remarks</th><th class="actions-head">Actions</th></tr></thead><tbody>${requests.length?requests.map(request=>`<tr><td><b>${esc(serviceRequestTypeLabel(request.request_type))}</b></td><td>${esc(serviceRequestSummary(request))}</td><td>${fmtDate(String(request.submitted_at||'').slice(0,10))}</td><td>${statusBadge(request.status,SERVICE_REQUEST_STATUS_MAP)}</td><td>${esc(request.reviewer_remarks||'—')}</td><td><div class="rowactions">${request.status==='Pending'?`<button class="btn btn-ghost btn-sm" data-confirm-change="true" data-confirm-label="Cancel request" onclick="cancelSelfServiceRequest('${request.id}')">Cancel</button>`:'<span class="small">Complete</span>'}</div></td></tr>`).join(''):`<tr><td colspan="6"><div class="empty"><b>No matching requests</b>Your submitted requests and review results will appear here.</div></td></tr>`}</tbody></table></div>
       </section>
@@ -715,6 +717,149 @@ async function reviewServiceRequest(id,decision){
   await closeModal(); await refreshServiceRequests(); toast(`Request ${decision.toLowerCase()}.`); renderTeamApprovals();
 }
 
+/* ---------------- Phase 11: Lifecycle Checklists ---------------- */
+const LIFECYCLE_TYPES=['Onboarding','Regularization','Transfer','Separation'];
+const LIFECYCLE_STATUS_MAP={Active:'b-blue',Overdue:'b-red',Completed:'b-green',Cancelled:'b-grey'};
+const LIFECYCLE_TEMPLATES={
+  Onboarding:[['documents','Verify employment documents','HR',-5],['file','Create personnel file','HR',-3],['payroll','Complete payroll enrollment','Payroll',-2],['access','Provision system and workplace access','IT / Facilities',-1],['orientation','Complete first-day orientation','HR',0],['expectations','Confirm role expectations and handover','Hiring Manager',1],['acknowledgement','Employee acknowledgement','Employee',2]],
+  Regularization:[['evaluations','Consolidate probation evaluations','HR',-14],['recommendation','Submit manager recommendation','Hiring Manager',-10],['decision','Record regularization decision','HR',-5],['records','Update employment status and documents','HR',0],['acknowledgement','Employee acknowledgement','Employee',1]],
+  Transfer:[['approval','Verify approved transfer documents','HR',-7],['plan','Confirm receiving-team plan','Hiring Manager',-5],['access','Update access and workplace assignment','IT / Facilities',-2],['payroll','Update payroll and cost center','Payroll',-2],['handover','Complete role handover','Hiring Manager',-1],['records','Update employee master record','HR',0],['acknowledgement','Employee acknowledgement','Employee',1]],
+  Separation:[['notice','Verify notice or decision documents','HR',-14],['interview','Complete exit interview','HR',-7],['clearance','Complete assets and account clearance','IT / Facilities',-3],['handover','Complete supervisor handover','Hiring Manager',-3],['payroll','Complete payroll clearance','Payroll',-2],['documents','Issue final documents and clearance','HR',-1],['acknowledgement','Employee acknowledgement','Employee',0]],
+};
+function lifecycleChecklistEmployee(checklist){ return DB.employees.find(employee=>String(employee.id)===String(checklist?.employeeId||'')); }
+function lifecycleChecklistManager(checklist){ return DB.users.find(user=>String(user.id)===String(checklist?.managerProfileId||'')); }
+function lifecycleChecklistProgress(checklist){
+  const items=checklist?.items||[];
+  const complete=items.filter(item=>item.completed).length;
+  return {complete,total:items.length,pct:items.length?Math.round(complete/items.length*100):0};
+}
+function lifecycleChecklistComputedStatus(checklist){
+  if(checklist?.status==='Cancelled') return 'Cancelled';
+  const progress=lifecycleChecklistProgress(checklist);
+  if(progress.total&&progress.complete===progress.total) return 'Completed';
+  return (checklist?.items||[]).some(item=>!item.completed&&item.dueDate&&item.dueDate<todayISO())?'Overdue':'Active';
+}
+function lifecycleChecklistCanManage(checklist,item=null){
+  if(isHRRole()) return true;
+  if(SESSION?.role!=='Manager') return false;
+  return String(checklist?.managerProfileId||'')===String(SESSION.id)||String(item?.assigneeProfileId||'')===String(SESSION.id);
+}
+function lifecycleChecklistPendingCount(){
+  return (DB.lifecycleChecklists||[]).filter(checklist=>lifecycleChecklistComputedStatus(checklist)!=='Cancelled').reduce((count,checklist)=>count+(checklist.items||[]).filter(item=>!item.completed&&lifecycleChecklistCanManage(checklist,item)).length,0);
+}
+function lifecycleTemplateItems(type,targetDate,employeeId='',managerProfileId='',previous=[]){
+  const employeeProfile=DB.users.find(user=>String(user.employeeRecordId||'')===String(employeeId));
+  const prior=new Map((previous||[]).map(item=>[item.key,item]));
+  return (LIFECYCLE_TEMPLATES[type]||[]).map(([key,title,owner,offset])=>{
+    const old=prior.get(key)||{};
+    const assigneeProfileId=owner==='Hiring Manager'?managerProfileId:owner==='Employee'?(employeeProfile?.id||''):(old.assigneeProfileId||'');
+    return {id:old.id||uid(),key,title,owner,offset,dueDate:addDaysISO(targetDate,offset),assigneeProfileId,completed:!!old.completed,completedAt:old.completedAt||'',completedBy:old.completedBy||'',note:old.note||''};
+  });
+}
+function lifecycleChecklistHistory(checklist,action,detail=''){
+  if(!checklist.history) checklist.history=[];
+  checklist.history.unshift({id:uid(),action,detail,at:new Date().toISOString(),by:SESSION?.fullName||'System',byId:SESSION?.id||''});
+}
+async function reloadLifecycleChecklists(){
+  const {data,error}=await supabase.from('hr_records').select('data').eq('module','lifecycleChecklists').order('updated_at',{ascending:true});
+  if(error) throw error;
+  DB.lifecycleChecklists=(data||[]).map(row=>row.data);
+  if(DB_SNAPSHOT) DB_SNAPSHOT.lifecycleChecklists=JSON.parse(JSON.stringify(DB.lifecycleChecklists));
+}
+function lifecycleProgressHTML(checklist){
+  const progress=lifecycleChecklistProgress(checklist);
+  return `<div class="checklist-progress"><div><span style="width:${progress.pct}%"></span></div><small>${progress.complete}/${progress.total} complete · ${progress.pct}%</small></div>`;
+}
+function renderLifecycleChecklists(){
+  setTitle('Lifecycle Checklists','Onboarding, movement, regularization, and separation tasks.');
+  const content=document.getElementById('content');
+  if(!isHRRole()&&SESSION?.role!=='Manager'){content.innerHTML='<div class="notice"><b>Access restricted.</b> This workspace is available to managers and HR personnel.</div>';return;}
+  const q=String(STATE.checklistSearch||'').trim().toLowerCase();
+  const type=STATE.checklistType||'';
+  const status=STATE.checklistStatus||'';
+  const all=(DB.lifecycleChecklists||[]).map(checklist=>({...checklist,computedStatus:lifecycleChecklistComputedStatus(checklist)}));
+  const rows=all.filter(checklist=>{
+    const employee=lifecycleChecklistEmployee(checklist);
+    const manager=lifecycleChecklistManager(checklist);
+    return (!type||checklist.type===type)&&(!status||checklist.computedStatus===status)&&(!q||[employee?.name,employee?.employeeNo,employee?.department,checklist.type,manager?.fullName,checklist.notes].some(value=>String(value||'').toLowerCase().includes(q)));
+  }).sort((a,b)=>String(a.targetDate||'').localeCompare(String(b.targetDate||'')));
+  const active=all.filter(item=>['Active','Overdue'].includes(item.computedStatus)).length;
+  const overdue=all.reduce((count,item)=>count+(item.items||[]).filter(task=>!task.completed&&task.dueDate&&task.dueDate<todayISO()).length,0);
+  const dueSoon=all.reduce((count,item)=>count+(item.items||[]).filter(task=>!task.completed&&task.dueDate>=todayISO()&&task.dueDate<=addDaysISO(todayISO(),7)).length,0);
+  const completed=all.filter(item=>item.computedStatus==='Completed').length;
+  content.innerHTML=`<div class="checklist-shell">
+    <div class="checklist-summary"><div><span>Active journeys</span><b>${active}</b></div><div><span>Overdue tasks</span><b>${overdue}</b></div><div><span>Due in 7 days</span><b>${dueSoon}</b></div><div><span>Completed</span><b>${completed}</b></div></div>
+    <div class="data-toolbar checklist-toolbar"><div class="searchbox">${iSearch(16)}<input data-search-key="checklistSearch" type="search" placeholder="Search employee, department, or manager…" value="${esc(STATE.checklistSearch)}" oninput="queueSearchRender(this,'checklistSearch',renderLifecycleChecklists)"></div><select class="filter-select" onchange="STATE.checklistType=this.value;STATE.tablePages={};renderLifecycleChecklists()"><option value="">All journeys</option>${LIFECYCLE_TYPES.map(value=>`<option value="${value}" ${type===value?'selected':''}>${value}</option>`).join('')}</select><select class="filter-select" onchange="STATE.checklistStatus=this.value;STATE.tablePages={};renderLifecycleChecklists()"><option value="">All statuses</option>${Object.keys(LIFECYCLE_STATUS_MAP).map(value=>`<option value="${value}" ${status===value?'selected':''}>${value}</option>`).join('')}</select>${q||type||status!=='Active'?`<button class="btn btn-ghost btn-sm" onclick="STATE.checklistSearch='';STATE.checklistType='';STATE.checklistStatus='Active';renderLifecycleChecklists()">Reset</button>`:''}<span class="toolbar-spacer"></span>${isHRRole()?`<button class="btn btn-primary" onclick="openLifecycleChecklistForm()">+ New Checklist</button>`:''}</div>
+    <div class="tablewrap"><table class="data-table"><thead><tr><th>Employee</th><th>Journey</th><th>Progress</th><th>Target Date</th><th>Next Task</th><th>Manager</th><th>Status</th><th class="actions-head">Action</th></tr></thead><tbody>${rows.length?rows.map(checklist=>{const employee=lifecycleChecklistEmployee(checklist);const manager=lifecycleChecklistManager(checklist);const next=(checklist.items||[]).filter(item=>!item.completed).sort((a,b)=>String(a.dueDate).localeCompare(String(b.dueDate)))[0];return `<tr><td><b>${esc(employee?.name||'Unknown employee')}</b><div class="small">${esc(employee?.employeeNo||employee?.department||'—')}</div></td><td>${esc(checklist.type)}</td><td>${lifecycleProgressHTML(checklist)}</td><td>${fmtDate(checklist.targetDate)}</td><td>${next?`<b>${esc(next.title)}</b><div class="small ${next.dueDate<todayISO()?'text-danger':''}">${esc(next.owner)} · ${fmtDate(next.dueDate)}</div>`:'<span class="small">All tasks complete</span>'}</td><td>${esc(manager?.fullName||'Unassigned')}</td><td>${statusBadge(checklist.computedStatus,LIFECYCLE_STATUS_MAP)}</td><td><div class="rowactions"><button class="btn btn-ghost btn-sm" onclick="openLifecycleChecklist('${checklist.id}')">Manage</button></div></td></tr>`;}).join(''):`<tr><td colspan="8"><div class="empty"><b>No matching lifecycle checklists</b><span>Create a journey or adjust the current filters.</span></div></td></tr>`}</tbody></table></div>
+  </div>`;
+  requestAnimationFrame(()=>enhanceDataTables());
+}
+function lifecycleTemplatePreview(type,targetDate){
+  if(!type||!targetDate) return '<div class="computed-note">Choose a journey and target date to preview its tasks.</div>';
+  return `<div class="checklist-template-preview">${lifecycleTemplateItems(type,targetDate).map(item=>`<div><span>${esc(item.title)}</span><small>${esc(item.owner)} · ${fmtDate(item.dueDate)}</small></div>`).join('')}</div>`;
+}
+function lifecycleTemplateChanged(){ const el=document.getElementById('lc_template_preview');if(el)el.innerHTML=lifecycleTemplatePreview(document.getElementById('lc_type')?.value,document.getElementById('lc_target')?.value); }
+function openLifecycleChecklistForm(id=''){
+  if(!isHRRole()) return;
+  const checklist=(DB.lifecycleChecklists||[]).find(item=>String(item.id)===String(id));
+  const existing=checklist||{type:'Onboarding',targetDate:addDaysISO(todayISO(),7),employeeId:'',managerProfileId:'',notes:''};
+  const managers=DB.users.filter(user=>['Manager','Administrator','HR Staff'].includes(user.role));
+  openModal(`<div class="modal-head"><div><h3>${checklist?'Edit':'New'} Lifecycle Checklist</h3><div class="small">Apply a standard journey and assign its accountable manager.</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="formgrid"><div class="field full"><label>Employee *</label><select id="lc_employee"><option value="">Select employee</option>${DB.employees.slice().sort((a,b)=>String(a.name).localeCompare(String(b.name))).map(employee=>`<option value="${employee.id}" ${String(existing.employeeId)===String(employee.id)?'selected':''}>${esc(employee.employeeNo||'—')} · ${esc(employee.name)} · ${esc(employee.department||'Unassigned')}</option>`).join('')}</select></div><div class="field"><label>Journey *</label><select id="lc_type" onchange="lifecycleTemplateChanged()">${LIFECYCLE_TYPES.map(value=>`<option value="${value}" ${existing.type===value?'selected':''}>${value}</option>`).join('')}</select></div><div class="field"><label>Target Date *</label><input id="lc_target" type="date" value="${esc(existing.targetDate)}" onchange="lifecycleTemplateChanged()"></div><div class="field full"><label>Accountable Manager</label><select id="lc_manager"><option value="">Unassigned</option>${managers.map(user=>`<option value="${user.id}" ${String(existing.managerProfileId||'')===String(user.id)?'selected':''}>${esc(user.fullName)} · ${esc(user.role)}</option>`).join('')}</select></div><div class="field full"><label>Internal Notes</label><textarea id="lc_notes" rows="3" placeholder="Context, handover details, or special instructions…">${esc(existing.notes||'')}</textarea></div></div><div id="lc_template_preview">${lifecycleTemplatePreview(existing.type,existing.targetDate)}</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveLifecycleChecklist('${id}')">${checklist?'Save Changes':'Create Checklist'}</button></div>`);
+}
+async function saveLifecycleChecklist(id=''){
+  if(!isHRRole()) return;
+  const employeeId=document.getElementById('lc_employee')?.value||'';
+  const type=document.getElementById('lc_type')?.value||'';
+  const targetDate=document.getElementById('lc_target')?.value||'';
+  const managerProfileId=document.getElementById('lc_manager')?.value||'';
+  const notes=document.getElementById('lc_notes')?.value.trim()||'';
+  if(!employeeId||!type||!targetDate){toast('Select an employee, journey, and target date.',true);return;}
+  let checklist=(DB.lifecycleChecklists||[]).find(item=>String(item.id)===String(id));
+  const isNew=!checklist;
+  const original=checklist?JSON.parse(JSON.stringify(checklist)):null;
+  if(!checklist){checklist={id:uid(),createdAt:new Date().toISOString(),createdBy:SESSION?.id||'',history:[]};DB.lifecycleChecklists.push(checklist);}
+  const previous=checklist.type===type?(checklist.items||[]):[];
+  Object.assign(checklist,{employeeId,type,targetDate,managerProfileId,notes,updatedAt:new Date().toISOString(),updatedBy:SESSION?.id||''});
+  checklist.items=lifecycleTemplateItems(type,targetDate,employeeId,managerProfileId,previous);
+  checklist.status=lifecycleChecklistComputedStatus(checklist);
+  lifecycleChecklistHistory(checklist,isNew?'Checklist created':'Checklist updated',`${type} · target ${fmtDate(targetDate)}`);
+  if(!(await saveDB())){if(isNew)DB.lifecycleChecklists=DB.lifecycleChecklists.filter(item=>item!==checklist);else Object.assign(checklist,original);return;}logAudit(`${isNew?'Created':'Updated'} ${type} checklist for ${lifecycleChecklistEmployee(checklist)?.name||'employee'}`);await workflowSyncTasks({silent:true});closeModal();renderLifecycleChecklists();toast(`Checklist ${isNew?'created':'updated'}.`);
+}
+function lifecycleTaskState(item){ return item.completed?'Completed':item.dueDate&&item.dueDate<todayISO()?'Overdue':item.dueDate&&item.dueDate<=addDaysISO(todayISO(),7)?'Due Soon':'Upcoming'; }
+function openLifecycleChecklist(id){
+  const checklist=(DB.lifecycleChecklists||[]).find(item=>String(item.id)===String(id));if(!checklist)return;
+  const employee=lifecycleChecklistEmployee(checklist);const manager=lifecycleChecklistManager(checklist);const status=lifecycleChecklistComputedStatus(checklist);
+  openModal(`<div class="modal-head"><div><h3>${esc(checklist.type)} · ${esc(employee?.name||'Employee')}</h3><div class="small">Target ${fmtDate(checklist.targetDate)} · ${esc(manager?.fullName||'No manager assigned')}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="checklist-detail-head">${lifecycleProgressHTML(checklist)}${statusBadge(status,LIFECYCLE_STATUS_MAP)}</div>${checklist.notes?`<div class="computed-note">${esc(checklist.notes)}</div>`:''}<div class="checklist-task-list">${(checklist.items||[]).map(item=>{const state=lifecycleTaskState(item);const manageable=lifecycleChecklistCanManage(checklist,item)&&status!=='Cancelled';return `<button type="button" class="checklist-task ${item.completed?'complete':''}" ${manageable?`onclick="openLifecycleChecklistItem('${checklist.id}','${item.id}')"`:'disabled'}><span class="checklist-task-check">${item.completed?'✓':''}</span><span><b>${esc(item.title)}</b><small>${esc(item.owner)} · ${fmtDate(item.dueDate)}${item.note?' · '+esc(item.note):''}</small></span>${statusBadge(state,{Completed:'b-green',Overdue:'b-red','Due Soon':'b-amber',Upcoming:'b-grey'})}</button>`;}).join('')}</div>${(checklist.history||[]).length?`<details class="checklist-history"><summary>Audit history (${checklist.history.length})</summary>${checklist.history.slice(0,12).map(entry=>`<div><b>${esc(entry.action)}</b><span>${esc(entry.by||'System')} · ${new Date(entry.at).toLocaleString()}</span>${entry.detail?`<small>${esc(entry.detail)}</small>`:''}</div>`).join('')}</details>`:''}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button>${isHRRole()&&status!=='Cancelled'?`<button class="btn btn-ghost" onclick="openLifecycleChecklistForm('${checklist.id}')">Edit Setup</button><button class="btn btn-danger" data-confirm-change="true" data-confirm-label="Cancel checklist" onclick="cancelLifecycleChecklist('${checklist.id}')">Cancel Checklist</button>`:''}</div>`);
+}
+function openLifecycleChecklistItem(checklistId,itemId){
+  const checklist=(DB.lifecycleChecklists||[]).find(row=>String(row.id)===String(checklistId));const item=checklist?.items?.find(row=>String(row.id)===String(itemId));if(!checklist||!item||!lifecycleChecklistCanManage(checklist,item))return;
+  openModal(`<div class="modal-head"><div><h3>${esc(item.title)}</h3><div class="small">${esc(item.owner)} · due ${fmtDate(item.dueDate)}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><label class="checklist-complete-toggle"><input id="lc_item_complete" type="checkbox" ${item.completed?'checked':''}><span><b>Task completed</b><small>Completion will be recorded in the checklist audit history.</small></span></label><div class="field"><label>Transaction Note</label><textarea id="lc_item_note" rows="4" placeholder="Add completion details or a follow-up note…">${esc(item.note||'')}</textarea></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="returnToLifecycleChecklist('${checklist.id}','${item.id}')">Back</button><button class="btn btn-primary" onclick="saveLifecycleChecklistItem('${checklist.id}','${item.id}')">Save Task</button></div>`);
+}
+async function returnToLifecycleChecklist(checklistId,itemId){
+  if(!modalHasUnsavedChanges()){openLifecycleChecklist(checklistId);return;}
+  const choice=await confirmDataChange({title:'Unsaved task changes',message:'Save your task changes before returning to the checklist?',confirmLabel:'Save changes',secondaryLabel:'Discard changes',cancelLabel:'Keep editing'});
+  if(choice==='confirm'){await saveLifecycleChecklistItem(checklistId,itemId);return;}
+  if(choice==='discard'){MODAL_EDIT_STATE=null;openLifecycleChecklist(checklistId);}
+}
+async function saveLifecycleChecklistItem(checklistId,itemId){
+  const checklist=(DB.lifecycleChecklists||[]).find(row=>String(row.id)===String(checklistId));const item=checklist?.items?.find(row=>String(row.id)===String(itemId));if(!checklist||!item||!lifecycleChecklistCanManage(checklist,item))return;
+  const completed=!!document.getElementById('lc_item_complete')?.checked;const note=document.getElementById('lc_item_note')?.value.trim()||'';
+  if(isHRRole()){
+    const original=JSON.parse(JSON.stringify(checklist));
+    Object.assign(item,{completed,note,completedAt:completed?new Date().toISOString():'',completedBy:completed?(SESSION?.id||''):''});
+    checklist.status=lifecycleChecklistComputedStatus(checklist);checklist.updatedAt=new Date().toISOString();lifecycleChecklistHistory(checklist,completed?'Task completed':'Task updated',item.title+(note?' · '+note:''));if(!(await saveDB())){Object.keys(checklist).forEach(key=>delete checklist[key]);Object.assign(checklist,original);return;}
+  }else{
+    const {error}=await supabase.rpc('update_lifecycle_checklist_item',{p_checklist_id:checklistId,p_item_id:itemId,p_completed:completed,p_note:note||null});
+    if(error){toast('Could not update the task: '+error.message,true);return;}
+    await reloadLifecycleChecklists();
+  }
+  if(isHRRole()){logAudit(`${completed?'Completed':'Updated'} lifecycle task: ${item.title}`);await workflowSyncTasks({silent:true});}renderNav();openLifecycleChecklist(checklistId);toast('Lifecycle task saved.');
+}
+async function cancelLifecycleChecklist(id){
+  if(!isHRRole())return;const checklist=(DB.lifecycleChecklists||[]).find(item=>String(item.id)===String(id));if(!checklist)return;
+  const original=JSON.parse(JSON.stringify(checklist));checklist.status='Cancelled';checklist.updatedAt=new Date().toISOString();lifecycleChecklistHistory(checklist,'Checklist cancelled');if(!(await saveDB())){Object.keys(checklist).forEach(key=>delete checklist[key]);Object.assign(checklist,original);return;}logAudit(`Cancelled ${checklist.type} checklist for ${lifecycleChecklistEmployee(checklist)?.name||'employee'}`);await workflowSyncTasks({silent:true});closeModal();renderLifecycleChecklists();toast('Checklist cancelled.');
+}
+
 /* ---------------- Phase 7: Action Center ---------------- */
 function actionCenterItems(caseRows){
   const today=todayISO();
@@ -731,6 +876,11 @@ function actionCenterItems(caseRows){
 
   const pendingLeaves=DB.leaves.filter(l=>l.status==='Pending').sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
   pendingLeaves.slice(0,8).forEach(l=>items.push({level:'warning',title:`Leave request pending: ${l.employeeName}`,detail:`${fmtDate(l.startDate)} – ${fmtDate(l.endDate)}${l.department?' · '+l.department:''}`,meta:['Leave','Pending'],view:'leaves'}));
+
+  (DB.lifecycleChecklists||[]).filter(checklist=>!['Cancelled','Completed'].includes(lifecycleChecklistComputedStatus(checklist))).forEach(checklist=>{
+    const employee=lifecycleChecklistEmployee(checklist);
+    (checklist.items||[]).filter(task=>!task.completed&&task.dueDate&&task.dueDate<=next7).forEach(task=>items.push({level:task.dueDate<today?'danger':'warning',title:`${checklist.type}: ${employee?.name||'Employee'}`,detail:`${task.title} · due ${fmtDate(task.dueDate)}`,meta:['Lifecycle',task.dueDate<today?'Overdue':'Due soon'],view:'lifecycleChecklists',id:checklist.id}));
+  });
 
   const evalItems=[];
   DB.employees.filter(e=>classify(e)==='Probationary' && e.dateHired).forEach(e=>EVAL_MILESTONES.forEach(m=>{
@@ -1032,6 +1182,7 @@ const NAV = [
   {sec:'My Workspace',items:[
     {v:'selfService',label:'My HR Portal',icon:iUser,roles:['Employee','Manager']},
     {v:'teamApprovals',label:'Requests & Approvals',icon:iCheck,roles:['Administrator','HR Staff','Manager'],count:()=>pendingServiceRequestCount()},
+    {v:'lifecycleChecklists',label:'Lifecycle Checklists',icon:iCheck,roles:['Administrator','HR Staff','Manager'],count:()=>lifecycleChecklistPendingCount()},
   ]},
   {sec:'Overview',items:[
     {v:'dashboard',label:'Dashboard',icon:iGrid},
@@ -3403,6 +3554,7 @@ const WORKFLOW_STEP_LABELS = {
   nte_review:'NTE Review',
   cvr_review:'CVR Review',
   incident_review:'Incident Review',
+  lifecycle_task:'Lifecycle Checklist',
   manual:'HR Task'
 };
 function workflowTaskId(module,recordId,step='action'){
@@ -3546,6 +3698,20 @@ async function workflowSyncTasks({silent=false}={}){
     });
   });
 
+  (DB.lifecycleChecklists||[]).forEach(checklist=>{
+    const employee=lifecycleChecklistEmployee(checklist);
+    const checklistClosed=['Cancelled','Completed'].includes(lifecycleChecklistComputedStatus(checklist));
+    (checklist.items||[]).forEach(item=>{
+      const recordId=`${checklist.id}__${item.id}`;
+      const closed=checklistClosed||item.completed;
+      if(!closed||workflowExistingTask('lifecycleChecklists',recordId)) ensureRecordTask('lifecycleChecklists',{id:recordId},{
+        stepKey:'completion',workflowType:'Task',title:`${item.title} — ${employee?.name||'Employee'}`,
+        description:`${checklist.type} checklist · ${item.owner}`,module:'lifecycleChecklists',recordId,
+        checklistId:checklist.id,itemId:item.id,employeeName:employee?.name||'',employeeRecordId:checklist.employeeId||'',department:employee?.department||'',priority:item.dueDate&&item.dueDate<today?'High':'Normal',dueDate:item.dueDate||'',assigneeId:item.assigneeProfileId||checklist.managerProfileId||'',actionType:closed?'none':'lifecycle_task',closed
+      });
+    });
+  });
+
   const after=JSON.stringify(DB.workflowTasks);
   if(before!==after){
     try{ await saveDB(); }
@@ -3559,6 +3725,7 @@ function workflowFindTask(id){ return (DB.workflowTasks||[]).find(t=>String(t.id
 function workflowOpenSource(task){
   if(!task) return;
   if(task.module==='cases'){ closeModal(); openCaseDetails(task.recordId); return; }
+  if(task.module==='lifecycleChecklists'){ closeModal(); openLifecycleChecklist(task.checklistId); return; }
   if(task.module==='evaluations'){
     const ev=DB.evaluations.find(x=>String(x.id)===String(task.recordId));
     if(ev) { closeModal(); openEvalForm(ev.employeeId,ev.milestone); }
@@ -3575,7 +3742,7 @@ function openWorkflowTask(id){
   if(task.workflowType==='Approval') steps.push('<span class="workflow-step done">Request</span>','<span class="workflow-step active">Review / Decision</span>','<span class="workflow-step">Completion</span>');
   else if(task.workflowType==='Review') steps.push('<span class="workflow-step done">Record</span>','<span class="workflow-step active">Review</span>','<span class="workflow-step">Next Action</span>');
   else steps.push('<span class="workflow-step done">Created</span>','<span class="workflow-step active">Action Required</span>','<span class="workflow-step">Completed</span>');
-  openModal(`<div class="modal-head"><div><h3>${esc(task.title)}</h3><div class="small">${esc(WORKFLOW_STEP_LABELS[task.actionType==='leave_decision'?'leave_review':task.actionType==='prf_decision'?'prf_review':task.actionType==='evaluation_review'?'evaluation_review':task.actionType==='case_decision'||task.actionType==='case_review'||task.actionType==='case_assign'?'case_review':task.actionType==='nte_review'?'nte_review':task.actionType==='cvr_review'?'cvr_review':task.actionType==='incident_review'?'incident_review':'manual'])}</div></div><button onclick="closeModal()">&times;</button></div>
+  openModal(`<div class="modal-head"><div><h3>${esc(task.title)}</h3><div class="small">${esc(WORKFLOW_STEP_LABELS[task.actionType==='leave_decision'?'leave_review':task.actionType==='prf_decision'?'prf_review':task.actionType==='evaluation_review'?'evaluation_review':task.actionType==='case_decision'||task.actionType==='case_review'||task.actionType==='case_assign'?'case_review':task.actionType==='nte_review'?'nte_review':task.actionType==='cvr_review'?'cvr_review':task.actionType==='incident_review'?'incident_review':task.actionType==='lifecycle_task'?'lifecycle_task':'manual'])}</div></div><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
       <div class="workflow-detail">
         <div class="item"><div class="label">Status</div><div class="value">${statusBadge(task.status,{Pending:'b-amber',Completed:'b-green',Rejected:'b-red',Cancelled:'b-grey'})}</div></div>
@@ -3623,6 +3790,12 @@ async function workflowCompleteTask(id){
   if(task.module==='evaluations'){
     const ev=DB.evaluations.find(x=>String(x.id)===String(task.recordId));
     if(!ev?.completedDate){ toast('Complete the evaluation record before closing this task.'); workflowOpenSource(task); return; }
+  }
+  if(task.module==='lifecycleChecklists'){
+    const checklist=(DB.lifecycleChecklists||[]).find(row=>String(row.id)===String(task.checklistId));
+    const item=checklist?.items?.find(row=>String(row.id)===String(task.itemId));
+    if(!checklist||!item){toast('The lifecycle task source could not be found.',true);return;}
+    item.completed=true;item.completedAt=new Date().toISOString();item.completedBy=SESSION?.id||'';item.note=(document.getElementById('wf_task_note')?.value||item.note||'').trim();checklist.status=lifecycleChecklistComputedStatus(checklist);checklist.updatedAt=new Date().toISOString();lifecycleChecklistHistory(checklist,'Task completed from Workflow',item.title);await saveDB();
   }
   await workflowSaveTaskNote(id);
   task.status='Completed'; task.completedAt=new Date().toISOString(); task.completedBy=SESSION?.id||null; task.decision='Completed';
@@ -5384,6 +5557,7 @@ const {enhanceDataTables,tablePageGo,tablePageSize,resetAllTablePages}=TABLE_ENH
 const RENDERERS = {
   selfService: renderSelfService,
   teamApprovals: renderTeamApprovals,
+  lifecycleChecklists: renderLifecycleChecklists,
   dashboard: renderDashboard,
   actionCenter: renderActionCenter,
   workflow: renderWorkflowCenter,
@@ -5444,6 +5618,7 @@ Object.assign(window, {
   addDaysISO, atdComputeStatus, atdFillEmployee, atdPayslipCellHTML, atdRemaining, atdToggleCategory, atdTotalPaid,
   addCaseActivity, addCaseNote, caseActivityIcon, caseActivityLabel, caseDeadlineInfo, casePriorityBadge, caseWorkflowSteps, caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, setCaseWorkflowStatus, buildNotificationItems, closeNotificationPanel, markAllNotificationsRead, openNotification, goFromNotifications, refreshNotificationBadge, renderNotificationPanel, toggleNotificationPanel, analyticsApplyFilters, analyticsSetPreset, exportAnalyticsSnapshot,
   renderSelfService, renderTeamApprovals, openProfileChangeRequest, saveProfileChangeRequest, openLeaveRequest, saveLeaveRequest, cancelSelfServiceRequest, openServiceRequestReview, reviewServiceRequest,
+  renderLifecycleChecklists, openLifecycleChecklistForm, saveLifecycleChecklist, openLifecycleChecklist, openLifecycleChecklistItem, returnToLifecycleChecklist, saveLifecycleChecklistItem, cancelLifecycleChecklist, lifecycleTemplateChanged,
   workflowSyncTasks, workflowPendingCount, workflowFindTask, workflowOpenSource, workflowSaveTaskNote, saveWorkflowTaskNote, workflowAssignTask, workflowSaveAssignment, workflowCompleteTask, workflowDecideTask, openWorkflowTask, openWorkflowCreateForm, saveWorkflowManualTask, renderWorkflowCenter, workflowActionButtons, workflowPriorityBadge, workflowDueText, workflowPageGo, workflowPageSize, automationPageGo, automationPageSize,
   AUTOMATION_RULES, automationPendingCount, ensureAutomationSettings, automationRuleEnabled, runAutomationEngine, toggleAutomationRule, automationOpenTask, renderAutomationCenter,
   countStoredDocuments, renderDocuments, openStoredDocument, collectStoredDocuments, collectDocumentIndex, openDriveDocument, openDriveDocumentForm, saveDriveDocument, deleteDriveDocument, countDriveDocuments, documentExpiryInfo, openDriveWorkspace,

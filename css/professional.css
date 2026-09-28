@@ -352,6 +352,52 @@ body.data-confirm-open{overflow:hidden;}
   .auth-footer{left:17px;right:17px;bottom:17px;justify-content:center;text-align:center;}
   .auth-footer span:last-child{display:none;}
 }
+
+/* Lifecycle checklist workspace */
+.checklist-shell{max-width:1500px;margin:0 auto;}
+.checklist-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px;}
+.checklist-summary>div{padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:#fff;}
+.checklist-summary span{display:block;color:var(--muted);font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;}
+.checklist-summary b{display:block;margin-top:3px;color:var(--text);font-size:22px;line-height:1.2;}
+.checklist-toolbar{margin-bottom:12px;}
+.checklist-toolbar .searchbox{min-width:min(390px,100%);}
+.toolbar-spacer{flex:1;}
+.checklist-progress{min-width:120px;}
+.checklist-progress>div{height:6px;overflow:hidden;border-radius:6px;background:#ECEAF0;}
+.checklist-progress>div>span{display:block;height:100%;border-radius:inherit;background:#277A65;}
+.checklist-progress small{display:block;margin-top:5px;color:var(--muted);font-size:9.5px;white-space:nowrap;}
+.checklist-template-preview{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:15px;}
+.checklist-template-preview>div{display:flex;justify-content:space-between;gap:12px;padding:9px 10px;border:1px solid var(--border);border-radius:7px;background:#FCFCFD;}
+.checklist-template-preview span{color:var(--text);font-size:10.5px;font-weight:700;}
+.checklist-template-preview small{color:var(--muted);font-size:9px;text-align:right;}
+.checklist-detail-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:13px;}
+.checklist-detail-head .checklist-progress{flex:1;max-width:440px;}
+.checklist-task-list{display:grid;gap:7px;margin-top:13px;}
+.checklist-task{width:100%;display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 11px;border:1px solid var(--border);border-radius:7px;background:#fff;color:var(--text);text-align:left;}
+.checklist-task:not(:disabled):hover,.checklist-task:not(:disabled):focus-visible{border-color:#CFC5FA;background:#FAF9FF;outline:0;}
+.checklist-task:disabled{cursor:default;opacity:.78;}
+.checklist-task.complete{background:#F8FBFA;}
+.checklist-task-check{width:24px;height:24px;display:flex;align-items:center;justify-content:center;border:1px solid #C9C5D0;border-radius:6px;color:#fff;font-size:12px;font-weight:800;}
+.checklist-task.complete .checklist-task-check{border-color:#277A65;background:#277A65;}
+.checklist-task b,.checklist-task small{display:block;}
+.checklist-task b{font-size:10.5px;}.checklist-task small{margin-top:2px;color:var(--muted);font-size:9.5px;line-height:1.4;}
+.checklist-complete-toggle{display:flex;align-items:flex-start;gap:10px;margin-bottom:15px;padding:12px;border:1px solid var(--border);border-radius:7px;background:#FCFCFD;}
+.checklist-complete-toggle input{margin-top:2px;accent-color:#277A65;}
+.checklist-complete-toggle b,.checklist-complete-toggle small{display:block;}.checklist-complete-toggle small{margin-top:3px;color:var(--muted);font-size:9.5px;}
+.checklist-history{margin-top:15px;border-top:1px solid var(--border);}
+.checklist-history summary{padding:12px 0 8px;color:var(--text);font-size:10.5px;font-weight:800;cursor:pointer;}
+.checklist-history>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:8px 0;border-top:1px solid #F0EEF3;font-size:9.5px;}
+.checklist-history>div span,.checklist-history>div small{color:var(--muted);}.checklist-history>div small{grid-column:1/-1;}
+.portal-journeys{margin-bottom:16px;padding:15px 16px;border:1px solid var(--border);border-radius:8px;background:#fff;box-shadow:var(--shadow-sm);}
+.portal-journey-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;}
+.portal-journey{padding:11px 12px;border:1px solid var(--border);border-radius:7px;background:#FCFCFD;}
+.portal-journey>div:first-child{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px;}
+.portal-journey>div:first-child>span{color:var(--text);font-size:11px;font-weight:800;}
+.portal-journey>small{display:block;margin-top:8px;color:var(--muted);font-size:9.5px;line-height:1.4;}
+.text-danger{color:var(--danger)!important;}
+@media (max-width:900px){.checklist-summary,.portal-journey-list{grid-template-columns:repeat(2,minmax(0,1fr));}.checklist-template-preview{grid-template-columns:1fr;}}
+@media (max-width:600px){.checklist-summary,.portal-journey-list{grid-template-columns:1fr 1fr;}.checklist-toolbar>*{width:100%;}.checklist-toolbar .toolbar-spacer{display:none;}.checklist-task{grid-template-columns:28px minmax(0,1fr);}.checklist-task>.badge{grid-column:2;justify-self:start;}}
+@media (max-width:480px){.topbar-left{flex:1;overflow:hidden;}.topbar-left>div:last-child{min-width:0;overflow:hidden;}.topbar-left h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.topbar-left .sub{max-width:100%!important;}}
 @media (max-height:720px) and (min-width:681px){
   #auth-screen{padding-top:86px;padding-bottom:66px;align-items:start;}
   #auth-screen .auth-card{max-height:calc(100dvh - 130px);}

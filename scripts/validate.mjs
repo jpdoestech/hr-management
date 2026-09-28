@@ -17,7 +17,8 @@ function existsWithExactCase(filePath){
 const required=[
   'index.html','css/app.css','css/professional.css','js/app.js',
   'js/core/pagination.js','js/core/table-enhancer.js','js/core/content-layout.js','supabase-config.js',
-  'supabase/phase10-self-service.sql'
+  'supabase/phase10-self-service.sql','supabase/phase11-lifecycle-checklists.sql',
+  'database/migrations/phase11-lifecycle-checklists.sql'
 ];
 const missing=required.filter(f=>!fs.existsSync(path.join(root,f)));
 if(missing.length){
@@ -53,6 +54,22 @@ for(const feature of ['renderSelfService','renderTeamApprovals','submit_hr_servi
     console.error(`Self-service feature contract is missing: ${feature}`);
     process.exit(1);
   }
+}
+const lifecycleMigration=fs.readFileSync(path.join(root,'supabase/phase11-lifecycle-checklists.sql'),'utf8');
+for(const feature of ['renderLifecycleChecklists','saveLifecycleChecklistItem','lifecycleChecklistPendingCount']){
+  if(!app.includes(feature)){
+    console.error(`Lifecycle checklist feature contract is missing: ${feature}`);
+    process.exit(1);
+  }
+}
+if(!lifecycleMigration.includes('update_lifecycle_checklist_item')||!lifecycleMigration.includes("'lifecycleChecklists'")){
+  console.error('Lifecycle checklist database contract is missing.');
+  process.exit(1);
+}
+const lifecycleMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase11-lifecycle-checklists.sql'),'utf8');
+if(lifecycleMigration!==lifecycleMigrationCopy){
+  console.error('Lifecycle checklist migration copies are out of sync.');
+  process.exit(1);
 }
 const paginationState={tablePages:{},tablePageSizes:{}};
 paginationState.tablePageSizes['qa:list']=25;
