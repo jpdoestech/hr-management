@@ -1,7 +1,8 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '../supabase-config.js';
-import { paginationMeta, paginationHTML, paginationReset, paginateRows } from './core/pagination.js';
-import { installTableEnhancer } from './core/table-enhancer.js';
+import { paginationMeta, paginationHTML, paginationReset, paginateRows } from './core/pagination.js?v=20260928-3';
+import { installTableEnhancer } from './core/table-enhancer.js?v=20260928-3';
+import { compactRedundantPageIntros } from './core/content-layout.js?v=20260928-3';
 
 if(!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('YOUR_PROJECT_REF')){
   document.body.innerHTML = '<div style="font-family:system-ui;padding:40px;max-width:760px;margin:auto"><h2>Supabase configuration missing</h2><p>Edit <b>supabase-config.js</b> with your Supabase project URL and publishable key.</p></div>';
@@ -5425,6 +5426,15 @@ const ROW_ACTION_OBSERVER=new MutationObserver(()=>requestAnimationFrame(enhance
   const root=document.getElementById(id);
   if(root) ROW_ACTION_OBSERVER.observe(root,{childList:true,subtree:true});
 });
+let PAGE_INTRO_FRAME=0;
+const PAGE_INTRO_OBSERVER=new MutationObserver(()=>{
+  cancelAnimationFrame(PAGE_INTRO_FRAME);
+  PAGE_INTRO_FRAME=requestAnimationFrame(()=>compactRedundantPageIntros(
+    document.getElementById('content'),
+    document.getElementById('tb-title')?.textContent
+  ));
+});
+PAGE_INTRO_OBSERVER.observe(document.getElementById('content'),{childList:true,subtree:true});
 
 // The app is an ES module, while the existing UI uses inline onclick/onsubmit
 // handlers. Expose the application handlers on window so GitHub Pages/Vercel

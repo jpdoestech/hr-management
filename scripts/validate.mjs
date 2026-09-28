@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {paginationHTML,paginationMeta} from '../js/core/pagination.js';
 
 const root=process.cwd();
 function existsWithExactCase(filePath){
@@ -15,7 +16,7 @@ function existsWithExactCase(filePath){
 }
 const required=[
   'index.html','css/app.css','css/professional.css','js/app.js',
-  'js/core/pagination.js','js/core/table-enhancer.js','supabase-config.js',
+  'js/core/pagination.js','js/core/table-enhancer.js','js/core/content-layout.js','supabase-config.js',
   'supabase/phase10-self-service.sql'
 ];
 const missing=required.filter(f=>!fs.existsSync(path.join(root,f)));
@@ -52,5 +53,23 @@ for(const feature of ['renderSelfService','renderTeamApprovals','submit_hr_servi
     console.error(`Self-service feature contract is missing: ${feature}`);
     process.exit(1);
   }
+}
+const paginationState={tablePages:{},tablePageSizes:{}};
+paginationState.tablePageSizes['qa:list']=25;
+paginationState.tablePages['qa:list']={page:2,size:25,signature:'qa'};
+const paginationMetaResult=paginationMeta(paginationState,'qa:list',37,10);
+if(paginationMetaResult.size!==25||paginationMetaResult.page!==2||paginationMetaResult.start!==26||paginationMetaResult.end!==37){
+  console.error('Pagination state calculation failed.');
+  process.exit(1);
+}
+const paginationMarkup=paginationHTML(paginationMetaResult,'qa:list',{go:'qaPageGo',size:'qaPageSize'});
+if(!paginationMarkup.includes('requestAnimationFrame(()=>qaPageSize')||!paginationMarkup.includes('requestAnimationFrame(()=>qaPageGo')){
+  console.error('Pagination controls must defer rerendering until their UI event completes.');
+  process.exit(1);
+}
+const tableEnhancer=fs.readFileSync(path.join(root,'js/core/table-enhancer.js'),'utf8');
+if(!tableEnhancer.includes('dataset.paginationState')){
+  console.error('Pagination footer stability guard is missing.');
+  process.exit(1);
 }
 console.log('SLSC HR Platform structural validation passed.');

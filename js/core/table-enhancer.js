@@ -1,4 +1,4 @@
-import { paginationHTML, paginationMeta } from './pagination.js';
+import { paginationHTML, paginationMeta } from './pagination.js?v=20260928-3';
 
 export function installTableEnhancer({getState, getContent}) {
   function tableSignature(table){
@@ -32,13 +32,16 @@ export function installTableEnhancer({getState, getContent}) {
     const meta=paginationMeta(state,key,visibleRows.length,10);
     visibleRows.forEach((row,idx)=>{ row.style.display=(idx>=meta.start-1&&idx<meta.end)?'':'none'; });
     const newFooter=`<div class="table-pagination-meta">${meta.total?`${meta.start}–${meta.end} of ${meta.total}`:'0'} <span>records</span></div>${paginationHTML(meta,key)}`;
+    const footerState=[meta.key,meta.total,meta.size,meta.pages,meta.page,meta.start,meta.end].join('|');
     if(!footer||!footer.classList.contains('table-pagination-wrap')){
       footer=document.createElement('div');
       footer.className='table-pagination-wrap';
       host.parentNode.insertBefore(footer,host.nextSibling);
       footer.innerHTML=newFooter;
-    } else if(footer.innerHTML!==newFooter){
+      footer.dataset.paginationState=footerState;
+    } else if(footer.dataset.paginationState!==footerState){
       footer.innerHTML=newFooter;
+      footer.dataset.paginationState=footerState;
     }
   }
   function enhanceDataTables(){
