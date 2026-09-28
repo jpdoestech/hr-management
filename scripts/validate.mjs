@@ -89,4 +89,19 @@ if(!tableEnhancer.includes('dataset.paginationState')){
   console.error('Pagination footer stability guard is missing.');
   process.exit(1);
 }
+for(const feature of ['employeePickerHTML','employeePickerChoose','employeePickerKeydown','search-pending']){
+  if(!app.includes(feature)){
+    console.error(`Search interaction contract is missing: ${feature}`);
+    process.exit(1);
+  }
+}
+if(/<select[^>]+id=["'`](?:u_employee|gd_employee|case_employee|lc_employee|f_employeeName)["'`]/.test(app)){
+  console.error('An employee entry field has regressed to a dropdown.');
+  process.exit(1);
+}
+const professionalCss=fs.readFileSync(path.join(root,'css/professional.css'),'utf8');
+if(!professionalCss.includes('.employee-picker-options')||!professionalCss.includes('max-height:calc(100dvh - 190px)')){
+  console.error('Employee picker or sticky table styling is missing.');
+  process.exit(1);
+}
 console.log('SLSC HR Platform structural validation passed.');

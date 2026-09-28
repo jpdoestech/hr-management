@@ -804,7 +804,7 @@ function openLifecycleChecklistForm(id=''){
   const checklist=(DB.lifecycleChecklists||[]).find(item=>String(item.id)===String(id));
   const existing=checklist||{type:'Onboarding',targetDate:addDaysISO(todayISO(),7),employeeId:'',managerProfileId:'',notes:''};
   const managers=DB.users.filter(user=>['Manager','Administrator','HR Staff'].includes(user.role));
-  openModal(`<div class="modal-head"><div><h3>${checklist?'Edit':'New'} Lifecycle Checklist</h3><div class="small">Apply a standard journey and assign its accountable manager.</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="formgrid"><div class="field full"><label>Employee *</label><select id="lc_employee"><option value="">Select employee</option>${DB.employees.slice().sort((a,b)=>String(a.name).localeCompare(String(b.name))).map(employee=>`<option value="${employee.id}" ${String(existing.employeeId)===String(employee.id)?'selected':''}>${esc(employee.employeeNo||'—')} · ${esc(employee.name)} · ${esc(employee.department||'Unassigned')}</option>`).join('')}</select></div><div class="field"><label>Journey *</label><select id="lc_type" onchange="lifecycleTemplateChanged()">${LIFECYCLE_TYPES.map(value=>`<option value="${value}" ${existing.type===value?'selected':''}>${value}</option>`).join('')}</select></div><div class="field"><label>Target Date *</label><input id="lc_target" type="date" value="${esc(existing.targetDate)}" onchange="lifecycleTemplateChanged()"></div><div class="field full"><label>Accountable Manager</label><select id="lc_manager"><option value="">Unassigned</option>${managers.map(user=>`<option value="${user.id}" ${String(existing.managerProfileId||'')===String(user.id)?'selected':''}>${esc(user.fullName)} · ${esc(user.role)}</option>`).join('')}</select></div><div class="field full"><label>Internal Notes</label><textarea id="lc_notes" rows="3" placeholder="Context, handover details, or special instructions…">${esc(existing.notes||'')}</textarea></div></div><div id="lc_template_preview">${lifecycleTemplatePreview(existing.type,existing.targetDate)}</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveLifecycleChecklist('${id}')">${checklist?'Save Changes':'Create Checklist'}</button></div>`);
+  openModal(`<div class="modal-head"><div><h3>${checklist?'Edit':'New'} Lifecycle Checklist</h3><div class="small">Apply a standard journey and assign its accountable manager.</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="formgrid">${employeePickerHTML({id:'lc_employee',label:'Employee',selectedId:existing.employeeId,required:true,full:true})}<div class="field"><label>Journey *</label><select id="lc_type" onchange="lifecycleTemplateChanged()">${LIFECYCLE_TYPES.map(value=>`<option value="${value}" ${existing.type===value?'selected':''}>${value}</option>`).join('')}</select></div><div class="field"><label>Target Date *</label><input id="lc_target" type="date" value="${esc(existing.targetDate)}" onchange="lifecycleTemplateChanged()"></div><div class="field full"><label>Accountable Manager</label><select id="lc_manager"><option value="">Unassigned</option>${managers.map(user=>`<option value="${user.id}" ${String(existing.managerProfileId||'')===String(user.id)?'selected':''}>${esc(user.fullName)} · ${esc(user.role)}</option>`).join('')}</select></div><div class="field full"><label>Internal Notes</label><textarea id="lc_notes" rows="3" placeholder="Context, handover details, or special instructions…">${esc(existing.notes||'')}</textarea></div></div><div id="lc_template_preview">${lifecycleTemplatePreview(existing.type,existing.targetDate)}</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveLifecycleChecklist('${id}')">${checklist?'Save Changes':'Create Checklist'}</button></div>`);
 }
 async function saveLifecycleChecklist(id=''){
   if(!isHRRole()) return;
@@ -985,10 +985,10 @@ function opsOpenItems(){
 function opsPrefill(module,emp){
   if(!emp) return;
   const setVal=(id,val)=>{const el=document.getElementById(id); if(el&&val!=null){el.value=val; el.dispatchEvent(new Event('change',{bubbles:true}));}};
-  setVal('f_employeeName',emp.name); setVal('f_department',emp.department||'');
-  setVal('in_employeeName',emp.name); setVal('in_department',emp.department||'');
-  setVal('cv_employeeName',emp.name); setVal('cv_department',emp.department||'');
-  setVal('case_employee',emp.id);
+  employeePickerSet('f_employeeName',emp.id); setVal('f_department',emp.department||'');
+  employeePickerSet('in_employeeName',emp.id); setVal('in_department',emp.department||'');
+  employeePickerSet('cv_employeeName',emp.id); setVal('cv_department',emp.department||'');
+  employeePickerSet('case_employee',emp.id);
 }
 function openEmployeeOperation(module,employeeId){
   if(SESSION?.role==='Viewer'){ toast('Viewer accounts have read-only access.',true); return; }
@@ -999,7 +999,7 @@ function openEmployeeOperation(module,employeeId){
   if(module==='lifecycle'){ openEmployeeLifecycleEventForm(employeeId); return; }
   if(module==='transfer'){ openTransferForEmployee(employeeId); return; }
   if(module==='documents'){ closeModal(); STATE.view='documents'; STATE.search=emp.name||''; STATE.filter=''; STATE.tablePages={}; STATE.documentStorage=''; STATE.documentCategory=''; STATE.documentExpiry=''; STATE.documentStatus=''; renderNav(); renderDocuments(); return; }
-  if(module==='atd'){ openATDForm(employeeId); return; }
+  if(module==='atd'){ openATDForm(); setTimeout(()=>opsPrefill('atd',emp),0); return; }
   if(module==='evaluations'){
     const next=EVAL_MILESTONES.find(m=>{const st=evalStatusInfo(emp,m); return st.label!=='Completed';})||EVAL_MILESTONES[EVAL_MILESTONES.length-1];
     openEvalForm(employeeId,next.key); return;
@@ -1286,22 +1286,31 @@ async function go(view,{skipUnsaved=false}={}){
 }
 
 const SEARCH_RENDER_TIMERS=new Map();
-function queueSearchRender(input,stateKey,renderFn,delay=180){
+function queueSearchRender(input,stateKey,renderFn,delay=460){
   const view=STATE.view;
   const timerKey=`${view}:${stateKey}`;
   STATE[stateKey]=input.value;
-  STATE.tablePages={};
   clearTimeout(SEARCH_RENDER_TIMERS.get(timerKey));
+  const searchHost=input.closest('.searchbox,.search');
+  searchHost?.classList.add('search-pending');
   SEARCH_RENDER_TIMERS.set(timerKey,setTimeout(async()=>{
     SEARCH_RENDER_TIMERS.delete(timerKey);
     if(STATE.view!==view) return;
+    const selectionStart=input.selectionStart;
+    const selectionEnd=input.selectionEnd;
+    const scrollX=window.scrollX;
+    const scrollY=window.scrollY;
+    STATE.tablePages={};
     await Promise.resolve(renderFn());
     if(STATE.view!==view) return;
     requestAnimationFrame(()=>{
       const next=document.querySelector(`[data-search-key="${stateKey}"]`);
       if(!next) return;
       next.focus();
-      next.setSelectionRange?.(next.value.length,next.value.length);
+      const end=next.value.length;
+      next.setSelectionRange?.(Math.min(selectionStart??end,end),Math.min(selectionEnd??end,end));
+      next.closest('.searchbox,.search')?.classList.remove('search-pending');
+      window.scrollTo(scrollX,scrollY);
     });
   },Math.max(0,Number(delay)||0)));
 }
@@ -1309,6 +1318,83 @@ function cancelSearchRender(stateKey){
   for(const [key,timer] of SEARCH_RENDER_TIMERS){
     if(key.endsWith(`:${stateKey}`)){ clearTimeout(timer); SEARCH_RENDER_TIMERS.delete(key); }
   }
+  document.querySelectorAll(`[data-search-key="${stateKey}"]`).forEach(input=>input.closest('.searchbox,.search')?.classList.remove('search-pending'));
+}
+
+/* ---------------- searchable employee picker ---------------- */
+function employeePickerFind({id='',name=''}={}){
+  if(id){const match=DB.employees.find(employee=>String(employee.id)===String(id));if(match)return match;}
+  const normalized=normalizeEmployeeName(name);
+  return normalized?DB.employees.find(employee=>normalizeEmployeeName(employee.name)===normalized)||null:null;
+}
+function employeePickerHTML({id,label='Employee',selectedId='',selectedName='',mode='id',required=false,full=false,placeholder='Type an employee name or number',onSelect='',autofill=true}={}){
+  const selected=employeePickerFind({id:selectedId,name:selectedName});
+  const stored=selected?(mode==='name'?selected.name:selected.id):'';
+  const display=selected?.name||selectedName||'';
+  return `<div class="field ${full?'full':''}"><label for="${id}_search">${esc(label)}${required?' *':''}</label><div class="employee-picker" id="${id}_picker" data-mode="${mode}" data-on-select="${esc(onSelect)}" data-autofill="${autofill?'true':'false'}" data-selected-id="${esc(selected?.id||'')}"><input type="hidden" id="${id}" value="${esc(stored)}"><div class="employee-picker-input">${iSearch(15)}<input id="${id}_search" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}_options" autocomplete="off" spellcheck="false" placeholder="${esc(placeholder)}" value="${esc(display)}" onfocus="employeePickerOpen('${id}')" oninput="employeePickerInput('${id}',this.value)" onkeydown="employeePickerKeydown(event,'${id}')"><button type="button" class="employee-picker-clear" title="Clear employee" aria-label="Clear employee" onclick="employeePickerClear('${id}')">&times;</button></div><div class="employee-picker-options" id="${id}_options" role="listbox" hidden></div></div></div>`;
+}
+function employeePickerMatches(query){
+  const q=String(query||'').trim().toLowerCase();
+  const rows=DB.employees.filter(employee=>!q||[employee.name,employee.employeeNo].some(value=>String(value||'').toLowerCase().includes(q)));
+  return rows.sort((a,b)=>{
+    const aName=String(a.name||'').toLowerCase(),bName=String(b.name||'').toLowerCase();
+    const aFirst=q&&(aName.startsWith(q)||String(a.employeeNo||'').toLowerCase().startsWith(q))?0:1;
+    const bFirst=q&&(bName.startsWith(q)||String(b.employeeNo||'').toLowerCase().startsWith(q))?0:1;
+    return aFirst-bFirst||aName.localeCompare(bName);
+  });
+}
+function employeePickerRender(id,query=''){
+  const picker=document.getElementById(`${id}_picker`);const options=document.getElementById(`${id}_options`);const input=document.getElementById(`${id}_search`);if(!picker||!options||!input)return;
+  const rows=employeePickerMatches(query);const hasQuery=String(query||'').trim().length>0;const visible=hasQuery?rows:rows.slice(0,20);picker.dataset.activeIndex='-1';
+  options.innerHTML=visible.length?visible.map((employee,index)=>`<button type="button" role="option" data-index="${index}" data-employee-id="${esc(employee.id)}" onmousedown="event.preventDefault()" onclick="employeePickerChoose('${id}','${esc(employee.id)}')"><span class="employee-picker-avatar">${esc(opsInitials(employee.name))}</span><span><b>${esc(employee.name)}</b><small>${esc(employee.employeeNo||'No employee number')} · ${esc(employee.position||'No position')}</small></span><em>${esc(employee.department||'Unassigned')}</em></button>`).join(''):`<div class="employee-picker-empty"><b>No employee found</b><span>Try the employee's name or employee number.</span></div>`;
+  if(rows.length>visible.length) options.insertAdjacentHTML('beforeend',`<div class="employee-picker-more">Type a name or employee number to search all ${rows.length} employees.</div>`);
+  options.hidden=false;input.setAttribute('aria-expanded','true');
+}
+function employeePickerOpen(id){
+  const picker=document.getElementById(`${id}_picker`);const input=document.getElementById(`${id}_search`);if(!picker||!input)return;
+  employeePickerRender(id,picker.dataset.selectedId?'':input.value);
+}
+function employeePickerInput(id,value){
+  const picker=document.getElementById(`${id}_picker`);const hidden=document.getElementById(id);if(!picker||!hidden)return;
+  picker.dataset.selectedId='';hidden.value='';employeePickerRender(id,value);
+}
+function employeePickerClose(id){
+  const input=document.getElementById(`${id}_search`);const options=document.getElementById(`${id}_options`);if(options)options.hidden=true;if(input)input.setAttribute('aria-expanded','false');
+}
+function employeePickerAutofill(employee){
+  const values={f_department:employee.department||'',f_position:employee.position||'',f_fromDepartment:employee.department||'',cv_department:employee.department||'',in_department:employee.department||''};
+  Object.entries(values).forEach(([id,value])=>{const el=document.getElementById(id);if(el)el.value=value;});
+}
+function employeePickerChoose(id,employeeId){
+  const picker=document.getElementById(`${id}_picker`);const input=document.getElementById(`${id}_search`);const hidden=document.getElementById(id);const employee=DB.employees.find(row=>String(row.id)===String(employeeId));if(!picker||!input||!hidden||!employee)return;
+  picker.dataset.selectedId=employee.id;hidden.value=picker.dataset.mode==='name'?employee.name:employee.id;input.value=employee.name;input.setAttribute('aria-activedescendant','');employeePickerClose(id);
+  if(picker.dataset.autofill==='true')employeePickerAutofill(employee);
+  const callback=picker.dataset.onSelect;if(callback&&typeof window[callback]==='function')window[callback]();
+  hidden.dispatchEvent(new Event('change',{bubbles:true}));input.focus();
+}
+function employeePickerClear(id){
+  const picker=document.getElementById(`${id}_picker`);const input=document.getElementById(`${id}_search`);const hidden=document.getElementById(id);if(!picker||!input||!hidden)return;
+  picker.dataset.selectedId='';hidden.value='';input.value='';employeePickerRender(id,'');input.focus();
+}
+function employeePickerSet(id,reference){
+  const employee=employeePickerFind({id:String(reference||''),name:String(reference||'')});
+  if(employee){employeePickerChoose(id,employee.id);return true;}
+  const input=document.getElementById(`${id}_search`);const hidden=document.getElementById(id);if(input)input.value=String(reference||'');if(hidden)hidden.value='';return false;
+}
+function employeePickerSelected(id){
+  const picker=document.getElementById(`${id}_picker`);return DB.employees.find(employee=>String(employee.id)===String(picker?.dataset.selectedId||''))||null;
+}
+function employeePickerKeydown(event,id){
+  const picker=document.getElementById(`${id}_picker`);const options=document.getElementById(`${id}_options`);if(!picker||!options)return;
+  if(event.key==='Escape'){employeePickerClose(id);return;}
+  if(options.hidden&&(event.key==='ArrowDown'||event.key==='ArrowUp'))employeePickerOpen(id);
+  const buttons=[...options.querySelectorAll('button[data-employee-id]')];if(!buttons.length)return;
+  let index=Number(picker.dataset.activeIndex||-1);
+  if(event.key==='ArrowDown'){event.preventDefault();index=Math.min(buttons.length-1,index+1);}
+  else if(event.key==='ArrowUp'){event.preventDefault();index=Math.max(0,index-1);}
+  else if(event.key==='Enter'&&index>=0){event.preventDefault();employeePickerChoose(id,buttons[index].dataset.employeeId);return;}
+  else return;
+  picker.dataset.activeIndex=String(index);buttons.forEach((button,i)=>button.classList.toggle('active',i===index));buttons[index]?.scrollIntoView({block:'nearest'});
 }
 
 /* ---------------- icons (inline svg, currentColor) ---------------- */
@@ -1707,6 +1793,9 @@ async function runRowAction(id,index){
 
 function fieldHTML(f, val){
   const v = val==null?'':val;
+  if(f.employeePicker||f.key==='employeeName'||f.key==='employeeReplaced'){
+    return employeePickerHTML({id:`f_${f.key}`,label:f.label,selectedId:f.employeeSelectedId||'',selectedName:v,mode:'name',required:!!f.required,full:!!f.full,autofill:f.key==='employeeName'});
+  }
   if(f.type==='select'){
     return `<div class="field ${f.full?'full':''}"><label>${f.label}${f.required?' *':''}</label>
       <select id="f_${f.key}" ${f.required?'required':''}>
@@ -1734,6 +1823,11 @@ function readFields(fields){
   fields.forEach(f=>{
     const el=document.getElementById('f_'+f.key);
     out[f.key]= el? el.value.trim(): '';
+    if(f.employeePicker||f.key==='employeeName'||f.key==='employeeReplaced'){
+      const selected=employeePickerSelected('f_'+f.key);
+      if(f.key==='employeeName') out.employeeId=selected?.id||'';
+      if(f.key==='employeeReplaced') out.employeeReplacedId=selected?.id||'';
+    }
     if(f.type==='file'){
       const dataEl = document.getElementById('f_'+f.key+'_data');
       out[f.key+'Data'] = dataEl? dataEl.value : '';
@@ -1964,7 +2058,12 @@ function renderModuleView(key){
 function openRecordForm(key, id){
   const cfg = MODULES[key];
   const existing = id? DB[key].find(r=>r.id===id) : null;
-  const fields = cfg.fields.map(f=> f.type==='file' && existing? {...f, existingData: existing[f.key+'Data']||''} : f);
+  const fields = cfg.fields.map(f=>{
+    const next=f.type==='file'&&existing?{...f,existingData:existing[f.key+'Data']||''}:{...f};
+    if(existing&&f.key==='employeeName')next.employeeSelectedId=existing.employeeId||'';
+    if(existing&&f.key==='employeeReplaced')next.employeeSelectedId=existing.employeeReplacedId||'';
+    return next;
+  });
   openModal(`
     <div class="modal-head"><h3>${existing? 'Edit':'Add'} ${cfg.singular}</h3><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
@@ -2009,9 +2108,8 @@ function openWorkflowRecordForm(module, caseId){
   openRecordForm(module);
   supabase.from('hr_cases').select('employee_record_id,employee_name,department,subject').eq('id',caseId).maybeSingle().then(({data,error})=>{
     if(error||!data) return;
-    const empInput=document.getElementById('f_employeeName');
     const deptInput=document.getElementById('f_department');
-    if(empInput){empInput.value=data.employee_name||''; empInput.dispatchEvent(new Event('change'));}
+    employeePickerSet('f_employeeName',data.employee_record_id||data.employee_name||'');
     if(deptInput && !deptInput.value) deptInput.value=data.department||'';
     const dateMap={nte:'f_dateIssued',memos:'f_dateOfMemo',nod:'f_dateOfNod'};
     const dateId=dateMap[module]; if(document.getElementById(dateId) && !document.getElementById(dateId).value) document.getElementById(dateId).value=todayISO();
@@ -2032,6 +2130,11 @@ function openWorkflowRecordForm(module, caseId){
 async function saveRecord(key, id){
   const cfg = MODULES[key];
   const vals = readFields(cfg.fields);
+  const invalidEmployeeFields=cfg.fields.filter(f=>f.employeePicker||f.key==='employeeName'||f.key==='employeeReplaced').filter(f=>{
+    const typed=document.getElementById(`f_${f.key}_search`)?.value.trim();
+    return typed&&!employeePickerSelected(`f_${f.key}`);
+  });
+  if(invalidEmployeeFields.length){toast('Select '+invalidEmployeeFields.map(f=>f.label).join(', ')+' from the employee results.',true);return;}
   const missing = cfg.fields.filter(f=>f.required && !vals[f.key]);
   if(missing.length){ toast('Please complete: '+missing.map(f=>f.label).join(', ')); return; }
   let rec;
@@ -2154,12 +2257,11 @@ function lifecycleRecentEvents(limit=12){
 function openEmployeeLifecycleEventForm(id){
   if(!canEdit()) return;
   const existingEmp=id?DB.employees.find(e=>e.id===id):null;
-  const employeeOptions=DB.employees.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(e=>`<option value="${esc(e.id)}" ${existingEmp?.id===e.id?'selected':''}>${esc(e.employeeNo||'—')} · ${esc(e.name)}</option>`).join('');
   openModal(`
     <div class="modal-head"><div><h3>Record Employment Lifecycle Event</h3><div class="small">Add a verified employment milestone or status event to the employee timeline.</div></div><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
       <div class="formgrid">
-        <div class="field full"><label>Employee *</label><select id="lc_employee" onchange="lifecycleEmployeePreview()"><option value="">— Select employee —</option>${employeeOptions}</select></div>
+        ${employeePickerHTML({id:'lc_employee',label:'Employee',selectedId:existingEmp?.id||'',required:true,full:true,onSelect:'lifecycleEmployeePreview'})}
         <div class="field"><label>Event Type *</label><select id="lc_eventType" onchange="lifecycleEventTypeChanged()">${LIFECYCLE_EVENT_TYPES.map(x=>`<option>${esc(x)}</option>`).join('')}</select></div>
         <div class="field"><label>Effective Date *</label><input type="date" id="lc_date" value="${todayISO()}"></div>
         <div class="field" id="lc_position_wrap" style="display:none"><label>New Position</label><input id="lc_position" placeholder="e.g. HR Officer II"></div>
@@ -2852,7 +2954,7 @@ function openCVRForm(id){
     <div class="modal-head"><h3>${existing?'Edit':'Add'} CVR</h3><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
       <div class="formgrid">
-        <div class="field"><label>Employee Name *</label><input id="cv_employeeName" value="${esc(existing?existing.employeeName:'')}"></div>
+        ${employeePickerHTML({id:'cv_employeeName',label:'Employee Name',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true})}
         <div class="field"><label>Department *</label><select id="cv_department">${DEPT_OPTIONS.map(d=>`<option ${existing&&existing.department===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
         <div class="field"><label>Date of CVR *</label><input type="date" id="cv_date" value="${existing?existing.dateOfCVR:todayISO()}"></div>
         <div class="field"><label>Status</label><select id="cv_status">${CVR_STATUS.map(s=>`<option ${(existing?existing.status:CVR_STATUS[0])===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
@@ -2873,6 +2975,7 @@ function openCVRForm(id){
 }
 async function saveCVR(id){
   const employeeName = document.getElementById('cv_employeeName').value.trim();
+  const employeeId = employeePickerSelected('cv_employeeName')?.id||'';
   const department = document.getElementById('cv_department').value;
   const dateOfCVR = document.getElementById('cv_date').value;
   const status = document.getElementById('cv_status').value;
@@ -2885,7 +2988,7 @@ async function saveCVR(id){
   if(!offenses.length && !otherOffense){ toast('Check at least one offense, or write one in.'); return; }
   const rec=id?DB.cvr.find(c=>c.id===id):{id:uid()};
   const oldStoragePaths=recordStoragePaths(id?rec:null);
-  Object.assign(rec,{employeeName, department, dateOfCVR, status, offenses, otherOffense, attachment, attachmentData, remarks});
+  Object.assign(rec,{employeeId,employeeName, department, dateOfCVR, status, offenses, otherOffense, attachment, attachmentData, remarks});
   if(!id) DB.cvr.push(rec);
   logAudit(`${id?'Updated':'Added'} CVR for ${employeeName}`); toast(`CVR ${id?'updated.':'added.'}`);
   await saveDB();
@@ -2973,7 +3076,7 @@ function openIncidentForm(id){
     <div class="modal-head"><h3>${existing?'Edit':'Add'} Incident Report</h3><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
       <div class="formgrid">
-        <div class="field"><label>Employee Name *</label><input id="in_employeeName" value="${esc(existing?existing.employeeName:'')}"></div>
+        ${employeePickerHTML({id:'in_employeeName',label:'Employee Name',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true})}
         <div class="field"><label>Department *</label><select id="in_department">${DEPT_OPTIONS.map(d=>`<option ${existing&&existing.department===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
         <div class="field"><label>Date of Incident *</label><input type="date" id="in_date" value="${existing?existing.dateOfIncident:todayISO()}"></div>
         <div class="field"><label>Severity</label><select id="in_severity">${INCIDENT_SEVERITY.map(s=>`<option ${(existing?existing.severity:INCIDENT_SEVERITY[0])===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
@@ -2996,6 +3099,7 @@ function openIncidentForm(id){
 }
 async function saveIncident(id){
   const employeeName = document.getElementById('in_employeeName').value.trim();
+  const employeeId = employeePickerSelected('in_employeeName')?.id||'';
   const department = document.getElementById('in_department').value;
   const dateOfIncident = document.getElementById('in_date').value;
   const severity = document.getElementById('in_severity').value;
@@ -3010,7 +3114,7 @@ async function saveIncident(id){
   if(!incidentTypes.length && !otherType){ toast('Check at least one incident type, or write one in.'); return; }
   const rec=id?DB.incidents.find(i=>i.id===id):{id:uid()};
   const oldStoragePaths=recordStoragePaths(id?rec:null);
-  Object.assign(rec,{employeeName, department, dateOfIncident, severity, incidentTypes, otherType, description, status, attachment, attachmentData, remarks});
+  Object.assign(rec,{employeeId,employeeName, department, dateOfIncident, severity, incidentTypes, otherType, description, status, attachment, attachmentData, remarks});
   if(!id) DB.incidents.push(rec);
   logAudit(`${id?'Updated':'Added'} Incident Report for ${employeeName}`); toast(`Incident report ${id?'updated.':'added.'}`);
   await saveDB();
@@ -3250,15 +3354,11 @@ function renderATD(){
 function openATDForm(id){
   const existing = id? DB.atd.find(r=>r.id===id) : null;
   const cat = existing? existing.category : 'Uniforms/Expenses';
-  const empOptions = DB.employees.map(e=>e.name);
   openModal(`
     <div class="modal-head"><h3>${existing?'Edit':'New'} ATD Record</h3><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
       <div class="formgrid" id="atd-form">
-        <div class="field"><label>Employee *</label><select id="f_employeeName" onchange="atdFillEmployee()">
-          <option value="">— Select —</option>
-          ${empOptions.map(n=>`<option value="${esc(n)}" ${existing&&existing.employeeName===n?'selected':''}>${esc(n)}</option>`).join('')}
-        </select></div>
+        ${employeePickerHTML({id:'f_employeeName',label:'Employee',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true,onSelect:'atdFillEmployee'})}
         <div class="field"><label>Department</label><input id="f_department" value="${esc(existing?existing.department:'')}"></div>
         <div class="field"><label>Position</label><input id="f_position" value="${esc(existing?existing.position:'')}"></div>
         <div class="field"><label>ATD Category *</label><select id="f_category" onchange="atdToggleCategory()">
@@ -3292,13 +3392,14 @@ function atdFillEmployee(){
 }
 async function saveATDRecord(id){
   const employeeName=document.getElementById('f_employeeName').value;
+  const employeeId=employeePickerSelected('f_employeeName')?.id||'';
   const category=document.getElementById('f_category').value;
   const totalAmount=document.getElementById('f_totalAmount').value;
   const atdDate=document.getElementById('f_atdDate').value;
   const deductionType=document.getElementById('f_deductionType').value.trim();
   if(!employeeName||!category||!totalAmount||!atdDate||!deductionType){ toast('Please complete all required fields.'); return; }
   const vals = {
-    employeeName, department:document.getElementById('f_department').value.trim(), position:document.getElementById('f_position').value.trim(),
+    employeeId,employeeName, department:document.getElementById('f_department').value.trim(), position:document.getElementById('f_position').value.trim(),
     category, atdDate, deductionType, totalAmount:parseFloat(totalAmount)||0,
     paymentTerms:document.getElementById('f_paymentTerms').value.trim(),
     atdForm:document.getElementById('f_atdForm').value, atdFormData:document.getElementById('f_atdForm_data').value,
@@ -4944,7 +5045,7 @@ function openUserForm(id){
           <option ${existing.role==='Employee'?'selected':''}>Employee</option>
           <option ${existing.role==='Viewer'?'selected':''}>Viewer</option>
         </select></div>
-        <div class="field full"><label>Linked Employee Record</label><select id="u_employee"><option value="">Not linked</option>${DB.employees.slice().sort((a,b)=>String(a.name).localeCompare(String(b.name))).map(employee=>`<option value="${esc(employee.id)}" ${String(existing.employeeRecordId||'')===String(employee.id)?'selected':''}>${esc(employee.employeeNo||'—')} · ${esc(employee.name)}</option>`).join('')}</select></div>
+        ${employeePickerHTML({id:'u_employee',label:'Linked Employee Record',selectedId:existing.employeeRecordId||'',full:true,placeholder:'Type to link an employee record',autofill:false})}
         <div class="field full"><label>Direct Manager</label><select id="u_manager"><option value="">No manager assigned</option>${managers.map(manager=>`<option value="${manager.id}" ${existing.managerProfileId===manager.id?'selected':''}>${esc(manager.fullName)}</option>`).join('')}</select></div>
       </div>
       <div class="computed-note">Link Employee and Manager accounts to employee master records before enabling self-service. Passwords remain managed by Supabase Auth.</div>
@@ -5131,7 +5232,7 @@ function openDriveDocumentForm(id=''){
       <div class="panel" style="padding:13px;margin-bottom:14px;background:#FBFCFE;"><div class="doc-drive-badge">Google Drive metadata</div><div class="small" style="margin-top:7px;line-height:1.5;">This records the Drive file reference, employee/case relationship, category, and expiration date. The actual file is not stored in the HR database.</div></div>
       <div class="formgrid">
         <div class="field full"><label>Document Name *</label><input id="gd_name" value="${esc(rec?.name||'')}" placeholder="e.g. Signed Employment Contract"></div>
-        <div class="field"><label>Employee *</label><select id="gd_employee"><option value="">Select employee</option>${documentEmployeeOptions(rec?.employeeId||'')}</select></div>
+        ${employeePickerHTML({id:'gd_employee',label:'Employee',selectedId:rec?.employeeId||'',required:true,autofill:false})}
         <div class="field"><label>Category</label><select id="gd_category">${DOCUMENT_CATEGORIES.map(x=>`<option value="${esc(x)}" ${x===(rec?.category||'Other')?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
         <div class="field"><label>Related Module</label><select id="gd_module">${documentSourceModuleOptions(rec?.sourceModule||'employees')}</select></div>
         <div class="field"><label>Source Record ID</label><input id="gd_source_record" value="${esc(rec?.sourceRecordId||'')}" placeholder="Optional record ID / case ID"></div>
@@ -5409,10 +5510,9 @@ function openCaseForm(id){
   supabase.from('hr_cases').select('*').eq('id',id).maybeSingle().then(({data,error})=>{ if(error||!data){toast('Could not load the case for editing.',true);return;} openCaseFormMarkup(data); });
 }
 function openCaseFormMarkup(existing){
-  const employees=DB.employees.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
   const assigned=DB.users.filter(u=>u.role==='Administrator'||u.role==='HR Staff');
   openModal(`<div class="modal-head"><h3>${existing?'Edit':'Create'} HR Case</h3><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="formgrid">
-    <div class="field full"><label>Employee *</label><select id="case_employee"><option value="">Select employee…</option>${employees.map(e=>`<option value="${esc(e.id)}" data-name="${esc(e.name)}" data-dept="${esc(e.department||'')}" ${existing&&existing.employee_record_id===e.id?'selected':''}>${esc(e.name)}${e.department?' — '+esc(e.department):''}</option>`).join('')}</select></div>
+    ${employeePickerHTML({id:'case_employee',label:'Employee',selectedId:existing?.employee_record_id||'',required:true,full:true,autofill:false})}
     <div class="field"><label>Case Number</label><input value="${esc(existing?.case_number||'Generated on save')}" disabled style="background:var(--paper);"></div>
     <div class="field"><label>Status</label><select id="case_status">${Object.keys(CASE_STATUS_MAP).map(x=>`<option ${existing?.status===x||(!existing&&x==='Open')?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
     <div class="field"><label>Priority</label><select id="case_priority">${['Low','Normal','High','Urgent'].map(x=>`<option ${existing?.priority===x||(!existing&&x==='Normal')?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
@@ -5426,8 +5526,8 @@ function openCaseFormMarkup(existing){
 }
 async function saveCase(id){
   if(SESSION?.role==='Viewer') return;
-  const emp=document.getElementById('case_employee'); const opt=emp?.options[emp.selectedIndex];
-  const employeeRecordId=emp?.value||''; const employeeName=opt?.dataset?.name||''; const department=opt?.dataset?.dept||'';
+  const employee=employeePickerSelected('case_employee');
+  const employeeRecordId=employee?.id||''; const employeeName=employee?.name||''; const department=employee?.department||'';
   const status=document.getElementById('case_status').value; const priority=document.getElementById('case_priority').value;
   const openedAt=document.getElementById('case_opened').value; const dueDate=document.getElementById('case_due').value||null; const closedAt=document.getElementById('case_closed').value||null;
   const subject=document.getElementById('case_subject').value.trim(); const remarks=document.getElementById('case_remarks').value.trim(); const assignedTo=document.getElementById('case_assigned').value||null;
@@ -5492,10 +5592,9 @@ async function openWorkflowATDForm(caseId){
   if(SESSION?.role==='Viewer') return;
   CASE_WORKFLOW_CONTEXT = {caseId, module:'atd'};
   openATDForm();
-  const {data,error}=await supabase.from('hr_cases').select('employee_name,department,subject').eq('id',caseId).maybeSingle();
+  const {data,error}=await supabase.from('hr_cases').select('employee_record_id,employee_name,department,subject').eq('id',caseId).maybeSingle();
   if(error||!data) return;
-  const emp=document.getElementById('f_employeeName');
-  if(emp){emp.value=data.employee_name||''; emp.dispatchEvent(new Event('change'));}
+  employeePickerSet('f_employeeName',data.employee_record_id||data.employee_name||'');
   const dept=document.getElementById('f_department'); if(dept && !dept.value) dept.value=data.department||'';
   const deduction=document.getElementById('f_deductionType'); if(deduction && !deduction.value && data.subject) deduction.value=data.subject;
 }
@@ -5592,8 +5691,15 @@ const RENDERERS = {
 document.addEventListener('click', e=>{
   const wrap=document.getElementById('notification-wrap');
   if(wrap && !wrap.contains(e.target)) closeNotificationPanel();
+  document.querySelectorAll('.employee-picker').forEach(picker=>{
+    if(!picker.contains(e.target)) employeePickerClose(picker.id.replace(/_picker$/,''));
+  });
 });
-document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeNotificationPanel(); });
+document.addEventListener('keydown', e=>{
+  if(e.key!=='Escape') return;
+  closeNotificationPanel();
+  document.querySelectorAll('.employee-picker').forEach(picker=>employeePickerClose(picker.id.replace(/_picker$/,'')));
+});
 document.getElementById('login-form').addEventListener('keydown', e=>{ if(document.getElementById('auth-error').style.display==='block') document.getElementById('auth-error').style.display='none'; });
 const ROW_ACTION_OBSERVER=new MutationObserver(()=>requestAnimationFrame(enhanceRowActionMenus));
 ['content','modal'].forEach(id=>{
@@ -5632,7 +5738,7 @@ Object.assign(window, {
   loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
   openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard,
-  renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, queueSearchRender, cancelSearchRender, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
+  renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, setTitle, shiftDate, statusBadge, switchAuthTab, toCSV,
