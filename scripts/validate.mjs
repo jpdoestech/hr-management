@@ -183,8 +183,12 @@ if(!resetSql.includes("where bucket_id = 'hr-documents'") || resetSql.includes('
   console.error('HR data reset must guard Storage cleanup without deleting storage metadata through SQL.');
   process.exit(1);
 }
-if(!resetSql.includes("to_regclass('public.' || target_table)") || !resetSql.includes('reset_hr_results')){
+if(!resetSql.includes("to_regclass('public.' || target_table)") || !resetSql.includes("'{dataResetAt}'") || resetSql.includes('create temporary table')){
   console.error('HR data reset must tolerate optional migration tables and report reset results.');
+  process.exit(1);
+}
+if(!app.includes('serverResetAt') || !app.includes('clientResetAt')){
+  console.error('Database saves must reject stale browser state after an HR data reset.');
   process.exit(1);
 }
 if(!app.includes('let DB = blankDB();') || /DB\s*=\s*seedDB\(\)/.test(app)){

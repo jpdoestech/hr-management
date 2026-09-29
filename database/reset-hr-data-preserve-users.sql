@@ -4,23 +4,19 @@
 --
 -- Run this entire file in Supabase Dashboard > SQL Editor as the project owner.
 -- The reset is migration-tolerant: optional tables that do not exist are skipped.
+-- This version creates no helper table, so Supabase will not show an RLS warning.
+--
+-- IMPORTANT: deploy the current app version and close every open HRIS browser tab
+-- before running this reset. The reset marker below prevents current clients from
+-- writing a pre-reset in-memory copy back to the database.
 --
 -- Uploaded files require separate cleanup:
 -- 1. Supabase Dashboard > Storage > hr-documents > Empty bucket.
 -- 2. For Google Drive, delete the HRIS-created module folders below the configured root.
 -- SQL must not delete directly from storage.objects because that can leave physical
--- files orphaned. The result table reports how many Supabase files still need cleanup.
+-- files orphaned. The final notice reports how many Supabase files still need cleanup.
 
 begin;
-
-create temporary table if not exists reset_hr_results (
-  table_name text primary key,
-  deleted_rows bigint not null default 0,
-  remaining_rows bigint not null default 0,
-  note text
-) on commit preserve rows;
-
-truncate table reset_hr_results;
 
 do $$
 declare
@@ -28,6 +24,7 @@ declare
   affected bigint;
   remaining bigint;
   storage_files bigint := 0;
+  reset_at text := clock_timestamp()::text;
 begin
   -- Preserve login/profile rows while removing links to deleted employee records.
   if to_regclass('public.profiles') is not null
@@ -41,6 +38,16 @@ begin
     set employee_record_id = null,
         updated_at = now()
     where employee_record_id is not null;
+  end if;
+
+  -- Stamp the preserved settings row. The app compares this marker before every
+  -- write so an already-open page cannot silently restore the deleted records.
+  if to_regclass('public.hr_settings') is not null then
+    update public.hr_settings
+    set data = jsonb_set(coalesce(data, '{}'::jsonb), '{dataResetAt}', to_jsonb(reset_at), true),
+        updated_at = now(),
+        updated_by = null
+    where id = 'singleton';
   end if;
 
   -- Dependency order matters. Each table is optional so the script also works
@@ -58,16 +65,12 @@ begin
       execute format('delete from public.%I', target_table);
       get diagnostics affected = row_count;
       execute format('select count(*) from public.%I', target_table) into remaining;
-      insert into reset_hr_results(table_name, deleted_rows, remaining_rows, note)
-      values (target_table, affected, remaining, 'Reset completed')
-      on conflict (table_name) do update
-      set deleted_rows = excluded.deleted_rows,
-          remaining_rows = excluded.remaining_rows,
-          note = excluded.note;
+      if remaining <> 0 then
+        raise exception 'Reset failed: public.% still contains % row(s)', target_table, remaining;
+      end if;
+      raise notice 'RESET OK: public.% deleted % row(s); 0 remain', target_table, affected;
     else
-      insert into reset_hr_results(table_name, note)
-      values (target_table, 'Skipped because this optional table is not installed')
-      on conflict (table_name) do update set note = excluded.note;
+      raise notice 'RESET SKIPPED: optional table public.% is not installed', target_table;
     end if;
   end loop;
 
@@ -77,29 +80,17 @@ begin
     where bucket_id = 'hr-documents';
   end if;
 
-  insert into reset_hr_results(table_name, remaining_rows, note)
-  values (
-    'storage:hr-documents',
-    storage_files,
-    case when storage_files = 0
-      then 'Bucket is empty'
-      else 'Manual cleanup required in Supabase Storage to remove physical files'
-    end
-  )
-  on conflict (table_name) do update
-  set remaining_rows = excluded.remaining_rows,
-      note = excluded.note;
+  raise notice 'RESET MARKER: %', reset_at;
+  raise notice 'STORAGE: % file(s) remain in hr-documents and require Storage cleanup', storage_files;
 end
 $$;
 
 commit;
 
--- Every installed database table should show remaining_rows = 0.
--- A nonzero storage row is a cleanup reminder and does not roll back the reset.
-select table_name, deleted_rows, remaining_rows, note
-from reset_hr_results
-order by case when table_name like 'storage:%' then 2 else 1 end, table_name;
-
--- These user/profile rows are intentionally preserved.
-select count(*) as preserved_profiles from public.profiles;
+-- A successful result means the transaction committed. Any nonzero operational
+-- table count raises an exception above and rolls the entire reset back.
+select
+  'HR operational data reset completed' as result,
+  (select count(*) from public.profiles) as preserved_profiles,
+  (select data ->> 'dataResetAt' from public.hr_settings where id = 'singleton') as reset_marker;
 

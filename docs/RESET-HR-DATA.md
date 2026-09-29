@@ -2,6 +2,8 @@
 
 Use this procedure only when you intentionally want to remove all operational HR data and start with an empty HR workspace.
 
+The current reset also writes a marker into the preserved settings row. Before saving, the application compares its marker with the database so a browser tab that was open during the reset cannot restore deleted records.
+
 The reset preserves:
 
 - Supabase Auth users
@@ -40,20 +42,22 @@ SQL cannot remove files from Google Drive.
 
 ## 4. Run the Reset SQL
 
-1. Open **Supabase Dashboard > SQL Editor**.
-2. Create a new query.
-3. Open `supabase/reset-hr-data-preserve-users.sql`.
-4. Copy the complete script into the SQL Editor.
-5. Review the preserved and deleted tables listed at the top of the script.
-6. Click **Run**.
+1. Deploy the current HRIS application version.
+2. Close every open HRIS browser tab and installed-app window.
+3. Open **Supabase Dashboard > SQL Editor**.
+4. Create a new query.
+5. Open `supabase/reset-hr-data-preserve-users.sql`.
+6. Copy the complete script into the SQL Editor.
+7. Review the preserved and deleted tables listed at the top of the script.
+8. Click **Run** and accept the destructive-operation warning.
 
-The result table identifies each deleted or skipped table. Optional tables from migrations that are not installed are skipped safely.
+The destructive-operation warning is expected because the script intentionally deletes HR data. The revised script creates no helper table, so Supabase should not warn that `reset_hr_results` needs Row Level Security. Optional tables from migrations that are not installed are skipped safely.
 
 ## 5. Verify the Reset
 
-The script returns deleted and remaining record counts. Every installed operational table should report `remaining_rows = 0`, while `preserved_profiles` should still show the number of user profiles. A nonzero `storage:hr-documents` row means the database reset succeeded but the bucket still needs to be emptied through Storage.
+The result must say `HR operational data reset completed`, retain the expected `preserved_profiles` count, and show a non-empty `reset_marker`. The Messages panel reports every deleted or skipped table and the number of files still in Supabase Storage. If an operational table is not empty, the script raises an error and rolls back instead of reporting success.
 
-Deploy the matching application update and hard-refresh the browser after resetting. Older builds automatically inserted demo records when they encountered an empty database.
+Reopen the HRIS after resetting. If an older browser tab attempts to save stale data, the current app rejects the write and asks the user to reload. Older deployments do not have this protection, which is why all HRIS tabs must be closed before the reset.
 
 Sign back in to the HRIS and confirm:
 

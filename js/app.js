@@ -122,6 +122,13 @@ async function loadDB(){
 
 async function saveDBInternal(state){
   const now=new Date().toISOString();
+  const {data:serverSettings,error:resetCheckError}=await supabase.from('hr_settings').select('data').eq('id','singleton').maybeSingle();
+  if(resetCheckError) throw resetCheckError;
+  const serverResetAt=serverSettings?.data?.dataResetAt||'';
+  const clientResetAt=state.settings?.dataResetAt||'';
+  if(serverResetAt&&serverResetAt!==clientResetAt){
+    throw new Error('The HR database was reset in another session. Reload this page before making changes.');
+  }
   for(const module of RECORD_MODULES){
     const rows=(state[module]||[]).map(r=>({module,record_id:String(r.id),data:r,updated_at:now,updated_by:SESSION?.id||null}));
     if(rows.length){
