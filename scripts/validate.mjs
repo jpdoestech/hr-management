@@ -85,6 +85,12 @@ for(const feature of ['openEmployeeColumnManager','persistUserPreferences','DB.e
     process.exit(1);
   }
 }
+for(const feature of ['employee-directory-row','employee-workspace-modal','employeeWorkspaceHeader','employeeWorkspaceNav','renderEmployeeOrigin','selectEmployeeDirectoryRow']){
+  if(!app.includes(feature)){
+    console.error(`Employee workspace interaction contract is missing: ${feature}`);
+    process.exit(1);
+  }
+}
 const onboardingMigration=fs.readFileSync(path.join(root,'supabase/phase13-onboarding.sql'),'utf8');
 const onboardingMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase13-onboarding.sql'),'utf8');
 if(onboardingMigration!==onboardingMigrationCopy || !onboardingMigration.includes("module <> 'onboardingCandidates'")){
@@ -126,7 +132,7 @@ if(/<select[^>]+id=["'`](?:u_employee|gd_employee|case_employee|lc_employee|f_em
   process.exit(1);
 }
 const professionalCss=fs.readFileSync(path.join(root,'css/professional.css'),'utf8');
-if(!professionalCss.includes('.employee-picker-options')||!professionalCss.includes('max-height:calc(100dvh - 190px)')){
+if(!professionalCss.includes('.employee-picker-options')||!professionalCss.includes('max-height:calc(100dvh - 190px)')||!professionalCss.includes('.employee-workspace-modal')){
   console.error('Employee picker or sticky table styling is missing.');
   process.exit(1);
 }

@@ -1484,6 +1484,7 @@ function iSearch(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" 
 function iDownload(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>`;}
 function iColumns(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg>`;}
 function iBell(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 9a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9z"/><path d="M10 21h4"/></svg>`;}
+function iArrowLeft(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>`;}
 
 /* ---------------- audit / permissions ---------------- */
 function logAudit(action){
@@ -1638,7 +1639,7 @@ function openModal(html){
   const overlay=document.getElementById('overlay');
   const modal=document.getElementById('modal');
   MODAL_TRIGGER=document.activeElement instanceof HTMLElement?document.activeElement:null;
-  modal.classList.remove('case-modal');
+  modal.classList.remove('case-modal','employee-workspace-modal');
   modal.innerHTML=html;
   overlay.classList.add('on');
   overlay.setAttribute('aria-hidden','false');
@@ -2347,11 +2348,14 @@ function lifecycleRecentEvents(limit=12){
 function openEmployeeLifecycleEventForm(id){
   if(!canEdit()) return;
   const existingEmp=id?DB.employees.find(e=>e.id===id):null;
-  openModal(`
-    <div class="modal-head"><div><h3>Record Employment Lifecycle Event</h3><div class="small">Add a verified employment milestone or status event to the employee timeline.</div></div><button onclick="closeModal()">&times;</button></div>
+  if(id&&!existingEmp){toast('Employee record could not be found.',true);return;}
+  if(existingEmp) selectEmployeeDirectoryRow(existingEmp.id);
+  openEmployeeWorkspaceModal(`
+    ${existingEmp?employeeWorkspaceHeader(existingEmp,'Lifecycle Event'):`<div class="modal-head employee-workspace-head"><div><div class="employee-workspace-breadcrumb"><span>Employment Lifecycle</span><span>›</span><b>Record Event</b></div><h3>Record Employment Lifecycle Event</h3><div class="small">Add a verified employment milestone or status event.</div></div><button type="button" onclick="closeModal()" aria-label="Close lifecycle form">&times;</button></div>`}
     <div class="modal-body">
+      ${existingEmp?employeeWorkspaceNav(existingEmp,'lifecycle'):''}
       <div class="formgrid">
-        ${employeePickerHTML({id:'lc_employee',label:'Employee',selectedId:existingEmp?.id||'',required:true,full:true,onSelect:'lifecycleEmployeePreview'})}
+        ${existingEmp?`<div class="field full"><label>Employee</label><input value="${esc(employeeDisplayName(existingEmp))}" disabled><input type="hidden" id="lc_employee" value="${esc(existingEmp.id)}"></div>`:employeePickerHTML({id:'lc_employee',label:'Employee',selectedId:'',required:true,full:true,onSelect:'lifecycleEmployeePreview'})}
         <div class="field"><label>Event Type *</label><select id="lc_eventType" onchange="lifecycleEventTypeChanged()">${LIFECYCLE_EVENT_TYPES.map(x=>`<option>${esc(x)}</option>`).join('')}</select></div>
         <div class="field"><label>Effective Date *</label><input type="date" id="lc_date" value="${todayISO()}"></div>
         <div class="field" id="lc_position_wrap" style="display:none"><label>New Position</label><input id="lc_position" placeholder="e.g. HR Officer II"></div>
@@ -2359,7 +2363,7 @@ function openEmployeeLifecycleEventForm(id){
       </div>
       <div id="lc_preview" class="lifecycle-helper">Select an employee to see the current employment state.</div>
     </div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployeeLifecycleEvent()">Save Lifecycle Event</button></div>
+    ${existingEmp?employeeWorkspaceFooter(existingEmp,'Save Lifecycle Event','saveEmployeeLifecycleEvent()'):`<div class="modal-foot employee-workspace-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><div class="toolbar-spacer"></div><button class="btn btn-primary" onclick="saveEmployeeLifecycleEvent()">Save Lifecycle Event</button></div>`}
   `);
   lifecycleEventTypeChanged(); lifecycleEmployeePreview();
 }
@@ -2394,6 +2398,7 @@ async function saveEmployeeLifecycleEvent(){
   if(effectiveDate<emp.dateHired){ toast('Lifecycle event date cannot be before Date Hired.'); return; }
   if(effectiveDate>todayISO()){ toast('Lifecycle event date cannot be in the future.'); return; }
   if(eventType==='Promotion / Position Change' && !newPosition){ toast('Enter the new position for a promotion or position change.'); return; }
+  const original=JSON.parse(JSON.stringify(emp));
   const fromStatus=emp.status||''; const fromPosition=emp.position||''; const fromDepartment=emp.department||'';
   let toStatus=fromStatus; let toPosition=fromPosition;
   if(LIFECYCLE_EVENT_STATUS[eventType]) toStatus=LIFECYCLE_EVENT_STATUS[eventType];
@@ -2405,10 +2410,12 @@ async function saveEmployeeLifecycleEvent(){
     type:'Lifecycle Event',eventType,from:fromStatus,to:emp.status||fromStatus,fromPosition,toPosition,fromDepartment,toDepartment:emp.department||fromDepartment,
     effectiveDate,remarks,changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'
   });
+  if(!(await saveDB())){Object.keys(emp).forEach(key=>delete emp[key]);Object.assign(emp,original);return;}
   logAudit(`Recorded employment lifecycle event for ${employeeDisplayName(emp)}: ${eventType}`);
-  await saveDB();
-  closeModal(); renderNav();
-  if(STATE.view==='employeeLifecycle') renderEmployeeLifecycle(); else renderEmployees();
+  await closeModal(); renderNav();
+  await renderEmployeeOrigin();
+  selectEmployeeDirectoryRow(id);
+  await openEmployeeProfile(id);
   toast('Employment lifecycle event recorded.');
 }
 function renderEmployeeLifecycle(){
@@ -2759,13 +2766,13 @@ function renderEmployees(){
           <colgroup>${columns.map(c=>`<col style="width:${c.width}px">`).join('')}<col style="width:92px"></colgroup>
           <thead><tr>${columns.map(c=>`<th>${esc(c.label)}</th>`).join('')}<th class="actions-head">Actions</th></tr></thead>
           <tbody>
-            ${rows.length? rows.map(e=>`<tr>
+            ${rows.length? rows.map(e=>`<tr class="employee-directory-row ${String(STATE.employeeSelectedId||'')===String(e.id)?'selected':''}" data-employee-id="${esc(e.id)}" tabindex="0" aria-label="Open ${esc(employeeDisplayName(e))}" onclick="selectEmployeeDirectoryRow('${e.id}');openEmployeeProfile('${e.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectEmployeeDirectoryRow('${e.id}');openEmployeeProfile('${e.id}')}">
               ${columns.map(c=>`<td data-column="${esc(c.key)}">${c.cell(e)}</td>`).join('')}
-              <td><div class="rowactions">
-                <button class="iconbtn" onclick="openEmployeeProfile('${e.id}')" title="View employee profile">${iUser(14)}</button>
-                ${canEdit()? `<button class="iconbtn" onclick="openEmployeeForm('${e.id}')" title="Edit">${iEdit(14)}</button>
-                <button class="iconbtn" onclick="openTransferForEmployee('${e.id}')" title="Record Department Transfer">${iSwap(14)}</button>
-                <button class="iconbtn" onclick="openEmployeeStatusForm('${e.id}')" title="Update Employment Status">${iShield(14)}</button>
+              <td onclick="event.stopPropagation()" onkeydown="event.stopPropagation()"><div class="rowactions">
+                <button class="iconbtn" onclick="selectEmployeeDirectoryRow('${e.id}');openEmployeeProfile('${e.id}')" title="View employee profile">${iUser(14)}</button>
+                ${canEdit()? `<button class="iconbtn" onclick="selectEmployeeDirectoryRow('${e.id}');openEmployeeForm('${e.id}')" title="Edit">${iEdit(14)}</button>
+                <button class="iconbtn" onclick="selectEmployeeDirectoryRow('${e.id}');openTransferForEmployee('${e.id}')" title="Record Department Transfer">${iSwap(14)}</button>
+                <button class="iconbtn" onclick="selectEmployeeDirectoryRow('${e.id}');openEmployeeStatusForm('${e.id}')" title="Update Employment Status">${iShield(14)}</button>
                 <button class="iconbtn" onclick="deleteEmployee('${e.id}')" title="Delete">${iTrash(14)}</button>`:''}
               </div></td>
             </tr>`).join('') : `<tr><td colspan="${columns.length+1}"><div class="empty"><b>No employees found</b><span>${hasFilters?'Try adjusting the search or filters.':'Add an employee to begin building the directory.'}</span>${hasFilters?`<button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="resetEmployeeDirectoryFilters()">Reset search and filters</button>`:''}</div></td></tr>`}
@@ -2775,6 +2782,39 @@ function renderEmployees(){
     </section>
   </div>`;
   document.getElementById('content').innerHTML = html;
+}
+function openEmployeeWorkspaceModal(html){
+  openModal(html);
+  document.getElementById('modal')?.classList.add('employee-workspace-modal');
+}
+function selectEmployeeDirectoryRow(id){
+  STATE.employeeSelectedId=id;
+  document.querySelectorAll('.employee-directory-row').forEach(row=>{
+    row.classList.toggle('selected',String(row.dataset.employeeId)===String(id));
+  });
+}
+async function renderEmployeeOrigin(){
+  if(STATE.view==='operations') return renderOperationsWorkspace();
+  if(STATE.view==='employeeLifecycle') return renderEmployeeLifecycle();
+  return renderEmployees();
+}
+function employeeWorkspaceHeader(emp,section='Overview'){
+  const isOverview=section==='Overview';
+  return `<div class="modal-head employee-workspace-head"><div class="employee-workspace-heading">${!isOverview?`<button type="button" class="employee-workspace-back" title="Back to employee" aria-label="Back to ${esc(employeeDisplayName(emp))}" onclick="closeModal();openEmployeeProfile('${emp.id}')">${iArrowLeft(17)}</button>`:''}<div><div class="employee-workspace-breadcrumb"><span>Employee Information</span><span>›</span><span>${esc(employeeDisplayName(emp))}</span>${!isOverview?`<span>›</span><b>${esc(section)}</b>`:''}</div><h3>${esc(section==='Overview'?employeeDisplayName(emp):section)}</h3><div class="small">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div></div></div><button type="button" onclick="closeModal()" aria-label="Close employee workspace">&times;</button></div>`;
+}
+function employeeWorkspaceNav(emp,active='overview'){
+  if(!canEdit()) return '';
+  const actions=[
+    ['overview','Overview',iUser(14),`openEmployeeProfile('${emp.id}')`],
+    ['edit','Edit',iEdit(14),`openEmployeeForm('${emp.id}')`],
+    ['status','Status',iShield(14),`openEmployeeStatusForm('${emp.id}')`],
+    ['lifecycle','Lifecycle',iPlus(14),`openEmployeeLifecycleEventForm('${emp.id}')`],
+    ['transfer','Transfer',iSwap(14),`openTransferForEmployee('${emp.id}')`],
+  ];
+  return `<nav class="employee-workspace-nav" aria-label="Employee transactions">${actions.map(([key,label,icon,handler])=>`<button type="button" class="${key===active?'active':''}" ${key===active?'disabled aria-current="page"':`onclick="closeModal();${handler}"`}>${icon}<span>${label}</span></button>`).join('')}</nav>`;
+}
+function employeeWorkspaceFooter(emp,saveLabel,saveHandler){
+  return `<div class="modal-foot employee-workspace-foot"><button class="btn btn-ghost" onclick="closeModal();openEmployeeProfile('${emp.id}')">Back to Employee</button><div class="toolbar-spacer"></div><button class="btn btn-primary" onclick="${saveHandler}">${esc(saveLabel)}</button></div>`;
 }
 const EMP_FIELDS = [
   {key:'employeeNo', label:'Employee No.', type:'text', readonly:true},
@@ -2805,16 +2845,19 @@ const EMP_FIELDS = [
 function openEmployeeForm(id){
   const existing = id? DB.employees.find(e=>e.id===id): null;
   const formRecord=existing?{...existing,...splitEmployeeName(existing)}:null;
-  openModal(`
-    <div class="modal-head"><h3>${existing?'Edit':'Add'} Employee</h3><button onclick="closeModal()">&times;</button></div>
+  if(id&&!existing){toast('Employee record could not be found.',true);return;}
+  if(existing) selectEmployeeDirectoryRow(existing.id);
+  openEmployeeWorkspaceModal(`
+    ${existing?employeeWorkspaceHeader(existing,'Edit Employee'):`<div class="modal-head employee-workspace-head"><div><div class="employee-workspace-breadcrumb"><span>Employee Information</span><span>›</span><b>Add Employee</b></div><h3>Add Employee</h3><div class="small">Create a complete employee master record.</div></div><button type="button" onclick="closeModal()" aria-label="Close employee form">&times;</button></div>`}
     <div class="modal-body">
+      ${existing?employeeWorkspaceNav(existing,'edit'):''}
       <div class="formgrid">
         ${EMP_FIELDS.map(f=>fieldHTML(f, formRecord? formRecord[f.key] : (f.key==='employeeNo'?nextEmployeeNumber(DB.employees):f.key==='status'?'Newly Hired':f.key==='classOverride'?'Auto':''))).join('')}
       </div>
       <div class="employee-master-note"><b>Employee master data:</b> Employee No. is system-generated. PRF Number links the employee to the approved personnel request; contact and emergency information can be completed later.</div>
       <div class="computed-note">Classification is calculated automatically from Date Hired against the ${DB.settings.probationDays}-day regularization threshold (set in Settings). Choose "Auto" unless you need to manually correct a record.</div>
     </div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployee('${id||''}')">Save Employee</button></div>
+    ${existing?employeeWorkspaceFooter(existing,'Save Employee',`saveEmployee('${id}')`):`<div class="modal-foot employee-workspace-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><div class="toolbar-spacer"></div><button class="btn btn-primary" onclick="saveEmployee('')">Save Employee</button></div>`}
   `);
 }
 function normalizeEmployeeName(v){ return String(v||'').toLowerCase().replace(/\s+/g,' ').trim(); }
@@ -2901,7 +2944,9 @@ async function saveEmployee(id){
   logAudit((id?'Updated':'Added new')+' employee record: '+vals.name);
   const newStoragePaths=recordStoragePaths(rec); rememberCommittedRecordFiles(rec);
   await deleteStorageObjects([...oldStoragePaths].filter(path=>!newStoragePaths.has(path)));
-  await closeModal([...newStoragePaths]); renderNav(); renderEmployees();
+  await closeModal([...newStoragePaths]); renderNav(); await renderEmployeeOrigin();
+  selectEmployeeDirectoryRow(rec.id);
+  await openEmployeeProfile(rec.id);
   toast('Employee '+(id?'updated.':'added.'));
 }
 async function deleteEmployee(id){
@@ -2917,9 +2962,11 @@ async function deleteEmployee(id){
 function openTransferForEmployee(id){
   const emp = DB.employees.find(e=>e.id===id);
   if(!emp) return;
-  openModal(`
-    <div class="modal-head"><h3>Record Department Transfer</h3><button onclick="closeModal()">&times;</button></div>
+  selectEmployeeDirectoryRow(emp.id);
+  openEmployeeWorkspaceModal(`
+    ${employeeWorkspaceHeader(emp,'Department Transfer')}
     <div class="modal-body">
+      ${employeeWorkspaceNav(emp,'transfer')}
       <div class="formgrid">
         <div class="field full"><label>Employee</label><input value="${esc(employeeDisplayName(emp))}" disabled style="background:var(--paper);"></div>
         <div class="field"><label>Transferred From *</label><select id="tf_from">${DEPT_OPTIONS.map(d=>`<option ${d===emp.department?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
@@ -2930,10 +2977,10 @@ function openTransferForEmployee(id){
       </div>
       <div class="computed-note">This logs the move in Department Transfers and updates the employee's current department and status to "Transferred to Another Department".</div>
     </div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployeeTransfer('${id}')">Save Transfer</button></div>
+    ${employeeWorkspaceFooter(emp,'Save Transfer',`saveEmployeeTransfer('${id}')`)}
   `);
 }
-function saveEmployeeTransfer(id){
+async function saveEmployeeTransfer(id){
   const emp = DB.employees.find(e=>e.id===id);
   if(!emp) return;
   const fromDepartment = document.getElementById('tf_from').value;
@@ -2944,11 +2991,14 @@ function saveEmployeeTransfer(id){
   if(!fromDate || !toDate){ toast('Please set both the from and to dates.'); return; }
   if(fromDepartment===toDepartment){ toast('Transferred From and Transferred To must be different departments.'); return; }
   if(toDate < fromDate){ toast('The "To Date" cannot be before the "From Date".'); return; }
-  DB.transfers.push({id:uid(), employeeName:emp.name, fromDepartment, fromDate, toDepartment, toDate, remarks});
+  const transfer={id:uid(), employeeName:emp.name, fromDepartment, fromDate, toDepartment, toDate, remarks};
+  const original={department:emp.department,status:emp.status};
+  DB.transfers.push(transfer);
   emp.department = toDepartment;
   emp.status = 'Transferred to Another Department';
+  if(!(await saveDB())){DB.transfers=DB.transfers.filter(row=>row!==transfer);emp.department=original.department;emp.status=original.status;return;}
   logAudit(`Transferred ${employeeDisplayName(emp)} from ${fromDepartment} to ${toDepartment}`);
-  saveDB(); closeModal(); renderNav(); renderEmployees();
+  await closeModal(); renderNav(); await renderEmployeeOrigin(); await openEmployeeProfile(id);
   toast('Transfer recorded.');
 }
 function employeeCompleteness(emp){
@@ -2971,9 +3021,11 @@ function employeeTenureText(emp){
 function openEmployeeStatusForm(id){
   if(!canEdit()) return;
   const emp=DB.employees.find(e=>e.id===id); if(!emp) return;
-  openModal(`
-    <div class="modal-head"><div><h3>Update Employment Status</h3><div class="small">${esc(emp.employeeNo||'—')} · ${esc(employeeDisplayName(emp))}</div></div><button onclick="closeModal()">&times;</button></div>
+  selectEmployeeDirectoryRow(emp.id);
+  openEmployeeWorkspaceModal(`
+    ${employeeWorkspaceHeader(emp,'Employment Status')}
     <div class="modal-body">
+      ${employeeWorkspaceNav(emp,'status')}
       <div class="formgrid">
         <div class="field"><label>Current Status</label><input value="${esc(emp.status||'—')}" disabled style="background:var(--paper);"></div>
         <div class="field"><label>New Status *</label><select id="es_status">${EMP_STATUS.map(s=>`<option value="${esc(s)}" ${s===emp.status?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
@@ -2982,7 +3034,7 @@ function openEmployeeStatusForm(id){
       </div>
       <div class="computed-note">This update becomes part of the employee's employment history. Department transfers should continue to be recorded through the Transfer workflow.</div>
     </div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployeeStatus('${id}')">Save Status</button></div>
+    ${employeeWorkspaceFooter(emp,'Save Status',`saveEmployeeStatus('${id}')`)}
   `);
 }
 async function saveEmployeeStatus(id){
@@ -2995,15 +3047,17 @@ async function saveEmployeeStatus(id){
   if(effectiveDate<emp.dateHired){ toast('Status Effective Date cannot be before Date Hired.'); return; }
   if(status===emp.status && effectiveDate===(emp.statusDate||'')){ toast('No status change was made.'); return; }
   const from=emp.status||'';
+  const original={status:emp.status,statusDate:emp.statusDate,employmentHistory:JSON.parse(JSON.stringify(emp.employmentHistory||[]))};
   emp.status=status;
   emp.statusDate=effectiveDate;
   if(!Array.isArray(emp.employmentHistory)) emp.employmentHistory=[];
   emp.employmentHistory.push({type:'Employment Status',from,to:status,effectiveDate,remarks,changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
+  if(!(await saveDB())){emp.status=original.status;emp.statusDate=original.statusDate;emp.employmentHistory=original.employmentHistory;return;}
   logAudit(`Updated employment status for ${employeeDisplayName(emp)}: ${from||'—'} → ${status}`);
-  await saveDB();
-  closeModal();
+  await closeModal();
   renderNav();
-  renderEmployees();
+  await renderEmployeeOrigin();
+  await openEmployeeProfile(id);
   toast('Employment status updated.');
 }
 
@@ -3022,6 +3076,7 @@ function exportEmployeesCSV(){
 async function openEmployeeProfile(id){
   const emp=DB.employees.find(e=>e.id===id);
   if(!emp){ toast('Employee record could not be found.',true); return; }
+  selectEmployeeDirectoryRow(emp.id);
   const nameKey=normalizeEmployeeName(emp.name);
   const sameName=(rows)=>rows.filter(r=>normalizeEmployeeName(r.employeeName||r.name)===nameKey);
   const leaves=sameName(DB.leaves), discipline=sameName(DB.disciplinary), cvr=sameName(DB.cvr), incidents=sameName(DB.incidents), nte=sameName(DB.nte), memos=sameName(DB.memos), nod=sameName(DB.nod), atd=sameName(DB.atd), transfers=sameName(DB.transfers);
@@ -3046,8 +3101,9 @@ async function openEmployeeProfile(id){
     ...cases.map(r=>({date:r.opened_at,type:'HR Case',title:r.case_number+' · '+(r.subject||'HR Case'),meta:r.status||''}))
   ].filter(x=>x.date).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,14);
   const statusMap=EMP_STATUS_MAP;
-  openModal(`<div class="modal-head"><div><h3>Employee 360 Profile</h3><div class="small">${esc(emp.id)}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body">
-    <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(employeeDisplayName(emp))}</div><div class="profile-sub">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div><div class="small" style="margin-top:6px;">${esc(employeeTenureText(emp))}</div></div><div class="profile-actions">${canEdit()?`<div class="employee-quick-actions"><button class="btn btn-ghost btn-sm" onclick="closeModal(); openEmployeeForm('${emp.id}')">${iEdit(13)} Edit</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeStatusForm('${emp.id}')">${iShield(13)} Status</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeLifecycleEventForm('${emp.id}')">${iPlus(13)} Lifecycle</button><button class="btn btn-ghost btn-sm" onclick="openTransferForEmployee('${emp.id}')">${iSwap(13)} Transfer</button><button class="btn btn-brass btn-sm" onclick="openEmployeeOperation('cases','${emp.id}')">${iShield(13)} New Case</button></div>`:''}</div></div>
+  openEmployeeWorkspaceModal(`${employeeWorkspaceHeader(emp,'Overview')}<div class="modal-body">
+    ${employeeWorkspaceNav(emp,'overview')}
+    <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(employeeDisplayName(emp))}</div><div class="profile-sub">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div><div class="small" style="margin-top:6px;">${esc(employeeTenureText(emp))}</div></div><div class="profile-actions">${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="openEmployeeOperation('cases','${emp.id}')">${iShield(13)} New HR Case</button>`:''}</div></div>
     <div class="employee-completeness"><div style="min-width:0;"><div style="font-size:11px;font-weight:700;color:var(--ink);">Master Data Completion</div><div style="font-size:10px;color:var(--slate);">${employeeCompleteness(emp)}% of standard employee fields completed</div></div><div class="bar"><div class="fill" style="width:${employeeCompleteness(emp)}%;"></div></div><div class="pct">${employeeCompleteness(emp)}%</div></div>
     <div class="profile-kpis">
       <div class="profile-kpi"><div class="k">HR Cases</div><div class="v">${cases.length}</div><div class="s">Case history</div></div>
@@ -3099,8 +3155,7 @@ async function openEmployeeProfile(id){
     <div class="panel" style="margin-top:14px;"><div class="dashboard-panel-head"><div><h3>HR Case History</h3><div class="desc">Cases currently associated with this employee.</div></div></div>
       ${cases.length?`<div class="profile-list">${cases.slice(0,8).map(c=>`<div class="profile-list-row"><div class="main"><div class="title">${esc(c.case_number)} · ${esc(c.subject||'HR Case')}</div><div class="meta">Opened ${fmtDate(c.opened_at)} · Updated ${fmtDate(String(c.updated_at).slice(0,10))}</div></div><div class="right">${statusBadge(c.status,CASE_STATUS_MAP)}<div style="margin-top:5px;"><button class="btn btn-ghost btn-sm" onclick="openCaseDetails('${c.id}')">Open</button></div></div></div>`).join('')}</div>`:'<div class="empty"><b>No HR cases</b>No central case file is currently associated with this employee.</div>'}
     </div>
-  </div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>`);
-  document.getElementById('modal').classList.add('case-modal');
+  </div><div class="modal-foot employee-workspace-foot"><span class="small">Selected employee: ${esc(employeeDisplayName(emp))}</span><div class="toolbar-spacer"></div><button class="btn btn-ghost" onclick="closeModal()">Back to Directory</button></div>`);
 }
 
 /* ================================================================
@@ -6122,7 +6177,7 @@ Object.assign(window, {
   loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
   openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard,
-  renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, openEmployeeColumnManager, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
+  renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, setTitle, shiftDate, statusBadge, switchAuthTab, toCSV,
