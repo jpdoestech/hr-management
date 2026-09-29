@@ -114,6 +114,16 @@ if(!/header:'Remarks',key:'remarks'/.test(app) || !/key:'remarks', label:'Remark
   console.error('Employee import remarks must persist in the editable employee master record.');
   process.exit(1);
 }
+for(const feature of ['employeeBranchLocations','employeeAllowanceTypes','Branch Reporting','Daily Rate','Allowance Types (one per line)','employeeAllowanceFieldsHTML','employeeAllowanceTotal','Allowance - ${name}']){
+  if(!app.includes(feature)){
+    console.error(`Employee assignment or compensation contract is missing: ${feature}`);
+    process.exit(1);
+  }
+}
+if(!/header:'Branch Reporting',key:'branchReporting',required:true/.test(app) || !/key:'branchReporting', label:'Branch Reporting'[^\n]*required:true/.test(app)){
+  console.error('Branch Reporting must be required for employee forms and imports.');
+  process.exit(1);
+}
 if(!html.includes('js/vendor/xlsx.full.min.js?v=0.20.3')){
   console.error('Pinned local SheetJS browser build is missing.');
   process.exit(1);

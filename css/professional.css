@@ -809,6 +809,11 @@ body{background:var(--page);color:var(--text);}
 .employee-form-grid .field input,.employee-form-grid .field select,.employee-form-grid .field textarea{min-width:0;height:38px;padding:7px 10px;border-radius:7px;font-size:11px;}
 .employee-form-grid .field textarea{height:auto;min-height:64px;}
 .employee-form-grid .field input[readonly]{background:#F5F6F8;color:#536075;font-weight:700;}
+.money-input{display:flex;align-items:center;height:38px;overflow:hidden;border:1px solid var(--border);border-radius:7px;background:#fff;}
+.money-input:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px rgba(91,72,177,.09);}
+.money-input>span{display:flex;align-items:center;align-self:stretch;padding:0 9px;border-right:1px solid var(--border);background:#F6F7F9;color:var(--muted);font-size:10px;font-weight:700;}
+.money-input>input{width:100%;height:100%!important;border:0!important;border-radius:0!important;box-shadow:none!important;}
+.employee-allowance-empty{grid-column:1/-1;padding:10px 12px;border:1px dashed var(--border);border-radius:7px;background:#FAFAFC;color:var(--muted);font-size:9.5px;}
 .employee-form-guidance{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;margin-top:4px;padding:10px 12px;border-left:3px solid var(--accent);background:#F8F7FC;color:var(--muted);font-size:9.5px;line-height:1.45;}
 .employee-form-guidance b{color:var(--text);font-size:10px;}
 .employee-record-history{display:grid;gap:6px;}

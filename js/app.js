@@ -23,8 +23,19 @@ let USER_PREFERENCES = {employeeColumns:[]};
 let USER_PREFERENCES_SYNC_READY = true;
 
 function blankDB(){
-  return {employees:[],onboardingCandidates:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],lifecycleChecklists:[],serviceRequests:[],settings:{orgName:'SCPA',probationDays:180,fileStorageProvider:'supabase',googleDriveRootUrl:'',googleDriveClientId:''},audit:[],users:[]};
+  return {employees:[],onboardingCandidates:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],lifecycleChecklists:[],serviceRequests:[],settings:{orgName:'SCPA',probationDays:180,fileStorageProvider:'supabase',googleDriveRootUrl:'',googleDriveClientId:'',branchLocations:['Main Office'],allowanceTypes:[]},audit:[],users:[]};
 }
+function uniqueSettingNames(values){
+  const seen=new Set();
+  return (Array.isArray(values)?values:[]).map(value=>String(value||'').trim()).filter(value=>{
+    const key=value.toLowerCase();if(!key||seen.has(key))return false;seen.add(key);return true;
+  });
+}
+function employeeBranchLocations(){
+  const configured=uniqueSettingNames(DB.settings?.branchLocations);
+  return configured.length?configured:['Main Office'];
+}
+function employeeAllowanceTypes(){return uniqueSettingNames(DB.settings?.allowanceTypes);}
 
 function isMissingSelfServiceTable(error){
   return ['42P01','PGRST205','PGRST204'].includes(error?.code) || /hr_service_requests/i.test(error?.message||'')&&/not find|does not exist|schema cache/i.test(error?.message||'');
@@ -470,7 +481,7 @@ function seedDB(){
   ];
   return {
     users, employees, onboardingCandidates:[], leaves, disciplinary, nte, memos, nod, oncall, transfers, offenseCatalog, cvr, incidents, prf, evaluations, atd, lifecycleChecklists:[],
-    settings:{orgName:'SCPA', probationDays:180},
+    settings:{orgName:'SCPA', probationDays:180, branchLocations:['Main Office'], allowanceTypes:[]},
     audit:[{ts:new Date().toISOString(), user:'System', action:'Seeded initial demo data'}]
   };
 }
@@ -485,7 +496,9 @@ function normalizeEmployeeMasterData(){
   (DB.employees||[]).forEach(e=>{
     if(!e.employeeNo || used.has(String(e.employeeNo).toUpperCase())){ e.employeeNo=nextEmployeeNumber(DB.employees.filter(x=>x!==e && x.employeeNo)); changed=true; }
     used.add(String(e.employeeNo).toUpperCase());
-    ['birthDate','civilStatus','mobileNumber','personalEmail','address','remarks','tin','sssNumber','philHealthNumber','pagIbigNumber','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'].forEach(k=>{ if(e[k]===undefined){ e[k]=''; changed=true; } });
+    ['birthDate','civilStatus','mobileNumber','personalEmail','address','remarks','branchReporting','tin','sssNumber','philHealthNumber','pagIbigNumber','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'].forEach(k=>{ if(e[k]===undefined){ e[k]=''; changed=true; } });
+    if(e.dailyRate===undefined){e.dailyRate='';changed=true;}
+    if(!e.allowances||typeof e.allowances!=='object'||Array.isArray(e.allowances)){e.allowances={};changed=true;}
     const nameParts=splitEmployeeName(e);
     ['lastName','firstName','middleName'].forEach(key=>{if(e[key]===undefined){e[key]=nameParts[key]||'';changed=true;}});
     if(!Array.isArray(e.employmentHistory)){
@@ -501,7 +514,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = blankDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', checklistSearch:'', checklistType:'', checklistStatus:'Active', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', tablePages:{}, tablePageSizes:{} };
+let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeBranchFilter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', checklistSearch:'', checklistType:'', checklistStatus:'Active', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', tablePages:{}, tablePageSizes:{} };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
@@ -583,7 +596,7 @@ async function bootAuthenticated(user){
     // An empty database is a valid production state, including after an
     // administrator performs the user-preserving reset.
     DB=state;
-    if(!DB.audit) DB.audit=[]; if(!DB.onboardingCandidates) DB.onboardingCandidates=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; DB.prf.forEach(p=>{if(!p.status)p.status='Draft';}); if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; if(!DB.workflowTasks) DB.workflowTasks=[]; if(!DB.automationRuns) DB.automationRuns=[]; if(!DB.documents) DB.documents=[]; if(!DB.lifecycleChecklists) DB.lifecycleChecklists=[]; if(!DB.serviceRequests) DB.serviceRequests=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];}); if(!DB.settings) DB.settings={orgName:'SCPA',probationDays:180};
+    if(!DB.audit) DB.audit=[]; if(!DB.onboardingCandidates) DB.onboardingCandidates=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; DB.prf.forEach(p=>{if(!p.status)p.status='Draft';}); if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; if(!DB.workflowTasks) DB.workflowTasks=[]; if(!DB.automationRuns) DB.automationRuns=[]; if(!DB.documents) DB.documents=[]; if(!DB.lifecycleChecklists) DB.lifecycleChecklists=[]; if(!DB.serviceRequests) DB.serviceRequests=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];}); if(!DB.settings) DB.settings={orgName:'SCPA',probationDays:180}; DB.settings.branchLocations=uniqueSettingNames(DB.settings.branchLocations); if(!DB.settings.branchLocations.length)DB.settings.branchLocations=['Main Office']; DB.settings.allowanceTypes=uniqueSettingNames(DB.settings.allowanceTypes);
     const employeeMasterChanged=isHRRole()?normalizeEmployeeMasterData():false;
     DB_SNAPSHOT=JSON.parse(JSON.stringify(DB));
     if(employeeMasterChanged) await saveDB();
@@ -2047,7 +2060,8 @@ function fieldHTML(f, val){
       </div>`;
   }
   const formatAttrs=f.format?`inputmode="numeric" maxlength="${f.format==='sss'?13:f.format==='philHealth'?15:f.format==='pagIbig'?14:15}" oninput="formatGovernmentIdInput(this,'${f.format}')"`:'';
-  return `<div class="field ${f.full?'full':''}"><label>${f.label}${f.required?' *':''}</label><input type="${f.type}" id="f_${f.key}" value="${esc(f.format?formatGovernmentId(f.format,v):v)}" ${f.required?'required':''} ${f.readonly?'readonly':''} ${formatAttrs}></div>`;
+  const numericAttrs=f.type==='number'?`${f.min!=null?`min="${f.min}"`:''} ${f.step!=null?`step="${f.step}"`:''}`:'';
+  return `<div class="field ${f.full?'full':''}"><label>${f.label}${f.required?' *':''}</label><input type="${f.type}" id="f_${f.key}" value="${esc(f.format?formatGovernmentId(f.format,v):v)}" ${f.required?'required':''} ${f.readonly?'readonly':''} ${formatAttrs} ${numericAttrs}></div>`;
 }
 function readFields(fields){
   const out={};
@@ -2812,15 +2826,21 @@ function openOnboardingDetails(id){
 function openOnboardingHire(id){
   const candidate=DB.onboardingCandidates.find(row=>row.id===id);if(!candidate)return;
   const blockers=onboardingHireBlockers(candidate);
-  openModal(`<div class="modal-head"><div><h3>Convert to Employee</h3><div class="small">${esc(candidateDisplayName(candidate))}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="onboarding-convert-summary"><div><span>Employee No.</span><b>${esc(nextEmployeeNumber(DB.employees))}</b></div><div><span>PRF Number</span><b>${esc(candidate.prfNumber||'—')}</b></div><div><span>Position</span><b>${esc(candidate.positionApplied||'—')}</b></div><div><span>Start Date</span><b>${fmtDate(candidate.proposedStartDate)}</b></div></div>${blockers.length?`<div class="notice"><b>Not ready to convert.</b> Complete: ${esc(blockers.join(', '))}.</div>`:`<div class="notice notice-soft"><b>Ready:</b> This creates an active employee master record and preserves this applicant history.</div>`}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ghost" onclick="openOnboardingForm('${candidate.id}')">Edit Applicant</button><button class="btn btn-primary" data-confirm-change="true" ${blockers.length?'disabled':''} onclick="convertOnboardingCandidate('${candidate.id}')">Create Employee</button></div>`);
+  openModal(`<div class="modal-head"><div><h3>Convert to Employee</h3><div class="small">${esc(candidateDisplayName(candidate))}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="onboarding-convert-summary"><div><span>Employee No.</span><b>${esc(nextEmployeeNumber(DB.employees))}</b></div><div><span>PRF Number</span><b>${esc(candidate.prfNumber||'—')}</b></div><div><span>Position</span><b>${esc(candidate.positionApplied||'—')}</b></div><div><span>Start Date</span><b>${fmtDate(candidate.proposedStartDate)}</b></div></div><section class="onboarding-form-section"><div class="onboarding-form-heading"><h4>Assignment &amp; Compensation</h4><p>Set the employee's reporting branch before activation.</p></div><div class="formgrid"><div class="field"><label>Branch Reporting *</label><select id="oh_branch"><option value="">Select branch</option>${employeeBranchLocations().map(branch=>`<option value="${esc(branch)}">${esc(branch)}</option>`).join('')}</select></div><div class="field"><label>Daily Rate</label><div class="money-input"><span>₱</span><input id="oh_daily_rate" type="number" min="0" step="0.01"></div></div>${employeeAllowanceFieldsHTML(null)}</div></section>${blockers.length?`<div class="notice"><b>Not ready to convert.</b> Complete: ${esc(blockers.join(', '))}.</div>`:`<div class="notice notice-soft"><b>Ready:</b> This creates an active employee master record and preserves this applicant history.</div>`}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ghost" onclick="openOnboardingForm('${candidate.id}')">Edit Applicant</button><button class="btn btn-primary" data-confirm-change="true" ${blockers.length?'disabled':''} onclick="convertOnboardingCandidate('${candidate.id}')">Create Employee</button></div>`);
 }
 async function convertOnboardingCandidate(id){
   const candidate=DB.onboardingCandidates.find(row=>row.id===id);if(!candidate)return;
   const blockers=onboardingHireBlockers(candidate);if(blockers.length){toast('Complete hiring requirements before conversion: '+blockers.join(', '),true);return;}
   if(candidate.employeeRecordId||DB.employees.some(employee=>employee.sourceCandidateId===candidate.id)){toast('This applicant has already been converted.',true);return;}
+  const branchReporting=document.getElementById('oh_branch')?.value||'';
+  const dailyRateRaw=document.getElementById('oh_daily_rate')?.value.trim()||'';
+  const allowances=readEmployeeAllowances();
+  if(!branchReporting){toast('Select the employee Branch Reporting location.',true);return;}
+  if(dailyRateRaw!==''&&(!Number.isFinite(Number(dailyRateRaw))||Number(dailyRateRaw)<0)){toast('Daily Rate must be a non-negative amount.',true);return;}
+  if(Object.values(allowances).some(amount=>!Number.isFinite(amount)||amount<0)){toast('Allowance amounts must be non-negative numbers.',true);return;}
   const createdAt=new Date().toISOString();
   const createdByName=SESSION?.fullName||'System';
-  const employee={id:uid(),employeeNo:nextEmployeeNumber(DB.employees),prfNumber:candidate.prfNumber,lastName:candidate.lastName,firstName:candidate.firstName,middleName:candidate.middleName,name:formatEmployeeName(candidate),position:candidate.positionApplied,department:candidate.department,dateHired:candidate.proposedStartDate,birthDate:candidate.birthDate,gender:candidate.gender,civilStatus:candidate.civilStatus||'',status:'Newly Hired',statusDate:candidate.proposedStartDate,mobileNumber:candidate.mobileNumber||'',personalEmail:candidate.personalEmail||'',address:candidate.address||'',tin:candidate.tin||'',sssNumber:candidate.sssNumber||'',philHealthNumber:candidate.philHealthNumber||'',pagIbigNumber:candidate.pagIbigNumber||'',emergencyContactName:'',emergencyContactRelationship:'',emergencyContactPhone:'',classOverride:'Auto',sourceCandidateId:candidate.id,createdAt,createdBy:SESSION?.id||null,createdByName,updatedAt:createdAt,updatedBy:SESSION?.id||null,updatedByName:createdByName,recordHistory:[{action:'Created',at:createdAt,by:createdByName,byId:SESSION?.id||null,detail:'Converted from Onboarding & Applicants'}],employmentHistory:[{type:'Employment Status',from:'Applicant',to:'Newly Hired',effectiveDate:candidate.proposedStartDate,remarks:'Converted from Onboarding & Applicants',changedAt:createdAt,changedBy:createdByName}]};
+  const employee={id:uid(),employeeNo:nextEmployeeNumber(DB.employees),prfNumber:candidate.prfNumber,lastName:candidate.lastName,firstName:candidate.firstName,middleName:candidate.middleName,name:formatEmployeeName(candidate),position:candidate.positionApplied,department:candidate.department,branchReporting,dailyRate:dailyRateRaw===''?'':Math.round(Number(dailyRateRaw)*100)/100,allowances,dateHired:candidate.proposedStartDate,birthDate:candidate.birthDate,gender:candidate.gender,civilStatus:candidate.civilStatus||'',status:'Newly Hired',statusDate:candidate.proposedStartDate,mobileNumber:candidate.mobileNumber||'',personalEmail:candidate.personalEmail||'',address:candidate.address||'',tin:candidate.tin||'',sssNumber:candidate.sssNumber||'',philHealthNumber:candidate.philHealthNumber||'',pagIbigNumber:candidate.pagIbigNumber||'',emergencyContactName:'',emergencyContactRelationship:'',emergencyContactPhone:'',classOverride:'Auto',sourceCandidateId:candidate.id,createdAt,createdBy:SESSION?.id||null,createdByName,updatedAt:createdAt,updatedBy:SESSION?.id||null,updatedByName:createdByName,recordHistory:[{action:'Created',at:createdAt,by:createdByName,byId:SESSION?.id||null,detail:'Converted from Onboarding & Applicants'}],employmentHistory:[{type:'Employment Status',from:'Applicant',to:'Newly Hired',effectiveDate:candidate.proposedStartDate,remarks:'Converted from Onboarding & Applicants',changedAt:createdAt,changedBy:createdByName}]};
   const original=JSON.parse(JSON.stringify(candidate));
   DB.employees.push(employee);Object.assign(candidate,{stage:'Hired',employeeRecordId:employee.id,hiredAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
   if(!(await saveDB())){DB.employees=DB.employees.filter(row=>row!==employee);Object.keys(candidate).forEach(key=>delete candidate[key]);Object.assign(candidate,original);return;}
@@ -2836,6 +2856,7 @@ function resetEmployeeDirectoryFilters(){
   cancelSearchRender('employeeSearch');
   STATE.employeeSearch='';
   STATE.employeeDepartmentFilter='';
+  STATE.employeeBranchFilter='';
   STATE.employeeStatusFilter='';
   STATE.employeeClassFilter='';
   renderEmployees();
@@ -2847,6 +2868,7 @@ const EMPLOYEE_COLUMN_DEFS = [
   {key:'name',label:'Name',locked:true,default:true,width:184,cell:e=>`<b>${esc(employeeDisplayName(e)||'—')}</b>`},
   {key:'position',label:'Position',default:true,width:172,cell:e=>esc(e.position||'—')},
   {key:'department',label:'Department',default:true,width:124,cell:e=>esc(e.department||'—')},
+  {key:'branchReporting',label:'Branch Reporting',default:true,width:150,cell:e=>esc(e.branchReporting||'—')},
   {key:'dateHired',label:'Date Hired',default:true,width:112,cell:e=>fmtDate(e.dateHired)},
   {key:'gender',label:'Gender',default:false,width:86,cell:e=>esc(e.gender||'—')},
   {key:'status',label:'Status',default:true,width:142,cell:e=>statusBadge(e.status,EMP_STATUS_MAP)},
@@ -2855,6 +2877,8 @@ const EMPLOYEE_COLUMN_DEFS = [
   {key:'personalEmail',label:'Contact Email',default:false,width:210,cell:e=>esc(e.personalEmail||'—')},
   {key:'address',label:'Home Address',default:false,width:250,cell:e=>esc(e.address||'—')},
   {key:'remarks',label:'Remarks',default:false,width:260,cell:e=>esc(e.remarks||'—')},
+  {key:'dailyRate',label:'Daily Rate',default:false,width:112,cell:e=>e.dailyRate!==''&&e.dailyRate!=null?peso(Number(e.dailyRate)||0):'—'},
+  {key:'allowances',label:'Allowances',default:false,width:210,cell:e=>employeeAllowanceSummary(e)},
   {key:'birthDate',label:'Birth Date',default:false,width:112,cell:e=>fmtDate(e.birthDate)},
   {key:'civilStatus',label:'Civil Status',default:false,width:104,cell:e=>esc(e.civilStatus||'—')},
   {key:'tin',label:'BIR TIN',default:false,width:150,cell:e=>`<span class="mono">${esc(formatGovernmentId('tin',e.tin)||'—')}</span>`},
@@ -2865,22 +2889,28 @@ const EMPLOYEE_COLUMN_DEFS = [
   {key:'emergencyContactRelationship',label:'Relationship',default:false,width:124,cell:e=>esc(e.emergencyContactRelationship||'—')},
   {key:'emergencyContactPhone',label:'Emergency Phone',default:false,width:142,cell:e=>esc(e.emergencyContactPhone||'—')},
 ];
-function defaultEmployeeColumns(){ return EMPLOYEE_COLUMN_DEFS.filter(c=>c.default||c.locked).map(c=>c.key); }
+function employeeColumnDefinitions(){
+  const allowanceNames=uniqueSettingNames([...employeeAllowanceTypes(),...DB.employees.flatMap(employee=>Object.keys(employee.allowances||{}))]);
+  return [...EMPLOYEE_COLUMN_DEFS,...allowanceNames.map(name=>({key:employeeAllowanceFieldKey(name),label:name,default:false,width:144,cell:employee=>employee.allowances?.[name]!==''&&employee.allowances?.[name]!=null?peso(employee.allowances[name]):'—'}))];
+}
+function defaultEmployeeColumns(){ return employeeColumnDefinitions().filter(c=>c.default||c.locked).map(c=>c.key); }
 function sanitizeEmployeeColumns(keys){
+  const definitions=employeeColumnDefinitions();
   const selected=new Set(Array.isArray(keys)?keys:defaultEmployeeColumns());
-  EMPLOYEE_COLUMN_DEFS.filter(c=>c.locked).forEach(c=>selected.add(c.key));
-  return EMPLOYEE_COLUMN_DEFS.filter(c=>selected.has(c.key)).map(c=>c.key);
+  definitions.filter(c=>c.locked).forEach(c=>selected.add(c.key));
+  return definitions.filter(c=>selected.has(c.key)).map(c=>c.key);
 }
 function employeeVisibleColumns(){
   const keys=sanitizeEmployeeColumns(USER_PREFERENCES.employeeColumns?.length?USER_PREFERENCES.employeeColumns:defaultEmployeeColumns());
-  return EMPLOYEE_COLUMN_DEFS.filter(c=>keys.includes(c.key));
+  return employeeColumnDefinitions().filter(c=>keys.includes(c.key));
 }
 function openEmployeeColumnManager(){
+  const definitions=employeeColumnDefinitions();
   const selected=new Set(employeeVisibleColumns().map(c=>c.key));
   openModal(`
     <div class="modal-head"><div><h3>Customize employee columns</h3><div class="small">Choose the employee data shown in your directory.</div></div><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body column-manager-body">
-      <div class="column-manager-list">${EMPLOYEE_COLUMN_DEFS.map(c=>`<label class="column-manager-option ${c.locked?'locked':''}"><input type="checkbox" data-employee-column value="${esc(c.key)}" ${selected.has(c.key)?'checked':''} ${c.locked?'disabled':''}><span><b>${esc(c.label)}</b>${c.locked?'<small>Required column</small>':'<small>Optional employee data</small>'}</span></label>`).join('')}</div>
+      <div class="column-manager-list">${definitions.map(c=>`<label class="column-manager-option ${c.locked?'locked':''}"><input type="checkbox" data-employee-column value="${esc(c.key)}" ${selected.has(c.key)?'checked':''} ${c.locked?'disabled':''}><span><b>${esc(c.label)}</b>${c.locked?'<small>Required column</small>':c.key.startsWith('allowance:')?'<small>Configured allowance</small>':'<small>Optional employee data</small>'}</span></label>`).join('')}</div>
       <div class="computed-note">Your view is saved per user. Required identity columns always remain visible.</div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" data-confirm-change="false" onclick="resetEmployeeColumnPreferences()">Reset default</button><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployeeColumnPreferences()">Save view</button></div>
@@ -2904,18 +2934,21 @@ async function resetEmployeeColumnPreferences(){
 function renderEmployees(){
   const q=(STATE.employeeSearch||'').trim().toLowerCase();
   const deptFilter = STATE.employeeDepartmentFilter||'';
+  const branchFilter = STATE.employeeBranchFilter||'';
   const statusFilter = STATE.employeeStatusFilter||'';
   const classFilter = STATE.employeeClassFilter||'';
-  const hasFilters=Boolean(q||deptFilter||statusFilter||classFilter);
+  const hasFilters=Boolean(q||deptFilter||branchFilter||statusFilter||classFilter);
   let rows = DB.employees.filter(e=>{
-    const hay=[e.employeeNo,e.prfNumber,e.name,employeeDisplayName(e),e.position,e.department,e.mobileNumber,e.personalEmail,e.address,e.remarks].map(v=>String(v||'').toLowerCase());
+    const hay=[e.employeeNo,e.prfNumber,e.name,employeeDisplayName(e),e.position,e.department,e.branchReporting,e.mobileNumber,e.personalEmail,e.address,e.remarks,...Object.keys(e.allowances||{})].map(v=>String(v||'').toLowerCase());
     const matches = !q || hay.some(v=>v.includes(q));
     const deptOk = !deptFilter || e.department===deptFilter;
+    const branchOk = !branchFilter || e.branchReporting===branchFilter;
     const statusOk = !statusFilter || e.status===statusFilter;
     const classOk = !classFilter || classify(e)===classFilter;
-    return matches && deptOk && statusOk && classOk;
+    return matches && deptOk && branchOk && statusOk && classOk;
   });
   const depts = [...new Set(DB.employees.map(e=>e.department).filter(Boolean))];
+  const branches = uniqueSettingNames([...employeeBranchLocations(),...DB.employees.map(e=>e.branchReporting)]);
   const statusOptions=[...new Set(DB.employees.map(e=>e.status).filter(Boolean))];
   const columns=employeeVisibleColumns();
   const tableMinWidth=columns.reduce((sum,c)=>sum+c.width,0)+92;
@@ -2930,6 +2963,10 @@ function renderEmployees(){
         <select aria-label="Filter employees by department" onchange="STATE.employeeDepartmentFilter=this.value; renderEmployees()">
           <option value="">Department</option>
           ${depts.map(d=>`<option value="${esc(d)}" ${deptFilter===d?'selected':''}>${esc(d)}</option>`).join('')}
+        </select>
+        <select aria-label="Filter employees by reporting branch" onchange="STATE.employeeBranchFilter=this.value; renderEmployees()">
+          <option value="">Branch</option>
+          ${branches.map(branch=>`<option value="${esc(branch)}" ${branchFilter===branch?'selected':''}>${esc(branch)}</option>`).join('')}
         </select>
         <select aria-label="Filter employees by employment status" onchange="STATE.employeeStatusFilter=this.value; renderEmployees()">
           <option value="">Status</option>
@@ -3011,6 +3048,8 @@ const EMP_FIELDS = [
   {key:'middleName', label:'Middle Name', type:'text'},
   {key:'position', label:'Position', type:'text', required:true},
   {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
+  {key:'branchReporting', label:'Branch Reporting', type:'select', options:[], required:true},
+  {key:'dailyRate', label:'Daily Rate', type:'number', min:0, step:'0.01'},
   {key:'dateHired', label:'Date Hired', type:'date', required:true},
   {key:'birthDate', label:'Birth Date', type:'date'},
   {key:'gender', label:'Gender', type:'select', options:['Male','Female'], required:true},
@@ -3038,6 +3077,8 @@ const EMPLOYEE_IMPORT_COLUMNS = [
   {header:'Middle Name',key:'middleName'},
   {header:'Position',key:'position',required:true},
   {header:'Department',key:'department',required:true,options:DEPT_OPTIONS},
+  {header:'Branch Reporting',key:'branchReporting',required:true,dynamicOptions:'branches'},
+  {header:'Daily Rate',key:'dailyRate',type:'money'},
   {header:'Date Hired',key:'dateHired',required:true,type:'date'},
   {header:'Birth Date',key:'birthDate',type:'date'},
   {header:'Gender',key:'gender',required:true,options:['Male','Female']},
@@ -3057,6 +3098,21 @@ const EMPLOYEE_IMPORT_COLUMNS = [
   {header:'PhilHealth PIN',key:'philHealthNumber'},
   {header:'Pag-IBIG MID',key:'pagIbigNumber'},
 ];
+function employeeAllowanceFieldKey(name){return `allowance:${name}`;}
+function employeeImportColumns(){
+  const base=EMPLOYEE_IMPORT_COLUMNS.map(column=>column.dynamicOptions==='branches'?{...column,options:employeeBranchLocations()}:column);
+  return [...base,...employeeAllowanceTypes().map(name=>({header:`Allowance - ${name}`,key:employeeAllowanceFieldKey(name),type:'money',note:'Optional amount; enter zero or leave blank when not applicable.'}))];
+}
+function employeeAllowanceEntries(employee){
+  const allowances=employee?.allowances&&typeof employee.allowances==='object'?employee.allowances:{};
+  const names=uniqueSettingNames([...employeeAllowanceTypes(),...Object.keys(allowances)]);
+  return names.map(name=>({name,amount:Number(allowances[name])||0})).filter(item=>item.amount!==0);
+}
+function employeeAllowanceTotal(employee){return employeeAllowanceEntries(employee).reduce((sum,item)=>sum+item.amount,0);}
+function employeeAllowanceSummary(employee){
+  const entries=employeeAllowanceEntries(employee);
+  return entries.length?`${peso(employeeAllowanceTotal(employee))} · ${entries.length} ${entries.length===1?'type':'types'}`:'—';
+}
 const EMPLOYEE_IMPORT_HEADER_ALIASES = {
   employeenumber:'employeeNo',employeeno:'employeeNo',prf:'prfNumber',prfnumber:'prfNumber',
   lastname:'lastName',firstname:'firstName',middlename:'middleName',datehired:'dateHired',birthdate:'birthDate',
@@ -3083,7 +3139,7 @@ function requireEmployeeImportAdmin(){
 function normalizeSpreadsheetHeader(value){return String(value||'').toLowerCase().replace(/[^a-z0-9]/g,'');}
 function employeeImportKey(value){
   const normalized=normalizeSpreadsheetHeader(value);
-  return EMPLOYEE_IMPORT_HEADER_ALIASES[normalized]||EMPLOYEE_IMPORT_COLUMNS.find(column=>normalizeSpreadsheetHeader(column.header)===normalized)?.key||'';
+  return EMPLOYEE_IMPORT_HEADER_ALIASES[normalized]||employeeImportColumns().find(column=>normalizeSpreadsheetHeader(column.header)===normalized)?.key||'';
 }
 function spreadsheetISODate(value){
   if(value==null||value==='') return '';
@@ -3125,12 +3181,21 @@ function employeeImportPhoneError(value,label){
 }
 function validateEmployeeImportRow(values,rowNumber,accepted){
   const errors=[];const warnings=[];const vals={};
-  EMPLOYEE_IMPORT_COLUMNS.forEach(column=>{
+  const columns=employeeImportColumns();
+  columns.forEach(column=>{
     let value=values[column.key];
     if(column.type==='date'){
       const parsed=spreadsheetISODate(value);
       if(parsed===null) errors.push(`${column.header} is not a valid date`);
       value=parsed||'';
+    } else if(column.type==='money'){
+      const text=String(value??'').trim();
+      if(!text)value='';
+      else {
+        const amount=Number(text.replace(/[₱,\s]/g,''));
+        if(!Number.isFinite(amount)||amount<0)errors.push(`${column.header} must be a non-negative amount`);
+        value=Number.isFinite(amount)&&amount>=0?Math.round(amount*100)/100:'';
+      }
     } else value=String(value??'').trim();
     if(!value&&column.default) value=column.default;
     if(value&&column.options){
@@ -3140,7 +3205,7 @@ function validateEmployeeImportRow(values,rowNumber,accepted){
     }
     vals[column.key]=value;
   });
-  EMPLOYEE_IMPORT_COLUMNS.filter(column=>column.required).forEach(column=>{if(!vals[column.key])errors.push(`${column.header} is required`);});
+  columns.filter(column=>column.required).forEach(column=>{if(!vals[column.key])errors.push(`${column.header} is required`);});
   if(vals.dateHired&&vals.dateHired>todayISO()) errors.push('Date Hired cannot be in the future');
   if(vals.birthDate&&vals.birthDate>todayISO()) errors.push('Birth Date cannot be in the future');
   if(vals.statusDate&&vals.dateHired&&vals.statusDate<vals.dateHired) errors.push('Status Effective Date cannot be before Date Hired');
@@ -3151,6 +3216,12 @@ function validateEmployeeImportRow(values,rowNumber,accepted){
   const duplicateNumber=[...DB.employees,...accepted].find(employee=>String(employee.employeeNo||'').toUpperCase()===String(vals.employeeNo).toUpperCase());
   if(duplicateNumber) errors.push(`Employee No. ${vals.employeeNo} already exists`);
   vals.name=formatEmployeeName(vals);
+  vals.allowances={};
+  employeeAllowanceTypes().forEach(name=>{
+    const key=employeeAllowanceFieldKey(name);
+    if(vals[key]!==''&&vals[key]!=null)vals.allowances[name]=Number(vals[key])||0;
+    delete vals[key];
+  });
   if(vals.name){
     const matches=[...DB.employees,...accepted].map(employee=>({employee,score:employeeNameSimilarity(vals,employee)})).filter(match=>match.score>=0.86).sort((a,b)=>b.score-a.score);
     if(matches.length) warnings.push(`Possible duplicate: ${employeeDisplayName(matches[0].employee)} (${Math.round(matches[0].score*100)}% name match)`);
@@ -3165,8 +3236,9 @@ function parseEmployeeImportWorksheet(workbook,fileName){
   const keys=matrix[0].map(employeeImportKey);
   const fileErrors=[];
   const duplicateHeaders=keys.filter((key,index)=>key&&keys.indexOf(key)!==index);
-  if(duplicateHeaders.length) fileErrors.push(`Duplicate column${new Set(duplicateHeaders).size===1?'':'s'}: ${[...new Set(duplicateHeaders)].map(key=>EMPLOYEE_IMPORT_COLUMNS.find(column=>column.key===key)?.header||key).join(', ')}`);
-  EMPLOYEE_IMPORT_COLUMNS.filter(column=>column.required).forEach(column=>{if(!keys.includes(column.key))fileErrors.push(`Missing required column: ${column.header}`);});
+  const columns=employeeImportColumns();
+  if(duplicateHeaders.length) fileErrors.push(`Duplicate column${new Set(duplicateHeaders).size===1?'':'s'}: ${[...new Set(duplicateHeaders)].map(key=>columns.find(column=>column.key===key)?.header||key).join(', ')}`);
+  columns.filter(column=>column.required).forEach(column=>{if(!keys.includes(column.key))fileErrors.push(`Missing required column: ${column.header}`);});
   const accepted=[];const rows=[];
   matrix.slice(1).forEach((cells,index)=>{
     if(!cells.some(cell=>String(cell??'').trim())) return;
@@ -3201,7 +3273,7 @@ function renderEmployeeImportPreview(){
   if(!EMPLOYEE_IMPORT_PREVIEW)return;
   const summary=employeeImportSummary(EMPLOYEE_IMPORT_PREVIEW);
   const issues=[...EMPLOYEE_IMPORT_PREVIEW.fileErrors];
-  openEmployeeWorkspaceModal(`<div class="modal-head"><div><h3>Review Employee Import</h3><div class="small">${esc(EMPLOYEE_IMPORT_PREVIEW.fileName)} · ${summary.total} populated rows</div></div><button type="button" onclick="closeModal()" aria-label="Close import preview">&times;</button></div><div class="modal-body employee-import-body"><div class="employee-import-summary"><div><span>Ready</span><b>${summary.valid}</b></div><div class="${summary.errors?'has-error':''}"><span>Errors</span><b>${summary.errors}</b></div><div class="${summary.warnings?'has-warning':''}"><span>Warnings</span><b>${summary.warnings}</b></div></div>${issues.length?`<div class="employee-import-file-errors"><b>Workbook errors</b>${issues.map(issue=>`<span>${esc(issue)}</span>`).join('')}</div>`:''}<div class="tablewrap employee-import-preview"><table class="data-table"><thead><tr><th>Row</th><th>Employee No.</th><th>Employee</th><th>Department</th><th>Validation</th></tr></thead><tbody>${EMPLOYEE_IMPORT_PREVIEW.rows.map(row=>`<tr><td class="mono">${row.rowNumber}</td><td class="mono">${esc(row.values.employeeNo||'—')}</td><td><b>${esc(row.values.name||'Incomplete name')}</b><div class="small">${esc(row.values.position||'—')}</div></td><td>${esc(row.values.department||'—')}</td><td>${row.errors.length?`<div class="import-issues error">${row.errors.map(issue=>`<span>${esc(issue)}</span>`).join('')}</div>`:row.warnings.length?`<div class="import-issues warning">${row.warnings.map(issue=>`<span>${esc(issue)}</span>`).join('')}</div>`:'<span class="badge b-green"><span class="dot"></span>Ready</span>'}</td></tr>`).join('')}</tbody></table></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="openEmployeeImport()">Choose Another File</button><div class="toolbar-spacer"></div><button class="btn btn-primary" ${summary.errors||!summary.valid?'disabled':''} onclick="commitEmployeeImport()">Import ${summary.valid} Employee${summary.valid===1?'':'s'}</button></div>`);
+  openEmployeeWorkspaceModal(`<div class="modal-head"><div><h3>Review Employee Import</h3><div class="small">${esc(EMPLOYEE_IMPORT_PREVIEW.fileName)} · ${summary.total} populated rows</div></div><button type="button" onclick="closeModal()" aria-label="Close import preview">&times;</button></div><div class="modal-body employee-import-body"><div class="employee-import-summary"><div><span>Ready</span><b>${summary.valid}</b></div><div class="${summary.errors?'has-error':''}"><span>Errors</span><b>${summary.errors}</b></div><div class="${summary.warnings?'has-warning':''}"><span>Warnings</span><b>${summary.warnings}</b></div></div>${issues.length?`<div class="employee-import-file-errors"><b>Workbook errors</b>${issues.map(issue=>`<span>${esc(issue)}</span>`).join('')}</div>`:''}<div class="tablewrap employee-import-preview"><table class="data-table"><thead><tr><th>Row</th><th>Employee No.</th><th>Employee</th><th>Department</th><th>Branch Reporting</th><th>Validation</th></tr></thead><tbody>${EMPLOYEE_IMPORT_PREVIEW.rows.map(row=>`<tr><td class="mono">${row.rowNumber}</td><td class="mono">${esc(row.values.employeeNo||'—')}</td><td><b>${esc(row.values.name||'Incomplete name')}</b><div class="small">${esc(row.values.position||'—')}</div></td><td>${esc(row.values.department||'—')}</td><td>${esc(row.values.branchReporting||'—')}</td><td>${row.errors.length?`<div class="import-issues error">${row.errors.map(issue=>`<span>${esc(issue)}</span>`).join('')}</div>`:row.warnings.length?`<div class="import-issues warning">${row.warnings.map(issue=>`<span>${esc(issue)}</span>`).join('')}</div>`:'<span class="badge b-green"><span class="dot"></span>Ready</span>'}</td></tr>`).join('')}</tbody></table></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="openEmployeeImport()">Choose Another File</button><div class="toolbar-spacer"></div><button class="btn btn-primary" ${summary.errors||!summary.valid?'disabled':''} onclick="commitEmployeeImport()">Import ${summary.valid} Employee${summary.valid===1?'':'s'}</button></div>`);
 }
 async function commitEmployeeImport(){
   if(!requireEmployeeImportAdmin()||!EMPLOYEE_IMPORT_PREVIEW)return;
@@ -3222,13 +3294,14 @@ async function commitEmployeeImport(){
 }
 function downloadEmployeeImportTemplate(){
   if(!requireEmployeeImportAdmin()||!employeeSpreadsheetReady())return;
-  const headers=EMPLOYEE_IMPORT_COLUMNS.map(column=>column.header);
+  const columns=employeeImportColumns();
+  const headers=columns.map(column=>column.header);
   const employeeSheet=window.XLSX.utils.aoa_to_sheet([headers]);
-  employeeSheet['!cols']=EMPLOYEE_IMPORT_COLUMNS.map(column=>({wch:Math.max(15,column.header.length+3)}));
+  employeeSheet['!cols']=columns.map(column=>({wch:Math.max(15,column.header.length+3)}));
   employeeSheet['!autofilter']={ref:`A1:${window.XLSX.utils.encode_col(headers.length-1)}1`};
-  const instructions=[['SLSC Employee Import Template'],['Instructions'],['1. Enter one employee per row in the Employees sheet.'],['2. Do not rename or remove required columns.'],['3. Leave Employee No. blank to generate the next available number.'],['4. Dates may use YYYY-MM-DD or MM/DD/YYYY.'],['5. PRF Number and government IDs are optional.'],['6. Import validates the entire workbook before saving any employee.'],[],['Column','Required','Allowed values / guidance'],...EMPLOYEE_IMPORT_COLUMNS.map(column=>[column.header,column.required?'Yes':'No',column.options?.join(' | ')||column.note||''])];
+  const instructions=[['SLSC Employee Import Template'],['Instructions'],['1. Enter one employee per row in the Employees sheet.'],['2. Do not rename or remove required columns.'],['3. Leave Employee No. blank to generate the next available number.'],['4. Dates may use YYYY-MM-DD or MM/DD/YYYY.'],['5. PRF Number and government IDs are optional.'],['6. Branch Reporting must match an Administrator-configured branch.'],['7. Import validates the entire workbook before saving any employee.'],[],['Column','Required','Allowed values / guidance'],...columns.map(column=>[column.header,column.required?'Yes':'No',column.options?.join(' | ')||column.note||''])];
   const instructionSheet=window.XLSX.utils.aoa_to_sheet(instructions);instructionSheet['!cols']=[{wch:34},{wch:12},{wch:95}];
-  const reference=[['Field','Allowed values'],['Department',DEPT_OPTIONS.join(' | ')],['Gender','Male | Female'],['Civil Status','Single | Married | Widowed | Separated | Other'],['Employment Status',EMP_STATUS.join(' | ')],['Classification Override','Auto | Probationary | Regular'],['SSS Number','10 digits; example 09-5421455-9'],['PhilHealth PIN','12 digits; 2-9-1 format'],['Pag-IBIG MID','12 digits; 4-4-4 format'],['BIR TIN','9 digits plus optional 3-digit branch code']];
+  const reference=[['Field','Allowed values'],['Department',DEPT_OPTIONS.join(' | ')],['Branch Reporting',employeeBranchLocations().join(' | ')],['Allowance Types',employeeAllowanceTypes().join(' | ')||'No allowance types configured'],['Gender','Male | Female'],['Civil Status','Single | Married | Widowed | Separated | Other'],['Employment Status',EMP_STATUS.join(' | ')],['Classification Override','Auto | Probationary | Regular'],['SSS Number','10 digits; example 09-5421455-9'],['PhilHealth PIN','12 digits; 2-9-1 format'],['Pag-IBIG MID','12 digits; 4-4-4 format'],['BIR TIN','9 digits plus optional 3-digit branch code']];
   const referenceSheet=window.XLSX.utils.aoa_to_sheet(reference);referenceSheet['!cols']=[{wch:30},{wch:95}];
   const workbook=window.XLSX.utils.book_new();
   window.XLSX.utils.book_append_sheet(workbook,employeeSheet,'Employees');window.XLSX.utils.book_append_sheet(workbook,instructionSheet,'Instructions');window.XLSX.utils.book_append_sheet(workbook,referenceSheet,'Reference');
@@ -3237,6 +3310,7 @@ function downloadEmployeeImportTemplate(){
 const EMP_FORM_SECTIONS = [
   {title:'Employee Record',description:'Core identifiers and approved hiring reference.',keys:['employeeNo','prfNumber']},
   {title:'Personal & Employment',description:'Legal name, assignment, and current employment details.',keys:['lastName','firstName','middleName','position','department','dateHired','birthDate','gender','civilStatus','status','statusDate','classOverride','remarks']},
+  {title:'Assignment & Compensation',description:'Required reporting location and current employee rate or allowances.',keys:['branchReporting','dailyRate'],allowances:true},
   {title:'Contact & Emergency',description:'Private contact information used by HR when needed.',keys:['mobileNumber','personalEmail','address','emergencyContactName','emergencyContactRelationship','emergencyContactPhone']},
   {title:'Government IDs',description:'Optional statutory identifiers with format validation.',keys:['tin','sssNumber','philHealthNumber','pagIbigNumber']},
 ];
@@ -3252,9 +3326,25 @@ function employeeFormSectionsHTML(record){
     <div class="employee-form-section-head"><span>${String(index+1).padStart(2,'0')}</span><div><h4>${esc(section.title)}</h4><p>${esc(section.description)}</p></div></div>
     <div class="employee-form-grid">${section.keys.map(key=>{
       const field=EMP_FIELDS.find(item=>item.key===key);
-      return field?fieldHTML(field,employeeFormFieldValue(field,record)):'';
-    }).join('')}</div>
+      if(!field)return '';
+      const resolved=key==='branchReporting'?{...field,options:['',...uniqueSettingNames([...employeeBranchLocations(),record?.branchReporting||''])]}:field;
+      return fieldHTML(resolved,employeeFormFieldValue(resolved,record));
+    }).join('')}${section.allowances?employeeAllowanceFieldsHTML(record):''}</div>
   </section>`).join('');
+}
+function employeeAllowanceFieldsHTML(record){
+  const types=employeeAllowanceTypes();
+  if(!types.length)return '<div class="employee-allowance-empty">No allowance types configured. A System Administrator can add them in Settings.</div>';
+  return types.map((name,index)=>`<div class="field"><label>${esc(name)}</label><div class="money-input"><span>₱</span><input id="f_allowance_${index}" data-employee-allowance data-allowance-name="${esc(name)}" type="number" min="0" step="0.01" value="${esc(record?.allowances?.[name]??'')}"></div></div>`).join('');
+}
+function readEmployeeAllowances(existingEmployee=null){
+  const activeNames=new Set(employeeAllowanceTypes().map(name=>name.toLowerCase()));
+  const allowances=Object.fromEntries(Object.entries(existingEmployee?.allowances||{}).filter(([name])=>!activeNames.has(name.toLowerCase())));
+  document.querySelectorAll('[data-employee-allowance]').forEach(input=>{
+    const name=input.dataset.allowanceName;const raw=input.value.trim();
+    if(name&&raw!=='')allowances[name]=Math.round(Number(raw)*100)/100;
+  });
+  return allowances;
 }
 function openEmployeeForm(id){
   const existing = id? DB.employees.find(e=>e.id===id): null;
@@ -3345,8 +3435,12 @@ function appendEmployeeRecordHistory(employee,action,detail,at=new Date().toISOS
 
 async function saveEmployee(id){
   const vals = readFields(EMP_FIELDS);
+  vals.allowances=readEmployeeAllowances(id?DB.employees.find(employee=>employee.id===id):null);
   const missing = EMP_FIELDS.filter(f=>f.required && !vals[f.key]);
   if(missing.length){ toast('Please complete: '+missing.map(f=>f.label).join(', ')); return; }
+  if(vals.dailyRate!==''&&(!Number.isFinite(Number(vals.dailyRate))||Number(vals.dailyRate)<0)){toast('Daily Rate must be a non-negative amount.',true);return;}
+  if(Object.values(vals.allowances).some(amount=>!Number.isFinite(amount)||amount<0)){toast('Allowance amounts must be non-negative numbers.',true);return;}
+  vals.dailyRate=vals.dailyRate===''?'':Math.round(Number(vals.dailyRate)*100)/100;
   if(vals.dateHired>todayISO()){ toast('Date Hired cannot be in the future.'); return; }
   if(vals.birthDate && vals.birthDate>todayISO()){ toast('Birth Date cannot be in the future.'); return; }
   if(vals.statusDate && vals.statusDate<vals.dateHired){ toast('Status Effective Date cannot be before Date Hired.'); return; }
@@ -3369,6 +3463,7 @@ async function saveEmployee(id){
   const now=new Date().toISOString();
   const actorName=SESSION?.fullName||'System';
   const changedFields=isNew?[]:EMP_FIELDS.filter(field=>String(original?.[field.key]??'')!==String(vals[field.key]??'')).map(field=>field.label);
+  if(!isNew&&JSON.stringify(original?.allowances||{})!==JSON.stringify(vals.allowances||{}))changedFields.push('Allowances');
   Object.assign(rec, vals);
   if(!Array.isArray(rec.employmentHistory)) rec.employmentHistory=[];
   if(!Array.isArray(rec.recordHistory)) rec.recordHistory=[];
@@ -3457,7 +3552,7 @@ async function saveEmployeeTransfer(id){
   toast('Transfer recorded.');
 }
 function employeeCompleteness(emp){
-  const keys=['employeeNo','prfNumber','lastName','firstName','position','department','dateHired','birthDate','gender','civilStatus','mobileNumber','personalEmail','address','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'];
+  const keys=['employeeNo','prfNumber','lastName','firstName','position','department','branchReporting','dateHired','birthDate','gender','civilStatus','mobileNumber','personalEmail','address','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'];
   const normalized={...emp,...splitEmployeeName(emp)};
   const filled=keys.filter(k=>String(normalized?.[k]??'').trim()!=='').length;
   return Math.round((filled/keys.length)*100);
@@ -3518,9 +3613,12 @@ async function saveEmployeeStatus(id){
 }
 
 function exportEmployeesCSV(){
+  const allowanceNames=uniqueSettingNames([...employeeAllowanceTypes(),...DB.employees.flatMap(employee=>Object.keys(employee.allowances||{}))]);
   const columns=[
     {header:'Employee No.',get:r=>r.employeeNo},{header:'PRF Number',get:r=>r.prfNumber},{header:'Last Name',get:r=>splitEmployeeName(r).lastName},{header:'First Name',get:r=>splitEmployeeName(r).firstName},{header:'Middle Name',get:r=>splitEmployeeName(r).middleName},{header:'Formatted Name',get:r=>employeeDisplayName(r)},
-    {header:'Position',get:r=>r.position},{header:'Department',get:r=>r.department},{header:'Date Hired',get:r=>r.dateHired},{header:'Birth Date',get:r=>r.birthDate},{header:'Gender',get:r=>r.gender},{header:'Civil Status',get:r=>r.civilStatus},
+    {header:'Position',get:r=>r.position},{header:'Department',get:r=>r.department},{header:'Branch Reporting',get:r=>r.branchReporting},{header:'Daily Rate',get:r=>r.dailyRate},{header:'Total Allowances',get:r=>employeeAllowanceTotal(r)},
+    ...allowanceNames.map(name=>({header:`Allowance - ${name}`,get:r=>r.allowances?.[name]??''})),
+    {header:'Date Hired',get:r=>r.dateHired},{header:'Birth Date',get:r=>r.birthDate},{header:'Gender',get:r=>r.gender},{header:'Civil Status',get:r=>r.civilStatus},
     {header:'Employment Status',get:r=>r.status},{header:'Status Effective Date',get:r=>r.statusDate},{header:'Classification Override',get:r=>r.classOverride||'Auto'},{header:'Computed Classification',get:r=>classify(r)},
     {header:'Mobile Number',get:r=>r.mobileNumber},{header:'Personal Email',get:r=>r.personalEmail},{header:'Home Address',get:r=>r.address},{header:'Remarks',get:r=>r.remarks},{header:'Emergency Contact Name',get:r=>r.emergencyContactName},{header:'Emergency Contact Relationship',get:r=>r.emergencyContactRelationship},{header:'Emergency Contact Phone',get:r=>r.emergencyContactPhone},
     {header:'BIR TIN',get:r=>formatGovernmentId('tin',r.tin)},{header:'SSS Number',get:r=>formatGovernmentId('sss',r.sssNumber)},{header:'PhilHealth PIN',get:r=>formatGovernmentId('philHealth',r.philHealthNumber)},{header:'Pag-IBIG MID',get:r=>formatGovernmentId('pagIbig',r.pagIbigNumber)},
@@ -3574,6 +3672,7 @@ async function openEmployeeProfile(id){
   ].filter(x=>x.date).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,14);
   const statusMap=EMP_STATUS_MAP;
   const recordHistory=Array.isArray(emp.recordHistory)?emp.recordHistory.slice().reverse().slice(0,20):[];
+  const allowanceEntries=employeeAllowanceEntries(emp);
   openEmployeeWorkspaceModal(`${employeeWorkspaceHeader(emp,'Overview')}<div class="modal-body">
     ${employeeWorkspaceNav(emp,'overview')}
     <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(employeeDisplayName(emp))}</div><div class="profile-sub">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div><div class="small" style="margin-top:6px;">${esc(employeeTenureText(emp))}</div></div><div class="profile-actions">${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="openEmployeeOperation('cases','${emp.id}')">${iShield(13)} New HR Case</button>`:''}</div></div>
@@ -3590,12 +3689,18 @@ async function openEmployeeProfile(id){
         <div class="item"><div class="label">Employee Name</div><div class="value">${esc(employeeDisplayName(emp))}</div></div>
         <div class="item"><div class="label">Position</div><div class="value">${esc(emp.position||'—')}</div></div>
         <div class="item"><div class="label">Department</div><div class="value">${esc(emp.department||'—')}</div></div>
+        <div class="item"><div class="label">Branch Reporting</div><div class="value">${esc(emp.branchReporting||'Not assigned')}</div></div>
         <div class="item"><div class="label">Date Hired</div><div class="value">${fmtDate(emp.dateHired)}</div></div>
         <div class="item"><div class="label">Gender</div><div class="value">${esc(emp.gender||'—')}</div></div>
         <div class="item"><div class="label">Employment Status</div><div class="value">${esc(emp.status||'—')}</div></div>
         <div class="item"><div class="label">Status Effective Date</div><div class="value">${fmtDate(emp.statusDate)}</div></div>
         <div class="item"><div class="label">PRF Number</div><div class="value">${esc(emp.prfNumber||'—')}</div></div>
         <div class="item" style="grid-column:1/-1;"><div class="label">Remarks</div><div class="value">${esc(emp.remarks||'—')}</div></div>
+      </div></div>
+      <div class="panel"><h3>Compensation</h3><div class="desc">Current daily rate and configured employee allowances.</div><div class="profile-detail">
+        <div class="item"><div class="label">Daily Rate</div><div class="value">${emp.dailyRate!==''&&emp.dailyRate!=null?peso(emp.dailyRate):'—'}</div></div>
+        ${allowanceEntries.map(item=>`<div class="item"><div class="label">${esc(item.name)}</div><div class="value">${peso(item.amount)}</div></div>`).join('')||'<div class="item"><div class="label">Allowances</div><div class="value">None recorded</div></div>'}
+        <div class="item"><div class="label">Total Allowances</div><div class="value">${peso(employeeAllowanceTotal(emp))}</div></div>
       </div></div>
       <div class="panel"><h3>Contact &amp; Emergency Information</h3><div class="desc">Personal contact details recorded for HR operations.</div><div class="profile-detail">
         <div class="item"><div class="label">Birth Date</div><div class="value">${fmtDate(emp.birthDate)}</div></div>
@@ -5623,7 +5728,7 @@ function qualityIssues(caseRows=[]){
 
   employees.forEach((e,idx)=>{
     const base=`employee:${e.id||idx}`;
-    const required=[['employeeNo','Employee No.'],['name','Employee Name'],['position','Position'],['department','Department'],['dateHired','Date Hired'],['gender','Gender'],['status','Employment Status']];
+    const required=[['employeeNo','Employee No.'],['name','Employee Name'],['position','Position'],['department','Department'],['branchReporting','Branch Reporting'],['dateHired','Date Hired'],['gender','Gender'],['status','Employment Status']];
     required.forEach(([k,label])=>{ if(!String(e[k]??'').trim()) add(`${base}:missing:${k}`,'error','employees',`${label} is missing`,`${e.name||'Employee record'} has incomplete required master data.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Required field']); });
     if(e.dateHired && e.dateHired>today) add(`${base}:future-hire`,'error','employees','Date Hired is in the future',`${e.name||'Employee'} is recorded as hired on ${fmtDate(e.dateHired)}.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Date']);
     if(e.birthDate && e.birthDate>today) add(`${base}:future-birth`,'error','employees','Birth Date is in the future',`${e.name||'Employee'} has a Birth Date later than today.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Date']);
@@ -6012,6 +6117,13 @@ function renderSettings(){
         ${admin?'<button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>':''}
       </div>
       <div class="panel">
+        <h3>Employee Assignment &amp; Compensation</h3>
+        <div class="desc">Maintain the branch locations and allowance types used by employee records and import templates.</div>
+        <div class="field"><label>Branch Locations (one per line)</label><textarea id="s_branches" rows="6" ${admin?'':'disabled'}>${esc(employeeBranchLocations().join('\n'))}</textarea><div class="computed-note">Every new or imported employee must be assigned to one of these reporting branches.</div></div>
+        <div class="field"><label>Allowance Types (one per line)</label><textarea id="s_allowances" rows="6" ${admin?'':'disabled'} placeholder="Meal Allowance&#10;Transportation Allowance">${esc(employeeAllowanceTypes().join('\n'))}</textarea><div class="computed-note">Each type becomes an amount field in Employee Information and a column in the employee import template.</div></div>
+        ${admin?'<button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>':''}
+      </div>
+      <div class="panel">
         <h3>Audit Trail</h3>
         <div class="desc">Log of record changes made in this session (most recent first).</div>
         <div style="max-height:320px;overflow-y:auto;">
@@ -6049,14 +6161,23 @@ async function saveSettings(){
   const driveRoot=document.getElementById('s_drive_root')?.value.trim()||'';
   const driveClient=document.getElementById('s_drive_client')?.value.trim()||'';
   if(provider==='google-drive'&&(!documentDriveFileId(driveRoot)||!driveClient.endsWith('.apps.googleusercontent.com'))){toast('Google Drive storage requires a valid root folder URL and OAuth Web Client ID.',true);return;}
+  const branchLocations=uniqueSettingNames((document.getElementById('s_branches')?.value||'').split(/\r?\n/));
+  const allowanceTypes=uniqueSettingNames((document.getElementById('s_allowances')?.value||'').split(/\r?\n/));
+  if(!branchLocations.length){toast('Add at least one Branch Location.',true);return;}
+  if(branchLocations.length>50||allowanceTypes.length>50){toast('Branch and allowance lists can contain up to 50 entries each.',true);return;}
+  if([...branchLocations,...allowanceTypes].some(name=>name.length>60)){toast('Branch and allowance names cannot exceed 60 characters.',true);return;}
+  const unavailableBranches=uniqueSettingNames(DB.employees.map(employee=>employee.branchReporting).filter(Boolean)).filter(branch=>!branchLocations.some(value=>value.toLowerCase()===branch.toLowerCase()));
+  if(unavailableBranches.length){toast(`Cannot remove assigned branch locations: ${unavailableBranches.join(', ')}. Reassign those employees first.`,true);return;}
   const previousClient=DB.settings.googleDriveClientId||'';
   DB.settings.orgName = document.getElementById('s_org').value.trim()||'SCPA';
   DB.settings.probationDays = parseInt(document.getElementById('s_prob').value,10)||180;
   DB.settings.fileStorageProvider=provider;
   DB.settings.googleDriveRootUrl=driveRoot;
   DB.settings.googleDriveClientId=driveClient;
+  DB.settings.branchLocations=branchLocations;
+  DB.settings.allowanceTypes=allowanceTypes;
   if(previousClient!==driveClient) GOOGLE_DRIVE_TOKEN={accessToken:'',expiresAt:0};
-  logAudit(`Updated system settings · file storage: ${provider==='google-drive'?'Google Drive':'Supabase Storage'}`);
+  logAudit(`Updated system settings · ${branchLocations.length} branches · ${allowanceTypes.length} allowance types · file storage: ${provider==='google-drive'?'Google Drive':'Supabase Storage'}`);
   if(!(await saveDB())){PENDING_PAGE_NAVIGATION=null;return;}
   const destination=PENDING_PAGE_NAVIGATION||'settings';
   PENDING_PAGE_NAVIGATION=null;
