@@ -1273,6 +1273,7 @@ async function go(view,{skipUnsaved=false}={}){
   if(navItem&&!navItemVisible(navItem)){toast('This workspace is not available for your role.',true);return;}
   if(!skipUnsaved && !(await requestPageNavigation(view))) return;
   STATE.view=view; STATE.search=''; STATE.filter=''; STATE.filterDept=''; STATE.filterStatus='';
+  document.getElementById('content')?.classList.toggle('employee-directory-content',view==='employees');
   STATE.tablePages={};
   closeSidebar();
   renderNav();
@@ -2392,7 +2393,6 @@ function resetEmployeeDirectoryFilters(){
   requestAnimationFrame(()=>document.getElementById('employee-directory-search')?.focus());
 }
 function renderEmployees(){
-  setTitle('Employee Information', 'Master employee directory and HR operations.');
   const q=(STATE.employeeSearch||'').trim().toLowerCase();
   const deptFilter = STATE.employeeDepartmentFilter||'';
   const statusFilter = STATE.employeeStatusFilter||'';
@@ -2408,55 +2408,58 @@ function renderEmployees(){
   });
   const depts = [...new Set(DB.employees.map(e=>e.department).filter(Boolean))];
   const statusOptions=[...new Set(DB.employees.map(e=>e.status).filter(Boolean))];
+  setTitle('Employee Information', `${rows.length} of ${DB.employees.length} employees · ${depts.length} departments`);
+  document.getElementById('content')?.classList.add('employee-directory-content');
 
   const html = `
-  <div class="sectionhead">
-    <div><h2>Employee Information</h2><p>${rows.length} of ${DB.employees.length} employees shown across ${depts.length} departments.</p></div>
-    ${canEdit()? `<button class="btn btn-brass" onclick="openEmployeeForm()">${iPlus(15)} Add Employee</button>`:''}
-  </div>
-  <div class="toolbar employee-directory-toolbar" aria-label="Employee directory search and filters">
-    <div class="search employee-directory-search">${iSearch(15)}<input id="employee-directory-search" data-search-key="employeeSearch" type="search" autocomplete="off" spellcheck="false" aria-label="Search employees" placeholder="Search employee no., name, position, department, or contact…" value="${esc(STATE.employeeSearch)}" oninput="employeeSearchInput(this.value)"></div>
-    <select aria-label="Filter employees by department" onchange="STATE.employeeDepartmentFilter=this.value; renderEmployees()">
-      <option value="">All Departments</option>
-      ${depts.map(d=>`<option value="${esc(d)}" ${deptFilter===d?'selected':''}>${esc(d)}</option>`).join('')}
-    </select>
-    <select aria-label="Filter employees by employment status" onchange="STATE.employeeStatusFilter=this.value; renderEmployees()">
-      <option value="">All Statuses</option>
-      ${statusOptions.map(v=>`<option value="${esc(v)}" ${statusFilter===v?'selected':''}>${esc(v)}</option>`).join('')}
-    </select>
-    <select aria-label="Filter employees by classification" onchange="STATE.employeeClassFilter=this.value; renderEmployees()">
-      <option value="">All Classifications</option>
-      <option value="Probationary" ${classFilter==='Probationary'?'selected':''}>Probationary</option>
-      <option value="Regular" ${classFilter==='Regular'?'selected':''}>Regular</option>
-    </select>
-    <div class="employee-toolbar-actions">
-      ${hasFilters?`<button class="btn btn-ghost btn-sm" onclick="resetEmployeeDirectoryFilters()">Reset</button>`:''}
-      <button class="btn btn-ghost btn-sm" onclick="exportEmployeesCSV()">${iDownload(14)} Export CSV</button>
-    </div>
-  </div>
-  <div class="tablewrap">
-    <table class="data-table">
-      <thead><tr><th>Employee No.</th><th>Name</th><th>Position</th><th>Department</th><th>Date Hired</th><th>Gender</th><th>Status</th><th>Classification</th><th style="text-align:right;">Actions</th></tr></thead>
-      <tbody>
-        ${rows.length? rows.map(e=>`<tr>
-          <td class="mono">${esc(e.employeeNo||'—')}</td>
-          <td><b>${esc(e.name)}</b></td>
-          <td>${esc(e.position||'—')}</td>
-          <td>${esc(e.department||'—')}</td>
-          <td>${fmtDate(e.dateHired)}</td>
-          <td>${esc(e.gender||'—')}</td>
-          <td>${statusBadge(e.status, EMP_STATUS_MAP)}</td>
-          <td>${statusBadge(classify(e), classify(e)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</td>
-          <td><div class="rowactions">
-            <button class="iconbtn" onclick="openEmployeeProfile('${e.id}')" title="View employee profile">${iUser(14)}</button>
-            ${canEdit()? `<button class="iconbtn" onclick="openEmployeeForm('${e.id}')" title="Edit">${iEdit(14)}</button>
-            <button class="iconbtn" onclick="openTransferForEmployee('${e.id}')" title="Record Department Transfer">${iSwap(14)}</button>
-            <button class="iconbtn" onclick="openEmployeeStatusForm('${e.id}')" title="Update Employment Status">${iShield(14)}</button>
-            <button class="iconbtn" onclick="deleteEmployee('${e.id}')" title="Delete">${iTrash(14)}</button>`:''}
-          </div></td>
-        </tr>`).join('') : `<tr><td colspan="9"><div class="empty"><b>No employees found</b><span>${hasFilters?'Try adjusting the search or filters.':'Add an employee to begin building the directory.'}</span>${hasFilters?`<button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="resetEmployeeDirectoryFilters()">Reset search and filters</button>`:''}</div></td></tr>`}
-      </tbody>
-    </table>
+  <div class="employee-directory-workspace">
+    <section class="employee-directory-surface" aria-label="Employee directory">
+      <div class="toolbar employee-directory-toolbar" aria-label="Employee directory search and filters">
+        <div class="search employee-directory-search">${iSearch(14)}<input id="employee-directory-search" data-search-key="employeeSearch" type="search" autocomplete="off" spellcheck="false" aria-label="Search employees" placeholder="Search employees…" value="${esc(STATE.employeeSearch)}" oninput="employeeSearchInput(this.value)"></div>
+        <select aria-label="Filter employees by department" onchange="STATE.employeeDepartmentFilter=this.value; renderEmployees()">
+          <option value="">Department</option>
+          ${depts.map(d=>`<option value="${esc(d)}" ${deptFilter===d?'selected':''}>${esc(d)}</option>`).join('')}
+        </select>
+        <select aria-label="Filter employees by employment status" onchange="STATE.employeeStatusFilter=this.value; renderEmployees()">
+          <option value="">Status</option>
+          ${statusOptions.map(v=>`<option value="${esc(v)}" ${statusFilter===v?'selected':''}>${esc(v)}</option>`).join('')}
+        </select>
+        <select aria-label="Filter employees by classification" onchange="STATE.employeeClassFilter=this.value; renderEmployees()">
+          <option value="">Classification</option>
+          <option value="Probationary" ${classFilter==='Probationary'?'selected':''}>Probationary</option>
+          <option value="Regular" ${classFilter==='Regular'?'selected':''}>Regular</option>
+        </select>
+        <div class="employee-toolbar-actions">
+          ${hasFilters?`<button class="btn btn-ghost btn-sm employee-reset" onclick="resetEmployeeDirectoryFilters()">Reset</button>`:''}
+          <button class="btn btn-ghost btn-sm" onclick="exportEmployeesCSV()" title="Export employee records">${iDownload(13)} <span>Export</span></button>
+          ${canEdit()? `<button class="btn btn-primary btn-sm" onclick="openEmployeeForm()">${iPlus(13)} <span>Add Employee</span></button>`:''}
+        </div>
+      </div>
+      <div class="tablewrap employee-directory-tablewrap">
+        <table class="data-table employee-directory-table">
+          <thead><tr><th>Employee No.</th><th>Name</th><th>Position</th><th>Department</th><th>Date Hired</th><th>Gender</th><th>Status</th><th>Classification</th><th class="actions-head">Actions</th></tr></thead>
+          <tbody>
+            ${rows.length? rows.map(e=>`<tr>
+              <td class="mono">${esc(e.employeeNo||'—')}</td>
+              <td><b>${esc(e.name)}</b></td>
+              <td>${esc(e.position||'—')}</td>
+              <td>${esc(e.department||'—')}</td>
+              <td>${fmtDate(e.dateHired)}</td>
+              <td>${esc(e.gender||'—')}</td>
+              <td>${statusBadge(e.status, EMP_STATUS_MAP)}</td>
+              <td>${statusBadge(classify(e), classify(e)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</td>
+              <td><div class="rowactions">
+                <button class="iconbtn" onclick="openEmployeeProfile('${e.id}')" title="View employee profile">${iUser(14)}</button>
+                ${canEdit()? `<button class="iconbtn" onclick="openEmployeeForm('${e.id}')" title="Edit">${iEdit(14)}</button>
+                <button class="iconbtn" onclick="openTransferForEmployee('${e.id}')" title="Record Department Transfer">${iSwap(14)}</button>
+                <button class="iconbtn" onclick="openEmployeeStatusForm('${e.id}')" title="Update Employment Status">${iShield(14)}</button>
+                <button class="iconbtn" onclick="deleteEmployee('${e.id}')" title="Delete">${iTrash(14)}</button>`:''}
+              </div></td>
+            </tr>`).join('') : `<tr><td colspan="9"><div class="empty"><b>No employees found</b><span>${hasFilters?'Try adjusting the search or filters.':'Add an employee to begin building the directory.'}</span>${hasFilters?`<button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="resetEmployeeDirectoryFilters()">Reset search and filters</button>`:''}</div></td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </section>
   </div>`;
   document.getElementById('content').innerHTML = html;
 }

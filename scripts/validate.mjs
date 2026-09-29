@@ -104,4 +104,8 @@ if(!professionalCss.includes('.employee-picker-options')||!professionalCss.inclu
   console.error('Employee picker or sticky table styling is missing.');
   process.exit(1);
 }
+if(!app.includes('employee-directory-workspace')||!professionalCss.includes('#content.employee-directory-content')){
+  console.error('The viewport-bound employee data workspace is missing.');
+  process.exit(1);
+}
 console.log('SLSC HR Platform structural validation passed.');
