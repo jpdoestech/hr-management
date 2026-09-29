@@ -18,9 +18,15 @@ For Employee Self-Service and Manager approvals, run `supabase/phase10-self-serv
 
 Continue through `supabase/phase13-onboarding.sql` for the applicant onboarding workspace. Phase 13 keeps `onboardingCandidates` records visible only to Administrator and HR Staff accounts while preserving the existing employee and manager record scopes.
 
+Apply `supabase/phase14-admin-storage-settings.sql` to restrict system-wide settings changes to Administrator accounts. The frontend skips the settings upsert for other roles so ordinary HR record saves continue to work under this policy.
+
 ## Google Drive
 
-The frontend supports Google Drive document references and metadata. Real Google Drive OAuth/upload operations should be implemented through a secure server-side or Supabase Edge Function flow rather than exposing Google client secrets in `index.html`.
+The System Administrator can choose Google Drive as the destination for all new HR uploads in Settings. Configure a Google Cloud OAuth 2.0 Web Client ID and add each deployed app origin, such as the Vercel production URL and local preview origin, to its authorized JavaScript origins. Enable the Google Drive API for that Google Cloud project.
+
+The configured Drive root folder must be accessible to every HR user who uploads files. The app requests a short-lived Google access token when an upload starts, creates or reuses a module folder such as `leave`, `atd`, `cvr`, or `onboarding` below the configured root, and uploads the file there. Access tokens remain in browser memory and are not stored in Supabase. OAuth client IDs are public application identifiers; do not place a Google client secret in this frontend.
+
+Changing the destination affects new uploads only. Existing Drive and Supabase files remain indexed and readable from the Document Center.
 
 ## Local preview
 

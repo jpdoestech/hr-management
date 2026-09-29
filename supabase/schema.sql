@@ -124,7 +124,7 @@ create policy hr_records_delete on public.hr_records for delete to authenticated
 drop policy if exists hr_settings_select on public.hr_settings;
 create policy hr_settings_select on public.hr_settings for select to authenticated using (true);
 drop policy if exists hr_settings_write on public.hr_settings;
-create policy hr_settings_write on public.hr_settings for all to authenticated using (public.current_profile_role() in ('Administrator','HR Staff')) with check (public.current_profile_role() in ('Administrator','HR Staff'));
+create policy hr_settings_write on public.hr_settings for all to authenticated using (public.current_profile_role()='Administrator') with check (public.current_profile_role()='Administrator');
 
 drop policy if exists hr_audit_select on public.hr_audit_logs;
 create policy hr_audit_select on public.hr_audit_logs for select to authenticated using (true);

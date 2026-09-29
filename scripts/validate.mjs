@@ -20,7 +20,8 @@ const required=[
   'supabase/phase10-self-service.sql','supabase/phase11-lifecycle-checklists.sql',
   'database/migrations/phase11-lifecycle-checklists.sql','supabase/phase12-user-preferences.sql',
   'database/migrations/phase12-user-preferences.sql','supabase/phase13-onboarding.sql',
-  'database/migrations/phase13-onboarding.sql'
+  'database/migrations/phase13-onboarding.sql','supabase/phase14-admin-storage-settings.sql',
+  'database/migrations/phase14-admin-storage-settings.sql'
 ];
 const missing=required.filter(f=>!fs.existsSync(path.join(root,f)));
 if(missing.length){
@@ -97,6 +98,12 @@ for(const feature of ['recordHistory','createdByName','updatedByName','Record Hi
     process.exit(1);
   }
 }
+for(const feature of ['employeeNameSimilarity','levenshteinDistance','Continue and save']){
+  if(!app.includes(feature)){
+    console.error(`Employee duplicate warning contract is missing: ${feature}`);
+    process.exit(1);
+  }
+}
 if(!app.includes("trigger.innerHTML=iEdit(15)")){
   console.error('Consolidated table actions must use the pencil icon trigger.');
   process.exit(1);
@@ -106,6 +113,18 @@ const onboardingMigrationCopy=fs.readFileSync(path.join(root,'database/migration
 if(onboardingMigration!==onboardingMigrationCopy || !onboardingMigration.includes("module <> 'onboardingCandidates'")){
   console.error('Onboarding access migration copies are missing or out of sync.');
   process.exit(1);
+}
+const storageSettingsMigration=fs.readFileSync(path.join(root,'supabase/phase14-admin-storage-settings.sql'),'utf8');
+const storageSettingsMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase14-admin-storage-settings.sql'),'utf8');
+if(storageSettingsMigration!==storageSettingsMigrationCopy || !storageSettingsMigration.includes("current_profile_role() = 'Administrator'")){
+  console.error('Admin-only storage settings migration copies are missing or out of sync.');
+  process.exit(1);
+}
+for(const feature of ['fileStorageProvider','uploadGoogleDriveAttachment','googleDriveModuleFolder','requestGoogleDriveAccessToken','storageSettingsChanged','testGoogleDriveConnection','GOOGLE_DRIVE_PREFIX']){
+  if(!app.includes(feature)){
+    console.error(`Configurable attachment storage contract is missing: ${feature}`);
+    process.exit(1);
+  }
 }
 for(const feature of ['renderOnboarding','saveOnboardingCandidate','convertOnboardingCandidate','formatGovernmentId','onboardingCandidates']){
   if(!app.includes(feature)){

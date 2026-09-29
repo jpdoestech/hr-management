@@ -23,7 +23,7 @@ let USER_PREFERENCES = {employeeColumns:[]};
 let USER_PREFERENCES_SYNC_READY = true;
 
 function blankDB(){
-  return {employees:[],onboardingCandidates:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],lifecycleChecklists:[],serviceRequests:[],settings:{orgName:'SCPA',probationDays:180},audit:[],users:[]};
+  return {employees:[],onboardingCandidates:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],lifecycleChecklists:[],serviceRequests:[],settings:{orgName:'SCPA',probationDays:180,fileStorageProvider:'supabase',googleDriveRootUrl:'',googleDriveClientId:''},audit:[],users:[]};
 }
 
 function isMissingSelfServiceTable(error){
@@ -125,8 +125,10 @@ async function saveDBInternal(state){
       if(error) throw error;
     }
   }
-  const {error:settingsError}=await supabase.from('hr_settings').upsert({id:'singleton',data:state.settings||{orgName:'SCPA',probationDays:180},updated_at:now,updated_by:SESSION?.id||null},{onConflict:'id'});
-  if(settingsError) throw settingsError;
+  if(SESSION?.role==='Administrator'){
+    const {error:settingsError}=await supabase.from('hr_settings').upsert({id:'singleton',data:state.settings||{orgName:'SCPA',probationDays:180},updated_at:now,updated_by:SESSION?.id||null},{onConflict:'id'});
+    if(settingsError) throw settingsError;
+  }
   DB_SNAPSHOT=JSON.parse(JSON.stringify(state));
 }
 
@@ -147,10 +149,87 @@ async function loadProfiles(){
 
 async function persistStateAndProfiles(){ await saveDB(); await loadProfiles(); }
 
-/* ---------------- attachments (Supabase Storage) ---------------- */
+/* ---------------- attachment storage router ---------------- */
 const MAX_ATTACH_BYTES = 10*1024*1024;
 const STORAGE_BUCKET = 'hr-documents';
+const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
+const GOOGLE_DRIVE_PREFIX = 'gdrive:';
 let PENDING_UPLOADS = new Set();
+let GOOGLE_DRIVE_TOKEN = {accessToken:'',expiresAt:0};
+let GOOGLE_DRIVE_TOKEN_CLIENT = null;
+
+function attachmentStorageProvider(){ return DB.settings?.fileStorageProvider==='google-drive'?'google-drive':'supabase'; }
+function storageRefProvider(ref){ return String(ref||'').startsWith(GOOGLE_DRIVE_PREFIX)?'google-drive':'supabase'; }
+function googleDriveRef(fileId){ return `${GOOGLE_DRIVE_PREFIX}${fileId}`; }
+function googleDriveFileIdFromRef(ref){ return storageRefProvider(ref)==='google-drive'?String(ref).slice(GOOGLE_DRIVE_PREFIX.length):''; }
+function googleDriveFileUrl(ref){ const id=googleDriveFileIdFromRef(ref)||documentDriveFileId(ref); return id?`https://drive.google.com/file/d/${encodeURIComponent(id)}/view`:''; }
+function uploadModuleFolder(module){
+  const aliases={onboardingCandidates:'onboarding',leaves:'leave',memos:'memo',incidents:'incident',evaluations:'evaluation',employees:'employee',disciplinary:'disciplinary',nte:'nte',nod:'nod',oncall:'on-call',transfers:'transfer',cvr:'cvr',prf:'prf',atd:'atd',cases:'case',documents:'documents'};
+  return aliases[module]||String(module||'documents').replace(/[^a-zA-Z0-9_-]/g,'-').toLowerCase();
+}
+function googleDriveRootFolderId(){ return documentDriveFileId(DB.settings?.googleDriveRootUrl||''); }
+function googleDriveRequest(path,options={}){
+  return fetch(path,{...options,headers:{Authorization:`Bearer ${GOOGLE_DRIVE_TOKEN.accessToken}`,...(options.headers||{})}}).then(async response=>{
+    if(response.ok) return response.status===204?null:response.json();
+    const payload=await response.json().catch(()=>({}));
+    const error=new Error(payload?.error?.message||`Google Drive request failed (${response.status}).`);
+    error.status=response.status;
+    throw error;
+  });
+}
+function ensureGoogleIdentityServices(){
+  if(window.google?.accounts?.oauth2) return Promise.resolve();
+  return new Promise((resolve,reject)=>{
+    const existing=document.querySelector('script[data-google-identity]');
+    if(existing){existing.addEventListener('load',resolve,{once:true});existing.addEventListener('error',()=>reject(new Error('Google authorization could not be loaded.')),{once:true});return;}
+    const script=document.createElement('script');script.src='https://accounts.google.com/gsi/client';script.async=true;script.defer=true;script.dataset.googleIdentity='true';script.onload=resolve;script.onerror=()=>reject(new Error('Google authorization could not be loaded.'));document.head.appendChild(script);
+  });
+}
+async function requestGoogleDriveAccessToken(forcePrompt=false){
+  if(GOOGLE_DRIVE_TOKEN.accessToken&&GOOGLE_DRIVE_TOKEN.expiresAt>Date.now()+60000&&!forcePrompt) return GOOGLE_DRIVE_TOKEN.accessToken;
+  const clientId=String(DB.settings?.googleDriveClientId||'').trim();
+  if(!clientId) throw new Error('Google Drive OAuth Client ID is not configured in Settings.');
+  await ensureGoogleIdentityServices();
+  return new Promise((resolve,reject)=>{
+    GOOGLE_DRIVE_TOKEN_CLIENT=google.accounts.oauth2.initTokenClient({client_id:clientId,scope:GOOGLE_DRIVE_SCOPE,callback:response=>{
+      if(response?.error){reject(new Error(response.error_description||response.error));return;}
+      GOOGLE_DRIVE_TOKEN={accessToken:response.access_token,expiresAt:Date.now()+(Number(response.expires_in)||3600)*1000};
+      resolve(response.access_token);
+    },error_callback:error=>reject(new Error(error?.message||error?.type||'Google authorization was cancelled.'))});
+    GOOGLE_DRIVE_TOKEN_CLIENT.requestAccessToken({prompt:forcePrompt?'consent':''});
+  });
+}
+async function googleDriveModuleFolder(module){
+  await requestGoogleDriveAccessToken();
+  const rootId=googleDriveRootFolderId();
+  if(!rootId) throw new Error('A valid Google Drive Root Folder URL is required in Settings.');
+  const folderName=uploadModuleFolder(module);
+  const escaped=folderName.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  const q=encodeURIComponent(`'${rootId}' in parents and name='${escaped}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const found=await googleDriveRequest(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&pageSize=1&supportsAllDrives=true&includeItemsFromAllDrives=true`);
+  if(found?.files?.[0]?.id) return found.files[0].id;
+  const created=await googleDriveRequest('https://www.googleapis.com/drive/v3/files?fields=id,name&supportsAllDrives=true',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:folderName,mimeType:'application/vnd.google-apps.folder',parents:[rootId]})});
+  return created.id;
+}
+async function uploadGoogleDriveAttachment(file,module){
+  const folderId=await googleDriveModuleFolder(module);
+  const metadata={name:file.name,parents:[folderId],description:`SLSC HR upload · ${uploadModuleFolder(module)}`};
+  let uploaded;
+  if(file.size<=5*1024*1024){
+    const boundary=`slsc_hr_${Date.now()}`;
+    const body=new Blob([`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${file.type||'application/octet-stream'}\r\n\r\n`,file,`\r\n--${boundary}--`]);
+    uploaded=await googleDriveRequest('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink&supportsAllDrives=true',{method:'POST',headers:{'Content-Type':`multipart/related; boundary=${boundary}`},body});
+  }else{
+    const start=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,webViewLink&supportsAllDrives=true',{method:'POST',headers:{Authorization:`Bearer ${GOOGLE_DRIVE_TOKEN.accessToken}`,'Content-Type':'application/json; charset=UTF-8','X-Upload-Content-Type':file.type||'application/octet-stream','X-Upload-Content-Length':String(file.size)},body:JSON.stringify(metadata)});
+    if(!start.ok) throw new Error((await start.json().catch(()=>({})))?.error?.message||'Could not start the Google Drive upload.');
+    const location=start.headers.get('Location');
+    if(!location) throw new Error('Google Drive did not return a resumable upload location.');
+    const finish=await fetch(location,{method:'PUT',headers:{'Content-Type':file.type||'application/octet-stream'},body:file});
+    if(!finish.ok) throw new Error((await finish.json().catch(()=>({})))?.error?.message||'Google Drive upload failed.');
+    uploaded=await finish.json();
+  }
+  return {path:googleDriveRef(uploaded.id),name:uploaded.name||file.name,provider:'google-drive',url:uploaded.webViewLink||googleDriveFileUrl(googleDriveRef(uploaded.id)),folder:uploadModuleFolder(module)};
+}
 
 function recordStoragePaths(value, out=new Set()){
   if(!value) return out;
@@ -166,6 +245,14 @@ function recordStoragePaths(value, out=new Set()){
 
 async function deleteStorageObject(path){
   if(!path) return true;
+  if(storageRefProvider(path)==='google-drive'){
+    try{
+      await requestGoogleDriveAccessToken();
+      await googleDriveRequest(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(googleDriveFileIdFromRef(path))}?supportsAllDrives=true`,{method:'DELETE'});
+      PENDING_UPLOADS.delete(path);
+      return true;
+    }catch(error){console.warn('Google Drive cleanup failed',path,error);toast('The record was updated, but the Google Drive file could not be removed: '+error.message,true);return false;}
+  }
   const {error}=await supabase.storage.from(STORAGE_BUCKET).remove([path]);
   if(error){ console.warn('Storage cleanup failed',path,error); return false; }
   PENDING_UPLOADS.delete(path);
@@ -175,18 +262,23 @@ async function deleteStorageObject(path){
 async function deleteStorageObjects(paths){
   const list=[...new Set((paths||[]).filter(Boolean))];
   if(!list.length) return;
-  await Promise.all(list.map(path=>deleteStorageObject(path)));
+  for(const path of list) await deleteStorageObject(path);
 }
 
 function rememberCommittedRecordFiles(rec){
   recordStoragePaths(rec).forEach(path=>PENDING_UPLOADS.delete(path));
 }
 
-async function uploadAttachment(file){
+async function uploadAttachment(file,module='documents'){
   if(!file) return {path:'',name:''};
   if(file.size > MAX_ATTACH_BYTES){ toast(`"${file.name}" is too large (max ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB per file).`, true); throw new Error('File too large'); }
+  if(attachmentStorageProvider()==='google-drive'){
+    const uploaded=await uploadGoogleDriveAttachment(file,module);
+    PENDING_UPLOADS.add(uploaded.path);
+    return uploaded;
+  }
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
-  const path = `${SESSION.id}/${Date.now()}-${uid()}-${safe}`;
+  const path = `${SESSION.id}/${uploadModuleFolder(module)}/${Date.now()}-${uid()}-${safe}`;
   const {error}=await supabase.storage.from(STORAGE_BUCKET).upload(path,file,{upsert:false,contentType:file.type||'application/octet-stream'});
   if(error){ toast('Upload failed: '+error.message,true); throw error; }
   PENDING_UPLOADS.add(path);
@@ -195,19 +287,28 @@ async function uploadAttachment(file){
 
 async function downloadAttachment(path, filename){
   if(!path){ toast('No stored file for this attachment.'); return; }
+  if(storageRefProvider(path)==='google-drive'){
+    const url=googleDriveFileUrl(path);
+    if(url) window.open(url,'_blank','noopener,noreferrer');
+    else toast('The Google Drive file reference is invalid.',true);
+    return;
+  }
   const {data,error}=await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(path,120);
   if(error){ toast('Could not create download link: '+error.message,true); return; }
   const a=document.createElement('a'); a.href=data.signedUrl; a.target='_blank'; a.rel='noopener'; a.download=filename||'attachment'; document.body.appendChild(a); a.click(); a.remove();
 }
 
-async function handleFileInput(key, inputEl){
+async function handleFileInput(key, inputEl, module='documents'){
   const file=inputEl.files && inputEl.files[0]; if(!file) return;
   try{
-    const uploaded=await uploadAttachment(file);
+    inputEl.disabled=true;
+    const uploaded=await uploadAttachment(file,module);
     document.getElementById('f_'+key).value=uploaded.name;
     document.getElementById('f_'+key+'_data').value=uploaded.path;
     const prev=document.getElementById('f_'+key+'_preview'); if(prev) prev.innerHTML=attachPreviewHTML(key,uploaded.name,uploaded.path);
-  }catch(e){ inputEl.value=''; }
+    toast(`Uploaded to ${uploaded.provider==='google-drive'?`Google Drive / ${uploaded.folder}`:'Supabase Storage'}.`);
+  }catch(e){ inputEl.value=''; toast('Upload failed: '+e.message,true); }
+  finally{inputEl.disabled=false;}
 }
 async function clearFileField(key){
   const dataEl=document.getElementById('f_'+key+'_data');
@@ -221,7 +322,8 @@ async function clearFileField(key){
 }
 function attachPreviewHTML(key,name,path){
   if(!name) return '';
-  return `<div class="attach-preview">${iDoc(14)}<span class="mono" style="font-size:12px;">${esc(name)}</span>${path?`<button type="button" class="iconbtn" title="Download" onclick="downloadAttachment('${esc(path)}','${esc(name).replace(/'/g,"\\'")}')">${iDownload(13)}</button>`:''}<button type="button" class="iconbtn" title="Remove" onclick="clearFileField('${key}')">${iTrash(13)}</button></div>`;
+  const provider=storageRefProvider(path);
+  return `<div class="attach-preview">${iDoc(14)}<span class="mono" style="font-size:12px;">${esc(name)}</span>${path?`<span class="attachment-provider">${provider==='google-drive'?'Drive':'Supabase'}</span><button type="button" class="iconbtn" title="Open file" onclick="downloadAttachment('${esc(path)}','${esc(name).replace(/'/g,"\\'")}')">${iDownload(13)}</button>`:''}<button type="button" class="iconbtn" title="Remove" onclick="clearFileField('${key}')">${iTrash(13)}</button></div>`;
 }
 
 const DEPT_OPTIONS = ['LOGISTICS','WAREHOUSE','UTILITY','MAINTENANCE','PRODUCTION','ADMIN','SALES'];
@@ -1877,13 +1979,15 @@ function fieldHTML(f, val){
   }
   if(f.type==='file'){
     const existingData = f.existingData || '';
+    const storageModule=uploadModuleFolder(f.storagePrefix||STATE.view||'documents');
+    const provider=attachmentStorageProvider()==='google-drive'?'Google Drive':'Supabase Storage';
     return `<div class="field ${f.full?'full':''}"><label>${f.label}</label>
       <input type="hidden" id="f_${f.key}" value="${esc(v)}">
       <input type="hidden" id="f_${f.key}_data" value="${esc(existingData)}">
       <button type="button" class="btn btn-ghost btn-sm" onclick="this.nextElementSibling.click()">${iPlus(13)} Choose File</button>
-      <input type="file" style="display:none" onchange="handleFileInput('${f.key}', this)">
+      <input type="file" style="display:none" onchange="handleFileInput('${f.key}', this, '${esc(storageModule)}')">
       <div id="f_${f.key}_preview">${attachPreviewHTML(f.key, v, existingData)}</div>
-      <div class="computed-note" style="margin-top:6px;">Uploaded securely to Supabase Storage (max ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB per file).</div>
+      <div class="computed-note" style="margin-top:6px;">New file: ${esc(provider)}${provider==='Google Drive'?` / ${esc(storageModule)}`:''} (max ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB).</div>
       </div>`;
   }
   const formatAttrs=f.format?`inputmode="numeric" maxlength="${f.format==='sss'?13:f.format==='philHealth'?15:f.format==='pagIbig'?14:15}" oninput="formatGovernmentIdInput(this,'${f.format}')"`:'';
@@ -2150,7 +2254,7 @@ function openRecordForm(key, id){
   const cfg = MODULES[key];
   const existing = id? DB[key].find(r=>r.id===id) : null;
   const fields = cfg.fields.map(f=>{
-    const next=f.type==='file'&&existing?{...f,existingData:existing[f.key+'Data']||''}:{...f};
+    const next=f.type==='file'&&existing?{...f,storagePrefix:key,existingData:existing[f.key+'Data']||''}:{...f,storagePrefix:key};
     if(existing&&f.key==='employeeName')next.employeeSelectedId=existing.employeeId||'';
     if(existing&&f.key==='employeeReplaced')next.employeeSelectedId=existing.employeeReplacedId||'';
     return next;
@@ -2493,7 +2597,7 @@ const ONBOARDING_APPLICATION_FIELDS=[
   {key:'applicationDate',label:'Application Date',type:'date',required:true},
   {key:'source',label:'Application Source',type:'select',options:['Walk-in','Referral','Online Job Board','Social Media','Job Fair','Agency','Other']},
   {key:'stage',label:'Hiring Stage',type:'select',options:ONBOARDING_STAGES,required:true},
-  {key:'resume',label:'Resume / Application Form',type:'file',full:true},
+  {key:'resume',label:'Resume / Application Form',type:'file',full:true,storagePrefix:'onboarding'},
 ];
 const ONBOARDING_EVALUATION_FIELDS=[
   {key:'interviewDate',label:'Interview Date',type:'date'},
@@ -2514,7 +2618,7 @@ const ONBOARDING_OFFER_FIELDS=[
   {key:'sssNumber',label:'SSS Number',type:'text',format:'sss'},
   {key:'philHealthNumber',label:'PhilHealth PIN',type:'text',format:'philHealth'},
   {key:'pagIbigNumber',label:'Pag-IBIG MID',type:'text',format:'pagIbig'},
-  {key:'preEmploymentDocs',label:'Combined Pre-employment Documents',type:'file',full:true},
+  {key:'preEmploymentDocs',label:'Combined Pre-employment Documents',type:'file',full:true,storagePrefix:'onboarding'},
   {key:'remarks',label:'HR Remarks',type:'textarea'},
 ];
 const ONBOARDING_FIELDS=[...ONBOARDING_IDENTITY_FIELDS,...ONBOARDING_APPLICATION_FIELDS,...ONBOARDING_EVALUATION_FIELDS,...ONBOARDING_OFFER_FIELDS];
@@ -2905,9 +3009,36 @@ function employeeDisplayName(employee){
   const parts=splitEmployeeName(employee);
   return parts.lastName&&parts.firstName?formatEmployeeName(parts):String(employee?.name||'').trim();
 }
+function duplicateNameKey(value){
+  const raw=typeof value==='string'?value:employeeDisplayName(value);
+  return String(raw||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(Boolean).sort().join(' ');
+}
+function levenshteinDistance(a,b){
+  const left=String(a||''),right=String(b||'');
+  const row=Array.from({length:right.length+1},(_,index)=>index);
+  for(let i=1;i<=left.length;i++){
+    let previous=row[0];row[0]=i;
+    for(let j=1;j<=right.length;j++){
+      const saved=row[j];
+      row[j]=Math.min(row[j]+1,row[j-1]+1,previous+(left[i-1]===right[j-1]?0:1));
+      previous=saved;
+    }
+  }
+  return row[right.length];
+}
+function employeeNameSimilarity(a,b){
+  const left=duplicateNameKey(a),right=duplicateNameKey(b);
+  if(!left||!right) return 0;
+  if(left===right) return 1;
+  return 1-(levenshteinDistance(left,right)/Math.max(left.length,right.length));
+}
 function findEmployeeDuplicates(vals,id){
-  const keyName=normalizeEmployeeName(vals.name);
-  return DB.employees.filter(e=>e.id!==id && [e.name,employeeDisplayName(e)].some(name=>normalizeEmployeeName(name)===keyName) && String(e.dateHired||'')===String(vals.dateHired||'') && String(e.department||'')===String(vals.department||''));
+  return DB.employees.filter(employee=>employee.id!==id).map(employee=>{
+    const score=employeeNameSimilarity(vals,employee);
+    const sameDate=!!vals.dateHired&&String(employee.dateHired||'')===String(vals.dateHired);
+    const sameDepartment=!!vals.department&&String(employee.department||'')===String(vals.department);
+    return {employee,score,sameDate,sameDepartment};
+  }).filter(match=>match.score>=0.86||(match.score>=0.78&&(match.sameDate||match.sameDepartment))).sort((a,b)=>b.score-a.score);
 }
 function updateEmployeeNameReferences(oldName,newName){
   if(!oldName||!newName||normalizeEmployeeName(oldName)===normalizeEmployeeName(newName)) return [];
@@ -2940,8 +3071,8 @@ async function saveEmployee(id){
   if(DB.employees.some(e=>e.id!==id && String(e.prfNumber||'').trim().toUpperCase()===String(vals.prfNumber||'').trim().toUpperCase())){ toast('PRF Number is already assigned to another employee.'); return; }
   const duplicateCandidates=findEmployeeDuplicates(vals,id);
   if(duplicateCandidates.length){
-    const sample=duplicateCandidates.slice(0,3).map(e=>e.name+' — '+e.department).join('; ');
-    if(!(await confirmDataChange({title:'Possible duplicate employee',message:`A similar employee record was found: ${sample}. Save this employee anyway?`,confirmLabel:'Save anyway'}))) return;
+    const sample=duplicateCandidates.slice(0,4).map(match=>`${employeeDisplayName(match.employee)} · ${match.employee.employeeNo||'No employee number'} · ${match.employee.department||'Unassigned'} (${Math.round(match.score*100)}% name match)`).join('; ');
+    if(!(await confirmDataChange({title:'Possible duplicate employee',message:`Similar employee record${duplicateCandidates.length===1?' was':'s were'} found: ${sample}. Review these matches before creating another employee.`,confirmLabel:'Continue and save',cancelLabel:'Go back'}))) return;
   }
   const isNew=!id;
   const rec=id?DB.employees.find(e=>e.id===id):{id:uid(), employmentHistory:[]};
@@ -3214,7 +3345,7 @@ function renderLeaves(){
     <div><h2>Leave Tracker</h2><p>${DB.leaves.length} leave requests on record.</p></div>
     ${canEdit()? `<button class="btn btn-brass" onclick="openRecordForm('leaves')">${iPlus(15)} Add Leave Record</button>`:''}
   </div>
-  <div class="notice"><b>Note:</b> Uploaded leave forms are stored securely in the private Supabase Storage bucket (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each). Automatic OCR/text extraction is not performed; all fields here are entered or confirmed manually.</div>
+  <div class="notice"><b>Note:</b> Uploaded leave forms use the storage destination selected by the System Administrator (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each). Automatic OCR/text extraction is not performed; all fields here are entered or confirmed manually.</div>
   <div class="tabs">
     <button class="tabbtn ${tab==='records'?'active':''}" onclick="STATE.leaveTab='records'; renderLeaves()">Leave Records</button>
     <button class="tabbtn ${tab==='calendar'?'active':''}" onclick="STATE.leaveTab='calendar'; renderLeaves()">Leave Calendar</button>
@@ -3448,7 +3579,7 @@ function openCVRForm(id){
           </div>
         </div>
         <div class="field full"><label>Other / Additional Offense (write-in, not in catalog)</label><input id="cv_other" value="${esc((existing&&existing.otherOffense)||'')}"></div>
-        ${fieldHTML({key:'attachment', label:'Uploaded CVR Document', type:'file', full:true, existingData:(existing&&existing.attachmentData)||''}, existing?existing.attachment:'')}
+        ${fieldHTML({key:'attachment', label:'Uploaded CVR Document', type:'file', full:true, storagePrefix:'cvr', existingData:(existing&&existing.attachmentData)||''}, existing?existing.attachment:'')}
         <div class="field full"><label>Remarks</label><textarea id="cv_remarks" rows="2">${esc((existing&&existing.remarks)||'')}</textarea></div>
       </div>
       <div class="computed-note">Offense level (1st/2nd/3rd/4th+) and consequence are computed automatically per offense from this employee's CVR history and the Offense Catalog — no need to set them manually.</div>
@@ -3572,7 +3703,7 @@ function openIncidentForm(id){
         <div class="field full"><label>Other / Additional Type (write-in)</label><input id="in_other" value="${esc((existing&&existing.otherType)||'')}"></div>
         <div class="field full"><label>Description *</label><textarea id="in_description" rows="3">${esc((existing&&existing.description)||'')}</textarea></div>
         <div class="field"><label>Status</label><select id="in_status">${INCIDENT_STATUS.map(s=>`<option ${(existing?existing.status:INCIDENT_STATUS[0])===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
-        ${fieldHTML({key:'attachment', label:'Uploaded Incident Report Document', type:'file', full:true, existingData:(existing&&existing.attachmentData)||''}, existing?existing.attachment:'')}
+        ${fieldHTML({key:'attachment', label:'Uploaded Incident Report Document', type:'file', full:true, storagePrefix:'incident', existingData:(existing&&existing.attachmentData)||''}, existing?existing.attachment:'')}
         <div class="field full"><label>Remarks</label><textarea id="in_remarks" rows="2">${esc((existing&&existing.remarks)||'')}</textarea></div>
       </div>
       <div class="computed-note">Repeat-occurrence count per incident type is computed automatically from this employee's incident history — no need to set it manually.</div>
@@ -3786,7 +3917,7 @@ function renderATD(){
     <div><h2>ATD Monitoring</h2><p>${totalRecords} record(s) — uniform/expense and charge deductions.</p></div>
     ${canEdit()? `<button class="btn btn-brass" onclick="openATDForm()">${iPlus(15)} New ATD Record</button>`:''}
   </div>
-  <div class="notice"><b>Note:</b> ATD form, Incident Report and quotation/SOA documents are stored securely in the private Supabase Storage bucket (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each). Payment status, cumulative paid and remaining balance are calculated automatically from the recorded payments.</div>
+  <div class="notice"><b>Note:</b> ATD forms, Incident Reports, quotation/SOA documents, and payslips use the storage destination selected by the System Administrator (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each). Payment status, cumulative paid and remaining balance are calculated automatically from the recorded payments.</div>
   <div class="grid cols-4" style="margin-bottom:16px;">
     <div class="stat" style="--accent:var(--brass)"><div class="lbl">Total ATD Records</div><div class="val">${totalRecords}</div><div class="sub">${byCat['Uniforms/Expenses']} Uniforms/Expenses · ${byCat['Charges']} Charges</div></div>
     <div class="stat" style="--accent:var(--ink)"><div class="lbl">Total Amount Due</div><div class="val" style="font-size:20px;">${peso(totalOutstanding)}</div></div>
@@ -3851,10 +3982,10 @@ function openATDForm(id){
         <div class="field"><label>Deduction Type / Reason *</label><input id="f_deductionType" value="${esc(existing?existing.deductionType:'')}" placeholder="e.g. Uniform cost, Negligence — damaged equipment"></div>
         <div class="field"><label>Total ATD Amount (₱) *</label><input type="number" step="0.01" id="f_totalAmount" value="${existing?existing.totalAmount:''}"></div>
         <div class="field"><label>Payment Terms / Installment</label><input id="f_paymentTerms" value="${esc(existing?existing.paymentTerms:'')}" placeholder="e.g. 3 cut-offs"></div>
-        ${fieldHTML({key:'atdForm', label:'ATD Form', type:'file', full:true, existingData:existing?existing.atdFormData:''}, existing?existing.atdForm:'')}
+        ${fieldHTML({key:'atdForm', label:'ATD Form', type:'file', full:true, storagePrefix:'atd', existingData:existing?existing.atdFormData:''}, existing?existing.atdForm:'')}
         <div id="atd-charges-fields" style="display:${cat==='Charges'?'contents':'none'}">
-          ${fieldHTML({key:'incidentReport', label:'Incident Report (IR)', type:'file', existingData:existing?existing.incidentReportData:''}, existing?existing.incidentReport:'')}
-          ${fieldHTML({key:'quotation', label:'Quotation / SOA Basis', type:'file', existingData:existing?existing.quotationData:''}, existing?existing.quotation:'')}
+          ${fieldHTML({key:'incidentReport', label:'Incident Report (IR)', type:'file', storagePrefix:'atd', existingData:existing?existing.incidentReportData:''}, existing?existing.incidentReport:'')}
+          ${fieldHTML({key:'quotation', label:'Quotation / SOA Basis', type:'file', storagePrefix:'atd', existingData:existing?existing.quotationData:''}, existing?existing.quotation:'')}
           <div class="field"><label>Statement of Account (SOA) Amount (₱)</label><input type="number" step="0.01" id="f_soaAmount" value="${existing?existing.soaAmount||'':''}"></div>
         </div>
         <div class="field full"><label>Remarks</label><textarea id="f_remarks" rows="2">${esc(existing?existing.remarks:'')}</textarea></div>
@@ -3969,7 +4100,7 @@ function openATDPaymentForm(atdId, paymentId){
         <div class="field"><label>Cut-Off *</label><select id="p_cutoff">${ATD_CUTOFFS.map(c=>`<option ${(existing?existing.cutoff:ATD_CUTOFFS[0])===c?'selected':''}>${c}</option>`).join('')}</select></div>
         <div class="field"><label>Amount Paid (₱) *</label><input type="number" step="0.01" id="p_amountPaid" value="${existing?existing.amountPaid:''}"></div>
         <div class="field"><label>Date Recorded</label><input type="date" id="p_dateRecorded" value="${existing?existing.dateRecorded:todayISO()}"></div>
-        ${fieldHTML({key:'payslip', label:'Payslip Attachment', type:'file', full:true, existingData:existing?existing.payslipData:''}, existing?existing.payslip:'')}
+        ${fieldHTML({key:'payslip', label:'Payslip Attachment', type:'file', full:true, storagePrefix:'atd', existingData:existing?existing.payslipData:''}, existing?existing.payslip:'')}
       </div>
       <div class="computed-note">Cumulative amount paid, remaining balance, and payment status recalculate automatically once saved.</div>
     </div>
@@ -4068,7 +4199,7 @@ function openEvalForm(employeeId, milestoneKey){
       <div class="formgrid">
         <div class="field"><label>Due Date</label><input value="${fmtDate(evalDueDate(emp.dateHired,m.days))}" disabled style="background:var(--paper);"></div>
         <div class="field"><label>Date Completed</label><input type="date" id="ev_completedDate" value="${(rec&&rec.completedDate)||''}"></div>
-        ${fieldHTML({key:'attachment', label:'Uploaded Evaluation Document', type:'file', full:true, existingData:(rec&&rec.attachmentData)||''}, rec?rec.attachment:'')}
+        ${fieldHTML({key:'attachment', label:'Uploaded Evaluation Document', type:'file', full:true, storagePrefix:'evaluation', existingData:(rec&&rec.attachmentData)||''}, rec?rec.attachment:'')}
         <div class="field full"><label>Remarks</label><textarea id="ev_remarks" rows="2">${esc((rec&&rec.remarks)||'')}</textarea></div>
       </div>
     </div>
@@ -4767,7 +4898,7 @@ const MODULES = {
   },
   nte:{ title:'Notice to Explain (NTE)', subtitle:'Track NTE issuance, receipt, and employee explanations.', singular:'NTE Record', addLabel:'Add NTE',
     searchFields:['employeeName','violation'], sortKey:'dateIssued', filterField:'status', filterOptions:NTE_STATUS, filterLabel:'Status',
-    notice:`Uploaded NTE documents are stored securely in the private Supabase Storage bucket (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each). Dates and text are not extracted automatically here.`,
+    notice:`Uploaded NTE documents use the storage destination selected by the System Administrator (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each). Dates and text are not extracted automatically here.`,
     fields:[
       {key:'employeeName', label:'Employee Name', type:'text', required:true},
       {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
@@ -5557,17 +5688,25 @@ async function saveUser(id){
    ================================================================ */
 function renderSettings(){
   setTitle('Settings', 'Organization preferences and audit log.');
+  const admin=SESSION?.role==='Administrator';
+  const provider=attachmentStorageProvider();
   document.getElementById('content').innerHTML = `
     <div class="grid cols-2">
       <div class="panel">
         <h3>Organization</h3>
-        <div class="desc">Applied across the dashboard header and reports.</div>
-        <div class="field"><label>Organization Name</label><input id="s_org" value="${esc(DB.settings.orgName)}"></div>
-        <div class="field"><label>Google Drive Root Folder URL</label><input id="s_drive_root" type="url" value="${esc(DB.settings.googleDriveRootUrl||'')}" placeholder="https://drive.google.com/drive/folders/..."><div class="computed-note">Optional workspace link used by the Document Center. The actual files remain in Google Drive.</div></div>
-        <div class="field"><label>Probation → Regularization Threshold (days)</label><input id="s_prob" type="number" value="${DB.settings.probationDays}">
+        <div class="desc">System-wide settings can only be changed by the System Administrator.</div>
+        ${!admin?'<div class="notice"><b>Read only:</b> Ask a System Administrator to change organization or file-storage settings.</div>':''}
+        <div class="field"><label>Organization Name</label><input id="s_org" value="${esc(DB.settings.orgName)}" ${admin?'':'disabled'}></div>
+        <div class="field"><label>Default File Storage</label><select id="s_file_storage" onchange="storageSettingsChanged()" ${admin?'':'disabled'}><option value="supabase" ${provider==='supabase'?'selected':''}>Supabase Storage</option><option value="google-drive" ${provider==='google-drive'?'selected':''}>Google Drive</option></select><div class="computed-note">Controls every new file uploaded from HR forms. Existing attachments remain in their original storage.</div></div>
+        <div id="s_drive_settings" class="storage-settings-group" style="display:${provider==='google-drive'?'grid':'none'}">
+          <div class="field"><label>Google Drive Root Folder URL</label><input id="s_drive_root" type="url" value="${esc(DB.settings.googleDriveRootUrl||'')}" placeholder="https://drive.google.com/drive/folders/..." ${admin?'':'disabled'}><div class="computed-note">Module folders such as leave, atd, cvr, and onboarding are created inside this root.</div></div>
+          <div class="field"><label>Google OAuth Web Client ID</label><input id="s_drive_client" value="${esc(DB.settings.googleDriveClientId||'')}" placeholder="000000000000-….apps.googleusercontent.com" autocomplete="off" ${admin?'':'disabled'}><div class="computed-note">OAuth client IDs are identifiers, not secrets. Tokens stay in browser memory and are never saved.</div></div>
+          ${admin?`<button type="button" class="btn btn-ghost btn-sm storage-test-button" onclick="testGoogleDriveConnection()">${iCheck(14)} Test Drive Connection</button>`:''}
+        </div>
+        <div class="field"><label>Probation → Regularization Threshold (days)</label><input id="s_prob" type="number" value="${DB.settings.probationDays}" ${admin?'':'disabled'}>
           <div class="computed-note">Default is 180 days (the standard Philippine probationary period). Employee classification recalculates automatically wherever it is displayed.</div>
         </div>
-        <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+        ${admin?'<button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>':''}
       </div>
       <div class="panel">
         <h3>Audit Trail</h3>
@@ -5577,14 +5716,44 @@ function renderSettings(){
         </div>
       </div>
     </div>
-    <div class="notice" style="margin-top:16px;"><b>Document architecture:</b> Existing uploads remain in the private <b>hr-documents</b> Supabase Storage bucket. New Google Drive records store only document metadata and the Drive reference in Supabase; the actual HR file stays in Google Drive.</div>
+    <div class="notice" style="margin-top:16px;"><b>Current upload destination:</b> ${provider==='google-drive'?`Google Drive · files are organized below the configured root folder by HR module.`:'Private Supabase Storage · files are organized by user and HR module.'} Existing files are not moved when this setting changes.</div>
   `;
 }
+function storageSettingsChanged(){
+  const group=document.getElementById('s_drive_settings');
+  if(group) group.style.display=document.getElementById('s_file_storage')?.value==='google-drive'?'grid':'none';
+}
+async function testGoogleDriveConnection(){
+  if(SESSION?.role!=='Administrator') return;
+  const rootUrl=document.getElementById('s_drive_root')?.value.trim()||'';
+  const clientId=document.getElementById('s_drive_client')?.value.trim()||'';
+  const rootId=documentDriveFileId(rootUrl);
+  if(!rootId||!clientId){toast('Enter a valid Drive root folder URL and OAuth Web Client ID first.',true);return;}
+  const previous={root:DB.settings.googleDriveRootUrl||'',client:DB.settings.googleDriveClientId||''};
+  DB.settings.googleDriveRootUrl=rootUrl;DB.settings.googleDriveClientId=clientId;
+  GOOGLE_DRIVE_TOKEN={accessToken:'',expiresAt:0};
+  try{
+    await requestGoogleDriveAccessToken(true);
+    const folder=await googleDriveRequest(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(rootId)}?fields=id,name,mimeType&supportsAllDrives=true`);
+    if(folder?.mimeType!=='application/vnd.google-apps.folder') throw new Error('The configured URL does not point to a Drive folder.');
+    toast(`Connected to Google Drive folder: ${folder.name}`);
+  }catch(error){toast('Google Drive connection failed: '+error.message,true);}
+  finally{DB.settings.googleDriveRootUrl=previous.root;DB.settings.googleDriveClientId=previous.client;}
+}
 async function saveSettings(){
+  if(SESSION?.role!=='Administrator'){toast('Only the System Administrator can change settings.',true);return;}
+  const provider=document.getElementById('s_file_storage')?.value||'supabase';
+  const driveRoot=document.getElementById('s_drive_root')?.value.trim()||'';
+  const driveClient=document.getElementById('s_drive_client')?.value.trim()||'';
+  if(provider==='google-drive'&&(!documentDriveFileId(driveRoot)||!driveClient.endsWith('.apps.googleusercontent.com'))){toast('Google Drive storage requires a valid root folder URL and OAuth Web Client ID.',true);return;}
+  const previousClient=DB.settings.googleDriveClientId||'';
   DB.settings.orgName = document.getElementById('s_org').value.trim()||'SCPA';
   DB.settings.probationDays = parseInt(document.getElementById('s_prob').value,10)||180;
-  DB.settings.googleDriveRootUrl = document.getElementById('s_drive_root')?.value.trim()||'';
-  logAudit('Updated organization settings');
+  DB.settings.fileStorageProvider=provider;
+  DB.settings.googleDriveRootUrl=driveRoot;
+  DB.settings.googleDriveClientId=driveClient;
+  if(previousClient!==driveClient) GOOGLE_DRIVE_TOKEN={accessToken:'',expiresAt:0};
+  logAudit(`Updated system settings · file storage: ${provider==='google-drive'?'Google Drive':'Supabase Storage'}`);
   if(!(await saveDB())){PENDING_PAGE_NAVIGATION=null;return;}
   const destination=PENDING_PAGE_NAVIGATION||'settings';
   PENDING_PAGE_NAVIGATION=null;
@@ -5645,18 +5814,20 @@ function collectStoredDocuments(){
         if(typeof path!=='string' || !path) return;
         const name=rec[key.slice(0,-4)];
         if(typeof name!=='string' || !name) return;
+        const provider=storageRefProvider(path);
         docs.push({
-          id:`${module}:${rec.id}:${key}`, storage:'Supabase', module, moduleLabel:caseModuleLabel(module),
+          id:`${module}:${rec.id}:${key}`, storage:provider==='google-drive'?'Google Drive':'Supabase', managedAttachment:true, module, moduleLabel:caseModuleLabel(module),
           recordId:String(rec.id), name, path, employee:rec.employeeName||rec.name||'—',
           employeeId:rec.employeeId||'', department:rec.department||'—', date:caseRecordDate(module,rec)||rec.updated_at||'',
-          label:caseRecordLabel(module,rec), category:'Legacy Attachment', expirationDate:'',
-          driveUrl:'', driveFileId:''
+          label:caseRecordLabel(module,rec), category:'HR Attachment', expirationDate:'',
+          driveUrl:provider==='google-drive'?googleDriveFileUrl(path):'', driveFileId:provider==='google-drive'?googleDriveFileIdFromRef(path):''
         });
       });
       if(module==='atd'){
         (rec.payments||[]).forEach(payment=>{
           if(payment.payslipData && payment.payslip){
-            docs.push({id:`atd:${rec.id}:payment:${payment.id}:payslip`,storage:'Supabase',module:'atd',moduleLabel:'ATD Monitoring',recordId:String(rec.id),name:payment.payslip,path:payment.payslipData,employee:rec.employeeName||'—',employeeId:rec.employeeId||'',department:rec.department||'—',date:payment.dateRecorded||rec.atdDate||'',label:`ATD payment — ${payment.month||''} ${payment.cutoff||''}`.trim(),category:'Payroll / ATD',expirationDate:'',driveUrl:'',driveFileId:''});
+            const provider=storageRefProvider(payment.payslipData);
+            docs.push({id:`atd:${rec.id}:payment:${payment.id}:payslip`,storage:provider==='google-drive'?'Google Drive':'Supabase',managedAttachment:true,module:'atd',moduleLabel:'ATD Monitoring',recordId:String(rec.id),name:payment.payslip,path:payment.payslipData,employee:rec.employeeName||'—',employeeId:rec.employeeId||'',department:rec.department||'—',date:payment.dateRecorded||rec.atdDate||'',label:`ATD payment — ${payment.month||''} ${payment.cutoff||''}`.trim(),category:'Payroll / ATD',expirationDate:'',driveUrl:provider==='google-drive'?googleDriveFileUrl(payment.payslipData):'',driveFileId:provider==='google-drive'?googleDriveFileIdFromRef(payment.payslipData):''});
           }
         });
       }
@@ -5687,10 +5858,8 @@ function documentFileType(name){
   return ext ? ext.toUpperCase() : 'File';
 }
 async function openStoredDocument(path,name){
-  if(!path){toast('No Supabase Storage file is attached to this document.',true);return;}
-  const {data,error}=await supabase.storage.from(STORAGE_BUCKET).createSignedUrl(path,120);
-  if(error){toast('Could not create secure preview link: '+error.message,true);return;}
-  window.open(data.signedUrl,'_blank','noopener,noreferrer');
+  if(!path){toast('No stored file is attached to this document.',true);return;}
+  await downloadAttachment(path,name);
 }
 function openDriveDocument(url){
   if(!url){toast('No Google Drive URL is available.',true);return;}
@@ -5763,7 +5932,7 @@ async function deleteDriveDocument(id){
   renderDocuments(); renderNav(); refreshNotificationBadge(); toast('Document reference removed.');
 }
 function renderDocuments(){
-  setTitle('Document Center','Central document index for employee/case records, with Google Drive references and legacy Supabase attachments.');
+  setTitle('Document Center','Central document index for employee and case files across Google Drive and Supabase Storage.');
   const docs=collectDocumentIndex();
   const q=(STATE.search||'').toLowerCase();
   const storageFilter=STATE.documentStorage||'';
@@ -5802,9 +5971,9 @@ function renderDocuments(){
   </div>
   ${driveDocs.length && (expired||expiring)?`<div class="notice" style="margin-top:10px;"><b>Document attention:</b> ${expired?`${expired} expired`:''}${expired&&expiring?' · ':''}${expiring?`${expiring} expiring within 30 days`:''}. Use the filters above to review them.</div>`:''}
   <div class="tablewrap"><table class="data-table"><thead><tr><th>Document</th><th>Employee</th><th>Category</th><th>Storage</th><th>Source</th><th>Status</th><th>Expiry</th><th style="text-align:right;">Actions</th></tr></thead><tbody>
-    ${filtered.length?filtered.map(d=>{const expiry=documentExpiryInfo(d);const storageBadge=d.storage==='Google Drive'?'b-blue':'b-grey';return `<tr><td><div class="doc-row"><div class="doc-icon">${iDoc(17)}</div><div class="doc-main"><div class="doc-name" title="${esc(d.name)}">${esc(d.name)}</div><div class="doc-meta">${esc(documentFileType(d.name))}${d.driveFileId?' · Drive ID linked':''}</div></div></div></td><td>${esc(d.employee)}</td><td>${esc(d.category||'Other')}</td><td>${statusBadge(d.storage,{'Google Drive':'b-blue','Supabase':'b-grey'})}</td><td><div class="doc-source">${esc(d.moduleLabel||'—')}${d.recordId?' · '+esc(d.recordId):''}</div></td><td>${statusBadge(d.storage==='Google Drive'?(d.status||'Active'):'Active',{'Active':'b-green','Pending':'b-amber','Expired':'b-red','Archived':'b-grey'})}</td><td><div class="doc-expiry">${statusBadge(expiry.label, {[expiry.label]:expiry.cls})}</div></td><td><div class="doc-actions rowactions">${d.storage==='Google Drive'?`${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="openDriveDocumentForm('${esc(d.id)}')">Edit</button>`:''}<button class="btn btn-ghost btn-sm" onclick="openDriveDocument('${esc(d.driveUrl).replace(/'/g,"\\'")}')">Open</button>${canEdit()?`<button class="btn btn-danger btn-sm" onclick="deleteDriveDocument('${esc(d.id)}')">Remove</button>`:''}`:`<button class="btn btn-ghost btn-sm" onclick="openStoredDocument('${esc(d.path)}','${esc(d.name).replace(/'/g,"\\'")}')">Open</button><button class="btn btn-ghost btn-sm" onclick="downloadAttachment('${esc(d.path)}','${esc(d.name).replace(/'/g,"\\'")}')">Download</button>`}</div></td></tr>`;}).join(''):`<tr><td colspan="8"><div class="empty"><b>No documents found</b>${docs.length?'Try another search or filter.':'Register a Google Drive document or attach a file to an existing HR record.'}</div></td></tr>`}
+    ${filtered.length?filtered.map(d=>{const expiry=documentExpiryInfo(d);const storedAttachment=d.managedAttachment;return `<tr><td><div class="doc-row"><div class="doc-icon">${iDoc(17)}</div><div class="doc-main"><div class="doc-name" title="${esc(d.name)}">${esc(d.name)}</div><div class="doc-meta">${esc(documentFileType(d.name))}${d.driveFileId?' · Drive ID linked':''}</div></div></div></td><td>${esc(d.employee)}</td><td>${esc(d.category||'Other')}</td><td>${statusBadge(d.storage,{'Google Drive':'b-blue','Supabase':'b-grey'})}</td><td><div class="doc-source">${esc(d.moduleLabel||'—')}${d.recordId?' · '+esc(d.recordId):''}</div></td><td>${statusBadge(d.storage==='Google Drive'?(d.status||'Active'):'Active',{'Active':'b-green','Pending':'b-amber','Expired':'b-red','Archived':'b-grey'})}</td><td><div class="doc-expiry">${statusBadge(expiry.label, {[expiry.label]:expiry.cls})}</div></td><td><div class="doc-actions rowactions">${storedAttachment?`<button class="btn btn-ghost btn-sm" onclick="openStoredDocument('${esc(d.path)}','${esc(d.name).replace(/'/g,"\\'")}')">Open</button>`:d.storage==='Google Drive'?`${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="openDriveDocumentForm('${esc(d.id)}')">Edit</button>`:''}<button class="btn btn-ghost btn-sm" onclick="openDriveDocument('${esc(d.driveUrl).replace(/'/g,"\\'")}')">Open</button>${canEdit()?`<button class="btn btn-danger btn-sm" onclick="deleteDriveDocument('${esc(d.id)}')">Remove</button>`:''}`:`<button class="btn btn-ghost btn-sm" onclick="openStoredDocument('${esc(d.path)}','${esc(d.name).replace(/'/g,"\\'")}')">Open</button>`}</div></td></tr>`;}).join(''):`<tr><td colspan="8"><div class="empty"><b>No documents found</b>${docs.length?'Try another search or filter.':'Register a Google Drive document or attach a file to an existing HR record.'}</div></td></tr>`}
   </tbody></table></div>
-  <div class="doc-note">Google Drive files remain outside the Supabase database. Supabase stores document metadata and references. Existing Supabase Storage attachments remain readable for backward compatibility.</div>`;
+  <div class="doc-note">New uploads follow the System Administrator's storage setting. Existing Google Drive and Supabase attachments remain available from this index.</div>`;
   document.getElementById('content').innerHTML=html;
 }
 function openDriveWorkspace(){
@@ -6225,7 +6394,7 @@ Object.assign(window, {
   renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
-  saveEval, saveIncident, saveRecord, saveSettings, saveUser, setTitle, shiftDate, statusBadge, switchAuthTab, toCSV,
+  saveEval, saveIncident, saveRecord, saveSettings, saveUser, setTitle, shiftDate, statusBadge, storageSettingsChanged, testGoogleDriveConnection, switchAuthTab, toCSV,
   toast, todayISO, togglePasswordVisibility, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, paginationMeta, paginationHTML, paginationReset, paginateRows
 });
 
