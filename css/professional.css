@@ -714,6 +714,25 @@ body{background:var(--page);color:var(--text);}
 .tablewrap thead th{position:sticky;top:0;z-index:4;background:#FAFAFC;box-shadow:0 1px 0 var(--border),0 5px 12px rgba(34,31,42,.05);}
 .modal .tablewrap{max-height:min(430px,48dvh);}
 
+/* Shared HR data surface: every operational table follows the directory pattern. */
+#content.data-focused-content .table-card,
+#content.data-focused-content>.tablewrap:has(>.data-table){overflow:hidden;border:1px solid var(--border);border-radius:8px;background:#fff;box-shadow:var(--shadow-sm);}
+#content.data-focused-content>.tablewrap:has(>.data-table){max-height:calc(100dvh - 225px);overflow:auto;}
+#content.data-focused-content .data-table{width:100%;border-collapse:separate;border-spacing:0;}
+#content.data-focused-content .data-table tbody tr{transition:background .12s ease;}
+#content.data-focused-content .data-table tbody tr:hover td{background:#FBFAFE;}
+#content.data-focused-content .data-table tbody td{border-bottom:1px solid #EFEDF3;vertical-align:middle;}
+#content.data-focused-content .data-table tbody tr:last-child td{border-bottom:0;}
+#content.data-focused-content .data-table:has(thead .actions-head) th:last-child,
+#content.data-focused-content .data-table:has(thead .actions-head) td:last-child{position:sticky;right:0;background:#fff;box-shadow:-1px 0 0 var(--border);}
+#content.data-focused-content .data-table:has(thead .actions-head) th:last-child{z-index:6;background:#FAFAFC;}
+#content.data-focused-content .data-table:has(thead .actions-head) tbody tr:hover td:last-child{background:#FBFAFE;}
+.information-note{display:flex;justify-content:flex-end;margin:-2px 0 8px;}
+.information-note-button{width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:1px solid var(--border);border-radius:50%;background:#fff;color:var(--accent);cursor:pointer;box-shadow:var(--shadow-sm);}
+.information-note-button:hover,.information-note-button:focus-visible{border-color:#BEB4EF;background:#F8F6FF;outline:0;box-shadow:0 0 0 3px rgba(98,70,229,.10);}
+.information-modal-title{display:flex;align-items:center;gap:9px;}.information-modal-title>span{display:flex;color:var(--accent);}
+.information-modal-body{max-width:620px;padding-top:18px;padding-bottom:20px;}.information-modal-body p{margin:0;color:var(--text);font-size:13px;line-height:1.7;}
+
 /* Employee directory: compact, viewport-bound data workspace. */
 #content.data-focused-content:not(.employee-directory-content){max-width:none;padding:14px 18px 28px;}
 #content.data-focused-content:not(.employee-directory-content) .page-header,

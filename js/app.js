@@ -167,6 +167,39 @@ function uploadModuleFolder(module){
   const aliases={onboardingCandidates:'onboarding',leaves:'leave',memos:'memo',incidents:'incident',evaluations:'evaluation',employees:'employee',disciplinary:'disciplinary',nte:'nte',nod:'nod',oncall:'on-call',transfers:'transfer',cvr:'cvr',prf:'prf',atd:'atd',cases:'case',documents:'documents'};
   return aliases[module]||String(module||'documents').replace(/[^a-zA-Z0-9_-]/g,'-').toLowerCase();
 }
+function uploadFilenamePart(value,fallback='unknown'){
+  const clean=String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9, -]+/g,' ').replace(/\s+/g,' ').trim();
+  return clean||fallback;
+}
+function uploadDocumentType(module,key){
+  const specific={resume:'resume',preEmploymentDocs:'pre-employment-documents',atdForm:'atd',incidentReport:'incident-report',quotation:'quotation-soa',payslip:'payslip'};
+  return specific[key]||uploadModuleFolder(module).replace(/[^a-zA-Z0-9-]/g,'-');
+}
+function uploadEmployeeContext(){
+  const pickerIds=['f_employeeName','cv_employeeName','in_employeeName'];
+  let employee=pickerIds.map(id=>employeePickerSelected(id)).find(Boolean)||null;
+  const explicit=document.querySelector('[data-upload-employee-id]');
+  if(!employee&&explicit?.dataset.uploadEmployeeId) employee=DB.employees.find(row=>String(row.id)===String(explicit.dataset.uploadEmployeeId))||null;
+  if(employee) return {name:employeeDisplayName(employee),employeeNo:employee.employeeNo||'',department:employee.department||''};
+  const lastName=document.getElementById('f_lastName')?.value||'';
+  const firstName=document.getElementById('f_firstName')?.value||'';
+  const middleName=document.getElementById('f_middleName')?.value||'';
+  const explicitName=explicit?.dataset.uploadEmployeeName||'';
+  const typedName=pickerIds.map(id=>document.getElementById(`${id}_search`)?.value||'').find(Boolean)||'';
+  return {
+    name:formatEmployeeName({lastName,firstName,middleName})||explicitName||typedName||'HR Record',
+    employeeNo:explicit?.dataset.uploadEmployeeNo||document.getElementById('f_prfNumber')?.value||'pending',
+    department:explicit?.dataset.uploadDepartment||document.getElementById('f_department')?.value||'unassigned',
+  };
+}
+function managedUploadFilename(file,module,key){
+  const context=uploadEmployeeContext();
+  if(context.name==='HR Record') throw new Error('Select an employee or enter the applicant name before choosing a file.');
+  const extension=(String(file?.name||'').match(/\.([a-zA-Z0-9]{1,10})$/)||[])[1]?.toLowerCase()||'file';
+  const employeeNumber=String(context.employeeNo||'').replace(/^EMP[\s_-]*/i,'').replace(/[^a-zA-Z0-9-]/g,'')||'pending';
+  const department=String(context.department||'').toLowerCase().replace(/\b\w/g,char=>char.toUpperCase());
+  return `${uploadFilenamePart(context.name,'HR Record')}_${uploadFilenamePart(employeeNumber,'pending')}_${uploadFilenamePart(department,'Unassigned')}_${uploadFilenamePart(uploadDocumentType(module,key),'document')}.${extension}`;
+}
 function googleDriveRootFolderId(){ return documentDriveFileId(DB.settings?.googleDriveRootUrl||''); }
 function googleDriveRequest(path,options={}){
   return fetch(path,{...options,headers:{Authorization:`Bearer ${GOOGLE_DRIVE_TOKEN.accessToken}`,...(options.headers||{})}}).then(async response=>{
@@ -211,9 +244,9 @@ async function googleDriveModuleFolder(module){
   const created=await googleDriveRequest('https://www.googleapis.com/drive/v3/files?fields=id,name&supportsAllDrives=true',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:folderName,mimeType:'application/vnd.google-apps.folder',parents:[rootId]})});
   return created.id;
 }
-async function uploadGoogleDriveAttachment(file,module){
+async function uploadGoogleDriveAttachment(file,module,managedName=file.name){
   const folderId=await googleDriveModuleFolder(module);
-  const metadata={name:file.name,parents:[folderId],description:`SLSC HR upload · ${uploadModuleFolder(module)}`};
+  const metadata={name:managedName,parents:[folderId],description:`SLSC HR upload · ${uploadModuleFolder(module)}`};
   let uploaded;
   if(file.size<=5*1024*1024){
     const boundary=`slsc_hr_${Date.now()}`;
@@ -228,7 +261,7 @@ async function uploadGoogleDriveAttachment(file,module){
     if(!finish.ok) throw new Error((await finish.json().catch(()=>({})))?.error?.message||'Google Drive upload failed.');
     uploaded=await finish.json();
   }
-  return {path:googleDriveRef(uploaded.id),name:uploaded.name||file.name,provider:'google-drive',url:uploaded.webViewLink||googleDriveFileUrl(googleDriveRef(uploaded.id)),folder:uploadModuleFolder(module)};
+  return {path:googleDriveRef(uploaded.id),name:uploaded.name||managedName,provider:'google-drive',url:uploaded.webViewLink||googleDriveFileUrl(googleDriveRef(uploaded.id)),folder:uploadModuleFolder(module)};
 }
 
 function recordStoragePaths(value, out=new Set()){
@@ -269,20 +302,20 @@ function rememberCommittedRecordFiles(rec){
   recordStoragePaths(rec).forEach(path=>PENDING_UPLOADS.delete(path));
 }
 
-async function uploadAttachment(file,module='documents'){
+async function uploadAttachment(file,module='documents',managedName=file?.name||'document'){
   if(!file) return {path:'',name:''};
   if(file.size > MAX_ATTACH_BYTES){ toast(`"${file.name}" is too large (max ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB per file).`, true); throw new Error('File too large'); }
   if(attachmentStorageProvider()==='google-drive'){
-    const uploaded=await uploadGoogleDriveAttachment(file,module);
+    const uploaded=await uploadGoogleDriveAttachment(file,module,managedName);
     PENDING_UPLOADS.add(uploaded.path);
     return uploaded;
   }
-  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+  const safe = managedName.replace(/[^a-zA-Z0-9., _-]/g,'_');
   const path = `${SESSION.id}/${uploadModuleFolder(module)}/${Date.now()}-${uid()}-${safe}`;
   const {error}=await supabase.storage.from(STORAGE_BUCKET).upload(path,file,{upsert:false,contentType:file.type||'application/octet-stream'});
   if(error){ toast('Upload failed: '+error.message,true); throw error; }
   PENDING_UPLOADS.add(path);
-  return {path,name:file.name};
+  return {path,name:managedName,provider:'supabase'};
 }
 
 async function downloadAttachment(path, filename){
@@ -302,7 +335,7 @@ async function handleFileInput(key, inputEl, module='documents'){
   const file=inputEl.files && inputEl.files[0]; if(!file) return;
   try{
     inputEl.disabled=true;
-    const uploaded=await uploadAttachment(file,module);
+    const uploaded=await uploadAttachment(file,module,managedUploadFilename(file,module,key));
     document.getElementById('f_'+key).value=uploaded.name;
     document.getElementById('f_'+key+'_data').value=uploaded.path;
     const prev=document.getElementById('f_'+key+'_preview'); if(prev) prev.innerHTML=attachPreviewHTML(key,uploaded.name,uploaded.path);
@@ -1585,6 +1618,7 @@ function iMore(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fi
 function iSearch(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>`;}
 function iDownload(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>`;}
 function iColumns(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg>`;}
+function iInfo(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg>`;}
 function iBell(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 9a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9z"/><path d="M10 21h4"/></svg>`;}
 function iArrowLeft(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>`;}
 
@@ -1598,6 +1632,25 @@ function isHRRole(role=SESSION?.role){ return role==='Administrator'||role==='HR
 function canEdit(){ return !SESSION || isHRRole(); }
 function canReviewServiceRequests(){ return isHRRole()||SESSION?.role==='Manager'; }
 function setTitle(t,sub){ document.getElementById('tb-title').textContent=t; document.getElementById('tb-sub').textContent=sub||''; }
+
+const INFORMATION_NOTES={
+  leaveUploads:{title:'Leave document handling',body:`Uploaded leave forms use the storage destination selected by the System Administrator. Files can be up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each. Automatic OCR or text extraction is not performed, so all fields must be entered or confirmed manually.`},
+  disciplinaryLevels:{title:'Offense level calculation',body:"The offense level is counted automatically from the employee's prior records for the same violation and references the approved disciplinary policy. Confirm the suggested action before saving."},
+  cvrOcr:{title:'CVR document handling',body:"The system does not automatically scan or OCR a photo or scan of a printed CVR. Select or enter the offenses shown on the paper CVR and attach the source document. Offense level and consequence are calculated from the employee's CVR history and the Offense Catalog."},
+  incidentOcr:{title:'Incident report handling',body:'The system does not automatically scan or OCR a printed or photographed incident report. Select or enter the incident types shown on the report and attach the source document. Repeat-incident counts are calculated from saved history.'},
+  atdUploads:{title:'ATD document handling',body:`ATD forms, incident reports, quotation or SOA documents, and payslips use the storage destination selected by the System Administrator. Files can be up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each. Payment status and balances are calculated from recorded payments.`},
+  evaluations:{title:'Evaluation due dates',body:'Evaluation due dates are calculated from Date Hired at 30, 90, and 180 days. Mark an evaluation complete and attach its document after completion.'},
+  offenseSummary:{title:'Offense summary calculation',body:'This view combines Disciplinary Action and CVR records by employee. Levels and consequences use the same Offense Catalog lookup used by CVR.'},
+  userAdministration:{title:'User administration access',body:'Only Administrators can change account roles or profile details. New users register from the login screen and must then be linked to the appropriate employee record.'},
+};
+function informationNoteButton(noteId){
+  const note=INFORMATION_NOTES[noteId];if(!note)return '';
+  return `<div class="information-note"><button type="button" class="information-note-button" title="${esc(note.title)}" aria-label="Open information: ${esc(note.title)}" onclick="openInformationNote('${noteId}')">${iInfo(16)}</button></div>`;
+}
+function openInformationNote(noteId){
+  const note=INFORMATION_NOTES[noteId];if(!note)return;
+  openModal(`<div class="modal-head"><div class="information-modal-title"><span>${iInfo(18)}</span><h3>${esc(note.title)}</h3></div><button type="button" onclick="closeModal()" aria-label="Close information">&times;</button></div><div class="modal-body information-modal-body"><p>${esc(note.body)}</p></div><div class="modal-foot"><button type="button" class="btn btn-primary" onclick="closeModal()">Got it</button></div>`);
+}
 
 /* ---------------- classification ---------------- */
 function classify(emp){
@@ -3345,7 +3398,7 @@ function renderLeaves(){
     <div><h2>Leave Tracker</h2><p>${DB.leaves.length} leave requests on record.</p></div>
     ${canEdit()? `<button class="btn btn-brass" onclick="openRecordForm('leaves')">${iPlus(15)} Add Leave Record</button>`:''}
   </div>
-  <div class="notice"><b>Note:</b> Uploaded leave forms use the storage destination selected by the System Administrator (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each). Automatic OCR/text extraction is not performed; all fields here are entered or confirmed manually.</div>
+  ${informationNoteButton('leaveUploads')}
   <div class="tabs">
     <button class="tabbtn ${tab==='records'?'active':''}" onclick="STATE.leaveTab='records'; renderLeaves()">Leave Records</button>
     <button class="tabbtn ${tab==='calendar'?'active':''}" onclick="STATE.leaveTab='calendar'; renderLeaves()">Leave Calendar</button>
@@ -3470,7 +3523,7 @@ function renderDisciplinary(){
     <div><h2>Disciplinary Action</h2><p>${DB.disciplinary.length} records across ${new Set(DB.disciplinary.map(d=>d.employeeName)).size} employees.</p></div>
     ${canEdit()? `<button class="btn btn-brass" onclick="openRecordForm('disciplinary')">${iPlus(15)} Add Disciplinary Record</button>`:''}
   </div>
-  <div class="notice"><b>Note:</b> Offense level is counted automatically from prior records of the same violation for that employee, referencing the company's approved disciplinary policy. Confirm the suggested action before saving.</div>
+  ${informationNoteButton('disciplinaryLevels')}
   <div class="toolbar">
     <div class="search">${iSearch(15)}<input data-search-key="search" placeholder="Search by employee or violation…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderDisciplinary)"></div>
     <select onchange="STATE.disciplinaryFilter=this.value;STATE.tablePages={};renderDisciplinary()"><option value="">All Levels / Departments</option>${OFFENSE_LEVELS.map(v=>`<option value="${esc(v)}" ${STATE.disciplinaryFilter===v?'selected':''}>${esc(v)}</option>`).join('')}${DEPT_OPTIONS.map(v=>`<option value="${esc(v)}" ${STATE.disciplinaryFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
@@ -3533,7 +3586,7 @@ function renderCVR(){
     <div><h2>CVR / Violation Reports</h2><p>${DB.cvr.length} CVRs on record across ${new Set(DB.cvr.map(c=>c.employeeName)).size} employees.</p></div>
     ${canEdit()? `<button class="btn btn-brass" onclick="openCVRForm()">${iPlus(15)} Add CVR</button>`:''}
   </div>
-  <div class="notice"><b>Note:</b> This app cannot automatically scan or OCR a photo/scan of a printed CVR — check or write the offense(s) on this form yourself (matching what's marked on the paper CVR), and the offense level (1st/2nd/3rd/4th+) and consequence are then computed automatically from this employee's CVR history and the <b>Offense Catalog</b>. Attach the actual scanned/photographed CVR for the record. Add your agency's real offense list and consequences under Offense Catalog (in the Manage section) so the lookup matches your policy.</div>
+  ${informationNoteButton('cvrOcr')}
   <div class="toolbar">
     <div class="search">${iSearch(15)}<input data-search-key="search" placeholder="Search by employee or offense…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderCVR)"></div>
     <select onchange="STATE.cvrFilter=this.value;STATE.tablePages={};renderCVR()"><option value="">All CVR Statuses</option>${CVR_STATUS.map(v=>`<option value="${esc(v)}" ${STATE.cvrFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
@@ -3654,7 +3707,7 @@ function renderIncidents(){
     <div><h2>Incident Reports</h2><p>${DB.incidents.length} incident reports on record across ${new Set(DB.incidents.map(i=>i.employeeName)).size} employees.</p></div>
     ${canEdit()? `<button class="btn btn-brass" onclick="openIncidentForm()">${iPlus(15)} Add Incident Report</button>`:''}
   </div>
-  <div class="notice"><b>Note:</b> This app cannot automatically scan or OCR a printed/photographed incident report — check or write the incident type(s) yourself to match what's on the report, and attach the actual document for the record. Repeat-incident counts per employee and type are then computed automatically from history.</div>
+  ${informationNoteButton('incidentOcr')}
   <div class="toolbar">
     <div class="search">${iSearch(15)}<input data-search-key="search" placeholder="Search by employee, type, or description…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderIncidents)"></div>
     <select onchange="STATE.incidentFilter=this.value;STATE.tablePages={};renderIncidents()"><option value="">All Severity / Status</option>${INCIDENT_SEVERITY.map(v=>`<option value="${esc(v)}" ${STATE.incidentFilter===v?'selected':''}>${esc(v)}</option>`).join('')}${INCIDENT_STATUS.map(v=>`<option value="${esc(v)}" ${STATE.incidentFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
@@ -3917,7 +3970,7 @@ function renderATD(){
     <div><h2>ATD Monitoring</h2><p>${totalRecords} record(s) — uniform/expense and charge deductions.</p></div>
     ${canEdit()? `<button class="btn btn-brass" onclick="openATDForm()">${iPlus(15)} New ATD Record</button>`:''}
   </div>
-  <div class="notice"><b>Note:</b> ATD forms, Incident Reports, quotation/SOA documents, and payslips use the storage destination selected by the System Administrator (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each). Payment status, cumulative paid and remaining balance are calculated automatically from the recorded payments.</div>
+  ${informationNoteButton('atdUploads')}
   <div class="grid cols-4" style="margin-bottom:16px;">
     <div class="stat" style="--accent:var(--brass)"><div class="lbl">Total ATD Records</div><div class="val">${totalRecords}</div><div class="sub">${byCat['Uniforms/Expenses']} Uniforms/Expenses · ${byCat['Charges']} Charges</div></div>
     <div class="stat" style="--accent:var(--ink)"><div class="lbl">Total Amount Due</div><div class="val" style="font-size:20px;">${peso(totalOutstanding)}</div></div>
@@ -4095,6 +4148,7 @@ function openATDPaymentForm(atdId, paymentId){
   openModal(`
     <div class="modal-head"><h3>${existing?'Edit':'Record'} Payment</h3><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
+      <span hidden data-upload-employee-id="${esc(rec.employeeId||'')}" data-upload-employee-name="${esc(rec.employeeName||'')}" data-upload-employee-no="${esc(DB.employees.find(employee=>String(employee.id)===String(rec.employeeId))?.employeeNo||'')}" data-upload-department="${esc(rec.department||'')}"></span>
       <div class="formgrid">
         <div class="field"><label>Month *</label><select id="p_month">${ATD_MONTHS.map(m=>`<option ${(existing?existing.month:ATD_MONTHS[now.getMonth()])===m?'selected':''}>${m}</option>`).join('')}</select></div>
         <div class="field"><label>Cut-Off *</label><select id="p_cutoff">${ATD_CUTOFFS.map(c=>`<option ${(existing?existing.cutoff:ATD_CUTOFFS[0])===c?'selected':''}>${c}</option>`).join('')}</select></div>
@@ -4173,7 +4227,7 @@ function renderEvaluations(){
   <div class="sectionhead">
     <div><h2>Probationary Evaluations</h2><p>${emps.length} employee(s) currently on probation.</p></div>
   </div>
-  <div class="notice"><b>Note:</b> Due dates are computed automatically from Date Hired (30 / 90 / 180 days). Mark an evaluation complete and attach the evaluation document once it's done.</div>
+  ${informationNoteButton('evaluations')}
   <div class="toolbar"><div class="search">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search by employee or department…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderEvaluations)"></div><select onchange="STATE.evaluationFilter=this.value;STATE.tablePages={};renderEvaluations()"><option value="">All Evaluation Statuses</option><option value="Overdue" ${STATE.evaluationFilter==='Overdue'?'selected':''}>Overdue</option><option value="Due Soon" ${STATE.evaluationFilter==='Due Soon'?'selected':''}>Due Soon</option><option value="Upcoming" ${STATE.evaluationFilter==='Upcoming'?'selected':''}>Upcoming</option><option value="Completed" ${STATE.evaluationFilter==='Completed'?'selected':''}>Completed</option></select><button class="btn btn-ghost btn-sm" onclick="cancelSearchRender('search');STATE.evaluationFilter='';STATE.search='';STATE.tablePages={};renderEvaluations()">Clear</button></div>
   <div class="tablewrap"><table class="data-table">
     <thead><tr><th>Employee</th><th>Department</th><th>Date Hired</th><th>1st Month</th><th>3rd Month</th><th>6th Month</th></tr></thead>
@@ -4196,6 +4250,7 @@ function openEvalForm(employeeId, milestoneKey){
   openModal(`
     <div class="modal-head"><h3>${m.label} Evaluation — ${esc(employeeDisplayName(emp))}</h3><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
+      <span hidden data-upload-employee-id="${esc(emp.id||'')}" data-upload-employee-name="${esc(employeeDisplayName(emp))}" data-upload-employee-no="${esc(emp.employeeNo||'')}" data-upload-department="${esc(emp.department||'')}"></span>
       <div class="formgrid">
         <div class="field"><label>Due Date</label><input value="${fmtDate(evalDueDate(emp.dateHired,m.days))}" disabled style="background:var(--paper);"></div>
         <div class="field"><label>Date Completed</label><input type="date" id="ev_completedDate" value="${(rec&&rec.completedDate)||''}"></div>
@@ -4237,7 +4292,7 @@ function renderOffenseSummary(){
   if(q) names = names.filter(n=> n.toLowerCase().includes(q) || Object.keys(map[n].offenses).some(o=>o.toLowerCase().includes(q)));
   const html = `
   <div class="sectionhead"><div><h2>Employee Offense Summary</h2><p>${names.length} employee(s) with recorded offenses.</p></div></div>
-  <div class="notice"><b>Note:</b> Combines Disciplinary Action and CVR records per employee. Level and consequence use the same lookup as CVR, referenced against the Offense Catalog.</div>
+  ${informationNoteButton('offenseSummary')}
   <div class="toolbar"><div class="search">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search by employee or offense…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderOffenseSummary)"></div></div>
   ${names.length? names.map(n=>{
     const m = map[n];
@@ -5622,7 +5677,7 @@ function renderUsers(){
     <div class="sectionhead">
       <div><h2>User Management</h2><p>${rows.length} registered profile${rows.length===1?'':'s'}.</p></div>
     </div>
-    ${SESSION.role!=='Administrator'? `<div class="notice"><b>Note:</b> Only Administrators can change roles or profile details. New users register from the login screen.</div>`:''}
+    ${SESSION.role!=='Administrator'?informationNoteButton('userAdministration'):''}
     <div class="tablewrap"><table class="data-table">
       <thead><tr><th>Full Name</th><th>Username</th><th>Email</th><th>Role</th><th>Employee Link</th><th>Manager</th><th>Created</th><th style="text-align:right;">Actions</th></tr></thead>
       <tbody>
@@ -6395,7 +6450,7 @@ Object.assign(window, {
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, setTitle, shiftDate, statusBadge, storageSettingsChanged, testGoogleDriveConnection, switchAuthTab, toCSV,
-  toast, todayISO, togglePasswordVisibility, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, paginationMeta, paginationHTML, paginationReset, paginateRows
+  toast, todayISO, togglePasswordVisibility, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, openInformationNote, paginationMeta, paginationHTML, paginationReset, paginateRows
 });
 
 (async function initSupabase(){

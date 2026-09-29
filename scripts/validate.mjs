@@ -126,6 +126,19 @@ for(const feature of ['fileStorageProvider','uploadGoogleDriveAttachment','googl
     process.exit(1);
   }
 }
+for(const feature of ['managedUploadFilename','uploadDocumentType','informationNoteButton','openInformationNote']){
+  if(!app.includes(feature)){
+    console.error(`Managed document UI contract is missing: ${feature}`);
+    process.exit(1);
+  }
+}
+const driveSetupGuide=fs.readFileSync(path.join(root,'docs/GOOGLE-DRIVE-STORAGE-SETUP.md'),'utf8');
+for(const requirement of ['Error 403: access_denied','Authorized JavaScript origins','Dela Cruz, Juan_0001_Production_nod.pdf']){
+  if(!driveSetupGuide.includes(requirement)){
+    console.error(`Google Drive setup guide is incomplete: ${requirement}`);
+    process.exit(1);
+  }
+}
 for(const feature of ['renderOnboarding','saveOnboardingCandidate','convertOnboardingCandidate','formatGovernmentId','onboardingCandidates']){
   if(!app.includes(feature)){
     console.error(`Onboarding feature contract is missing: ${feature}`);

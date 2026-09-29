@@ -24,6 +24,8 @@ Apply `supabase/phase14-admin-storage-settings.sql` to restrict system-wide sett
 
 The System Administrator can choose Google Drive as the destination for all new HR uploads in Settings. Configure a Google Cloud OAuth 2.0 Web Client ID and add each deployed app origin, such as the Vercel production URL and local preview origin, to its authorized JavaScript origins. Enable the Google Drive API for that Google Cloud project.
 
+See [Google Drive File Storage Setup](GOOGLE-DRIVE-STORAGE-SETUP.md) for the complete configuration, testing, filename, and troubleshooting steps.
+
 The configured Drive root folder must be accessible to every HR user who uploads files. The app requests a short-lived Google access token when an upload starts, creates or reuses a module folder such as `leave`, `atd`, `cvr`, or `onboarding` below the configured root, and uploads the file there. Access tokens remain in browser memory and are not stored in Supabase. OAuth client IDs are public application identifiers; do not place a Google client secret in this frontend.
 
 Changing the destination affects new uploads only. Existing Drive and Supabase files remain indexed and readable from the Document Center.
