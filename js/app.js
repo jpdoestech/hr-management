@@ -15,7 +15,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
    Phase 2: record-level Postgres persistence, Supabase Auth, and private Storage.
    ========================================================================= */
 
-const RECORD_MODULES = ['employees','leaves','disciplinary','nte','memos','nod','oncall','transfers','offenseCatalog','cvr','incidents','prf','evaluations','atd','workflowTasks','automationRuns','documents','lifecycleChecklists'];
+const RECORD_MODULES = ['employees','onboardingCandidates','leaves','disciplinary','nte','memos','nod','oncall','transfers','offenseCatalog','cvr','incidents','prf','evaluations','atd','workflowTasks','automationRuns','documents','lifecycleChecklists'];
 let DB_SNAPSHOT = null;
 let SAVE_QUEUE = Promise.resolve();
 let SELF_SERVICE_READY = true;
@@ -23,7 +23,7 @@ let USER_PREFERENCES = {employeeColumns:[]};
 let USER_PREFERENCES_SYNC_READY = true;
 
 function blankDB(){
-  return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],lifecycleChecklists:[],serviceRequests:[],settings:{orgName:'SCPA',probationDays:180},audit:[],users:[]};
+  return {employees:[],onboardingCandidates:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],lifecycleChecklists:[],serviceRequests:[],settings:{orgName:'SCPA',probationDays:180},audit:[],users:[]};
 }
 
 function isMissingSelfServiceTable(error){
@@ -246,6 +246,25 @@ const ATD_CATEGORIES = ['Uniforms/Expenses','Charges'];
 const ATD_STATUS_MAP = {'Pending':'b-amber','Ongoing':'b-blue','Paid':'b-green'};
 const ATD_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const ATD_CUTOFFS = ['1st Cut-Off','2nd Cut-Off'];
+const ONBOARDING_STAGES = ['Applicant','Screening','Interview','For Offer','Pre-employment','Ready to Hire','Hired','Rejected','Withdrawn'];
+const ONBOARDING_STAGE_MAP = {'Applicant':'b-grey','Screening':'b-blue','Interview':'b-blue','For Offer':'b-amber','Pre-employment':'b-amber','Ready to Hire':'b-green','Hired':'b-green','Rejected':'b-red','Withdrawn':'b-grey'};
+const ONBOARDING_RECOMMENDATIONS = ['Pending','Hire','Hold','Reject'];
+const ONBOARDING_CHECKLIST = [
+  {key:'privacyNotice',label:'Applicant privacy notice acknowledged',group:'Application'},
+  {key:'resume',label:'Resume / application form received',group:'Application'},
+  {key:'identity',label:'Government ID or birth record verified',group:'Identity'},
+  {key:'interview',label:'Interview and evaluation completed',group:'Selection'},
+  {key:'offer',label:'Offer accepted',group:'Employment'},
+  {key:'contract',label:'Employment contract signed',group:'Employment'},
+  {key:'standards',label:'Probationary standards communicated',group:'Employment'},
+  {key:'medical',label:'Medical / fitness clearance received',group:'Pre-employment'},
+  {key:'bir',label:'BIR Form 1902 / TIN verified',group:'Government'},
+  {key:'sss',label:'SSS number / coverage details verified',group:'Government'},
+  {key:'philHealth',label:'PhilHealth PIN / PMRF details verified',group:'Government'},
+  {key:'pagIbig',label:'Pag-IBIG MID / MDF details verified',group:'Government'},
+  {key:'payroll',label:'Payroll account details completed',group:'Company'},
+  {key:'orientation',label:'Company and safety orientation scheduled',group:'Company'},
+];
 function defaultOffenseCatalog(){
   return [
     {id:uid(), offense:'Tardiness', consequence1:'Verbal Reminder', consequence2:'Written Warning', consequence3:'Suspension (3 days)', consequence4:'Termination'},
@@ -315,7 +334,7 @@ function seedDB(){
       payments:[{id:uid(), month:ATD_MONTHS[new Date().getMonth()], cutoff:'1st Cut-Off', amountPaid:1500, payslip:'payslip_btorres_c1.pdf', payslipData:'', dateRecorded: shiftDate(-4)}]},
   ];
   return {
-    users, employees, leaves, disciplinary, nte, memos, nod, oncall, transfers, offenseCatalog, cvr, incidents, prf, evaluations, atd, lifecycleChecklists:[],
+    users, employees, onboardingCandidates:[], leaves, disciplinary, nte, memos, nod, oncall, transfers, offenseCatalog, cvr, incidents, prf, evaluations, atd, lifecycleChecklists:[],
     settings:{orgName:'SCPA', probationDays:180},
     audit:[{ts:new Date().toISOString(), user:'System', action:'Seeded initial demo data'}]
   };
@@ -331,7 +350,9 @@ function normalizeEmployeeMasterData(){
   (DB.employees||[]).forEach(e=>{
     if(!e.employeeNo || used.has(String(e.employeeNo).toUpperCase())){ e.employeeNo=nextEmployeeNumber(DB.employees.filter(x=>x!==e && x.employeeNo)); changed=true; }
     used.add(String(e.employeeNo).toUpperCase());
-    ['birthDate','civilStatus','mobileNumber','personalEmail','address','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'].forEach(k=>{ if(e[k]===undefined){ e[k]=''; changed=true; } });
+    ['birthDate','civilStatus','mobileNumber','personalEmail','address','tin','sssNumber','philHealthNumber','pagIbigNumber','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'].forEach(k=>{ if(e[k]===undefined){ e[k]=''; changed=true; } });
+    const nameParts=splitEmployeeName(e);
+    ['lastName','firstName','middleName'].forEach(key=>{if(e[key]===undefined){e[key]=nameParts[key]||'';changed=true;}});
     if(!Array.isArray(e.employmentHistory)){
       e.employmentHistory=[{type:'Employment Status',from:'',to:e.status||'Newly Hired',effectiveDate:e.statusDate||e.dateHired||'',remarks:'Initial employee record',changedAt:new Date().toISOString(),changedBy:'System'}];
       changed=true;
@@ -426,7 +447,7 @@ async function bootAuthenticated(user){
     let state=await loadDB();
     const hasAny=RECORD_MODULES.some(k=>(state[k]||[]).length);
     if(!hasAny&&isHRRole()){ DB=seedDB(); DB.serviceRequests=state.serviceRequests||[]; await saveDB(); } else DB=state;
-    if(!DB.audit) DB.audit=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; DB.prf.forEach(p=>{if(!p.status)p.status='Draft';}); if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; if(!DB.workflowTasks) DB.workflowTasks=[]; if(!DB.automationRuns) DB.automationRuns=[]; if(!DB.documents) DB.documents=[]; if(!DB.lifecycleChecklists) DB.lifecycleChecklists=[]; if(!DB.serviceRequests) DB.serviceRequests=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];}); if(!DB.settings) DB.settings={orgName:'SCPA',probationDays:180};
+    if(!DB.audit) DB.audit=[]; if(!DB.onboardingCandidates) DB.onboardingCandidates=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; DB.prf.forEach(p=>{if(!p.status)p.status='Draft';}); if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; if(!DB.workflowTasks) DB.workflowTasks=[]; if(!DB.automationRuns) DB.automationRuns=[]; if(!DB.documents) DB.documents=[]; if(!DB.lifecycleChecklists) DB.lifecycleChecklists=[]; if(!DB.serviceRequests) DB.serviceRequests=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];}); if(!DB.settings) DB.settings={orgName:'SCPA',probationDays:180};
     const employeeMasterChanged=isHRRole()?normalizeEmployeeMasterData():false;
     DB_SNAPSHOT=JSON.parse(JSON.stringify(DB));
     if(employeeMasterChanged) await saveDB();
@@ -536,8 +557,8 @@ async function buildNotificationItems(){
 
   DB.employees.filter(e=>classify(e)==='Probationary' && e.dateHired).forEach(e=>EVAL_MILESTONES.forEach(m=>{
     const st=evalStatusInfo(e,m);
-    if(st.label==='Overdue') items.push(notificationItem(`eval-overdue-${e.id}-${m.key}`,'danger',`Overdue evaluation: ${e.name}`,`${m.label} · Due ${fmtDate(st.due)}`,'evaluations'));
-    else if(st.label==='Due Soon' && st.due<=next14) items.push(notificationItem(`eval-due-${e.id}-${m.key}`,'warning',`Evaluation due soon: ${e.name}`,`${m.label} · Due ${fmtDate(st.due)}`,'evaluations'));
+    if(st.label==='Overdue') items.push(notificationItem(`eval-overdue-${e.id}-${m.key}`,'danger',`Overdue evaluation: ${employeeDisplayName(e)}`,`${m.label} · Due ${fmtDate(st.due)}`,'evaluations'));
+    else if(st.label==='Due Soon' && st.due<=next14) items.push(notificationItem(`eval-due-${e.id}-${m.key}`,'warning',`Evaluation due soon: ${employeeDisplayName(e)}`,`${m.label} · Due ${fmtDate(st.due)}`,'evaluations'));
   }));
 
   DB.nte.filter(n=>n.status!=='Resolved').slice(0,8).forEach(n=>items.push(notificationItem(`nte-${n.id}`,'warning',`NTE needs follow-up: ${n.employeeName||'Employee'}`,`${n.status||'Open'}${n.dateReceived?' · Received '+fmtDate(n.dateReceived):''}`,'nte')));
@@ -679,7 +700,7 @@ function renderSelfService(){
       <div class="portal-kpis"><div><span>Open requests</span><b>${pending}</b><small>Awaiting review</small></div><div><span>Approved requests</span><b>${approved}</b><small>All-time approvals</small></div><div><span>Employment status</span><b class="portal-kpi-text">${esc(employee.status||'—')}</b><small>${esc(classify(employee))}</small></div><div><span>Next approved leave</span><b class="portal-kpi-text">${nextLeave?fmtDate(nextLeave.startDate):'None scheduled'}</b><small>${nextLeave?esc(nextLeave.leaveType):'No upcoming leave'}</small></div></div>
       <div class="portal-grid">
         <section class="panel portal-profile"><div class="portal-section-head"><div><h2>My employment profile</h2><p>Employment fields are maintained by HR. Personal corrections can be submitted for approval.</p></div><button class="btn btn-ghost btn-sm" onclick="openProfileChangeRequest()">Request correction</button></div>
-          <div class="portal-identity"><div class="portal-avatar">${esc((employee.name||'E').split(' ').map(part=>part[0]).slice(0,2).join('').toUpperCase())}</div><div><h3>${esc(employee.name)}</h3><p>${esc(employee.employeeNo||'—')} · ${esc(employee.position||'—')}</p><div>${statusBadge(employee.status||'—',EMP_STATUS_MAP)} ${statusBadge(classify(employee),{'Regular':'b-green','Probationary':'b-amber'})}</div></div></div>
+          <div class="portal-identity"><div class="portal-avatar">${esc(employeeDisplayName(employee).split(/[\s,]+/).filter(Boolean).map(part=>part[0]).slice(0,2).join('').toUpperCase()||'E')}</div><div><h3>${esc(employeeDisplayName(employee))}</h3><p>${esc(employee.employeeNo||'—')} · ${esc(employee.position||'—')}</p><div>${statusBadge(employee.status||'—',EMP_STATUS_MAP)} ${statusBadge(classify(employee),{'Regular':'b-green','Probationary':'b-amber'})}</div></div></div>
           <dl class="portal-details"><div><dt>Department</dt><dd>${esc(employee.department||'—')}</dd></div><div><dt>Date hired</dt><dd>${fmtDate(employee.dateHired)}</dd></div><div><dt>Mobile number</dt><dd>${esc(employee.mobileNumber||'Not provided')}</dd></div><div><dt>Personal email</dt><dd>${esc(employee.personalEmail||'Not provided')}</dd></div><div><dt>Home address</dt><dd>${esc(employee.address||'Not provided')}</dd></div><div><dt>Emergency contact</dt><dd>${esc(employee.emergencyContactName||'Not provided')}${employee.emergencyContactPhone?' · '+esc(employee.emergencyContactPhone):''}</dd></div></dl>
         </section>
         <section class="panel portal-guide"><div class="portal-section-head"><div><h2>Request center</h2><p>Choose the transaction that matches what you need.</p></div></div><button class="portal-action" onclick="openLeaveRequest()"><span>${iCal(18)}</span><div><b>File a leave request</b><small>Send dates, leave type, and reason for review.</small></div><strong>›</strong></button><button class="portal-action" onclick="openProfileChangeRequest()"><span>${iUser(18)}</span><div><b>Correct personal information</b><small>Update contact, address, or emergency details.</small></div><strong>›</strong></button><div class="portal-security-note">Employment status, position, department, and classification remain HR-controlled fields.</div></section>
@@ -704,7 +725,7 @@ async function saveProfileChangeRequest(){
 }
 function openLeaveRequest(){
   const employee=currentEmployeeRecord(); if(!employee){toast('Your account is not linked to an employee record.',true);return;}
-  openModal(`<div class="modal-head"><div><h3>Request Leave</h3><div class="small">${esc(employee.name)} · ${esc(employee.department||'Unassigned')}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="formgrid"><div class="field full"><label>Type of Leave *</label><select id="ss_leave_type">${LEAVE_TYPES.map(value=>`<option>${esc(value)}</option>`).join('')}</select></div><div class="field"><label>Start Date *</label><input id="ss_leave_start" type="date" min="${todayISO()}"></div><div class="field"><label>End Date *</label><input id="ss_leave_end" type="date" min="${todayISO()}"></div><div class="field full"><label>Reason</label><textarea id="ss_leave_reason" rows="4" placeholder="Provide the reason or relevant context for your reviewer."></textarea></div><div class="field full"><label>Note for reviewer</label><textarea id="ss_leave_note" rows="2" placeholder="Optional handover or scheduling note."></textarea></div></div><div class="computed-note">Submitting creates a pending Leave Tracker record. The status changes only after manager or HR review.</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveLeaveRequest()">Submit Leave Request</button></div>`);
+  openModal(`<div class="modal-head"><div><h3>Request Leave</h3><div class="small">${esc(employeeDisplayName(employee))} · ${esc(employee.department||'Unassigned')}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="formgrid"><div class="field full"><label>Type of Leave *</label><select id="ss_leave_type">${LEAVE_TYPES.map(value=>`<option>${esc(value)}</option>`).join('')}</select></div><div class="field"><label>Start Date *</label><input id="ss_leave_start" type="date" min="${todayISO()}"></div><div class="field"><label>End Date *</label><input id="ss_leave_end" type="date" min="${todayISO()}"></div><div class="field full"><label>Reason</label><textarea id="ss_leave_reason" rows="4" placeholder="Provide the reason or relevant context for your reviewer."></textarea></div><div class="field full"><label>Note for reviewer</label><textarea id="ss_leave_note" rows="2" placeholder="Optional handover or scheduling note."></textarea></div></div><div class="computed-note">Submitting creates a pending Leave Tracker record. The status changes only after manager or HR review.</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveLeaveRequest()">Submit Leave Request</button></div>`);
 }
 async function saveLeaveRequest(){
   const leaveType=document.getElementById('ss_leave_type').value;
@@ -924,8 +945,8 @@ function actionCenterItems(caseRows){
   const evalItems=[];
   DB.employees.filter(e=>classify(e)==='Probationary' && e.dateHired).forEach(e=>EVAL_MILESTONES.forEach(m=>{
     const st=evalStatusInfo(e,m);
-    if(st.label==='Overdue') evalItems.push({level:'danger',title:`Overdue evaluation: ${e.name}`,detail:`${m.label||m.key||m} due ${fmtDate(st.due)}`,meta:['Evaluation','Overdue'],view:'evaluations'});
-    else if(st.label==='Due Soon' && st.due<=next14) evalItems.push({level:'warning',title:`Evaluation due soon: ${e.name}`,detail:`${m.label||m.key||m} due ${fmtDate(st.due)}`,meta:['Evaluation','Due soon'],view:'evaluations'});
+    if(st.label==='Overdue') evalItems.push({level:'danger',title:`Overdue evaluation: ${employeeDisplayName(e)}`,detail:`${m.label||m.key||m} due ${fmtDate(st.due)}`,meta:['Evaluation','Overdue'],view:'evaluations'});
+    else if(st.label==='Due Soon' && st.due<=next14) evalItems.push({level:'warning',title:`Evaluation due soon: ${employeeDisplayName(e)}`,detail:`${m.label||m.key||m} due ${fmtDate(st.due)}`,meta:['Evaluation','Due soon'],view:'evaluations'});
   }));
   items.push(...evalItems.slice(0,10));
 
@@ -1014,8 +1035,8 @@ function opsOpenItems(){
     DB.nte.filter(n=>n.status!=='Resolved').slice(0,8).forEach(n=>items.push({level:'warning',view:'nte',title:`NTE follow-up · ${n.employeeName}`,meta:`${n.status||'Open'}${n.dateReceived?' · received '+fmtDate(n.dateReceived):''}`,right:'NTE'}));
     DB.employees.filter(e=>classify(e)==='Probationary' && e.dateHired).forEach(e=>EVAL_MILESTONES.forEach(m=>{
       const st=evalStatusInfo(e,m);
-      if(st.label==='Overdue') items.push({level:'danger',view:'evaluations',title:`Overdue evaluation · ${e.name}`,meta:`${m.label} due ${fmtDate(st.due)}`,right:'Evaluation'});
-      else if(st.label==='Due Soon' && st.due<=next7) items.push({level:'warning',view:'evaluations',title:`Evaluation due · ${e.name}`,meta:`${m.label} due ${fmtDate(st.due)}`,right:'Evaluation'});
+      if(st.label==='Overdue') items.push({level:'danger',view:'evaluations',title:`Overdue evaluation · ${employeeDisplayName(e)}`,meta:`${m.label} due ${fmtDate(st.due)}`,right:'Evaluation'});
+      else if(st.label==='Due Soon' && st.due<=next7) items.push({level:'warning',view:'evaluations',title:`Evaluation due · ${employeeDisplayName(e)}`,meta:`${m.label} due ${fmtDate(st.due)}`,right:'Evaluation'});
     }));
     const rank={danger:0,warning:1,info:2};
     return {openCases,items:items.sort((a,b)=>(rank[a.level]??9)-(rank[b.level]??9)).slice(0,18)};
@@ -1166,7 +1187,7 @@ async function renderOperationsWorkspace(){
       const empCases=openCases.filter(c=>String(c.employee_record_id||'')===String(e.id)||normalizeEmployeeName(c.employee_name)===normalizeEmployeeName(e.name)).length;
       const leaveCount=DB.leaves.filter(l=>normalizeEmployeeName(l.employeeName)===normalizeEmployeeName(e.name)&&l.status==='Pending').length;
       const issueCount=opsRecordForEmployee('nte',e).filter(n=>n.status!=='Resolved').length + opsRecordForEmployee('incidents',e).filter(i=>!['Resolved','Closed'].includes(i.status)).length;
-      return `<tr class="ops-directory-row ${String(e.id)===String(selected?.id)?'selected':''}" onclick="STATE.opsEmployeeId='${e.id}';STATE.opsHistorySearch='';STATE.tablePages={};renderOperationsWorkspace()"><td><div class="cell-identity"><span class="avatar-sm">${esc(opsInitials(e.name))}</span><div><b>${esc(e.name)}</b><div class="muted">${esc(e.employeeNo||'—')}</div></div></div></td><td>${esc(e.position||'—')}</td><td>${esc(e.department||'—')}</td><td>${statusBadge(e.status,EMP_STATUS_MAP)}</td><td>${statusBadge(classify(e),classify(e)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</td><td>${empCases||leaveCount||issueCount?`<span class="count-chip">${empCases+leaveCount+issueCount} attention</span>`:'<span class="muted">Clear</span>'}</td><td><button class="iconbtn" title="Open workspace" onclick="event.stopPropagation();STATE.opsEmployeeId='${e.id}';renderOperationsWorkspace()">›</button></td></tr>`;
+      return `<tr class="ops-directory-row ${String(e.id)===String(selected?.id)?'selected':''}" onclick="STATE.opsEmployeeId='${e.id}';STATE.opsHistorySearch='';STATE.tablePages={};renderOperationsWorkspace()"><td><div class="cell-identity"><span class="avatar-sm">${esc(opsInitials(employeeDisplayName(e)))}</span><div><b>${esc(employeeDisplayName(e))}</b><div class="muted">${esc(e.employeeNo||'—')}</div></div></div></td><td>${esc(e.position||'—')}</td><td>${esc(e.department||'—')}</td><td>${statusBadge(e.status,EMP_STATUS_MAP)}</td><td>${statusBadge(classify(e),classify(e)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</td><td>${empCases||leaveCount||issueCount?`<span class="count-chip">${empCases+leaveCount+issueCount} attention</span>`:'<span class="muted">Clear</span>'}</td><td><button class="iconbtn" title="Open workspace" onclick="event.stopPropagation();STATE.opsEmployeeId='${e.id}';renderOperationsWorkspace()">›</button></td></tr>`;
     }).join('');
     const workRows=filteredHistory.slice(0,200).map(x=>{
       const safeView=String(x.view||'').replace(/'/g,"\\'");
@@ -1234,6 +1255,7 @@ const NAV = [
   ]},
   {sec:'People & Records',items:[
     {v:'employees',label:'Employee Information',icon:iUsers},
+    {v:'onboarding',label:'Onboarding & Applicants',icon:iCheck,roles:['Administrator','HR Staff'],count:()=>onboardingOpenCount()},
     {v:'employeeLifecycle',label:'Employment Lifecycle',icon:iSwap},
     {v:'leaves',label:'Leave Tracker',icon:iCal},
     {v:'evaluations',label:'Probationary Evaluations',icon:iChart},
@@ -1328,7 +1350,7 @@ async function go(view,{skipUnsaved=false}={}){
 }
 
 const DATA_FOCUSED_VIEWS=new Set([
-  'teamApprovals','lifecycleChecklists','workflow','automation','operations','employees','employeeLifecycle','leaves','evaluations','transfers','prf','oncall','atd','cases','incidents','cvr','nte','memos','nod','disciplinary','offenseCatalog','offenseSummary','documents','dataQuality','users'
+  'teamApprovals','lifecycleChecklists','workflow','automation','operations','employees','onboarding','employeeLifecycle','leaves','evaluations','transfers','prf','oncall','atd','cases','incidents','cvr','nte','memos','nod','disciplinary','offenseCatalog','offenseSummary','documents','dataQuality','users'
 ]);
 
 const SEARCH_RENDER_TIMERS=new Map();
@@ -1376,14 +1398,14 @@ function employeePickerFind({id='',name=''}={}){
 function employeePickerHTML({id,label='Employee',selectedId='',selectedName='',mode='id',required=false,full=false,placeholder='Type an employee name or number',onSelect='',autofill=true}={}){
   const selected=employeePickerFind({id:selectedId,name:selectedName});
   const stored=selected?(mode==='name'?selected.name:selected.id):'';
-  const display=selected?.name||selectedName||'';
+  const display=selected?employeeDisplayName(selected):selectedName||'';
   return `<div class="field ${full?'full':''}"><label for="${id}_search">${esc(label)}${required?' *':''}</label><div class="employee-picker" id="${id}_picker" data-mode="${mode}" data-on-select="${esc(onSelect)}" data-autofill="${autofill?'true':'false'}" data-selected-id="${esc(selected?.id||'')}"><input type="hidden" id="${id}" value="${esc(stored)}"><div class="employee-picker-input">${iSearch(15)}<input id="${id}_search" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}_options" autocomplete="off" spellcheck="false" placeholder="${esc(placeholder)}" value="${esc(display)}" onfocus="employeePickerOpen('${id}')" oninput="employeePickerInput('${id}',this.value)" onkeydown="employeePickerKeydown(event,'${id}')"><button type="button" class="employee-picker-clear" title="Clear employee" aria-label="Clear employee" onclick="employeePickerClear('${id}')">&times;</button></div><div class="employee-picker-options" id="${id}_options" role="listbox" hidden></div></div></div>`;
 }
 function employeePickerMatches(query){
   const q=String(query||'').trim().toLowerCase();
-  const rows=DB.employees.filter(employee=>!q||[employee.name,employee.employeeNo].some(value=>String(value||'').toLowerCase().includes(q)));
+  const rows=DB.employees.filter(employee=>!q||[employee.name,employeeDisplayName(employee),employee.employeeNo].some(value=>String(value||'').toLowerCase().includes(q)));
   return rows.sort((a,b)=>{
-    const aName=String(a.name||'').toLowerCase(),bName=String(b.name||'').toLowerCase();
+    const aName=employeeDisplayName(a).toLowerCase(),bName=employeeDisplayName(b).toLowerCase();
     const aFirst=q&&(aName.startsWith(q)||String(a.employeeNo||'').toLowerCase().startsWith(q))?0:1;
     const bFirst=q&&(bName.startsWith(q)||String(b.employeeNo||'').toLowerCase().startsWith(q))?0:1;
     return aFirst-bFirst||aName.localeCompare(bName);
@@ -1392,7 +1414,7 @@ function employeePickerMatches(query){
 function employeePickerRender(id,query=''){
   const picker=document.getElementById(`${id}_picker`);const options=document.getElementById(`${id}_options`);const input=document.getElementById(`${id}_search`);if(!picker||!options||!input)return;
   const rows=employeePickerMatches(query);const hasQuery=String(query||'').trim().length>0;const visible=hasQuery?rows:rows.slice(0,20);picker.dataset.activeIndex='-1';
-  options.innerHTML=visible.length?visible.map((employee,index)=>`<button type="button" role="option" data-index="${index}" data-employee-id="${esc(employee.id)}" onmousedown="event.preventDefault()" onclick="employeePickerChoose('${id}','${esc(employee.id)}')"><span class="employee-picker-avatar">${esc(opsInitials(employee.name))}</span><span><b>${esc(employee.name)}</b><small>${esc(employee.employeeNo||'No employee number')} · ${esc(employee.position||'No position')}</small></span><em>${esc(employee.department||'Unassigned')}</em></button>`).join(''):`<div class="employee-picker-empty"><b>No employee found</b><span>Try the employee's name or employee number.</span></div>`;
+  options.innerHTML=visible.length?visible.map((employee,index)=>`<button type="button" role="option" data-index="${index}" data-employee-id="${esc(employee.id)}" onmousedown="event.preventDefault()" onclick="employeePickerChoose('${id}','${esc(employee.id)}')"><span class="employee-picker-avatar">${esc(opsInitials(employeeDisplayName(employee)))}</span><span><b>${esc(employeeDisplayName(employee))}</b><small>${esc(employee.employeeNo||'No employee number')} · ${esc(employee.position||'No position')}</small></span><em>${esc(employee.department||'Unassigned')}</em></button>`).join(''):`<div class="employee-picker-empty"><b>No employee found</b><span>Try the employee's name or employee number.</span></div>`;
   if(rows.length>visible.length) options.insertAdjacentHTML('beforeend',`<div class="employee-picker-more">Type a name or employee number to search all ${rows.length} employees.</div>`);
   options.hidden=false;input.setAttribute('aria-expanded','true');
 }
@@ -1413,7 +1435,7 @@ function employeePickerAutofill(employee){
 }
 function employeePickerChoose(id,employeeId){
   const picker=document.getElementById(`${id}_picker`);const input=document.getElementById(`${id}_search`);const hidden=document.getElementById(id);const employee=DB.employees.find(row=>String(row.id)===String(employeeId));if(!picker||!input||!hidden||!employee)return;
-  picker.dataset.selectedId=employee.id;hidden.value=picker.dataset.mode==='name'?employee.name:employee.id;input.value=employee.name;input.setAttribute('aria-activedescendant','');employeePickerClose(id);
+  picker.dataset.selectedId=employee.id;hidden.value=picker.dataset.mode==='name'?employee.name:employee.id;input.value=employeeDisplayName(employee);input.setAttribute('aria-activedescendant','');employeePickerClose(id);
   if(picker.dataset.autofill==='true')employeePickerAutofill(employee);
   const callback=picker.dataset.onSelect;if(callback&&typeof window[callback]==='function')window[callback]();
   hidden.dispatchEvent(new Event('change',{bubbles:true}));input.focus();
@@ -1863,7 +1885,8 @@ function fieldHTML(f, val){
       <div class="computed-note" style="margin-top:6px;">Uploaded securely to Supabase Storage (max ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB per file).</div>
       </div>`;
   }
-  return `<div class="field ${f.full?'full':''}"><label>${f.label}${f.required?' *':''}</label><input type="${f.type}" id="f_${f.key}" value="${esc(v)}" ${f.required?'required':''} ${f.readonly?'readonly':''}></div>`;
+  const formatAttrs=f.format?`inputmode="numeric" maxlength="${f.format==='sss'?13:f.format==='philHealth'?15:f.format==='pagIbig'?14:15}" oninput="formatGovernmentIdInput(this,'${f.format}')"`:'';
+  return `<div class="field ${f.full?'full':''}"><label>${f.label}${f.required?' *':''}</label><input type="${f.type}" id="f_${f.key}" value="${esc(f.format?formatGovernmentId(f.format,v):v)}" ${f.required?'required':''} ${f.readonly?'readonly':''} ${formatAttrs}></div>`;
 }
 function readFields(fields){
   const out={};
@@ -1881,6 +1904,26 @@ function readFields(fields){
     }
   });
   return out;
+}
+function governmentIdDigits(value){ return String(value||'').replace(/\D/g,''); }
+function formatGovernmentId(kind,value){
+  const digits=governmentIdDigits(value);
+  if(kind==='sss') return [digits.slice(0,2),digits.slice(2,9),digits.slice(9,10)].filter(Boolean).join('-');
+  if(kind==='philHealth') return [digits.slice(0,2),digits.slice(2,11),digits.slice(11,12)].filter(Boolean).join('-');
+  if(kind==='pagIbig') return [digits.slice(0,4),digits.slice(4,8),digits.slice(8,12)].filter(Boolean).join('-');
+  if(kind==='tin') return [digits.slice(0,3),digits.slice(3,6),digits.slice(6,9),digits.slice(9,12)].filter(Boolean).join('-');
+  return digits;
+}
+function formatGovernmentIdInput(input,kind){ input.value=formatGovernmentId(kind,input.value); }
+function governmentIdError(kind,value){
+  if(!String(value||'').trim()) return '';
+  const digits=governmentIdDigits(value);
+  const valid=kind==='sss'?digits.length===10:kind==='philHealth'||kind==='pagIbig'?digits.length===12:kind==='tin'?[9,12].includes(digits.length):true;
+  if(valid) return '';
+  return {sss:'SSS Number must contain 10 digits (example: 09-5421455-9).',philHealth:'PhilHealth PIN must contain 12 digits in 2-9-1 format.',pagIbig:'Pag-IBIG MID must contain 12 digits in 4-4-4 format.',tin:'TIN must contain 9 digits, with an optional 3-digit branch code.'}[kind]||'Invalid government ID.';
+}
+function validateGovernmentIds(values){
+  return [['tin','tin'],['sssNumber','sss'],['philHealthNumber','philHealth'],['pagIbigNumber','pagIbig']].map(([key,kind])=>governmentIdError(kind,values[key])).find(Boolean)||'';
 }
 
 /* ================================================================
@@ -2362,7 +2405,7 @@ async function saveEmployeeLifecycleEvent(){
     type:'Lifecycle Event',eventType,from:fromStatus,to:emp.status||fromStatus,fromPosition,toPosition,fromDepartment,toDepartment:emp.department||fromDepartment,
     effectiveDate,remarks,changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'
   });
-  logAudit(`Recorded employment lifecycle event for ${emp.name}: ${eventType}`);
+  logAudit(`Recorded employment lifecycle event for ${employeeDisplayName(emp)}: ${eventType}`);
   await saveDB();
   closeModal(); renderNav();
   if(STATE.view==='employeeLifecycle') renderEmployeeLifecycle(); else renderEmployees();
@@ -2407,7 +2450,7 @@ function renderEmployeeLifecycle(){
     </div>
     <div class="lifecycle-grid">
       <div class="panel"><div class="dashboard-panel-head"><div><h3>Probation Pipeline</h3><div class="desc">Upcoming and overdue milestones for employees still classified as probationary.</div></div><button class="btn btn-ghost btn-sm" onclick="go('evaluations')">Open Evaluations →</button></div>
-        ${probationRows.length?`<div class="lifecycle-list">${probationRows.map(e=>{const n=lifecycleNextMilestone(e);const st=EVAL_MILESTONES.find(m=>m.label===n?.label);return `<div class="lifecycle-row"><div class="avatar">${lifecycleInitials(e)}</div><div class="main"><div class="title">${esc(e.employeeNo||'—')} · ${esc(e.name)}</div><div class="meta">${esc(e.position||'—')} · ${esc(e.department||'—')} · ${esc(employeeTenureText(e))}</div><div class="lifecycle-milestones" style="margin-top:7px;">${st?EVAL_MILESTONES.map(m=>{const x=lifecycleMilestoneStatus(e,m);return `<div class="lifecycle-milestone"><div class="label">${esc(m.label)}</div><div class="date">${fmtDate(x.due)}</div><div class="meta">${statusBadge(x.label,{[x.label]:x.cls})}</div></div>`}).join(''):''}</div></div><div class="right"><button class="btn btn-ghost btn-sm" onclick="openEmployeeProfile('${e.id}')">Profile</button>${canEdit()?`<div style="margin-top:5px;"><button class="btn btn-ghost btn-sm" onclick="openEmployeeLifecycleEventForm('${e.id}')">Event</button></div>`:''}<div class="date">${n?.label||''}${n?.date?' · '+fmtDate(n.date):''}</div></div></div>`;}).join('')}</div>`:'<div class="empty"><b>No probationary employees</b>There are no employees currently classified as probationary.</div>'}
+        ${probationRows.length?`<div class="lifecycle-list">${probationRows.map(e=>{const n=lifecycleNextMilestone(e);const st=EVAL_MILESTONES.find(m=>m.label===n?.label);return `<div class="lifecycle-row"><div class="avatar">${lifecycleInitials(e)}</div><div class="main"><div class="title">${esc(e.employeeNo||'—')} · ${esc(employeeDisplayName(e))}</div><div class="meta">${esc(e.position||'—')} · ${esc(e.department||'—')} · ${esc(employeeTenureText(e))}</div><div class="lifecycle-milestones" style="margin-top:7px;">${st?EVAL_MILESTONES.map(m=>{const x=lifecycleMilestoneStatus(e,m);return `<div class="lifecycle-milestone"><div class="label">${esc(m.label)}</div><div class="date">${fmtDate(x.due)}</div><div class="meta">${statusBadge(x.label,{[x.label]:x.cls})}</div></div>`}).join(''):''}</div></div><div class="right"><button class="btn btn-ghost btn-sm" onclick="openEmployeeProfile('${e.id}')">Profile</button>${canEdit()?`<div style="margin-top:5px;"><button class="btn btn-ghost btn-sm" onclick="openEmployeeLifecycleEventForm('${e.id}')">Event</button></div>`:''}<div class="date">${n?.label||''}${n?.date?' · '+fmtDate(n.date):''}</div></div></div>`;}).join('')}</div>`:'<div class="empty"><b>No probationary employees</b>There are no employees currently classified as probationary.</div>'}
       </div>
       <div class="panel"><div class="dashboard-panel-head"><div><h3>Workforce Movement · 90 Days</h3><div class="desc">Recent employee lifecycle changes and department transfers.</div></div></div>
         <div class="lifecycle-event-list">${events.length?events.slice(0,8).map(e=>`<div class="lifecycle-event"><div class="date">${fmtDate(e.date)}</div><div class="body"><div class="title">${esc(e.employeeName||e.employee||'Employee')} · ${esc(e.type)}</div><div class="meta">${esc(e.title||'')} ${e.meta?'· '+esc(e.meta):''}</div></div><div class="right">${statusBadge(e.type==='Department Transfer'?'Transfer':(e.to||''),{})}</div></div>`).join(''):'<div class="empty"><b>No recent movement</b>Lifecycle and transfer events will appear here.</div>'}</div>
@@ -2416,7 +2459,7 @@ function renderEmployeeLifecycle(){
     </div>
     <div class="panel"><div class="dashboard-panel-head"><div><h3>Employee Lifecycle Directory</h3><div class="desc">One operational view of current employment state, tenure, and next milestone.</div></div><div class="small">${separations} recent separation(s) in the last 90 days</div></div>
       <div class="tablewrap"><table class="data-table"><thead><tr><th>Employee</th><th>Department</th><th>Status</th><th>Classification</th><th>Date Hired</th><th>Tenure</th><th>Next Milestone</th><th style="text-align:right;">Actions</th></tr></thead><tbody>
-      ${employees.length?employees.map(e=>{const n=lifecycleNextMilestone(e);return `<tr><td><b>${esc(e.employeeNo||'—')}</b><div>${esc(e.name)}</div><div class="small">${esc(e.position||'—')}</div></td><td>${esc(e.department||'—')}</td><td>${statusBadge(e.status,EMP_STATUS_MAP)}</td><td>${statusBadge(classify(e),classify(e)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</td><td>${fmtDate(e.dateHired)}</td><td>${esc(employeeTenureText(e))}</td><td>${n?`${esc(n.label)}${n.date?`<div class="small">${fmtDate(n.date)}</div>`:''}`:'—'}</td><td><div class="rowactions"><button class="iconbtn" title="Profile" onclick="openEmployeeProfile('${e.id}')">${iUser(14)}</button>${canEdit()?`<button class="iconbtn" title="Lifecycle Event" onclick="openEmployeeLifecycleEventForm('${e.id}')">${iPlus(14)}</button>`:''}</div></td></tr>`;}).join(''):`<tr><td colspan="8"><div class="empty"><b>No employees found</b>Try a different search or lifecycle filter.</div></td></tr>`}
+      ${employees.length?employees.map(e=>{const n=lifecycleNextMilestone(e);return `<tr><td><b>${esc(e.employeeNo||'—')}</b><div>${esc(employeeDisplayName(e))}</div><div class="small">${esc(e.position||'—')}</div></td><td>${esc(e.department||'—')}</td><td>${statusBadge(e.status,EMP_STATUS_MAP)}</td><td>${statusBadge(classify(e),classify(e)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</td><td>${fmtDate(e.dateHired)}</td><td>${esc(employeeTenureText(e))}</td><td>${n?`${esc(n.label)}${n.date?`<div class="small">${fmtDate(n.date)}</div>`:''}`:'—'}</td><td><div class="rowactions"><button class="iconbtn" title="Profile" onclick="openEmployeeProfile('${e.id}')">${iUser(14)}</button>${canEdit()?`<button class="iconbtn" title="Lifecycle Event" onclick="openEmployeeLifecycleEventForm('${e.id}')">${iPlus(14)}</button>`:''}</div></td></tr>`;}).join(''):`<tr><td colspan="8"><div class="empty"><b>No employees found</b>Try a different search or lifecycle filter.</div></td></tr>`}
       </tbody></table></div>
     </div>`;
 }
@@ -2424,6 +2467,174 @@ function renderEmployeeLifecycle(){
 /* ================================================================
    EMPLOYEES (custom view — has classification logic)
    ================================================================ */
+const ONBOARDING_IDENTITY_FIELDS=[
+  {key:'lastName',label:'Last Name',type:'text',required:true},
+  {key:'firstName',label:'First Name',type:'text',required:true},
+  {key:'middleName',label:'Middle Name',type:'text'},
+  {key:'suffix',label:'Suffix',type:'text'},
+  {key:'birthDate',label:'Birth Date',type:'date'},
+  {key:'gender',label:'Gender',type:'select',options:['','Male','Female']},
+  {key:'civilStatus',label:'Civil Status',type:'select',options:['','Single','Married','Widowed','Separated','Other']},
+  {key:'mobileNumber',label:'Mobile Number',type:'tel',required:true},
+  {key:'personalEmail',label:'Personal Email',type:'email'},
+  {key:'address',label:'Home Address',type:'text',full:true},
+];
+const ONBOARDING_APPLICATION_FIELDS=[
+  {key:'positionApplied',label:'Position Applied For',type:'text',required:true},
+  {key:'department',label:'Department',type:'select',options:DEPT_OPTIONS,required:true},
+  {key:'applicationDate',label:'Application Date',type:'date',required:true},
+  {key:'source',label:'Application Source',type:'select',options:['Walk-in','Referral','Online Job Board','Social Media','Job Fair','Agency','Other']},
+  {key:'stage',label:'Hiring Stage',type:'select',options:ONBOARDING_STAGES,required:true},
+  {key:'resume',label:'Resume / Application Form',type:'file',full:true},
+];
+const ONBOARDING_EVALUATION_FIELDS=[
+  {key:'interviewDate',label:'Interview Date',type:'date'},
+  {key:'interviewer',label:'Interviewer / Panel',type:'text'},
+  {key:'experienceScore',label:'Experience Score (1-5)',type:'number'},
+  {key:'competencyScore',label:'Competency Score (1-5)',type:'number'},
+  {key:'communicationScore',label:'Communication Score (1-5)',type:'number'},
+  {key:'cultureScore',label:'Values / Culture Score (1-5)',type:'number'},
+  {key:'recommendation',label:'Recommendation',type:'select',options:ONBOARDING_RECOMMENDATIONS,required:true},
+  {key:'evaluationNotes',label:'Evaluation Notes',type:'textarea'},
+];
+const ONBOARDING_OFFER_FIELDS=[
+  {key:'prfNumber',label:'PRF Number',type:'text'},
+  {key:'proposedStartDate',label:'Proposed Start Date',type:'date'},
+  {key:'employmentType',label:'Employment Type',type:'select',options:['Probationary','Regular','Project-based','Fixed-term','Part-time']},
+  {key:'offeredSalary',label:'Offered Monthly Salary',type:'number'},
+  {key:'tin',label:'BIR TIN',type:'text',format:'tin'},
+  {key:'sssNumber',label:'SSS Number',type:'text',format:'sss'},
+  {key:'philHealthNumber',label:'PhilHealth PIN',type:'text',format:'philHealth'},
+  {key:'pagIbigNumber',label:'Pag-IBIG MID',type:'text',format:'pagIbig'},
+  {key:'preEmploymentDocs',label:'Combined Pre-employment Documents',type:'file',full:true},
+  {key:'remarks',label:'HR Remarks',type:'textarea'},
+];
+const ONBOARDING_FIELDS=[...ONBOARDING_IDENTITY_FIELDS,...ONBOARDING_APPLICATION_FIELDS,...ONBOARDING_EVALUATION_FIELDS,...ONBOARDING_OFFER_FIELDS];
+function onboardingOpenCount(){ return (DB.onboardingCandidates||[]).filter(c=>!['Hired','Rejected','Withdrawn'].includes(c.stage)).length; }
+function candidateDisplayName(candidate){ return formatEmployeeName(candidate); }
+function onboardingChecklist(candidate={}){ return candidate?.checklist&&typeof candidate.checklist==='object'?candidate.checklist:{}; }
+function onboardingReadiness(candidate){
+  const checks=onboardingChecklist(candidate);
+  const completed=ONBOARDING_CHECKLIST.filter(item=>checks[item.key]).length;
+  return {completed,total:ONBOARDING_CHECKLIST.length,percent:Math.round((completed/ONBOARDING_CHECKLIST.length)*100)};
+}
+function onboardingAverageScore(candidate){
+  const values=['experienceScore','competencyScore','communicationScore','cultureScore'].map(key=>Number(candidate[key])).filter(value=>value>=1&&value<=5);
+  return values.length?Math.round((values.reduce((sum,value)=>sum+value,0)/values.length)*10)/10:null;
+}
+function onboardingHireBlockers(candidate){
+  const checks=onboardingChecklist(candidate);
+  const blockers=[];
+  if(candidate.stage!=='Ready to Hire') blockers.push('stage must be Ready to Hire');
+  if(candidate.recommendation!=='Hire') blockers.push('recommendation must be Hire');
+  [['privacyNotice','privacy notice'],['interview','interview evaluation'],['offer','accepted offer'],['contract','signed contract'],['standards','probationary standards acknowledgment']].forEach(([key,label])=>{if(!checks[key])blockers.push(label);});
+  if(!candidate.prfNumber) blockers.push('PRF Number');
+  if(!candidate.proposedStartDate) blockers.push('proposed start date');
+  if(!candidate.birthDate) blockers.push('birth date');
+  if(!candidate.gender) blockers.push('gender');
+  return blockers;
+}
+function onboardingFieldValue(candidate,field){
+  if(!candidate) return field.key==='applicationDate'?todayISO():field.key==='stage'?'Applicant':field.key==='recommendation'?'Pending':'';
+  return candidate[field.key]??'';
+}
+function onboardingSection(title,description,fields,candidate){
+  return `<section class="onboarding-form-section"><div class="onboarding-form-heading"><h4>${esc(title)}</h4><p>${esc(description)}</p></div><div class="formgrid">${fields.map(field=>fieldHTML(field,onboardingFieldValue(candidate,field))).join('')}</div></section>`;
+}
+function onboardingChecklistHTML(candidate={}){
+  const checks=onboardingChecklist(candidate);
+  return `<div class="onboarding-check-grid">${ONBOARDING_CHECKLIST.map(item=>`<label class="onboarding-check"><input type="checkbox" data-onboarding-check="${esc(item.key)}" ${checks[item.key]?'checked':''}><span><b>${esc(item.label)}</b><small>${esc(item.group)}</small></span></label>`).join('')}</div>`;
+}
+function openOnboardingForm(id=''){
+  const candidate=id?(DB.onboardingCandidates||[]).find(row=>row.id===id):null;
+  const record=candidate?{...candidate,...splitEmployeeName(candidate)}:null;
+  const fields=ONBOARDING_FIELDS.map(field=>field.type==='file'&&candidate?{...field,existingData:candidate[field.key+'Data']||''}:field);
+  const byKey=keys=>fields.filter(field=>keys.includes(field.key));
+  openModal(`
+    <div class="modal-head"><div><h3>${candidate?'Edit Applicant':'Add Applicant'}</h3><div class="small">Applicant record · ${candidate?esc(candidateDisplayName(record)):'pre-employment intake'}</div></div><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body onboarding-modal-body">
+      ${onboardingSection('Personal and contact','Use separate name fields; the system displays Last Name, First Name Middle Name.',byKey(ONBOARDING_IDENTITY_FIELDS.map(f=>f.key)),record)}
+      ${onboardingSection('Application','Position, source, and current recruitment stage.',byKey(ONBOARDING_APPLICATION_FIELDS.map(f=>f.key)),record)}
+      ${onboardingSection('Evaluation','Use consistent 1-5 scores and retain the hiring rationale.',byKey(ONBOARDING_EVALUATION_FIELDS.map(f=>f.key)),record)}
+      ${onboardingSection('Offer and statutory details','Government identifiers are optional until available, but validated when entered.',byKey(ONBOARDING_OFFER_FIELDS.map(f=>f.key)),record)}
+      <section class="onboarding-form-section"><div class="onboarding-form-heading"><h4>Onboarding readiness</h4><p>Track evidence and required handoffs before activation.</p></div>${onboardingChecklistHTML(candidate)}</section>
+      <div class="computed-note">Collect only information necessary for recruitment and employment, keep access restricted, and verify current agency requirements before submission.</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveOnboardingCandidate('${esc(id)}')">Save Applicant</button></div>
+  `);
+}
+async function saveOnboardingCandidate(id=''){
+  const values=readFields(ONBOARDING_FIELDS);
+  const missing=ONBOARDING_FIELDS.filter(field=>field.required&&!values[field.key]);
+  if(missing.length){toast('Please complete: '+missing.map(field=>field.label).join(', '));return;}
+  values.name=formatEmployeeName(values);
+  if(values.birthDate&&values.birthDate>todayISO()){toast('Birth Date cannot be in the future.',true);return;}
+  if(values.personalEmail&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.personalEmail)){toast('Enter a valid personal email address.',true);return;}
+  for(const key of ['experienceScore','competencyScore','communicationScore','cultureScore']){
+    if(values[key]&&(Number(values[key])<1||Number(values[key])>5)){toast('Evaluation scores must be from 1 to 5.',true);return;}
+  }
+  const idError=validateGovernmentIds(values); if(idError){toast(idError,true);return;}
+  const checklist={}; document.querySelectorAll('[data-onboarding-check]').forEach(input=>checklist[input.dataset.onboardingCheck]=input.checked);
+  const existing=id?DB.onboardingCandidates.find(row=>row.id===id):null;
+  const isNew=!existing;
+  const record=existing||{id:uid(),createdAt:new Date().toISOString(),createdBy:SESSION?.id||null};
+  const original=existing?JSON.parse(JSON.stringify(existing)):null;
+  const oldStoragePaths=recordStoragePaths(existing);
+  Object.assign(record,values,{checklist,updatedAt:new Date().toISOString()});
+  if(isNew) DB.onboardingCandidates.push(record);
+  if(!(await saveDB())){
+    if(isNew) DB.onboardingCandidates=DB.onboardingCandidates.filter(row=>row!==record);
+    else {Object.keys(record).forEach(key=>delete record[key]);Object.assign(record,original);}
+    return;
+  }
+  logAudit(`${isNew?'Added':'Updated'} applicant record: ${record.name}`);
+  const newStoragePaths=recordStoragePaths(record);rememberCommittedRecordFiles(record);
+  await deleteStorageObjects([...oldStoragePaths].filter(path=>!newStoragePaths.has(path)));
+  await closeModal([...newStoragePaths]);renderNav();renderOnboarding();toast(isNew?'Applicant added.':'Applicant updated.');
+}
+function renderOnboarding(){
+  const records=DB.onboardingCandidates||[];
+  const query=String(STATE.onboardingSearch||'').trim().toLowerCase();
+  const stage=STATE.onboardingStage||'';
+  const rows=records.filter(candidate=>(!query||[candidate.name,candidateDisplayName(candidate),candidate.positionApplied,candidate.department,candidate.mobileNumber,candidate.personalEmail,candidate.prfNumber].some(value=>String(value||'').toLowerCase().includes(query)))&&(!stage||candidate.stage===stage)).sort((a,b)=>String(b.applicationDate||b.createdAt||'').localeCompare(String(a.applicationDate||a.createdAt||'')));
+  const ready=records.filter(candidate=>candidate.stage==='Ready to Hire').length;
+  const inProgress=records.filter(candidate=>!['Ready to Hire','Hired','Rejected','Withdrawn'].includes(candidate.stage)).length;
+  setTitle('Onboarding & Applicants',`${records.length} candidate${records.length===1?'':'s'} · ${ready} ready to hire`);
+  document.getElementById('content').innerHTML=`
+    <div class="onboarding-summary"><div><span>Active pipeline</span><b>${inProgress}</b></div><div><span>Ready to hire</span><b>${ready}</b></div><div><span>Hired</span><b>${records.filter(candidate=>candidate.stage==='Hired').length}</b></div><div><span>Needs documents</span><b>${records.filter(candidate=>!['Hired','Rejected','Withdrawn'].includes(candidate.stage)&&onboardingReadiness(candidate).percent<100).length}</b></div></div>
+    <div class="data-toolbar onboarding-toolbar">
+      <div class="searchbox">${iSearch(15)}<input data-search-key="onboardingSearch" type="search" autocomplete="off" placeholder="Search applicant, position, PRF, or contact…" value="${esc(STATE.onboardingSearch||'')}" oninput="queueSearchRender(this,'onboardingSearch',renderOnboarding)"></div>
+      <select aria-label="Filter applicants by stage" onchange="STATE.onboardingStage=this.value;STATE.tablePages={};renderOnboarding()"><option value="">All stages</option>${ONBOARDING_STAGES.map(value=>`<option value="${esc(value)}" ${stage===value?'selected':''}>${esc(value)}</option>`).join('')}</select>
+      ${query||stage?`<button class="btn btn-ghost btn-sm" onclick="STATE.onboardingSearch='';STATE.onboardingStage='';STATE.tablePages={};renderOnboarding()">Clear</button>`:''}
+      <div class="toolbar-spacer"></div><button class="btn btn-ghost btn-sm" onclick="openEmployeeForm()">${iUser(14)} Direct Hire</button><button class="btn btn-primary btn-sm" onclick="openOnboardingForm()">${iPlus(14)} Add Applicant</button>
+    </div>
+    <div class="table-card"><div class="table-card-head"><div class="table-meta"><b>${rows.length}</b> candidates <span class="table-meta-muted">${rows.length===records.length?'in the pipeline':`filtered from ${records.length}`}</span></div></div><div class="tablewrap"><table class="data-table onboarding-table"><thead><tr><th>Applicant</th><th>Position</th><th>Applied</th><th>Stage</th><th>Evaluation</th><th>Readiness</th><th class="actions-head">Actions</th></tr></thead><tbody>${rows.length?rows.map(candidate=>{
+      const score=onboardingAverageScore(candidate),readiness=onboardingReadiness(candidate),blockers=onboardingHireBlockers(candidate);
+      return `<tr><td><b>${esc(candidateDisplayName(candidate))}</b><div class="small">${esc(candidate.mobileNumber||candidate.personalEmail||'No contact')}</div></td><td>${esc(candidate.positionApplied||'—')}<div class="small">${esc(candidate.department||'—')}</div></td><td>${fmtDate(candidate.applicationDate)}</td><td>${statusBadge(candidate.stage||'Applicant',ONBOARDING_STAGE_MAP)}</td><td><b>${score?`${score}/5`:'—'}</b><div class="small">${esc(candidate.recommendation||'Pending')}</div></td><td><div class="readiness-cell"><span><b>${readiness.percent}%</b> ${readiness.completed}/${readiness.total}</span><div><i style="width:${readiness.percent}%"></i></div></div></td><td><div class="rowactions"><button class="iconbtn" title="View applicant" onclick="openOnboardingDetails('${candidate.id}')">${iUser(14)}</button>${canEdit()?`<button class="iconbtn" title="Edit applicant" onclick="openOnboardingForm('${candidate.id}')">${iEdit(14)}</button>${candidate.stage!=='Hired'?`<button class="iconbtn" title="${blockers.length?'Review hiring requirements':'Convert to employee'}" onclick="openOnboardingHire('${candidate.id}')">${iCheck(14)}</button>`:''}`:''}</div></td></tr>`;
+    }).join(''):`<tr><td colspan="7"><div class="empty"><b>No applicants found</b><span>${query||stage?'Clear the current search or stage filter.':'Add an applicant or use Direct Hire for an immediate employee record.'}</span></div></td></tr>`}</tbody></table></div></div>`;
+  requestAnimationFrame(()=>enhanceDataTables());
+}
+function openOnboardingDetails(id){
+  const candidate=DB.onboardingCandidates.find(row=>row.id===id);if(!candidate)return;
+  const score=onboardingAverageScore(candidate),readiness=onboardingReadiness(candidate),checks=onboardingChecklist(candidate),blockers=onboardingHireBlockers(candidate);
+  openModal(`<div class="modal-head"><div><h3>${esc(candidateDisplayName(candidate))}</h3><div class="small">${esc(candidate.positionApplied||'Applicant')} · ${esc(candidate.department||'Unassigned')}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="onboarding-detail-grid"><div><span>Stage</span>${statusBadge(candidate.stage||'Applicant',ONBOARDING_STAGE_MAP)}</div><div><span>Recommendation</span><b>${esc(candidate.recommendation||'Pending')}</b></div><div><span>Evaluation</span><b>${score?`${score}/5`:'Not scored'}</b></div><div><span>Readiness</span><b>${readiness.percent}%</b></div><div><span>PRF Number</span><b>${esc(candidate.prfNumber||'—')}</b></div><div><span>Proposed Start</span><b>${fmtDate(candidate.proposedStartDate)}</b></div></div><div class="onboarding-check-grid review">${ONBOARDING_CHECKLIST.map(item=>`<div class="onboarding-check ${checks[item.key]?'done':''}"><span class="checkmark">${checks[item.key]?'✓':'–'}</span><span><b>${esc(item.label)}</b><small>${esc(item.group)}</small></span></div>`).join('')}</div>${blockers.length&&candidate.stage!=='Hired'?`<div class="notice notice-soft"><b>Before conversion:</b> ${esc(blockers.join(', '))}.</div>`:''}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button>${canEdit()?`<button class="btn btn-ghost" onclick="openOnboardingForm('${candidate.id}')">Edit</button>${candidate.stage!=='Hired'?`<button class="btn btn-primary" onclick="openOnboardingHire('${candidate.id}')">Prepare Hire</button>`:''}`:''}</div>`);
+}
+function openOnboardingHire(id){
+  const candidate=DB.onboardingCandidates.find(row=>row.id===id);if(!candidate)return;
+  const blockers=onboardingHireBlockers(candidate);
+  openModal(`<div class="modal-head"><div><h3>Convert to Employee</h3><div class="small">${esc(candidateDisplayName(candidate))}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="onboarding-convert-summary"><div><span>Employee No.</span><b>${esc(nextEmployeeNumber(DB.employees))}</b></div><div><span>PRF Number</span><b>${esc(candidate.prfNumber||'—')}</b></div><div><span>Position</span><b>${esc(candidate.positionApplied||'—')}</b></div><div><span>Start Date</span><b>${fmtDate(candidate.proposedStartDate)}</b></div></div>${blockers.length?`<div class="notice"><b>Not ready to convert.</b> Complete: ${esc(blockers.join(', '))}.</div>`:`<div class="notice notice-soft"><b>Ready:</b> This creates an active employee master record and preserves this applicant history.</div>`}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ghost" onclick="openOnboardingForm('${candidate.id}')">Edit Applicant</button><button class="btn btn-primary" data-confirm-change="true" ${blockers.length?'disabled':''} onclick="convertOnboardingCandidate('${candidate.id}')">Create Employee</button></div>`);
+}
+async function convertOnboardingCandidate(id){
+  const candidate=DB.onboardingCandidates.find(row=>row.id===id);if(!candidate)return;
+  const blockers=onboardingHireBlockers(candidate);if(blockers.length){toast('Complete hiring requirements before conversion: '+blockers.join(', '),true);return;}
+  if(candidate.employeeRecordId||DB.employees.some(employee=>employee.sourceCandidateId===candidate.id)){toast('This applicant has already been converted.',true);return;}
+  const employee={id:uid(),employeeNo:nextEmployeeNumber(DB.employees),prfNumber:candidate.prfNumber,lastName:candidate.lastName,firstName:candidate.firstName,middleName:candidate.middleName,name:formatEmployeeName(candidate),position:candidate.positionApplied,department:candidate.department,dateHired:candidate.proposedStartDate,birthDate:candidate.birthDate,gender:candidate.gender,civilStatus:candidate.civilStatus||'',status:'Newly Hired',statusDate:candidate.proposedStartDate,mobileNumber:candidate.mobileNumber||'',personalEmail:candidate.personalEmail||'',address:candidate.address||'',tin:candidate.tin||'',sssNumber:candidate.sssNumber||'',philHealthNumber:candidate.philHealthNumber||'',pagIbigNumber:candidate.pagIbigNumber||'',emergencyContactName:'',emergencyContactRelationship:'',emergencyContactPhone:'',classOverride:'Auto',sourceCandidateId:candidate.id,employmentHistory:[{type:'Employment Status',from:'Applicant',to:'Newly Hired',effectiveDate:candidate.proposedStartDate,remarks:'Converted from Onboarding & Applicants',changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'}]};
+  const original=JSON.parse(JSON.stringify(candidate));
+  DB.employees.push(employee);Object.assign(candidate,{stage:'Hired',employeeRecordId:employee.id,hiredAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
+  if(!(await saveDB())){DB.employees=DB.employees.filter(row=>row!==employee);Object.keys(candidate).forEach(key=>delete candidate[key]);Object.assign(candidate,original);return;}
+  logAudit(`Converted applicant to employee: ${employeeDisplayName(employee)}`);await closeModal();renderNav();renderOnboarding();toast(`${employeeDisplayName(employee)} is now in Employee Information.`);
+}
+
 function employeeSearchInput(value){
   const input=document.getElementById('employee-directory-search');
   if(input) queueSearchRender(input,'employeeSearch',renderEmployees);
@@ -2441,7 +2652,7 @@ function resetEmployeeDirectoryFilters(){
 const EMPLOYEE_COLUMN_DEFS = [
   {key:'employeeNo',label:'Employee No.',locked:true,default:true,width:104,cell:e=>`<span class="mono">${esc(e.employeeNo||'—')}</span>`},
   {key:'prfNumber',label:'PRF Number',locked:true,default:true,width:118,cell:e=>`<span class="mono">${esc(e.prfNumber||'—')}</span>`},
-  {key:'name',label:'Name',locked:true,default:true,width:168,cell:e=>`<b>${esc(e.name||'—')}</b>`},
+  {key:'name',label:'Name',locked:true,default:true,width:184,cell:e=>`<b>${esc(employeeDisplayName(e)||'—')}</b>`},
   {key:'position',label:'Position',default:true,width:172,cell:e=>esc(e.position||'—')},
   {key:'department',label:'Department',default:true,width:124,cell:e=>esc(e.department||'—')},
   {key:'dateHired',label:'Date Hired',default:true,width:112,cell:e=>fmtDate(e.dateHired)},
@@ -2453,6 +2664,10 @@ const EMPLOYEE_COLUMN_DEFS = [
   {key:'address',label:'Home Address',default:false,width:250,cell:e=>esc(e.address||'—')},
   {key:'birthDate',label:'Birth Date',default:false,width:112,cell:e=>fmtDate(e.birthDate)},
   {key:'civilStatus',label:'Civil Status',default:false,width:104,cell:e=>esc(e.civilStatus||'—')},
+  {key:'tin',label:'BIR TIN',default:false,width:150,cell:e=>`<span class="mono">${esc(formatGovernmentId('tin',e.tin)||'—')}</span>`},
+  {key:'sssNumber',label:'SSS Number',default:false,width:144,cell:e=>`<span class="mono">${esc(formatGovernmentId('sss',e.sssNumber)||'—')}</span>`},
+  {key:'philHealthNumber',label:'PhilHealth PIN',default:false,width:160,cell:e=>`<span class="mono">${esc(formatGovernmentId('philHealth',e.philHealthNumber)||'—')}</span>`},
+  {key:'pagIbigNumber',label:'Pag-IBIG MID',default:false,width:154,cell:e=>`<span class="mono">${esc(formatGovernmentId('pagIbig',e.pagIbigNumber)||'—')}</span>`},
   {key:'emergencyContactName',label:'Emergency Contact',default:false,width:174,cell:e=>esc(e.emergencyContactName||'—')},
   {key:'emergencyContactRelationship',label:'Relationship',default:false,width:124,cell:e=>esc(e.emergencyContactRelationship||'—')},
   {key:'emergencyContactPhone',label:'Emergency Phone',default:false,width:142,cell:e=>esc(e.emergencyContactPhone||'—')},
@@ -2500,7 +2715,7 @@ function renderEmployees(){
   const classFilter = STATE.employeeClassFilter||'';
   const hasFilters=Boolean(q||deptFilter||statusFilter||classFilter);
   let rows = DB.employees.filter(e=>{
-    const hay=[e.employeeNo,e.prfNumber,e.name,e.position,e.department,e.mobileNumber,e.personalEmail,e.address].map(v=>String(v||'').toLowerCase());
+    const hay=[e.employeeNo,e.prfNumber,e.name,employeeDisplayName(e),e.position,e.department,e.mobileNumber,e.personalEmail,e.address].map(v=>String(v||'').toLowerCase());
     const matches = !q || hay.some(v=>v.includes(q));
     const deptOk = !deptFilter || e.department===deptFilter;
     const statusOk = !statusFilter || e.status===statusFilter;
@@ -2564,7 +2779,9 @@ function renderEmployees(){
 const EMP_FIELDS = [
   {key:'employeeNo', label:'Employee No.', type:'text', readonly:true},
   {key:'prfNumber', label:'PRF Number', type:'text', required:true},
-  {key:'name', label:'Employee Name', type:'text', required:true},
+  {key:'lastName', label:'Last Name', type:'text', required:true},
+  {key:'firstName', label:'First Name', type:'text', required:true},
+  {key:'middleName', label:'Middle Name', type:'text'},
   {key:'position', label:'Position', type:'text', required:true},
   {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
   {key:'dateHired', label:'Date Hired', type:'date', required:true},
@@ -2575,6 +2792,10 @@ const EMP_FIELDS = [
   {key:'statusDate', label:'Status Effective Date (resignation/AWOL/separation/etc.)', type:'date'},
   {key:'mobileNumber', label:'Mobile Number', type:'tel'},
   {key:'personalEmail', label:'Personal / Contact Email', type:'email'},
+  {key:'tin', label:'BIR TIN', type:'text', format:'tin'},
+  {key:'sssNumber', label:'SSS Number', type:'text', format:'sss'},
+  {key:'philHealthNumber', label:'PhilHealth PIN', type:'text', format:'philHealth'},
+  {key:'pagIbigNumber', label:'Pag-IBIG MID', type:'text', format:'pagIbig'},
   {key:'address', label:'Home Address', type:'text', full:true},
   {key:'emergencyContactName', label:'Emergency Contact Name', type:'text'},
   {key:'emergencyContactRelationship', label:'Emergency Contact Relationship', type:'text'},
@@ -2583,11 +2804,12 @@ const EMP_FIELDS = [
 ];
 function openEmployeeForm(id){
   const existing = id? DB.employees.find(e=>e.id===id): null;
+  const formRecord=existing?{...existing,...splitEmployeeName(existing)}:null;
   openModal(`
     <div class="modal-head"><h3>${existing?'Edit':'Add'} Employee</h3><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
       <div class="formgrid">
-        ${EMP_FIELDS.map(f=>fieldHTML(f, existing? existing[f.key] : (f.key==='employeeNo'?nextEmployeeNumber(DB.employees):f.key==='status'?'Newly Hired':f.key==='classOverride'?'Auto':''))).join('')}
+        ${EMP_FIELDS.map(f=>fieldHTML(f, formRecord? formRecord[f.key] : (f.key==='employeeNo'?nextEmployeeNumber(DB.employees):f.key==='status'?'Newly Hired':f.key==='classOverride'?'Auto':''))).join('')}
       </div>
       <div class="employee-master-note"><b>Employee master data:</b> Employee No. is system-generated. PRF Number links the employee to the approved personnel request; contact and emergency information can be completed later.</div>
       <div class="computed-note">Classification is calculated automatically from Date Hired against the ${DB.settings.probationDays}-day regularization threshold (set in Settings). Choose "Auto" unless you need to manually correct a record.</div>
@@ -2596,10 +2818,43 @@ function openEmployeeForm(id){
   `);
 }
 function normalizeEmployeeName(v){ return String(v||'').toLowerCase().replace(/\s+/g,' ').trim(); }
+function splitEmployeeName(employee={}){
+  if(employee.lastName||employee.firstName||employee.middleName) return {lastName:employee.lastName||'',firstName:employee.firstName||'',middleName:employee.middleName||''};
+  const raw=String(employee.name||'').trim();
+  if(!raw) return {lastName:'',firstName:'',middleName:''};
+  if(raw.includes(',')){
+    const [last,...rest]=raw.split(',');
+    const given=rest.join(',').trim().split(/\s+/).filter(Boolean);
+    return {lastName:last.trim(),firstName:given.shift()||'',middleName:given.join(' ')};
+  }
+  const parts=raw.split(/\s+/).filter(Boolean);
+  const lastName=parts.length>1?parts.pop():'';
+  return {lastName,firstName:parts.join(' '),middleName:''};
+}
+function formatEmployeeName({lastName='',firstName='',middleName=''}){
+  const family=String(lastName).trim();
+  const given=[String(firstName).trim(),String(middleName).trim()].filter(Boolean).join(' ');
+  return family&&given?`${family}, ${given}`:family||given;
+}
+function employeeDisplayName(employee){
+  const parts=splitEmployeeName(employee);
+  return parts.lastName&&parts.firstName?formatEmployeeName(parts):String(employee?.name||'').trim();
+}
 function findEmployeeDuplicates(vals,id){
   const keyName=normalizeEmployeeName(vals.name);
-  return DB.employees.filter(e=>e.id!==id && normalizeEmployeeName(e.name)===keyName && String(e.dateHired||'')===String(vals.dateHired||'') && String(e.department||'')===String(vals.department||''));
+  return DB.employees.filter(e=>e.id!==id && [e.name,employeeDisplayName(e)].some(name=>normalizeEmployeeName(name)===keyName) && String(e.dateHired||'')===String(vals.dateHired||'') && String(e.department||'')===String(vals.department||''));
 }
+function updateEmployeeNameReferences(oldName,newName){
+  if(!oldName||!newName||normalizeEmployeeName(oldName)===normalizeEmployeeName(newName)) return [];
+  const changes=[];
+  RECORD_MODULES.filter(module=>module!=='employees').forEach(module=>(DB[module]||[]).forEach(record=>{
+    ['employeeName','employeeReplaced','changedBy'].forEach(key=>{
+      if(normalizeEmployeeName(record[key])===normalizeEmployeeName(oldName)){changes.push({record,key,value:record[key]});record[key]=newName;}
+    });
+  }));
+  return changes;
+}
+function restoreEmployeeNameReferences(changes){ (changes||[]).forEach(change=>change.record[change.key]=change.value); }
 
 async function saveEmployee(id){
   const vals = readFields(EMP_FIELDS);
@@ -2608,7 +2863,9 @@ async function saveEmployee(id){
   if(vals.dateHired>todayISO()){ toast('Date Hired cannot be in the future.'); return; }
   if(vals.birthDate && vals.birthDate>todayISO()){ toast('Birth Date cannot be in the future.'); return; }
   if(vals.statusDate && vals.statusDate<vals.dateHired){ toast('Status Effective Date cannot be before Date Hired.'); return; }
+  const governmentIdValidation=validateGovernmentIds(vals); if(governmentIdValidation){toast(governmentIdValidation,true);return;}
   if(vals.employeeNo && DB.employees.some(e=>e.id!==id && String(e.employeeNo||'').toUpperCase()===String(vals.employeeNo).toUpperCase())){ vals.employeeNo=nextEmployeeNumber(DB.employees); }
+  vals.name=formatEmployeeName(vals);
   if(DB.employees.some(e=>e.id!==id && String(e.prfNumber||'').trim().toUpperCase()===String(vals.prfNumber||'').trim().toUpperCase())){ toast('PRF Number is already assigned to another employee.'); return; }
   const duplicateCandidates=findEmployeeDuplicates(vals,id);
   if(duplicateCandidates.length){
@@ -2619,6 +2876,7 @@ async function saveEmployee(id){
   const rec=id?DB.employees.find(e=>e.id===id):{id:uid(), employmentHistory:[]};
   if(!rec){ toast('Employee record could not be found.',true); return; }
   const original=isNew?null:JSON.parse(JSON.stringify(rec));
+  const originalName=rec.name||'';
   const oldStoragePaths=recordStoragePaths(id?rec:null);
   const previousStatus=id?rec.status:'';
   const previousStatusDate=id?rec.statusDate:'';
@@ -2630,10 +2888,15 @@ async function saveEmployee(id){
     rec.employmentHistory.push({type:'Employment Status',from:previousStatus||'',to:rec.status||'',effectiveDate:rec.statusDate||todayISO(),remarks:'Updated from Employee Information',changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
   }
   if(isNew) DB.employees.push(rec);
+  const renamedReferences=isNew?[]:updateEmployeeNameReferences(originalName,rec.name);
   if(!(await saveDB())){
     if(isNew) DB.employees=DB.employees.filter(e=>e!==rec);
-    else { Object.keys(rec).forEach(key=>delete rec[key]); Object.assign(rec,original); }
+    else { restoreEmployeeNameReferences(renamedReferences); Object.keys(rec).forEach(key=>delete rec[key]); Object.assign(rec,original); }
     return;
+  }
+  if(!isNew&&normalizeEmployeeName(originalName)!==normalizeEmployeeName(rec.name)){
+    const {error}=await supabase.from('hr_cases').update({employee_name:rec.name,updated_by:SESSION?.id||null}).ilike('employee_name',originalName);
+    if(error) toast('Employee saved, but linked HR case names could not be updated: '+error.message,true);
   }
   logAudit((id?'Updated':'Added new')+' employee record: '+vals.name);
   const newStoragePaths=recordStoragePaths(rec); rememberCommittedRecordFiles(rec);
@@ -2658,7 +2921,7 @@ function openTransferForEmployee(id){
     <div class="modal-head"><h3>Record Department Transfer</h3><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
       <div class="formgrid">
-        <div class="field full"><label>Employee</label><input value="${esc(emp.name)}" disabled style="background:var(--paper);"></div>
+        <div class="field full"><label>Employee</label><input value="${esc(employeeDisplayName(emp))}" disabled style="background:var(--paper);"></div>
         <div class="field"><label>Transferred From *</label><select id="tf_from">${DEPT_OPTIONS.map(d=>`<option ${d===emp.department?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
         <div class="field"><label>From Date *</label><input type="date" id="tf_fromDate" value="${todayISO()}"></div>
         <div class="field"><label>Transferred To *</label><select id="tf_to">${DEPT_OPTIONS.map(d=>`<option ${d===emp.department?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
@@ -2684,13 +2947,14 @@ function saveEmployeeTransfer(id){
   DB.transfers.push({id:uid(), employeeName:emp.name, fromDepartment, fromDate, toDepartment, toDate, remarks});
   emp.department = toDepartment;
   emp.status = 'Transferred to Another Department';
-  logAudit(`Transferred ${emp.name} from ${fromDepartment} to ${toDepartment}`);
+  logAudit(`Transferred ${employeeDisplayName(emp)} from ${fromDepartment} to ${toDepartment}`);
   saveDB(); closeModal(); renderNav(); renderEmployees();
   toast('Transfer recorded.');
 }
 function employeeCompleteness(emp){
-  const keys=['employeeNo','prfNumber','name','position','department','dateHired','birthDate','gender','civilStatus','mobileNumber','personalEmail','address','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'];
-  const filled=keys.filter(k=>String(emp?.[k]??'').trim()!=='').length;
+  const keys=['employeeNo','prfNumber','lastName','firstName','position','department','dateHired','birthDate','gender','civilStatus','mobileNumber','personalEmail','address','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'];
+  const normalized={...emp,...splitEmployeeName(emp)};
+  const filled=keys.filter(k=>String(normalized?.[k]??'').trim()!=='').length;
   return Math.round((filled/keys.length)*100);
 }
 function employeeTenureText(emp){
@@ -2708,7 +2972,7 @@ function openEmployeeStatusForm(id){
   if(!canEdit()) return;
   const emp=DB.employees.find(e=>e.id===id); if(!emp) return;
   openModal(`
-    <div class="modal-head"><div><h3>Update Employment Status</h3><div class="small">${esc(emp.employeeNo||'—')} · ${esc(emp.name)}</div></div><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-head"><div><h3>Update Employment Status</h3><div class="small">${esc(emp.employeeNo||'—')} · ${esc(employeeDisplayName(emp))}</div></div><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
       <div class="formgrid">
         <div class="field"><label>Current Status</label><input value="${esc(emp.status||'—')}" disabled style="background:var(--paper);"></div>
@@ -2735,7 +2999,7 @@ async function saveEmployeeStatus(id){
   emp.statusDate=effectiveDate;
   if(!Array.isArray(emp.employmentHistory)) emp.employmentHistory=[];
   emp.employmentHistory.push({type:'Employment Status',from,to:status,effectiveDate,remarks,changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
-  logAudit(`Updated employment status for ${emp.name}: ${from||'—'} → ${status}`);
+  logAudit(`Updated employment status for ${employeeDisplayName(emp)}: ${from||'—'} → ${status}`);
   await saveDB();
   closeModal();
   renderNav();
@@ -2768,7 +3032,7 @@ async function openEmployeeProfile(id){
     const {data,error}=await supabase.from('hr_cases').select('id,case_number,status,subject,opened_at,updated_at').ilike('employee_name',emp.name).order('updated_at',{ascending:false}).limit(20);
     if(!error) cases=data||[];
   }catch(e){}
-  const initials=emp.name.split(/\s+/).map(x=>x[0]||'').slice(0,2).join('').toUpperCase();
+  const initials=opsInitials(employeeDisplayName(emp));
   const activities=[
     ...leaves.map(r=>({date:r.startDate,type:'Leave',title:r.leaveType||'Leave Record',meta:r.status||''})),
     ...discipline.map(r=>({date:r.dateOfIncident,type:'Disciplinary',title:r.violation||'Disciplinary Action',meta:r.action||''})),
@@ -2783,7 +3047,7 @@ async function openEmployeeProfile(id){
   ].filter(x=>x.date).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,14);
   const statusMap=EMP_STATUS_MAP;
   openModal(`<div class="modal-head"><div><h3>Employee 360 Profile</h3><div class="small">${esc(emp.id)}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body">
-    <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(emp.name)}</div><div class="profile-sub">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div><div class="small" style="margin-top:6px;">${esc(employeeTenureText(emp))}</div></div><div class="profile-actions">${canEdit()?`<div class="employee-quick-actions"><button class="btn btn-ghost btn-sm" onclick="closeModal(); openEmployeeForm('${emp.id}')">${iEdit(13)} Edit</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeStatusForm('${emp.id}')">${iShield(13)} Status</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeLifecycleEventForm('${emp.id}')">${iPlus(13)} Lifecycle</button><button class="btn btn-ghost btn-sm" onclick="openTransferForEmployee('${emp.id}')">${iSwap(13)} Transfer</button><button class="btn btn-brass btn-sm" onclick="openEmployeeOperation('cases','${emp.id}')">${iShield(13)} New Case</button></div>`:''}</div></div>
+    <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(employeeDisplayName(emp))}</div><div class="profile-sub">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div><div class="small" style="margin-top:6px;">${esc(employeeTenureText(emp))}</div></div><div class="profile-actions">${canEdit()?`<div class="employee-quick-actions"><button class="btn btn-ghost btn-sm" onclick="closeModal(); openEmployeeForm('${emp.id}')">${iEdit(13)} Edit</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeStatusForm('${emp.id}')">${iShield(13)} Status</button><button class="btn btn-ghost btn-sm" onclick="openEmployeeLifecycleEventForm('${emp.id}')">${iPlus(13)} Lifecycle</button><button class="btn btn-ghost btn-sm" onclick="openTransferForEmployee('${emp.id}')">${iSwap(13)} Transfer</button><button class="btn btn-brass btn-sm" onclick="openEmployeeOperation('cases','${emp.id}')">${iShield(13)} New Case</button></div>`:''}</div></div>
     <div class="employee-completeness"><div style="min-width:0;"><div style="font-size:11px;font-weight:700;color:var(--ink);">Master Data Completion</div><div style="font-size:10px;color:var(--slate);">${employeeCompleteness(emp)}% of standard employee fields completed</div></div><div class="bar"><div class="fill" style="width:${employeeCompleteness(emp)}%;"></div></div><div class="pct">${employeeCompleteness(emp)}%</div></div>
     <div class="profile-kpis">
       <div class="profile-kpi"><div class="k">HR Cases</div><div class="v">${cases.length}</div><div class="s">Case history</div></div>
@@ -2794,7 +3058,7 @@ async function openEmployeeProfile(id){
     <div class="profile-grid">
       <div class="panel"><h3>Employment Information</h3><div class="desc">Current employee master record.</div><div class="profile-detail">
         <div class="item"><div class="label">Employee No.</div><div class="value mono">${esc(emp.employeeNo||'—')}</div></div>
-        <div class="item"><div class="label">Employee Name</div><div class="value">${esc(emp.name)}</div></div>
+        <div class="item"><div class="label">Employee Name</div><div class="value">${esc(employeeDisplayName(emp))}</div></div>
         <div class="item"><div class="label">Position</div><div class="value">${esc(emp.position||'—')}</div></div>
         <div class="item"><div class="label">Department</div><div class="value">${esc(emp.department||'—')}</div></div>
         <div class="item"><div class="label">Date Hired</div><div class="value">${fmtDate(emp.dateHired)}</div></div>
@@ -2812,6 +3076,12 @@ async function openEmployeeProfile(id){
         <div class="item"><div class="label">Emergency Contact</div><div class="value">${esc(emp.emergencyContactName||'—')}</div></div>
         <div class="item"><div class="label">Relationship</div><div class="value">${esc(emp.emergencyContactRelationship||'—')}</div></div>
         <div class="item"><div class="label">Emergency Phone</div><div class="value">${esc(emp.emergencyContactPhone||'—')}</div></div>
+      </div></div>
+      <div class="panel"><h3>Government Identifiers</h3><div class="desc">Optional statutory identifiers validated at entry.</div><div class="profile-detail">
+        <div class="item"><div class="label">BIR TIN</div><div class="value mono">${esc(formatGovernmentId('tin',emp.tin)||'—')}</div></div>
+        <div class="item"><div class="label">SSS Number</div><div class="value mono">${esc(formatGovernmentId('sss',emp.sssNumber)||'—')}</div></div>
+        <div class="item"><div class="label">PhilHealth PIN</div><div class="value mono">${esc(formatGovernmentId('philHealth',emp.philHealthNumber)||'—')}</div></div>
+        <div class="item"><div class="label">Pag-IBIG MID</div><div class="value mono">${esc(formatGovernmentId('pagIbig',emp.pagIbigNumber)||'—')}</div></div>
       </div></div>
       <div class="panel"><h3>Record Summary</h3><div class="desc">Activity across connected HR modules.</div><div class="profile-statline">
         <div class="profile-detail"><div class="item"><div class="label">NTE</div><div class="value">${nte.length}</div></div><div class="item"><div class="label">Memoranda</div><div class="value">${memos.length}</div></div></div>
@@ -3678,7 +3948,7 @@ function renderEvaluations(){
     <thead><tr><th>Employee</th><th>Department</th><th>Date Hired</th><th>1st Month</th><th>3rd Month</th><th>6th Month</th></tr></thead>
     <tbody>
     ${emps.length? emps.map(e=>`<tr>
-      <td><b>${esc(e.name)}</b></td><td>${esc(e.department||'—')}</td><td>${fmtDate(e.dateHired)}</td>
+      <td><b>${esc(employeeDisplayName(e))}</b></td><td>${esc(e.department||'—')}</td><td>${fmtDate(e.dateHired)}</td>
       ${EVAL_MILESTONES.map(m=>{ const s=evalStatusInfo(e,m); return `<td>
         <div style="cursor:pointer;" onclick="openEvalForm('${e.id}','${m.key}')">${statusBadge(s.label, {[s.label]:s.cls})}</div>
         <div class="small" style="margin-top:2px;">${s.rec&&s.rec.completedDate? fmtDate(s.rec.completedDate) : 'Due '+fmtDate(evalDueDate(e.dateHired,m.days))}</div>
@@ -3693,7 +3963,7 @@ function openEvalForm(employeeId, milestoneKey){
   const m = EVAL_MILESTONES.find(x=>x.key===milestoneKey);
   const rec = getEvalRecord(employeeId, milestoneKey);
   openModal(`
-    <div class="modal-head"><h3>${m.label} Evaluation — ${esc(emp.name)}</h3><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-head"><h3>${m.label} Evaluation — ${esc(employeeDisplayName(emp))}</h3><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
       <div class="formgrid">
         <div class="field"><label>Due Date</label><input value="${fmtDate(evalDueDate(emp.dateHired,m.days))}" disabled style="background:var(--paper);"></div>
@@ -3877,8 +4147,8 @@ async function workflowSyncTasks({silent=false}={}){
       const m=EVAL_MILESTONES.find(x=>x.key===ev.milestone);
       const due=emp.dateHired&&m?evalDueDate(emp.dateHired,m.days):'';
       ensureRecordTask('evaluations',ev,{
-        stepKey:'completion',workflowType:'Task',title:`Complete ${m?.label||ev.milestone||'evaluation'} — ${emp.name}`,
-        description:`Probationary evaluation milestone for ${emp.name}.`,module:'evaluations',recordId:ev.id,
+        stepKey:'completion',workflowType:'Task',title:`Complete ${m?.label||ev.milestone||'evaluation'} — ${employeeDisplayName(emp)}`,
+        description:`Probationary evaluation milestone for ${employeeDisplayName(emp)}.`,module:'evaluations',recordId:ev.id,
         employeeName:emp.name,employeeRecordId:emp.id,department:emp.department||'',priority:due&&due<today?'High':'Normal',dueDate:due||'',assigneeId:'',
         actionType:pending?'evaluation_review':'none',closed:!pending
       });
@@ -4211,7 +4481,7 @@ async function runAutomationEngine({manual=false,silent=false}={}){
         }
         if(state==='overdue'||state==='upcoming'){
           const existed=!!automationExistingTask('probation_milestones',key);
-          const t=automationUpsertTask('probation_milestones',key,{workflowType:'Task',title:`Prepare ${m.label} evaluation — ${emp.name}`,description:`Probation milestone ${m.label} for ${emp.name}. ${state==='overdue'?'Milestone is overdue.':'Milestone is approaching.'}`,module:'evaluations',recordId:ev?.id||'',employeeRecordId:emp.id,employeeName:emp.name,department:emp.department||'',priority:automationTaskPriority(state),dueDate:due,assigneeId:'',actionType:'evaluation_prep',status:'Pending'});
+          const t=automationUpsertTask('probation_milestones',key,{workflowType:'Task',title:`Prepare ${m.label} evaluation — ${employeeDisplayName(emp)}`,description:`Probation milestone ${m.label} for ${employeeDisplayName(emp)}. ${state==='overdue'?'Milestone is overdue.':'Milestone is approaching.'}`,module:'evaluations',recordId:ev?.id||'',employeeRecordId:emp.id,employeeName:employeeDisplayName(emp),department:emp.department||'',priority:automationTaskPriority(state),dueDate:due,assigneeId:'',actionType:'evaluation_prep',status:'Pending'});
           if(existed) rstat.updated++; else rstat.created++;
           rstat.active++;
         }
@@ -4804,7 +5074,7 @@ function qualityIssue(id,severity,module,title,detail,action,meta=[]){ return {i
 function qualityEmployeeMatches(ref){
   const raw=String(ref?.employeeId||'').trim();
   const name=normalizeEmployeeName(ref?.employeeName||ref?.name||'');
-  return DB.employees.find(e=>raw && String(e.id)===raw) || DB.employees.find(e=>name && normalizeEmployeeName(e.name)===name) || null;
+  return DB.employees.find(e=>raw && String(e.id)===raw) || DB.employees.find(e=>name && [e.name,employeeDisplayName(e)].some(value=>normalizeEmployeeName(value)===name)) || null;
 }
 function qualityDateInvalid(value){ return !!value && /^\d{4}-\d{2}-\d{2}$/.test(String(value).slice(0,10))===false; }
 function qualityIssues(caseRows=[]){
@@ -5083,7 +5353,7 @@ async function renderReports(){
         <div class="panel"><div class="dashboard-panel-head"><div><h3>Workforce Movement</h3><div class="desc">Hires and recorded movement in the selected period.</div></div><button class="btn btn-ghost btn-sm" onclick="exportReportEmployees()">${iDownload(14)} Employees</button></div>
           <div class="grid cols-2" style="gap:10px;margin-bottom:12px;"><div class="metric-card"><div class="k">Newly Hired</div><div class="v">${hired}</div></div><div class="metric-card"><div class="k">Transfers</div><div class="v">${transferred}</div></div></div>
           <div class="small">Resigned / AWOL / Separated records require a populated <b>statusDate</b> to appear in the movement count.</div>
-          ${movement.length?`<div class="dashboard-list" style="margin-top:10px;">${movement.slice(0,6).map(e=>`<div class="dashboard-list-row"><div><div class="primary">${esc(e.name)}</div><div class="secondary">${esc(e.department||'Unassigned')} · ${esc(e.status)}</div></div><div class="right">${fmtDate(e.statusDate)}</div></div>`).join('')}</div>`:''}
+          ${movement.length?`<div class="dashboard-list" style="margin-top:10px;">${movement.slice(0,6).map(e=>`<div class="dashboard-list-row"><div><div class="primary">${esc(employeeDisplayName(e))}</div><div class="secondary">${esc(e.department||'Unassigned')} · ${esc(e.status)}</div></div><div class="right">${fmtDate(e.statusDate)}</div></div>`).join('')}</div>`:''}
         </div>
         <div class="panel"><div class="dashboard-panel-head"><div><h3>ATD Collection</h3><div class="desc">Selected-period ATD records and payment progress.</div></div><button class="btn btn-ghost btn-sm" onclick='exportReportATD()'>${iDownload(14)} Export ATD</button></div>
           <div class="grid cols-3" style="gap:10px;"><div class="metric-card"><div class="k">ATD Records</div><div class="v">${atdRows.length}</div></div><div class="metric-card"><div class="k">Total Amount</div><div class="v" style="font-size:20px;">${peso(atdTotal)}</div></div><div class="metric-card"><div class="k">Paid</div><div class="v" style="font-size:20px;">${peso(atdPaid)}</div></div></div>
@@ -5328,7 +5598,7 @@ function openDriveDocument(url){
   window.open(url,'_blank','noopener,noreferrer');
 }
 function documentEmployeeOptions(selected=''){
-  return DB.employees.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(e=>`<option value="${esc(e.id)}" ${String(e.id)===String(selected)?'selected':''}>${esc(e.employeeNo||'—')} · ${esc(e.name)}</option>`).join('');
+  return DB.employees.slice().sort((a,b)=>employeeDisplayName(a).localeCompare(employeeDisplayName(b))).map(e=>`<option value="${esc(e.id)}" ${String(e.id)===String(selected)?'selected':''}>${esc(e.employeeNo||'—')} · ${esc(employeeDisplayName(e))}</option>`).join('');
 }
 function documentSourceModuleOptions(selected=''){
   const modules=['employees','cases','leaves','disciplinary','nte','memos','nod','cvr','incidents','prf','evaluations','atd','transfers','oncall'];
@@ -5779,6 +6049,7 @@ const RENDERERS = {
   cases: renderCases,
   documents: renderDocuments,
   employees: renderEmployees,
+  onboarding: renderOnboarding,
   employeeLifecycle: renderEmployeeLifecycle,
   leaves: renderLeaves,
   disciplinary: renderDisciplinary,
@@ -5846,12 +6117,12 @@ Object.assign(window, {
   deleteATDRecord, deleteCVR, deleteEmployee, deleteIncident, deleteRecord, doLogin, doLogout, doRegister, donut,
   downloadATDPayslip, downloadAttachment, downloadCSV, downloadRecordAttachment, enterApp, esc, evalDueDate,
   evalStatusInfo, exportATDCSV, exportCVRCSV, exportEmployeesCSV, exportIncidentsCSV, exportModuleCSV, exportWeeklyCSV,
-  fieldHTML, fmtDate, getEvalRecord, go, handleFileInput, incidentTypeOccurrence, incidentTypeSummaryHTML,
+  fieldHTML, fmtDate, formatGovernmentIdInput, getEvalRecord, go, handleFileInput, incidentTypeOccurrence, incidentTypeSummaryHTML,
   toggleSidebar, closeSidebar, applyReportFilters, exportReportEmployees, exportReportActivity, exportReportATD, exportReportCases,
   loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
   openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard,
-  renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, openEmployeeColumnManager, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
+  renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, openEmployeeColumnManager, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, setTitle, shiftDate, statusBadge, switchAuthTab, toCSV,

@@ -19,7 +19,8 @@ const required=[
   'js/core/pagination.js','js/core/table-enhancer.js','js/core/content-layout.js','supabase-config.js',
   'supabase/phase10-self-service.sql','supabase/phase11-lifecycle-checklists.sql',
   'database/migrations/phase11-lifecycle-checklists.sql','supabase/phase12-user-preferences.sql',
-  'database/migrations/phase12-user-preferences.sql'
+  'database/migrations/phase12-user-preferences.sql','supabase/phase13-onboarding.sql',
+  'database/migrations/phase13-onboarding.sql'
 ];
 const missing=required.filter(f=>!fs.existsSync(path.join(root,f)));
 if(missing.length){
@@ -81,6 +82,18 @@ if(preferencesMigration!==preferencesMigrationCopy || !preferencesMigration.incl
 for(const feature of ['openEmployeeColumnManager','persistUserPreferences','DB.employees.push(rec)','PRF Number']){
   if(!app.includes(feature)){
     console.error(`Employee directory contract is missing: ${feature}`);
+    process.exit(1);
+  }
+}
+const onboardingMigration=fs.readFileSync(path.join(root,'supabase/phase13-onboarding.sql'),'utf8');
+const onboardingMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase13-onboarding.sql'),'utf8');
+if(onboardingMigration!==onboardingMigrationCopy || !onboardingMigration.includes("module <> 'onboardingCandidates'")){
+  console.error('Onboarding access migration copies are missing or out of sync.');
+  process.exit(1);
+}
+for(const feature of ['renderOnboarding','saveOnboardingCandidate','convertOnboardingCandidate','formatGovernmentId','onboardingCandidates']){
+  if(!app.includes(feature)){
+    console.error(`Onboarding feature contract is missing: ${feature}`);
     process.exit(1);
   }
 }
