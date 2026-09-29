@@ -139,6 +139,26 @@ for(const requirement of ['Error 403: access_denied','Authorized JavaScript orig
     process.exit(1);
   }
 }
+if(app.includes('PRF Number is already assigned to another employee.') || app.includes("blockers.push('PRF Number')") || /key:'prfNumber'[^}\n]*required:true/.test(app)){
+  console.error('PRF numbers must remain optional and reusable across employees.');
+  process.exit(1);
+}
+for(const feature of ['onboardingApplicantReference','warning:true',"classList.toggle('warning'"]){
+  if(!app.includes(feature)){
+    console.error(`Applicant identity or duplicate-warning contract is missing: ${feature}`);
+    process.exit(1);
+  }
+}
+const resetSql=fs.readFileSync(path.join(root,'supabase/reset-hr-data-preserve-users.sql'),'utf8');
+const resetSqlCopy=fs.readFileSync(path.join(root,'database/reset-hr-data-preserve-users.sql'),'utf8');
+if(resetSql!==resetSqlCopy || !resetSql.includes('update public.profiles') || resetSql.includes('delete from public.profiles') || resetSql.includes('delete from auth.users')){
+  console.error('User-preserving HR data reset scripts are missing, unsafe, or out of sync.');
+  process.exit(1);
+}
+if(!resetSql.includes("where bucket_id = 'hr-documents'") || resetSql.includes('delete from storage.objects')){
+  console.error('HR data reset must guard Storage cleanup without deleting storage metadata through SQL.');
+  process.exit(1);
+}
 for(const feature of ['renderOnboarding','saveOnboardingCandidate','convertOnboardingCandidate','formatGovernmentId','onboardingCandidates']){
   if(!app.includes(feature)){
     console.error(`Onboarding feature contract is missing: ${feature}`);

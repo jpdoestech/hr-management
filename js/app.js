@@ -178,7 +178,7 @@ function uploadDocumentType(module,key){
 function uploadEmployeeContext(){
   const pickerIds=['f_employeeName','cv_employeeName','in_employeeName'];
   let employee=pickerIds.map(id=>employeePickerSelected(id)).find(Boolean)||null;
-  const explicit=document.querySelector('[data-upload-employee-id]');
+  const explicit=document.querySelector('[data-upload-employee-id],[data-upload-record-id]');
   if(!employee&&explicit?.dataset.uploadEmployeeId) employee=DB.employees.find(row=>String(row.id)===String(explicit.dataset.uploadEmployeeId))||null;
   if(employee) return {name:employeeDisplayName(employee),employeeNo:employee.employeeNo||'',department:employee.department||''};
   const lastName=document.getElementById('f_lastName')?.value||'';
@@ -188,7 +188,7 @@ function uploadEmployeeContext(){
   const typedName=pickerIds.map(id=>document.getElementById(`${id}_search`)?.value||'').find(Boolean)||'';
   return {
     name:formatEmployeeName({lastName,firstName,middleName})||explicitName||typedName||'HR Record',
-    employeeNo:explicit?.dataset.uploadEmployeeNo||document.getElementById('f_prfNumber')?.value||'pending',
+    employeeNo:explicit?.dataset.uploadEmployeeNo||explicit?.dataset.uploadRecordId||'pending',
     department:explicit?.dataset.uploadDepartment||document.getElementById('f_department')?.value||'unassigned',
   };
 }
@@ -1849,7 +1849,7 @@ function dataChangeIntent(target,eventType='click'){
     danger,
   };
 }
-function confirmDataChange({title='Confirm data change',message='This action will update stored system data. Do you want to continue?',confirmLabel='Confirm',secondaryLabel='',cancelLabel='Cancel',danger=false}={}){
+function confirmDataChange({title='Confirm data change',message='This action will update stored system data. Do you want to continue?',confirmLabel='Confirm',secondaryLabel='',cancelLabel='Cancel',danger=false,warning=false}={}){
   if(DATA_CONFIRM_PENDING) DATA_CONFIRM_PENDING(false);
   const overlay=document.getElementById('data-confirm-overlay');
   const accept=document.getElementById('data-confirm-accept');
@@ -1862,8 +1862,9 @@ function confirmDataChange({title='Confirm data change',message='This action wil
   discard.textContent=secondaryLabel||'Discard changes';
   discard.hidden=!secondaryLabel;
   accept.textContent=confirmLabel;
-  accept.className=`btn ${danger?'btn-danger':'btn-primary'}`;
+  accept.className=`btn ${danger?'btn-danger':warning?'btn-brass':'btn-primary'}`;
   overlay.classList.toggle('danger',danger);
+  overlay.classList.toggle('warning',warning&&!danger);
   overlay.classList.add('on');
   overlay.setAttribute('aria-hidden','false');
   document.body.classList.add('data-confirm-open');
@@ -1877,7 +1878,7 @@ function resolveDataChangeConfirmation(result){
   const resolve=DATA_CONFIRM_PENDING;
   DATA_CONFIRM_PENDING=null;
   const overlay=document.getElementById('data-confirm-overlay');
-  overlay.classList.remove('on','danger');
+  overlay.classList.remove('on','danger','warning');
   overlay.setAttribute('aria-hidden','true');
   document.body.classList.remove('data-confirm-open');
   if(DATA_CONFIRM_TRIGGER?.isConnected) DATA_CONFIRM_TRIGGER.focus();
@@ -2663,7 +2664,7 @@ const ONBOARDING_EVALUATION_FIELDS=[
   {key:'evaluationNotes',label:'Evaluation Notes',type:'textarea'},
 ];
 const ONBOARDING_OFFER_FIELDS=[
-  {key:'prfNumber',label:'PRF Number',type:'text'},
+  {key:'prfNumber',label:'PRF Number (optional)',type:'text'},
   {key:'proposedStartDate',label:'Proposed Start Date',type:'date'},
   {key:'employmentType',label:'Employment Type',type:'select',options:['Probationary','Regular','Project-based','Fixed-term','Part-time']},
   {key:'offeredSalary',label:'Offered Monthly Salary',type:'number'},
@@ -2677,6 +2678,11 @@ const ONBOARDING_OFFER_FIELDS=[
 const ONBOARDING_FIELDS=[...ONBOARDING_IDENTITY_FIELDS,...ONBOARDING_APPLICATION_FIELDS,...ONBOARDING_EVALUATION_FIELDS,...ONBOARDING_OFFER_FIELDS];
 function onboardingOpenCount(){ return (DB.onboardingCandidates||[]).filter(c=>!['Hired','Rejected','Withdrawn'].includes(c.stage)).length; }
 function candidateDisplayName(candidate){ return formatEmployeeName(candidate); }
+function onboardingApplicantReference(candidate={}){
+  if(candidate.applicantReference) return candidate.applicantReference;
+  const seed=String(candidate.id||uid()).replace(/[^a-zA-Z0-9]/g,'').slice(0,10).toUpperCase();
+  return `APP-${seed}`;
+}
 function onboardingChecklist(candidate={}){ return candidate?.checklist&&typeof candidate.checklist==='object'?candidate.checklist:{}; }
 function onboardingReadiness(candidate){
   const checks=onboardingChecklist(candidate);
@@ -2693,7 +2699,6 @@ function onboardingHireBlockers(candidate){
   if(candidate.stage!=='Ready to Hire') blockers.push('stage must be Ready to Hire');
   if(candidate.recommendation!=='Hire') blockers.push('recommendation must be Hire');
   [['privacyNotice','privacy notice'],['interview','interview evaluation'],['offer','accepted offer'],['contract','signed contract'],['standards','probationary standards acknowledgment']].forEach(([key,label])=>{if(!checks[key])blockers.push(label);});
-  if(!candidate.prfNumber) blockers.push('PRF Number');
   if(!candidate.proposedStartDate) blockers.push('proposed start date');
   if(!candidate.birthDate) blockers.push('birth date');
   if(!candidate.gender) blockers.push('gender');
@@ -2712,12 +2717,14 @@ function onboardingChecklistHTML(candidate={}){
 }
 function openOnboardingForm(id=''){
   const candidate=id?(DB.onboardingCandidates||[]).find(row=>row.id===id):null;
+  const applicantReference=onboardingApplicantReference(candidate||{});
   const record=candidate?{...candidate,...splitEmployeeName(candidate)}:null;
   const fields=ONBOARDING_FIELDS.map(field=>field.type==='file'&&candidate?{...field,existingData:candidate[field.key+'Data']||''}:field);
   const byKey=keys=>fields.filter(field=>keys.includes(field.key));
   openModal(`
     <div class="modal-head"><div><h3>${candidate?'Edit Applicant':'Add Applicant'}</h3><div class="small">Applicant record · ${candidate?esc(candidateDisplayName(record)):'pre-employment intake'}</div></div><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body onboarding-modal-body">
+      <span hidden data-upload-record-id="${esc(applicantReference)}"></span>
       ${onboardingSection('Personal and contact','Use separate name fields; the system displays Last Name, First Name Middle Name.',byKey(ONBOARDING_IDENTITY_FIELDS.map(f=>f.key)),record)}
       ${onboardingSection('Application','Position, source, and current recruitment stage.',byKey(ONBOARDING_APPLICATION_FIELDS.map(f=>f.key)),record)}
       ${onboardingSection('Evaluation','Use consistent 1-5 scores and retain the hiring rationale.',byKey(ONBOARDING_EVALUATION_FIELDS.map(f=>f.key)),record)}
@@ -2730,6 +2737,7 @@ function openOnboardingForm(id=''){
 }
 async function saveOnboardingCandidate(id=''){
   const values=readFields(ONBOARDING_FIELDS);
+  values.applicantReference=document.querySelector('[data-upload-record-id]')?.dataset.uploadRecordId||onboardingApplicantReference();
   const missing=ONBOARDING_FIELDS.filter(field=>field.required&&!values[field.key]);
   if(missing.length){toast('Please complete: '+missing.map(field=>field.label).join(', '));return;}
   values.name=formatEmployeeName(values);
@@ -2978,7 +2986,7 @@ function employeeWorkspaceFooter(emp,saveLabel,saveHandler){
 }
 const EMP_FIELDS = [
   {key:'employeeNo', label:'Employee No.', type:'text', readonly:true},
-  {key:'prfNumber', label:'PRF Number', type:'text', required:true},
+  {key:'prfNumber', label:'PRF Number (optional)', type:'text'},
   {key:'lastName', label:'Last Name', type:'text', required:true},
   {key:'firstName', label:'First Name', type:'text', required:true},
   {key:'middleName', label:'Middle Name', type:'text'},
@@ -3121,11 +3129,10 @@ async function saveEmployee(id){
   const governmentIdValidation=validateGovernmentIds(vals); if(governmentIdValidation){toast(governmentIdValidation,true);return;}
   if(vals.employeeNo && DB.employees.some(e=>e.id!==id && String(e.employeeNo||'').toUpperCase()===String(vals.employeeNo).toUpperCase())){ vals.employeeNo=nextEmployeeNumber(DB.employees); }
   vals.name=formatEmployeeName(vals);
-  if(DB.employees.some(e=>e.id!==id && String(e.prfNumber||'').trim().toUpperCase()===String(vals.prfNumber||'').trim().toUpperCase())){ toast('PRF Number is already assigned to another employee.'); return; }
   const duplicateCandidates=findEmployeeDuplicates(vals,id);
   if(duplicateCandidates.length){
     const sample=duplicateCandidates.slice(0,4).map(match=>`${employeeDisplayName(match.employee)} · ${match.employee.employeeNo||'No employee number'} · ${match.employee.department||'Unassigned'} (${Math.round(match.score*100)}% name match)`).join('; ');
-    if(!(await confirmDataChange({title:'Possible duplicate employee',message:`Similar employee record${duplicateCandidates.length===1?' was':'s were'} found: ${sample}. Review these matches before creating another employee.`,confirmLabel:'Continue and save',cancelLabel:'Go back'}))) return;
+    if(!(await confirmDataChange({title:'Possible duplicate employee',message:`Similar employee record${duplicateCandidates.length===1?' was':'s were'} found: ${sample}. Review these matches before creating another employee.`,confirmLabel:'Continue and save',cancelLabel:'Go back',warning:true}))) return;
   }
   const isNew=!id;
   const rec=id?DB.employees.find(e=>e.id===id):{id:uid(), employmentHistory:[]};
@@ -5023,7 +5030,7 @@ const MODULES = {
     fields:[
       {key:'employeeName', label:'Employee Name', type:'text', required:true},
       {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
-      {key:'prfNumber', label:'PRF Number', type:'text', required:true},
+      {key:'prfNumber', label:'PRF Number (optional)', type:'text'},
       {key:'reason', label:'Reason for Request', type:'text', full:true, required:true},
       {key:'employeeReplaced', label:'Employee Being Replaced', type:'text'},
       {key:'startDate', label:'Start Date', type:'date', required:true},
@@ -5083,12 +5090,12 @@ const MODULES = {
       {key:'consequence4', label:'4th+'},
     ],
   },
-  prf:{ title:'PRF / Replacement Tracking', subtitle:'Personnel Requisition Forms — replacement and additional manpower requests.', singular:'PRF Record', addLabel:'Add PRF Record',
+  prf:{ title:'PRF / Replacement Tracking', subtitle:'Personnel Request Forms — replacement and additional manpower requests.', singular:'PRF Record', addLabel:'Add PRF Record',
     searchFields:['employeeName','prfNumber','employeeReplaced'], sortKey:'dateOfRequest',
     fields:[
       {key:'employeeName', label:'Employee Name (hired/assigned)', type:'text', required:true},
       {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
-      {key:'prfNumber', label:'PRF Number', type:'text', required:true},
+      {key:'prfNumber', label:'PRF Number (optional)', type:'text'},
       {key:'dateOfRequest', label:'Date of Request', type:'date', required:true},
       {key:'reasonForRequest', label:'Reason for Manpower Request', type:'text', full:true, required:true},
       {key:'classification', label:'Classification', type:'select', options:PRF_CLASS, required:true},
@@ -5375,7 +5382,7 @@ function qualityIssues(caseRows=[]){
 
   employees.forEach((e,idx)=>{
     const base=`employee:${e.id||idx}`;
-    const required=[['employeeNo','Employee No.'],['prfNumber','PRF Number'],['name','Employee Name'],['position','Position'],['department','Department'],['dateHired','Date Hired'],['gender','Gender'],['status','Employment Status']];
+    const required=[['employeeNo','Employee No.'],['name','Employee Name'],['position','Position'],['department','Department'],['dateHired','Date Hired'],['gender','Gender'],['status','Employment Status']];
     required.forEach(([k,label])=>{ if(!String(e[k]??'').trim()) add(`${base}:missing:${k}`,'error','employees',`${label} is missing`,`${e.name||'Employee record'} has incomplete required master data.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Required field']); });
     if(e.dateHired && e.dateHired>today) add(`${base}:future-hire`,'error','employees','Date Hired is in the future',`${e.name||'Employee'} is recorded as hired on ${fmtDate(e.dateHired)}.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Date']);
     if(e.birthDate && e.birthDate>today) add(`${base}:future-birth`,'error','employees','Birth Date is in the future',`${e.name||'Employee'} has a Birth Date later than today.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Date']);

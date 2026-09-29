@@ -118,7 +118,7 @@ Example:
 Dela Cruz, Juan_0001_Production_nod.pdf
 ```
 
-Applicant files use the PRF number until an employee number exists. Specialized documents use a specific type such as `payslip`, `quotation-soa`, or `incident-report`.
+Applicant files use a unique `APP-...` applicant reference until an employee number exists. PRF numbers are optional and can be shared by multiple employees because they identify the personnel request, not the employee. Specialized documents use a specific type such as `payslip`, `quotation-soa`, or `incident-report`.
 
 ## 10. Troubleshooting
 
