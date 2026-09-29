@@ -1617,6 +1617,7 @@ function iTrash(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" f
 function iMore(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/></svg>`;}
 function iSearch(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>`;}
 function iDownload(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>`;}
+function iUpload(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21V9M7 14l5-5 5 5M4 4h16"/></svg>`;}
 function iColumns(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg>`;}
 function iInfo(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg>`;}
 function iBell(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 9a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9z"/><path d="M10 21h4"/></svg>`;}
@@ -1672,7 +1673,7 @@ function toCSV(rows, cols){
   return head+'\n'+body;
 }
 function downloadCSV(filename, csv){
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href=url; a.download=filename;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -2428,9 +2429,24 @@ async function deleteRecord(key,id){
 }
 function exportModuleCSV(key){
   const cfg = MODULES[key];
-  const csv = toCSV(DB[key], cfg.columns.map(c=>({label:c.label, get:c.csv || (r=>r[c.key])})));
+  const seen=new Set();
+  const cols=[];
+  (cfg.fields||[]).forEach(field=>{
+    if(seen.has(field.key)) return;
+    seen.add(field.key);
+    cols.push({label:field.label.replace(/\s*\*\s*$/,''),get:record=>record[field.key]});
+  });
+  (cfg.columns||[]).forEach(column=>{
+    if(seen.has(column.key)&&!column.csv) return;
+    seen.add(column.key);
+    cols.push({label:column.label,get:column.csv||(record=>record[column.key])});
+  });
+  ['createdAt','createdByName','updatedAt','updatedByName'].forEach(auditKey=>{
+    if(DB[key]?.some(record=>record?.[auditKey])) cols.push({label:({createdAt:'Created At',createdByName:'Created By',updatedAt:'Updated At',updatedByName:'Updated By'})[auditKey],get:record=>record[auditKey]});
+  });
+  const csv = toCSV(DB[key], cols);
   downloadCSV(key+'_export.csv', csv);
-  toast('CSV exported.');
+  toast(`Exported ${DB[key].length} complete ${cfg.title.toLowerCase()} records.`);
 }
 
 function downloadRecordAttachment(moduleKey, id, fieldKey){
@@ -2925,7 +2941,8 @@ function renderEmployees(){
         <div class="employee-toolbar-actions">
           ${hasFilters?`<button class="btn btn-ghost btn-sm employee-reset" onclick="resetEmployeeDirectoryFilters()">Reset</button>`:''}
           <button class="btn btn-ghost btn-sm" onclick="openEmployeeColumnManager()" title="Customize visible employee columns">${iColumns(13)} <span>Columns</span></button>
-          <button class="btn btn-ghost btn-sm" onclick="exportEmployeesCSV()" title="Export employee records">${iDownload(13)} <span>Export</span></button>
+          ${SESSION?.role==='Administrator'?`<button class="btn btn-ghost btn-sm" onclick="downloadEmployeeImportTemplate()" title="Download employee import template">${iDownload(13)} <span>Template</span></button><button class="btn btn-ghost btn-sm" onclick="openEmployeeImport()" title="Import employee records">${iUpload(13)} <span>Import</span></button>`:''}
+          <button class="btn btn-ghost btn-sm" onclick="exportEmployeesCSV()" title="Export complete employee records">${iDownload(13)} <span>Export</span></button>
           ${canEdit()? `<button class="btn btn-primary btn-sm" onclick="openEmployeeForm()">${iPlus(13)} <span>Add Employee</span></button>`:''}
         </div>
       </div>
@@ -3010,6 +3027,208 @@ const EMP_FIELDS = [
   {key:'emergencyContactPhone', label:'Emergency Contact Phone', type:'tel'},
   {key:'classOverride', label:'Classification', type:'select', options:['Auto','Probationary','Regular'], required:true},
 ];
+const EMPLOYEE_IMPORT_COLUMNS = [
+  {header:'Employee No.',key:'employeeNo',note:'Optional. Leave blank to generate the next employee number.'},
+  {header:'PRF Number',key:'prfNumber',note:'Optional and may be shared by employees hired under the same PRF.'},
+  {header:'Last Name',key:'lastName',required:true},
+  {header:'First Name',key:'firstName',required:true},
+  {header:'Middle Name',key:'middleName'},
+  {header:'Position',key:'position',required:true},
+  {header:'Department',key:'department',required:true,options:DEPT_OPTIONS},
+  {header:'Date Hired',key:'dateHired',required:true,type:'date'},
+  {header:'Birth Date',key:'birthDate',type:'date'},
+  {header:'Gender',key:'gender',required:true,options:['Male','Female']},
+  {header:'Civil Status',key:'civilStatus',options:['Single','Married','Widowed','Separated','Other']},
+  {header:'Employment Status',key:'status',required:true,options:EMP_STATUS},
+  {header:'Status Effective Date',key:'statusDate',type:'date'},
+  {header:'Mobile Number',key:'mobileNumber'},
+  {header:'Personal Email',key:'personalEmail'},
+  {header:'Home Address',key:'address'},
+  {header:'Emergency Contact Name',key:'emergencyContactName'},
+  {header:'Emergency Contact Relationship',key:'emergencyContactRelationship'},
+  {header:'Emergency Contact Phone',key:'emergencyContactPhone'},
+  {header:'Classification Override',key:'classOverride',options:['Auto','Probationary','Regular'],default:'Auto'},
+  {header:'BIR TIN',key:'tin'},
+  {header:'SSS Number',key:'sssNumber'},
+  {header:'PhilHealth PIN',key:'philHealthNumber'},
+  {header:'Pag-IBIG MID',key:'pagIbigNumber'},
+];
+const EMPLOYEE_IMPORT_HEADER_ALIASES = {
+  employeenumber:'employeeNo',employeeno:'employeeNo',prf:'prfNumber',prfnumber:'prfNumber',
+  lastname:'lastName',firstname:'firstName',middlename:'middleName',datehired:'dateHired',birthdate:'birthDate',
+  employmentstatus:'status',statuseffectivedate:'statusDate',mobilenumber:'mobileNumber',mobile:'mobileNumber',
+  personalemail:'personalEmail',email:'personalEmail',homeaddress:'address',address:'address',
+  emergencycontact:'emergencyContactName',emergencycontactname:'emergencyContactName',
+  emergencycontactrelationship:'emergencyContactRelationship',relationship:'emergencyContactRelationship',
+  emergencycontactphone:'emergencyContactPhone',classification:'classOverride',classificationoverride:'classOverride',
+  birtin:'tin',tin:'tin',sss:'sssNumber',sssnumber:'sssNumber',philhealth:'philHealthNumber',philhealthpin:'philHealthNumber',
+  pagibig:'pagIbigNumber',pagibigmid:'pagIbigNumber'
+};
+let EMPLOYEE_IMPORT_PREVIEW=null;
+
+function employeeSpreadsheetReady(){
+  if(window.XLSX) return true;
+  toast('Excel tools could not load. Refresh the page or contact the System Administrator.',true);
+  return false;
+}
+function requireEmployeeImportAdmin(){
+  if(SESSION?.role==='Administrator') return true;
+  toast('Only a System Administrator can import employees or download the template.',true);
+  return false;
+}
+function normalizeSpreadsheetHeader(value){return String(value||'').toLowerCase().replace(/[^a-z0-9]/g,'');}
+function employeeImportKey(value){
+  const normalized=normalizeSpreadsheetHeader(value);
+  return EMPLOYEE_IMPORT_HEADER_ALIASES[normalized]||EMPLOYEE_IMPORT_COLUMNS.find(column=>normalizeSpreadsheetHeader(column.header)===normalized)?.key||'';
+}
+function spreadsheetISODate(value){
+  if(value==null||value==='') return '';
+  const validDateParts=(year,month,day)=>{
+    const candidate=new Date(year,month-1,day);
+    return candidate.getFullYear()===year&&candidate.getMonth()===month-1&&candidate.getDate()===day;
+  };
+  let date=value;
+  if(typeof value==='number'&&window.XLSX?.SSF){
+    const parsed=window.XLSX.SSF.parse_date_code(value);
+    if(parsed&&validDateParts(parsed.y,parsed.m,parsed.d)) return `${parsed.y}-${String(parsed.m).padStart(2,'0')}-${String(parsed.d).padStart(2,'0')}`;
+    return null;
+  }
+  if(typeof value==='string'){
+    const text=value.trim();
+    if(!text) return '';
+    const iso=text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(iso) return validDateParts(Number(iso[1]),Number(iso[2]),Number(iso[3]))?text:null;
+    const match=text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+    if(match){
+      const year=Number(match[3]),month=Number(match[1]),day=Number(match[2]);
+      if(!validDateParts(year,month,day)) return null;
+      date=new Date(year,month-1,day);
+    }
+    else date=new Date(text);
+  }
+  if(!(date instanceof Date)||Number.isNaN(date.getTime())) return null;
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+function importAllowedValue(value,options){
+  const text=String(value||'').trim();
+  if(!text) return '';
+  return options.find(option=>String(option).toLowerCase()===text.toLowerCase())||null;
+}
+function employeeImportPhoneError(value,label){
+  if(!String(value||'').trim()) return '';
+  const digits=String(value).replace(/\D/g,'');
+  return digits.length>=10&&digits.length<=13?'':`${label} must contain 10 to 13 digits.`;
+}
+function validateEmployeeImportRow(values,rowNumber,accepted){
+  const errors=[];const warnings=[];const vals={};
+  EMPLOYEE_IMPORT_COLUMNS.forEach(column=>{
+    let value=values[column.key];
+    if(column.type==='date'){
+      const parsed=spreadsheetISODate(value);
+      if(parsed===null) errors.push(`${column.header} is not a valid date`);
+      value=parsed||'';
+    } else value=String(value??'').trim();
+    if(!value&&column.default) value=column.default;
+    if(value&&column.options){
+      const allowed=importAllowedValue(value,column.options);
+      if(allowed===null) errors.push(`${column.header} must be one of: ${column.options.join(', ')}`);
+      else value=allowed;
+    }
+    vals[column.key]=value;
+  });
+  EMPLOYEE_IMPORT_COLUMNS.filter(column=>column.required).forEach(column=>{if(!vals[column.key])errors.push(`${column.header} is required`);});
+  if(vals.dateHired&&vals.dateHired>todayISO()) errors.push('Date Hired cannot be in the future');
+  if(vals.birthDate&&vals.birthDate>todayISO()) errors.push('Birth Date cannot be in the future');
+  if(vals.statusDate&&vals.dateHired&&vals.statusDate<vals.dateHired) errors.push('Status Effective Date cannot be before Date Hired');
+  if(vals.personalEmail&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vals.personalEmail)) errors.push('Personal Email is invalid');
+  [employeeImportPhoneError(vals.mobileNumber,'Mobile Number'),employeeImportPhoneError(vals.emergencyContactPhone,'Emergency Contact Phone'),validateGovernmentIds(vals)].filter(Boolean).forEach(error=>errors.push(error));
+  if(!vals.employeeNo) vals.employeeNo=nextEmployeeNumber([...DB.employees,...accepted]);
+  const duplicateNumber=[...DB.employees,...accepted].find(employee=>String(employee.employeeNo||'').toUpperCase()===String(vals.employeeNo).toUpperCase());
+  if(duplicateNumber) errors.push(`Employee No. ${vals.employeeNo} already exists`);
+  vals.name=formatEmployeeName(vals);
+  if(vals.name){
+    const matches=[...DB.employees,...accepted].map(employee=>({employee,score:employeeNameSimilarity(vals,employee)})).filter(match=>match.score>=0.86).sort((a,b)=>b.score-a.score);
+    if(matches.length) warnings.push(`Possible duplicate: ${employeeDisplayName(matches[0].employee)} (${Math.round(matches[0].score*100)}% name match)`);
+  }
+  return {rowNumber,values:vals,errors:[...new Set(errors)],warnings:[...new Set(warnings)]};
+}
+function parseEmployeeImportWorksheet(workbook,fileName){
+  const sheetName=workbook.SheetNames.find(name=>name.toLowerCase()==='employees')||workbook.SheetNames[0];
+  if(!sheetName) return {fileName,rows:[],fileErrors:['The workbook does not contain a worksheet.']};
+  const matrix=window.XLSX.utils.sheet_to_json(workbook.Sheets[sheetName],{header:1,defval:'',raw:true});
+  if(!matrix.length) return {fileName,rows:[],fileErrors:['The Employees worksheet is empty.']};
+  const keys=matrix[0].map(employeeImportKey);
+  const fileErrors=[];
+  const duplicateHeaders=keys.filter((key,index)=>key&&keys.indexOf(key)!==index);
+  if(duplicateHeaders.length) fileErrors.push(`Duplicate column${new Set(duplicateHeaders).size===1?'':'s'}: ${[...new Set(duplicateHeaders)].map(key=>EMPLOYEE_IMPORT_COLUMNS.find(column=>column.key===key)?.header||key).join(', ')}`);
+  EMPLOYEE_IMPORT_COLUMNS.filter(column=>column.required).forEach(column=>{if(!keys.includes(column.key))fileErrors.push(`Missing required column: ${column.header}`);});
+  const accepted=[];const rows=[];
+  matrix.slice(1).forEach((cells,index)=>{
+    if(!cells.some(cell=>String(cell??'').trim())) return;
+    const values={};keys.forEach((key,columnIndex)=>{if(key)values[key]=cells[columnIndex];});
+    const result=validateEmployeeImportRow(values,index+2,accepted);
+    rows.push(result);if(!result.errors.length)accepted.push(result.values);
+  });
+  if(!rows.length) fileErrors.push('No populated employee rows were found.');
+  return {fileName,sheetName,rows,fileErrors};
+}
+function employeeImportSummary(preview){
+  const errors=preview.fileErrors.length+preview.rows.reduce((sum,row)=>sum+row.errors.length,0);
+  const warnings=preview.rows.reduce((sum,row)=>sum+row.warnings.length,0);
+  const valid=preview.rows.filter(row=>!row.errors.length).length;
+  return {errors,warnings,valid,total:preview.rows.length};
+}
+function openEmployeeImport(){
+  if(!requireEmployeeImportAdmin()||!employeeSpreadsheetReady()) return;
+  EMPLOYEE_IMPORT_PREVIEW=null;
+  openEmployeeWorkspaceModal(`<div class="modal-head"><div><h3>Import Employees</h3><div class="small">Validate a completed Excel template before adding records.</div></div><button type="button" onclick="closeModal()" aria-label="Close import">&times;</button></div><div class="modal-body employee-import-body"><div class="employee-import-drop"><span>${iUpload(22)}</span><div><b>Select an employee workbook</b><p>Accepted formats: .xlsx, .xls, and .csv. No records are saved until validation succeeds and you confirm the import.</p></div><label class="btn btn-primary btn-sm" for="employee-import-file">Choose File</label><input id="employee-import-file" type="file" accept=".xlsx,.xls,.csv" hidden onchange="handleEmployeeImportFile(this)"></div><div class="employee-import-rules"><b>Before importing</b><span>Use separate Last Name, First Name, and Middle Name columns. Required values, dates, contact details, government IDs, employee numbers, and allowed options are checked for every row. Similar names are highlighted for review.</span></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><div class="toolbar-spacer"></div><button class="btn btn-ghost" onclick="downloadEmployeeImportTemplate()">${iDownload(13)} Download Template</button></div>`);
+}
+async function handleEmployeeImportFile(input){
+  if(!requireEmployeeImportAdmin()||!employeeSpreadsheetReady()) return;
+  const file=input.files?.[0];if(!file)return;
+  try{
+    const workbook=window.XLSX.read(await file.arrayBuffer(),{cellDates:true});
+    EMPLOYEE_IMPORT_PREVIEW=parseEmployeeImportWorksheet(workbook,file.name);
+    renderEmployeeImportPreview();
+  }catch(error){toast('The workbook could not be read: '+error.message,true);input.value='';}
+}
+function renderEmployeeImportPreview(){
+  if(!EMPLOYEE_IMPORT_PREVIEW)return;
+  const summary=employeeImportSummary(EMPLOYEE_IMPORT_PREVIEW);
+  const issues=[...EMPLOYEE_IMPORT_PREVIEW.fileErrors];
+  openEmployeeWorkspaceModal(`<div class="modal-head"><div><h3>Review Employee Import</h3><div class="small">${esc(EMPLOYEE_IMPORT_PREVIEW.fileName)} · ${summary.total} populated rows</div></div><button type="button" onclick="closeModal()" aria-label="Close import preview">&times;</button></div><div class="modal-body employee-import-body"><div class="employee-import-summary"><div><span>Ready</span><b>${summary.valid}</b></div><div class="${summary.errors?'has-error':''}"><span>Errors</span><b>${summary.errors}</b></div><div class="${summary.warnings?'has-warning':''}"><span>Warnings</span><b>${summary.warnings}</b></div></div>${issues.length?`<div class="employee-import-file-errors"><b>Workbook errors</b>${issues.map(issue=>`<span>${esc(issue)}</span>`).join('')}</div>`:''}<div class="tablewrap employee-import-preview"><table class="data-table"><thead><tr><th>Row</th><th>Employee No.</th><th>Employee</th><th>Department</th><th>Validation</th></tr></thead><tbody>${EMPLOYEE_IMPORT_PREVIEW.rows.map(row=>`<tr><td class="mono">${row.rowNumber}</td><td class="mono">${esc(row.values.employeeNo||'—')}</td><td><b>${esc(row.values.name||'Incomplete name')}</b><div class="small">${esc(row.values.position||'—')}</div></td><td>${esc(row.values.department||'—')}</td><td>${row.errors.length?`<div class="import-issues error">${row.errors.map(issue=>`<span>${esc(issue)}</span>`).join('')}</div>`:row.warnings.length?`<div class="import-issues warning">${row.warnings.map(issue=>`<span>${esc(issue)}</span>`).join('')}</div>`:'<span class="badge b-green"><span class="dot"></span>Ready</span>'}</td></tr>`).join('')}</tbody></table></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="openEmployeeImport()">Choose Another File</button><div class="toolbar-spacer"></div><button class="btn btn-primary" ${summary.errors||!summary.valid?'disabled':''} onclick="commitEmployeeImport()">Import ${summary.valid} Employee${summary.valid===1?'':'s'}</button></div>`);
+}
+async function commitEmployeeImport(){
+  if(!requireEmployeeImportAdmin()||!EMPLOYEE_IMPORT_PREVIEW)return;
+  const summary=employeeImportSummary(EMPLOYEE_IMPORT_PREVIEW);
+  if(summary.errors||!summary.valid){toast('Resolve every import error before continuing.',true);return;}
+  const confirmed=await confirmDataChange({title:'Import employee records',message:`Add ${summary.valid} employees to the live directory${summary.warnings?` with ${summary.warnings} possible duplicate-name warning${summary.warnings===1?'':'s'}`:''}? This change will be recorded under your account.`,confirmLabel:'Import employees',cancelLabel:'Cancel',warning:Boolean(summary.warnings)});
+  if(!confirmed)return;
+  const now=new Date().toISOString();const actorName=SESSION?.fullName||'System';const added=[];
+  EMPLOYEE_IMPORT_PREVIEW.rows.forEach(row=>{
+    const employee={id:uid(),...row.values,employmentHistory:[],recordHistory:[],createdAt:now,createdBy:SESSION?.id||null,createdByName:actorName,updatedAt:now,updatedBy:SESSION?.id||null,updatedByName:actorName};
+    employee.recordHistory.push({action:'Imported',at:now,by:actorName,byId:SESSION?.id||null,detail:`Employee record imported from ${EMPLOYEE_IMPORT_PREVIEW.fileName}`});
+    employee.employmentHistory.push({type:'Employment Status',from:'',to:employee.status,effectiveDate:employee.statusDate||employee.dateHired,remarks:'Initial employee record imported from Excel',changedAt:now,changedBy:actorName});
+    DB.employees.push(employee);added.push(employee);
+  });
+  if(!(await saveDB())){DB.employees=DB.employees.filter(employee=>!added.includes(employee));return;}
+  logAudit(`Imported ${added.length} employee records from ${EMPLOYEE_IMPORT_PREVIEW.fileName}`);
+  EMPLOYEE_IMPORT_PREVIEW=null;await closeModal();renderNav();renderEmployees();toast(`Imported ${added.length} employee records.`);
+}
+function downloadEmployeeImportTemplate(){
+  if(!requireEmployeeImportAdmin()||!employeeSpreadsheetReady())return;
+  const headers=EMPLOYEE_IMPORT_COLUMNS.map(column=>column.header);
+  const employeeSheet=window.XLSX.utils.aoa_to_sheet([headers]);
+  employeeSheet['!cols']=EMPLOYEE_IMPORT_COLUMNS.map(column=>({wch:Math.max(15,column.header.length+3)}));
+  employeeSheet['!autofilter']={ref:`A1:${window.XLSX.utils.encode_col(headers.length-1)}1`};
+  const instructions=[['SLSC Employee Import Template'],['Instructions'],['1. Enter one employee per row in the Employees sheet.'],['2. Do not rename or remove required columns.'],['3. Leave Employee No. blank to generate the next available number.'],['4. Dates may use YYYY-MM-DD or MM/DD/YYYY.'],['5. PRF Number and government IDs are optional.'],['6. Import validates the entire workbook before saving any employee.'],[],['Column','Required','Allowed values / guidance'],...EMPLOYEE_IMPORT_COLUMNS.map(column=>[column.header,column.required?'Yes':'No',column.options?.join(' | ')||column.note||''])];
+  const instructionSheet=window.XLSX.utils.aoa_to_sheet(instructions);instructionSheet['!cols']=[{wch:34},{wch:12},{wch:95}];
+  const reference=[['Field','Allowed values'],['Department',DEPT_OPTIONS.join(' | ')],['Gender','Male | Female'],['Civil Status','Single | Married | Widowed | Separated | Other'],['Employment Status',EMP_STATUS.join(' | ')],['Classification Override','Auto | Probationary | Regular'],['SSS Number','10 digits; example 09-5421455-9'],['PhilHealth PIN','12 digits; 2-9-1 format'],['Pag-IBIG MID','12 digits; 4-4-4 format'],['BIR TIN','9 digits plus optional 3-digit branch code']];
+  const referenceSheet=window.XLSX.utils.aoa_to_sheet(reference);referenceSheet['!cols']=[{wch:30},{wch:95}];
+  const workbook=window.XLSX.utils.book_new();
+  window.XLSX.utils.book_append_sheet(workbook,employeeSheet,'Employees');window.XLSX.utils.book_append_sheet(workbook,instructionSheet,'Instructions');window.XLSX.utils.book_append_sheet(workbook,referenceSheet,'Reference');
+  window.XLSX.writeFile(workbook,'SLSC_Employee_Import_Template.xlsx');toast('Employee import template downloaded.');
+}
 const EMP_FORM_SECTIONS = [
   {title:'Employee Record',description:'Core identifiers and approved hiring reference.',keys:['employeeNo','prfNumber']},
   {title:'Personal & Employment',description:'Legal name, assignment, and current employment details.',keys:['lastName','firstName','middleName','position','department','dateHired','birthDate','gender','civilStatus','status','statusDate','classOverride']},
@@ -3294,15 +3513,31 @@ async function saveEmployeeStatus(id){
 }
 
 function exportEmployeesCSV(){
-  const csv = toCSV(DB.employees, [
-    {label:'Employee No.', get:r=>r.employeeNo},{label:'PRF Number', get:r=>r.prfNumber},{label:'Name', get:r=>r.name},{label:'Position', get:r=>r.position},{label:'Department', get:r=>r.department},
-    {label:'Date Hired', get:r=>r.dateHired},{label:'Birth Date', get:r=>r.birthDate},{label:'Gender', get:r=>r.gender},{label:'Civil Status', get:r=>r.civilStatus},
-    {label:'Mobile', get:r=>r.mobileNumber},{label:'Email', get:r=>r.personalEmail},{label:'Emergency Contact', get:r=>r.emergencyContactName},{label:'Emergency Phone', get:r=>r.emergencyContactPhone},
-    {label:'Status', get:r=>r.status},
-    {label:'Classification', get:r=>classify(r)},
-  ]);
-  downloadCSV('employees_export.csv', csv);
-  toast('CSV exported.');
+  const columns=[
+    {header:'Employee No.',get:r=>r.employeeNo},{header:'PRF Number',get:r=>r.prfNumber},{header:'Last Name',get:r=>splitEmployeeName(r).lastName},{header:'First Name',get:r=>splitEmployeeName(r).firstName},{header:'Middle Name',get:r=>splitEmployeeName(r).middleName},{header:'Formatted Name',get:r=>employeeDisplayName(r)},
+    {header:'Position',get:r=>r.position},{header:'Department',get:r=>r.department},{header:'Date Hired',get:r=>r.dateHired},{header:'Birth Date',get:r=>r.birthDate},{header:'Gender',get:r=>r.gender},{header:'Civil Status',get:r=>r.civilStatus},
+    {header:'Employment Status',get:r=>r.status},{header:'Status Effective Date',get:r=>r.statusDate},{header:'Classification Override',get:r=>r.classOverride||'Auto'},{header:'Computed Classification',get:r=>classify(r)},
+    {header:'Mobile Number',get:r=>r.mobileNumber},{header:'Personal Email',get:r=>r.personalEmail},{header:'Home Address',get:r=>r.address},{header:'Emergency Contact Name',get:r=>r.emergencyContactName},{header:'Emergency Contact Relationship',get:r=>r.emergencyContactRelationship},{header:'Emergency Contact Phone',get:r=>r.emergencyContactPhone},
+    {header:'BIR TIN',get:r=>formatGovernmentId('tin',r.tin)},{header:'SSS Number',get:r=>formatGovernmentId('sss',r.sssNumber)},{header:'PhilHealth PIN',get:r=>formatGovernmentId('philHealth',r.philHealthNumber)},{header:'Pag-IBIG MID',get:r=>formatGovernmentId('pagIbig',r.pagIbigNumber)},
+    {header:'Created At',get:r=>r.createdAt},{header:'Created By',get:r=>r.createdByName},{header:'Updated At',get:r=>r.updatedAt},{header:'Updated By',get:r=>r.updatedByName},
+  ];
+  if(!employeeSpreadsheetReady()){
+    downloadCSV('employees_complete_export.csv',toCSV(DB.employees,columns.map(column=>({label:column.header,get:column.get}))));
+    return;
+  }
+  const rows=DB.employees.map(employee=>Object.fromEntries(columns.map(column=>[column.header,column.get(employee)??''])));
+  const employeeSheet=window.XLSX.utils.json_to_sheet(rows,{header:columns.map(column=>column.header)});
+  employeeSheet['!cols']=columns.map(column=>({wch:Math.min(48,Math.max(14,column.header.length+2))}));
+  employeeSheet['!autofilter']={ref:`A1:${window.XLSX.utils.encode_col(columns.length-1)}${Math.max(1,rows.length+1)}`};
+  const employmentHistory=[];const recordHistory=[];
+  DB.employees.forEach(employee=>{
+    (employee.employmentHistory||[]).forEach(item=>employmentHistory.push({'Employee No.':employee.employeeNo||'','Employee':employeeDisplayName(employee),'Event Type':item.type||'','From':item.from||'','To':item.to||'','Effective Date':item.effectiveDate||'','Remarks':item.remarks||'','Changed At':item.changedAt||'','Changed By':item.changedBy||''}));
+    (employee.recordHistory||[]).forEach(item=>recordHistory.push({'Employee No.':employee.employeeNo||'','Employee':employeeDisplayName(employee),'Action':item.action||'','Detail':item.detail||'','Date/Time':item.at||'','User':item.by||''}));
+  });
+  const workbook=window.XLSX.utils.book_new();window.XLSX.utils.book_append_sheet(workbook,employeeSheet,'Employees');
+  const employmentSheet=window.XLSX.utils.json_to_sheet(employmentHistory);employmentSheet['!cols']=[{wch:16},{wch:30},{wch:26},{wch:22},{wch:22},{wch:18},{wch:48},{wch:24},{wch:28}];window.XLSX.utils.book_append_sheet(workbook,employmentSheet,'Employment History');
+  const recordSheet=window.XLSX.utils.json_to_sheet(recordHistory);recordSheet['!cols']=[{wch:16},{wch:30},{wch:18},{wch:55},{wch:24},{wch:28}];window.XLSX.utils.book_append_sheet(workbook,recordSheet,'Record History');
+  window.XLSX.writeFile(workbook,`SLSC_Employees_${todayISO()}.xlsx`);toast(`Exported ${DB.employees.length} complete employee records.`);
 }
 
 async function openEmployeeProfile(id){
@@ -6447,7 +6682,7 @@ Object.assign(window, {
   consequenceFor, cvrOffenseLevel, cvrOffenseSummaryHTML, daysBetweenInclusive, defaultOffenseCatalog, deleteATDPayment,
   deleteATDRecord, deleteCVR, deleteEmployee, deleteIncident, deleteRecord, doLogin, doLogout, doRegister, donut,
   downloadATDPayslip, downloadAttachment, downloadCSV, downloadRecordAttachment, enterApp, esc, evalDueDate,
-  evalStatusInfo, exportATDCSV, exportCVRCSV, exportEmployeesCSV, exportIncidentsCSV, exportModuleCSV, exportWeeklyCSV,
+  evalStatusInfo, exportATDCSV, exportCVRCSV, exportEmployeesCSV, exportIncidentsCSV, exportModuleCSV, exportWeeklyCSV, openEmployeeImport, handleEmployeeImportFile, renderEmployeeImportPreview, commitEmployeeImport, downloadEmployeeImportTemplate,
   fieldHTML, fmtDate, formatGovernmentIdInput, getEvalRecord, go, handleFileInput, incidentTypeOccurrence, incidentTypeSummaryHTML,
   toggleSidebar, closeSidebar, applyReportFilters, exportReportEmployees, exportReportActivity, exportReportATD, exportReportCases,
   loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,

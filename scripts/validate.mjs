@@ -15,7 +15,7 @@ function existsWithExactCase(filePath){
   return fs.existsSync(current);
 }
 const required=[
-  'index.html','css/app.css','css/professional.css','js/app.js',
+  'index.html','css/app.css','css/professional.css','js/app.js','js/vendor/xlsx.full.min.js','js/vendor/SHEETJS-LICENSE.txt',
   'js/core/pagination.js','js/core/table-enhancer.js','js/core/content-layout.js','supabase-config.js',
   'supabase/phase10-self-service.sql','supabase/phase11-lifecycle-checklists.sql',
   'database/migrations/phase11-lifecycle-checklists.sql','supabase/phase12-user-preferences.sql',
@@ -103,6 +103,16 @@ for(const feature of ['employeeNameSimilarity','levenshteinDistance','Continue a
     console.error(`Employee duplicate warning contract is missing: ${feature}`);
     process.exit(1);
   }
+}
+for(const feature of ['EMPLOYEE_IMPORT_COLUMNS','downloadEmployeeImportTemplate','parseEmployeeImportWorksheet','validateEmployeeImportRow','commitEmployeeImport','Only a System Administrator can import employees','Employment History','Record History']){
+  if(!app.includes(feature)){
+    console.error(`Employee spreadsheet import/export contract is missing: ${feature}`);
+    process.exit(1);
+  }
+}
+if(!html.includes('js/vendor/xlsx.full.min.js?v=0.20.3')){
+  console.error('Pinned local SheetJS browser build is missing.');
+  process.exit(1);
 }
 if(!app.includes("trigger.innerHTML=iEdit(15)")){
   console.error('Consolidated table actions must use the pencil icon trigger.');
