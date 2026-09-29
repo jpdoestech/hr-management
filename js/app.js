@@ -1830,11 +1830,11 @@ function enhanceRowActionMenus(){
     const trigger=document.createElement('button');
     trigger.type='button';
     trigger.className='btn btn-ghost btn-sm row-action-trigger';
-    trigger.title='Actions';
+    trigger.title='Open actions';
     trigger.setAttribute('aria-label','Open actions');
     trigger.setAttribute('aria-haspopup','dialog');
     trigger.setAttribute('onclick',`openRowActionMenu('${id}')`);
-    trigger.innerHTML=`${iMore(16)}<span>Actions</span>`;
+    trigger.innerHTML=iEdit(15);
     group.replaceChildren(trigger);
     group.classList.add('is-menu');
     group.dataset.menuEnhanced='true';
@@ -2410,6 +2410,7 @@ async function saveEmployeeLifecycleEvent(){
     type:'Lifecycle Event',eventType,from:fromStatus,to:emp.status||fromStatus,fromPosition,toPosition,fromDepartment,toDepartment:emp.department||fromDepartment,
     effectiveDate,remarks,changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'
   });
+  appendEmployeeRecordHistory(emp,'Lifecycle',eventType);
   if(!(await saveDB())){Object.keys(emp).forEach(key=>delete emp[key]);Object.assign(emp,original);return;}
   logAudit(`Recorded employment lifecycle event for ${employeeDisplayName(emp)}: ${eventType}`);
   await closeModal(); renderNav();
@@ -2635,7 +2636,9 @@ async function convertOnboardingCandidate(id){
   const candidate=DB.onboardingCandidates.find(row=>row.id===id);if(!candidate)return;
   const blockers=onboardingHireBlockers(candidate);if(blockers.length){toast('Complete hiring requirements before conversion: '+blockers.join(', '),true);return;}
   if(candidate.employeeRecordId||DB.employees.some(employee=>employee.sourceCandidateId===candidate.id)){toast('This applicant has already been converted.',true);return;}
-  const employee={id:uid(),employeeNo:nextEmployeeNumber(DB.employees),prfNumber:candidate.prfNumber,lastName:candidate.lastName,firstName:candidate.firstName,middleName:candidate.middleName,name:formatEmployeeName(candidate),position:candidate.positionApplied,department:candidate.department,dateHired:candidate.proposedStartDate,birthDate:candidate.birthDate,gender:candidate.gender,civilStatus:candidate.civilStatus||'',status:'Newly Hired',statusDate:candidate.proposedStartDate,mobileNumber:candidate.mobileNumber||'',personalEmail:candidate.personalEmail||'',address:candidate.address||'',tin:candidate.tin||'',sssNumber:candidate.sssNumber||'',philHealthNumber:candidate.philHealthNumber||'',pagIbigNumber:candidate.pagIbigNumber||'',emergencyContactName:'',emergencyContactRelationship:'',emergencyContactPhone:'',classOverride:'Auto',sourceCandidateId:candidate.id,employmentHistory:[{type:'Employment Status',from:'Applicant',to:'Newly Hired',effectiveDate:candidate.proposedStartDate,remarks:'Converted from Onboarding & Applicants',changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'}]};
+  const createdAt=new Date().toISOString();
+  const createdByName=SESSION?.fullName||'System';
+  const employee={id:uid(),employeeNo:nextEmployeeNumber(DB.employees),prfNumber:candidate.prfNumber,lastName:candidate.lastName,firstName:candidate.firstName,middleName:candidate.middleName,name:formatEmployeeName(candidate),position:candidate.positionApplied,department:candidate.department,dateHired:candidate.proposedStartDate,birthDate:candidate.birthDate,gender:candidate.gender,civilStatus:candidate.civilStatus||'',status:'Newly Hired',statusDate:candidate.proposedStartDate,mobileNumber:candidate.mobileNumber||'',personalEmail:candidate.personalEmail||'',address:candidate.address||'',tin:candidate.tin||'',sssNumber:candidate.sssNumber||'',philHealthNumber:candidate.philHealthNumber||'',pagIbigNumber:candidate.pagIbigNumber||'',emergencyContactName:'',emergencyContactRelationship:'',emergencyContactPhone:'',classOverride:'Auto',sourceCandidateId:candidate.id,createdAt,createdBy:SESSION?.id||null,createdByName,updatedAt:createdAt,updatedBy:SESSION?.id||null,updatedByName:createdByName,recordHistory:[{action:'Created',at:createdAt,by:createdByName,byId:SESSION?.id||null,detail:'Converted from Onboarding & Applicants'}],employmentHistory:[{type:'Employment Status',from:'Applicant',to:'Newly Hired',effectiveDate:candidate.proposedStartDate,remarks:'Converted from Onboarding & Applicants',changedAt:createdAt,changedBy:createdByName}]};
   const original=JSON.parse(JSON.stringify(candidate));
   DB.employees.push(employee);Object.assign(candidate,{stage:'Hired',employeeRecordId:employee.id,hiredAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
   if(!(await saveDB())){DB.employees=DB.employees.filter(row=>row!==employee);Object.keys(candidate).forEach(key=>delete candidate[key]);Object.assign(candidate,original);return;}
@@ -2842,6 +2845,28 @@ const EMP_FIELDS = [
   {key:'emergencyContactPhone', label:'Emergency Contact Phone', type:'tel'},
   {key:'classOverride', label:'Classification', type:'select', options:['Auto','Probationary','Regular'], required:true},
 ];
+const EMP_FORM_SECTIONS = [
+  {title:'Employee Record',description:'Core identifiers and approved hiring reference.',keys:['employeeNo','prfNumber']},
+  {title:'Personal & Employment',description:'Legal name, assignment, and current employment details.',keys:['lastName','firstName','middleName','position','department','dateHired','birthDate','gender','civilStatus','status','statusDate','classOverride']},
+  {title:'Contact & Emergency',description:'Private contact information used by HR when needed.',keys:['mobileNumber','personalEmail','address','emergencyContactName','emergencyContactRelationship','emergencyContactPhone']},
+  {title:'Government IDs',description:'Optional statutory identifiers with format validation.',keys:['tin','sssNumber','philHealthNumber','pagIbigNumber']},
+];
+function employeeFormFieldValue(field,record){
+  if(record) return record[field.key];
+  if(field.key==='employeeNo') return nextEmployeeNumber(DB.employees);
+  if(field.key==='status') return 'Newly Hired';
+  if(field.key==='classOverride') return 'Auto';
+  return '';
+}
+function employeeFormSectionsHTML(record){
+  return EMP_FORM_SECTIONS.map((section,index)=>`<section class="employee-form-section">
+    <div class="employee-form-section-head"><span>${String(index+1).padStart(2,'0')}</span><div><h4>${esc(section.title)}</h4><p>${esc(section.description)}</p></div></div>
+    <div class="employee-form-grid">${section.keys.map(key=>{
+      const field=EMP_FIELDS.find(item=>item.key===key);
+      return field?fieldHTML(field,employeeFormFieldValue(field,record)):'';
+    }).join('')}</div>
+  </section>`).join('');
+}
 function openEmployeeForm(id){
   const existing = id? DB.employees.find(e=>e.id===id): null;
   const formRecord=existing?{...existing,...splitEmployeeName(existing)}:null;
@@ -2849,13 +2874,10 @@ function openEmployeeForm(id){
   if(existing) selectEmployeeDirectoryRow(existing.id);
   openEmployeeWorkspaceModal(`
     ${existing?employeeWorkspaceHeader(existing,'Edit Employee'):`<div class="modal-head employee-workspace-head"><div><div class="employee-workspace-breadcrumb"><span>Employee Information</span><span>›</span><b>Add Employee</b></div><h3>Add Employee</h3><div class="small">Create a complete employee master record.</div></div><button type="button" onclick="closeModal()" aria-label="Close employee form">&times;</button></div>`}
-    <div class="modal-body">
+    <div class="modal-body employee-form-body">
       ${existing?employeeWorkspaceNav(existing,'edit'):''}
-      <div class="formgrid">
-        ${EMP_FIELDS.map(f=>fieldHTML(f, formRecord? formRecord[f.key] : (f.key==='employeeNo'?nextEmployeeNumber(DB.employees):f.key==='status'?'Newly Hired':f.key==='classOverride'?'Auto':''))).join('')}
-      </div>
-      <div class="employee-master-note"><b>Employee master data:</b> Employee No. is system-generated. PRF Number links the employee to the approved personnel request; contact and emergency information can be completed later.</div>
-      <div class="computed-note">Classification is calculated automatically from Date Hired against the ${DB.settings.probationDays}-day regularization threshold (set in Settings). Choose "Auto" unless you need to manually correct a record.</div>
+      ${employeeFormSectionsHTML(formRecord)}
+      <div class="employee-form-guidance"><b>Automatic classification</b><span>Date Hired is evaluated against the ${DB.settings.probationDays}-day regularization threshold in Settings. Keep Classification on Auto unless HR needs to correct the record.</span></div>
     </div>
     ${existing?employeeWorkspaceFooter(existing,'Save Employee',`saveEmployee('${id}')`):`<div class="modal-foot employee-workspace-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><div class="toolbar-spacer"></div><button class="btn btn-primary" onclick="saveEmployee('')">Save Employee</button></div>`}
   `);
@@ -2898,6 +2920,12 @@ function updateEmployeeNameReferences(oldName,newName){
   return changes;
 }
 function restoreEmployeeNameReferences(changes){ (changes||[]).forEach(change=>change.record[change.key]=change.value); }
+function appendEmployeeRecordHistory(employee,action,detail,at=new Date().toISOString()){
+  const actorName=SESSION?.fullName||'System';
+  if(!Array.isArray(employee.recordHistory)) employee.recordHistory=[];
+  Object.assign(employee,{updatedAt:at,updatedBy:SESSION?.id||null,updatedByName:actorName});
+  employee.recordHistory.push({action,at,by:actorName,byId:SESSION?.id||null,detail});
+}
 
 async function saveEmployee(id){
   const vals = readFields(EMP_FIELDS);
@@ -2923,12 +2951,23 @@ async function saveEmployee(id){
   const oldStoragePaths=recordStoragePaths(id?rec:null);
   const previousStatus=id?rec.status:'';
   const previousStatusDate=id?rec.statusDate:'';
+  const now=new Date().toISOString();
+  const actorName=SESSION?.fullName||'System';
+  const changedFields=isNew?[]:EMP_FIELDS.filter(field=>String(original?.[field.key]??'')!==String(vals[field.key]??'')).map(field=>field.label);
   Object.assign(rec, vals);
   if(!Array.isArray(rec.employmentHistory)) rec.employmentHistory=[];
+  if(!Array.isArray(rec.recordHistory)) rec.recordHistory=[];
   if(isNew){
-    rec.employmentHistory.push({type:'Employment Status',from:'',to:rec.status,effectiveDate:rec.statusDate||rec.dateHired,remarks:'Initial employee record',changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
+    Object.assign(rec,{createdAt:now,createdBy:SESSION?.id||null,createdByName:actorName,updatedAt:now,updatedBy:SESSION?.id||null,updatedByName:actorName});
+    appendEmployeeRecordHistory(rec,'Created','Employee record created',now);
+    rec.employmentHistory.push({type:'Employment Status',from:'',to:rec.status,effectiveDate:rec.statusDate||rec.dateHired,remarks:'Initial employee record',changedAt:now,changedBy:actorName});
   } else if(previousStatus!==rec.status || previousStatusDate!==rec.statusDate){
-    rec.employmentHistory.push({type:'Employment Status',from:previousStatus||'',to:rec.status||'',effectiveDate:rec.statusDate||todayISO(),remarks:'Updated from Employee Information',changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
+    rec.employmentHistory.push({type:'Employment Status',from:previousStatus||'',to:rec.status||'',effectiveDate:rec.statusDate||todayISO(),remarks:'Updated from Employee Information',changedAt:now,changedBy:actorName});
+  }
+  if(!isNew&&changedFields.length){
+    const visible=changedFields.slice(0,4).join(', ');
+    const remaining=changedFields.length-4;
+    appendEmployeeRecordHistory(rec,'Updated',`Changed ${visible}${remaining>0?` and ${remaining} more`:''}`,now);
   }
   if(isNew) DB.employees.push(rec);
   const renamedReferences=isNew?[]:updateEmployeeNameReferences(originalName,rec.name);
@@ -2992,11 +3031,12 @@ async function saveEmployeeTransfer(id){
   if(fromDepartment===toDepartment){ toast('Transferred From and Transferred To must be different departments.'); return; }
   if(toDate < fromDate){ toast('The "To Date" cannot be before the "From Date".'); return; }
   const transfer={id:uid(), employeeName:emp.name, fromDepartment, fromDate, toDepartment, toDate, remarks};
-  const original={department:emp.department,status:emp.status};
+  const original=JSON.parse(JSON.stringify(emp));
   DB.transfers.push(transfer);
   emp.department = toDepartment;
   emp.status = 'Transferred to Another Department';
-  if(!(await saveDB())){DB.transfers=DB.transfers.filter(row=>row!==transfer);emp.department=original.department;emp.status=original.status;return;}
+  appendEmployeeRecordHistory(emp,'Transferred',`${fromDepartment} to ${toDepartment}`);
+  if(!(await saveDB())){DB.transfers=DB.transfers.filter(row=>row!==transfer);Object.keys(emp).forEach(key=>delete emp[key]);Object.assign(emp,original);return;}
   logAudit(`Transferred ${employeeDisplayName(emp)} from ${fromDepartment} to ${toDepartment}`);
   await closeModal(); renderNav(); await renderEmployeeOrigin(); await openEmployeeProfile(id);
   toast('Transfer recorded.');
@@ -3047,12 +3087,13 @@ async function saveEmployeeStatus(id){
   if(effectiveDate<emp.dateHired){ toast('Status Effective Date cannot be before Date Hired.'); return; }
   if(status===emp.status && effectiveDate===(emp.statusDate||'')){ toast('No status change was made.'); return; }
   const from=emp.status||'';
-  const original={status:emp.status,statusDate:emp.statusDate,employmentHistory:JSON.parse(JSON.stringify(emp.employmentHistory||[]))};
+  const original=JSON.parse(JSON.stringify(emp));
   emp.status=status;
   emp.statusDate=effectiveDate;
   if(!Array.isArray(emp.employmentHistory)) emp.employmentHistory=[];
   emp.employmentHistory.push({type:'Employment Status',from,to:status,effectiveDate,remarks,changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
-  if(!(await saveDB())){emp.status=original.status;emp.statusDate=original.statusDate;emp.employmentHistory=original.employmentHistory;return;}
+  appendEmployeeRecordHistory(emp,'Status',`${from||'Unspecified'} to ${status}`);
+  if(!(await saveDB())){Object.keys(emp).forEach(key=>delete emp[key]);Object.assign(emp,original);return;}
   logAudit(`Updated employment status for ${employeeDisplayName(emp)}: ${from||'—'} → ${status}`);
   await closeModal();
   renderNav();
@@ -3101,6 +3142,7 @@ async function openEmployeeProfile(id){
     ...cases.map(r=>({date:r.opened_at,type:'HR Case',title:r.case_number+' · '+(r.subject||'HR Case'),meta:r.status||''}))
   ].filter(x=>x.date).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,14);
   const statusMap=EMP_STATUS_MAP;
+  const recordHistory=Array.isArray(emp.recordHistory)?emp.recordHistory.slice().reverse().slice(0,20):[];
   openEmployeeWorkspaceModal(`${employeeWorkspaceHeader(emp,'Overview')}<div class="modal-body">
     ${employeeWorkspaceNav(emp,'overview')}
     <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(employeeDisplayName(emp))}</div><div class="profile-sub">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div><div class="small" style="margin-top:6px;">${esc(employeeTenureText(emp))}</div></div><div class="profile-actions">${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="openEmployeeOperation('cases','${emp.id}')">${iShield(13)} New HR Case</button>`:''}</div></div>
@@ -3148,6 +3190,9 @@ async function openEmployeeProfile(id){
     </div>
     <div class="panel" style="margin-top:14px;"><div class="dashboard-panel-head"><div><h3>Employment History</h3><div class="desc">Status changes recorded from the employee master record.</div></div></div>
       ${Array.isArray(emp.employmentHistory)&&emp.employmentHistory.length?`<div class="employee-history">${emp.employmentHistory.slice().reverse().slice(0,12).map(h=>`<div class="employee-history-row"><div class="dot"></div><div class="date">${fmtDate(h.effectiveDate||String(h.changedAt||'').slice(0,10))}</div><div><div class="title">${esc(h.from||'Initial')} ${h.from?'→ ':''}${esc(h.to||'—')}</div><div class="meta">${esc(h.remarks||'No remarks')} · ${esc(h.changedBy||'System')}</div></div><div class="right">${statusBadge(h.to||'—',EMP_STATUS_MAP)}</div></div>`).join('')}</div>`:'<div class="empty"><b>No employment history</b>Status changes will appear here as they are recorded.</div>'}
+    </div>
+    <div class="panel" style="margin-top:14px;"><div class="dashboard-panel-head"><div><h3>Record History</h3><div class="desc">Who created or updated this employee master record.</div></div></div>
+      ${recordHistory.length?`<div class="employee-record-history">${recordHistory.map(entry=>`<div><span class="record-history-action">${esc(entry.action||'Updated')}</span><span><b>${esc(entry.by||'System')}</b><small>${esc(entry.detail||'Employee record updated')}</small></span><time>${new Date(entry.at).toLocaleString()}</time></div>`).join('')}</div>`:`<div class="empty"><b>No record audit available</b>Creation and update history will be captured from the next saved change.</div>`}
     </div>
     <div class="panel" style="margin-top:14px;"><div class="dashboard-panel-head"><div><h3>Recent HR Activity</h3><div class="desc">Latest records across the employee's HR history.</div></div></div>
       ${activities.length?`<div class="profile-list">${activities.map(a=>`<div class="profile-list-row"><div class="main"><div class="title">${esc(a.type)} · ${esc(a.title)}</div><div class="meta">${esc(a.meta||'')}</div></div><div class="right">${fmtDate(String(a.date).slice(0,10))}</div></div>`).join('')}</div>`:'<div class="empty"><b>No HR activity yet</b>This employee does not have additional records across the tracked modules.</div>'}

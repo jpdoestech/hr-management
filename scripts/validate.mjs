@@ -85,11 +85,21 @@ for(const feature of ['openEmployeeColumnManager','persistUserPreferences','DB.e
     process.exit(1);
   }
 }
-for(const feature of ['employee-directory-row','employee-workspace-modal','employeeWorkspaceHeader','employeeWorkspaceNav','renderEmployeeOrigin','selectEmployeeDirectoryRow']){
+for(const feature of ['employee-directory-row','employee-workspace-modal','employeeWorkspaceHeader','employeeWorkspaceNav','renderEmployeeOrigin','selectEmployeeDirectoryRow','EMP_FORM_SECTIONS','employeeFormSectionsHTML']){
   if(!app.includes(feature)){
     console.error(`Employee workspace interaction contract is missing: ${feature}`);
     process.exit(1);
   }
+}
+for(const feature of ['recordHistory','createdByName','updatedByName','Record History','appendEmployeeRecordHistory']){
+  if(!app.includes(feature)){
+    console.error(`Employee audit history contract is missing: ${feature}`);
+    process.exit(1);
+  }
+}
+if(!app.includes("trigger.innerHTML=iEdit(15)")){
+  console.error('Consolidated table actions must use the pencil icon trigger.');
+  process.exit(1);
 }
 const onboardingMigration=fs.readFileSync(path.join(root,'supabase/phase13-onboarding.sql'),'utf8');
 const onboardingMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase13-onboarding.sql'),'utf8');
