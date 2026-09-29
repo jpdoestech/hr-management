@@ -110,6 +110,10 @@ for(const feature of ['EMPLOYEE_IMPORT_COLUMNS','downloadEmployeeImportTemplate'
     process.exit(1);
   }
 }
+if(!/header:'Remarks',key:'remarks'/.test(app) || !/key:'remarks', label:'Remarks', type:'textarea'/.test(app)){
+  console.error('Employee import remarks must persist in the editable employee master record.');
+  process.exit(1);
+}
 if(!html.includes('js/vendor/xlsx.full.min.js?v=0.20.3')){
   console.error('Pinned local SheetJS browser build is missing.');
   process.exit(1);

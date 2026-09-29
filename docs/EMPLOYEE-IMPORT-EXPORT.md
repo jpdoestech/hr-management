@@ -11,10 +11,11 @@ Only users with the `Administrator` role can see or use **Template** and **Impor
 3. Read the **Instructions** and **Reference** worksheets.
 4. Enter one employee per row in the **Employees** worksheet.
 5. Keep the required column names unchanged. Leave **Employee No.** blank to generate the next number.
-6. Return to Employee Information and select **Import**.
-7. Choose the completed `.xlsx`, `.xls`, or `.csv` file.
-8. Review every validation result. The system does not save partial imports; all errors must be corrected first.
-9. Review any yellow possible-duplicate warnings, then confirm the import.
+6. Use the optional **Remarks** column for HR context that should remain on the employee master record.
+7. Return to Employee Information and select **Import**.
+8. Choose the completed `.xlsx`, `.xls`, or `.csv` file.
+9. Review every validation result. The system does not save partial imports; all errors must be corrected first.
+10. Review any yellow possible-duplicate warnings, then confirm the import.
 
 The importer validates required fields, dates, allowed department and status values, email and phone formats, government ID formats, and duplicate employee numbers. Similar employee names are warnings and require an explicit confirmation.
 

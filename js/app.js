@@ -485,7 +485,7 @@ function normalizeEmployeeMasterData(){
   (DB.employees||[]).forEach(e=>{
     if(!e.employeeNo || used.has(String(e.employeeNo).toUpperCase())){ e.employeeNo=nextEmployeeNumber(DB.employees.filter(x=>x!==e && x.employeeNo)); changed=true; }
     used.add(String(e.employeeNo).toUpperCase());
-    ['birthDate','civilStatus','mobileNumber','personalEmail','address','tin','sssNumber','philHealthNumber','pagIbigNumber','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'].forEach(k=>{ if(e[k]===undefined){ e[k]=''; changed=true; } });
+    ['birthDate','civilStatus','mobileNumber','personalEmail','address','remarks','tin','sssNumber','philHealthNumber','pagIbigNumber','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'].forEach(k=>{ if(e[k]===undefined){ e[k]=''; changed=true; } });
     const nameParts=splitEmployeeName(e);
     ['lastName','firstName','middleName'].forEach(key=>{if(e[key]===undefined){e[key]=nameParts[key]||'';changed=true;}});
     if(!Array.isArray(e.employmentHistory)){
@@ -2031,7 +2031,7 @@ function fieldHTML(f, val){
       </select></div>`;
   }
   if(f.type==='textarea'){
-    return `<div class="field full"><label>${f.label}${f.required?' *':''}</label><textarea id="f_${f.key}" rows="3" ${f.required?'required':''}>${esc(v)}</textarea></div>`;
+    return `<div class="field full"><label>${f.label}${f.required?' *':''}</label><textarea id="f_${f.key}" rows="3" ${f.required?'required':''} ${f.maxLength?`maxlength="${f.maxLength}"`:''}>${esc(v)}</textarea></div>`;
   }
   if(f.type==='file'){
     const existingData = f.existingData || '';
@@ -2854,6 +2854,7 @@ const EMPLOYEE_COLUMN_DEFS = [
   {key:'mobileNumber',label:'Mobile Number',default:false,width:132,cell:e=>esc(e.mobileNumber||'—')},
   {key:'personalEmail',label:'Contact Email',default:false,width:210,cell:e=>esc(e.personalEmail||'—')},
   {key:'address',label:'Home Address',default:false,width:250,cell:e=>esc(e.address||'—')},
+  {key:'remarks',label:'Remarks',default:false,width:260,cell:e=>esc(e.remarks||'—')},
   {key:'birthDate',label:'Birth Date',default:false,width:112,cell:e=>fmtDate(e.birthDate)},
   {key:'civilStatus',label:'Civil Status',default:false,width:104,cell:e=>esc(e.civilStatus||'—')},
   {key:'tin',label:'BIR TIN',default:false,width:150,cell:e=>`<span class="mono">${esc(formatGovernmentId('tin',e.tin)||'—')}</span>`},
@@ -2907,7 +2908,7 @@ function renderEmployees(){
   const classFilter = STATE.employeeClassFilter||'';
   const hasFilters=Boolean(q||deptFilter||statusFilter||classFilter);
   let rows = DB.employees.filter(e=>{
-    const hay=[e.employeeNo,e.prfNumber,e.name,employeeDisplayName(e),e.position,e.department,e.mobileNumber,e.personalEmail,e.address].map(v=>String(v||'').toLowerCase());
+    const hay=[e.employeeNo,e.prfNumber,e.name,employeeDisplayName(e),e.position,e.department,e.mobileNumber,e.personalEmail,e.address,e.remarks].map(v=>String(v||'').toLowerCase());
     const matches = !q || hay.some(v=>v.includes(q));
     const deptOk = !deptFilter || e.department===deptFilter;
     const statusOk = !statusFilter || e.status===statusFilter;
@@ -3023,6 +3024,7 @@ const EMP_FIELDS = [
   {key:'philHealthNumber', label:'PhilHealth PIN', type:'text', format:'philHealth'},
   {key:'pagIbigNumber', label:'Pag-IBIG MID', type:'text', format:'pagIbig'},
   {key:'address', label:'Home Address', type:'text', full:true},
+  {key:'remarks', label:'Remarks', type:'textarea', maxLength:1000},
   {key:'emergencyContactName', label:'Emergency Contact Name', type:'text'},
   {key:'emergencyContactRelationship', label:'Emergency Contact Relationship', type:'text'},
   {key:'emergencyContactPhone', label:'Emergency Contact Phone', type:'tel'},
@@ -3045,6 +3047,7 @@ const EMPLOYEE_IMPORT_COLUMNS = [
   {header:'Mobile Number',key:'mobileNumber'},
   {header:'Personal Email',key:'personalEmail'},
   {header:'Home Address',key:'address'},
+  {header:'Remarks',key:'remarks',note:'Optional HR context or note for this employee record.'},
   {header:'Emergency Contact Name',key:'emergencyContactName'},
   {header:'Emergency Contact Relationship',key:'emergencyContactRelationship'},
   {header:'Emergency Contact Phone',key:'emergencyContactPhone'},
@@ -3142,6 +3145,7 @@ function validateEmployeeImportRow(values,rowNumber,accepted){
   if(vals.birthDate&&vals.birthDate>todayISO()) errors.push('Birth Date cannot be in the future');
   if(vals.statusDate&&vals.dateHired&&vals.statusDate<vals.dateHired) errors.push('Status Effective Date cannot be before Date Hired');
   if(vals.personalEmail&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vals.personalEmail)) errors.push('Personal Email is invalid');
+  if(vals.remarks.length>1000) errors.push('Remarks cannot exceed 1,000 characters');
   [employeeImportPhoneError(vals.mobileNumber,'Mobile Number'),employeeImportPhoneError(vals.emergencyContactPhone,'Emergency Contact Phone'),validateGovernmentIds(vals)].filter(Boolean).forEach(error=>errors.push(error));
   if(!vals.employeeNo) vals.employeeNo=nextEmployeeNumber([...DB.employees,...accepted]);
   const duplicateNumber=[...DB.employees,...accepted].find(employee=>String(employee.employeeNo||'').toUpperCase()===String(vals.employeeNo).toUpperCase());
@@ -3232,7 +3236,7 @@ function downloadEmployeeImportTemplate(){
 }
 const EMP_FORM_SECTIONS = [
   {title:'Employee Record',description:'Core identifiers and approved hiring reference.',keys:['employeeNo','prfNumber']},
-  {title:'Personal & Employment',description:'Legal name, assignment, and current employment details.',keys:['lastName','firstName','middleName','position','department','dateHired','birthDate','gender','civilStatus','status','statusDate','classOverride']},
+  {title:'Personal & Employment',description:'Legal name, assignment, and current employment details.',keys:['lastName','firstName','middleName','position','department','dateHired','birthDate','gender','civilStatus','status','statusDate','classOverride','remarks']},
   {title:'Contact & Emergency',description:'Private contact information used by HR when needed.',keys:['mobileNumber','personalEmail','address','emergencyContactName','emergencyContactRelationship','emergencyContactPhone']},
   {title:'Government IDs',description:'Optional statutory identifiers with format validation.',keys:['tin','sssNumber','philHealthNumber','pagIbigNumber']},
 ];
@@ -3518,7 +3522,7 @@ function exportEmployeesCSV(){
     {header:'Employee No.',get:r=>r.employeeNo},{header:'PRF Number',get:r=>r.prfNumber},{header:'Last Name',get:r=>splitEmployeeName(r).lastName},{header:'First Name',get:r=>splitEmployeeName(r).firstName},{header:'Middle Name',get:r=>splitEmployeeName(r).middleName},{header:'Formatted Name',get:r=>employeeDisplayName(r)},
     {header:'Position',get:r=>r.position},{header:'Department',get:r=>r.department},{header:'Date Hired',get:r=>r.dateHired},{header:'Birth Date',get:r=>r.birthDate},{header:'Gender',get:r=>r.gender},{header:'Civil Status',get:r=>r.civilStatus},
     {header:'Employment Status',get:r=>r.status},{header:'Status Effective Date',get:r=>r.statusDate},{header:'Classification Override',get:r=>r.classOverride||'Auto'},{header:'Computed Classification',get:r=>classify(r)},
-    {header:'Mobile Number',get:r=>r.mobileNumber},{header:'Personal Email',get:r=>r.personalEmail},{header:'Home Address',get:r=>r.address},{header:'Emergency Contact Name',get:r=>r.emergencyContactName},{header:'Emergency Contact Relationship',get:r=>r.emergencyContactRelationship},{header:'Emergency Contact Phone',get:r=>r.emergencyContactPhone},
+    {header:'Mobile Number',get:r=>r.mobileNumber},{header:'Personal Email',get:r=>r.personalEmail},{header:'Home Address',get:r=>r.address},{header:'Remarks',get:r=>r.remarks},{header:'Emergency Contact Name',get:r=>r.emergencyContactName},{header:'Emergency Contact Relationship',get:r=>r.emergencyContactRelationship},{header:'Emergency Contact Phone',get:r=>r.emergencyContactPhone},
     {header:'BIR TIN',get:r=>formatGovernmentId('tin',r.tin)},{header:'SSS Number',get:r=>formatGovernmentId('sss',r.sssNumber)},{header:'PhilHealth PIN',get:r=>formatGovernmentId('philHealth',r.philHealthNumber)},{header:'Pag-IBIG MID',get:r=>formatGovernmentId('pagIbig',r.pagIbigNumber)},
     {header:'Created At',get:r=>r.createdAt},{header:'Created By',get:r=>r.createdByName},{header:'Updated At',get:r=>r.updatedAt},{header:'Updated By',get:r=>r.updatedByName},
   ];
@@ -3591,6 +3595,7 @@ async function openEmployeeProfile(id){
         <div class="item"><div class="label">Employment Status</div><div class="value">${esc(emp.status||'—')}</div></div>
         <div class="item"><div class="label">Status Effective Date</div><div class="value">${fmtDate(emp.statusDate)}</div></div>
         <div class="item"><div class="label">PRF Number</div><div class="value">${esc(emp.prfNumber||'—')}</div></div>
+        <div class="item" style="grid-column:1/-1;"><div class="label">Remarks</div><div class="value">${esc(emp.remarks||'—')}</div></div>
       </div></div>
       <div class="panel"><h3>Contact &amp; Emergency Information</h3><div class="desc">Personal contact details recorded for HR operations.</div><div class="profile-detail">
         <div class="item"><div class="label">Birth Date</div><div class="value">${fmtDate(emp.birthDate)}</div></div>
