@@ -173,6 +173,16 @@ for(const feature of ['onboardingApplicantReference','warning:true',"classList.t
     process.exit(1);
   }
 }
+for(const feature of ['departmentCatalog','positionCatalog','openDepartmentSetting','openPositionSetting','settings-tabs','dynamicOptions:\'departments\'']){
+  if(!app.includes(feature)){
+    console.error(`Configurable organization-structure contract is missing: ${feature}`);
+    process.exit(1);
+  }
+}
+if(/const\s+DEPT_OPTIONS\s*=/.test(app)){
+  console.error('Departments must come from administrator-managed settings, not a fixed option list.');
+  process.exit(1);
+}
 const resetSql=fs.readFileSync(path.join(root,'supabase/reset-hr-data-preserve-users.sql'),'utf8');
 const resetSqlCopy=fs.readFileSync(path.join(root,'database/reset-hr-data-preserve-users.sql'),'utf8');
 if(resetSql!==resetSqlCopy || !resetSql.includes('update public.profiles') || resetSql.includes('delete from public.profiles') || resetSql.includes('delete from auth.users')){

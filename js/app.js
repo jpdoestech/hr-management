@@ -21,9 +21,10 @@ let SAVE_QUEUE = Promise.resolve();
 let SELF_SERVICE_READY = true;
 let USER_PREFERENCES = {employeeColumns:[]};
 let USER_PREFERENCES_SYNC_READY = true;
+const DEFAULT_DEPARTMENT_NAMES = ['LOGISTICS','WAREHOUSE','UTILITY','MAINTENANCE','PRODUCTION','ADMIN','SALES'];
 
 function blankDB(){
-  return {employees:[],onboardingCandidates:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],lifecycleChecklists:[],serviceRequests:[],settings:{orgName:'SCPA',probationDays:180,fileStorageProvider:'supabase',googleDriveRootUrl:'',googleDriveClientId:'',branchLocations:['Main Office'],allowanceTypes:[]},audit:[],users:[]};
+  return {employees:[],onboardingCandidates:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],lifecycleChecklists:[],serviceRequests:[],settings:{orgName:'SCPA',probationDays:180,fileStorageProvider:'supabase',googleDriveRootUrl:'',googleDriveClientId:'',branchLocations:['Main Office'],allowanceTypes:[],departments:DEFAULT_DEPARTMENT_NAMES.map(name=>({name,active:true})),positions:[]},audit:[],users:[]};
 }
 function uniqueSettingNames(values){
   const seen=new Set();
@@ -36,6 +37,47 @@ function employeeBranchLocations(){
   return configured.length?configured:['Main Office'];
 }
 function employeeAllowanceTypes(){return uniqueSettingNames(DB.settings?.allowanceTypes);}
+function normalizeDepartmentCatalog(values){
+  const seen=new Set();
+  return (Array.isArray(values)?values:[]).map(value=>typeof value==='string'?{name:value,active:true}:value).map(value=>({name:String(value?.name||'').trim(),active:value?.active!==false})).filter(value=>{
+    const key=value.name.toLowerCase();if(!key||seen.has(key))return false;seen.add(key);return true;
+  });
+}
+function usedDepartmentNames(){
+  const values=[];
+  RECORD_MODULES.forEach(module=>(DB[module]||[]).forEach(record=>['department','fromDepartment','toDepartment'].forEach(key=>record?.[key]&&values.push(record[key]))));
+  return uniqueSettingNames(values);
+}
+function departmentCatalog(){
+  const configured=normalizeDepartmentCatalog(DB.settings?.departments);
+  const base=configured.length?configured:DEFAULT_DEPARTMENT_NAMES.map(name=>({name,active:true}));
+  const known=new Set(base.map(item=>item.name.toLowerCase()));
+  usedDepartmentNames().forEach(name=>{if(!known.has(name.toLowerCase()))base.push({name,active:true});});
+  return base;
+}
+function employeeDepartmentNames(current=''){
+  const names=departmentCatalog().filter(item=>item.active||String(item.name).toLowerCase()===String(current).toLowerCase()).map(item=>item.name);
+  return uniqueSettingNames([...names,current]);
+}
+function normalizePositionCatalog(values){
+  const seen=new Set();
+  return (Array.isArray(values)?values:[]).map(value=>typeof value==='string'?{name:value,department:'',active:true}:value).map(value=>({name:String(value?.name||'').trim(),department:String(value?.department||'').trim(),active:value?.active!==false})).filter(value=>{
+    const key=`${value.department.toLowerCase()}|${value.name.toLowerCase()}`;if(!value.name||seen.has(key))return false;seen.add(key);return true;
+  });
+}
+function positionCatalog(){
+  const configured=normalizePositionCatalog(DB.settings?.positions);
+  if(configured.length)return configured;
+  const derived=[];
+  (DB.employees||[]).forEach(employee=>employee.position&&derived.push({name:employee.position,department:employee.department||'',active:true}));
+  (DB.onboardingCandidates||[]).forEach(candidate=>candidate.positionApplied&&derived.push({name:candidate.positionApplied,department:candidate.department||'',active:true}));
+  return normalizePositionCatalog(derived);
+}
+function employeePositionNames(department='',current=''){
+  const dept=String(department||'').toLowerCase();
+  const names=positionCatalog().filter(item=>(!dept||item.department.toLowerCase()===dept)&&(item.active||item.name.toLowerCase()===String(current).toLowerCase())).map(item=>item.name);
+  return uniqueSettingNames([...names,current]);
+}
 
 function isMissingSelfServiceTable(error){
   return ['42P01','PGRST205','PGRST204'].includes(error?.code) || /hr_service_requests/i.test(error?.message||'')&&/not find|does not exist|schema cache/i.test(error?.message||'');
@@ -377,7 +419,6 @@ function attachPreviewHTML(key,name,path){
   return `<div class="attach-preview">${iDoc(14)}<span class="mono" style="font-size:12px;">${esc(name)}</span>${path?`<span class="attachment-provider">${provider==='google-drive'?'Drive':'Supabase'}</span><button type="button" class="iconbtn" title="Open file" onclick="downloadAttachment('${esc(path)}','${esc(name).replace(/'/g,"\\'")}')">${iDownload(13)}</button>`:''}<button type="button" class="iconbtn" title="Remove" onclick="clearFileField('${key}')">${iTrash(13)}</button></div>`;
 }
 
-const DEPT_OPTIONS = ['LOGISTICS','WAREHOUSE','UTILITY','MAINTENANCE','PRODUCTION','ADMIN','SALES'];
 const EMP_STATUS = ['Active','AWOL','Resigned','Transferred to Another Department','Separated','Returned to Agency','Newly Hired'];
 const LEAVE_TYPES = ['Vacation Leave','Sick Leave','Emergency Leave','Maternity Leave','Paternity Leave','Bereavement Leave','Others'];
 const LEAVE_STATUS = ['Pending','Approved','Ongoing','Completed','Disapproved'];
@@ -2045,9 +2086,10 @@ function fieldHTML(f, val){
     return employeePickerHTML({id:`f_${f.key}`,label:f.label,selectedId:f.employeeSelectedId||'',selectedName:v,mode:'name',required:!!f.required,full:!!f.full,autofill:f.key==='employeeName'});
   }
   if(f.type==='select'){
+    const options=typeof f.options==='function'?f.options(v):(f.options||[]);
     return `<div class="field ${f.full?'full':''}"><label>${f.label}${f.required?' *':''}</label>
-      <select id="f_${f.key}" ${f.required?'required':''}>
-        ${f.options.map(o=>`<option value="${esc(o)}" ${o===v?'selected':''}>${esc(o)}</option>`).join('')}
+      <select id="f_${f.key}" ${f.required?'required':''} ${f.onchange?`onchange="${f.onchange}"`:''}>
+        ${f.placeholder?`<option value="">${esc(f.placeholder)}</option>`:''}${options.map(o=>`<option value="${esc(o)}" ${o===v?'selected':''}>${esc(o)}</option>`).join('')}
       </select></div>`;
   }
   if(f.type==='textarea'){
@@ -2684,8 +2726,8 @@ const ONBOARDING_IDENTITY_FIELDS=[
   {key:'address',label:'Home Address',type:'text',full:true},
 ];
 const ONBOARDING_APPLICATION_FIELDS=[
-  {key:'positionApplied',label:'Position Applied For',type:'text',required:true},
-  {key:'department',label:'Department',type:'select',options:DEPT_OPTIONS,required:true},
+  {key:'department',label:'Department',type:'select',options:employeeDepartmentNames,placeholder:'Select department',required:true,onchange:"syncPositionSelect('f_positionApplied',this.value)"},
+  {key:'positionApplied',label:'Position Applied For',type:'select',options:()=>employeePositionNames(),placeholder:'Select position',required:true},
   {key:'applicationDate',label:'Application Date',type:'date',required:true},
   {key:'source',label:'Application Source',type:'select',options:['Walk-in','Referral','Online Job Board','Social Media','Job Fair','Agency','Other']},
   {key:'stage',label:'Hiring Stage',type:'select',options:ONBOARDING_STAGES,required:true},
@@ -2747,7 +2789,12 @@ function onboardingFieldValue(candidate,field){
   return candidate[field.key]??'';
 }
 function onboardingSection(title,description,fields,candidate){
-  return `<section class="onboarding-form-section"><div class="onboarding-form-heading"><h4>${esc(title)}</h4><p>${esc(description)}</p></div><div class="formgrid">${fields.map(field=>fieldHTML(field,onboardingFieldValue(candidate,field))).join('')}</div></section>`;
+  return `<section class="onboarding-form-section"><div class="onboarding-form-heading"><h4>${esc(title)}</h4><p>${esc(description)}</p></div><div class="formgrid">${fields.map(field=>{
+    const value=onboardingFieldValue(candidate,field);
+    if(field.key==='department')return fieldHTML({...field,options:()=>employeeDepartmentNames(value)},value);
+    if(field.key==='positionApplied')return fieldHTML({...field,options:()=>employeePositionNames(candidate?.department||'',value)},value);
+    return fieldHTML(field,value);
+  }).join('')}</div></section>`;
 }
 function onboardingChecklistHTML(candidate={}){
   const checks=onboardingChecklist(candidate);
@@ -2778,6 +2825,10 @@ async function saveOnboardingCandidate(id=''){
   values.applicantReference=document.querySelector('[data-upload-record-id]')?.dataset.uploadRecordId||onboardingApplicantReference();
   const missing=ONBOARDING_FIELDS.filter(field=>field.required&&!values[field.key]);
   if(missing.length){toast('Please complete: '+missing.map(field=>field.label).join(', '));return;}
+  const existingCandidate=id?DB.onboardingCandidates.find(row=>row.id===id):null;
+  const validDepartment=departmentCatalog().some(item=>item.name===values.department&&(item.active||existingCandidate?.department===values.department));
+  const validPosition=positionCatalog().some(item=>item.name===values.positionApplied&&item.department===values.department&&(item.active||(existingCandidate?.department===values.department&&existingCandidate?.positionApplied===values.positionApplied)));
+  if(!validDepartment||!validPosition){toast('Select an active department and a position configured for that department.',true);return;}
   values.name=formatEmployeeName(values);
   if(values.birthDate&&values.birthDate>todayISO()){toast('Birth Date cannot be in the future.',true);return;}
   if(values.personalEmail&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.personalEmail)){toast('Enter a valid personal email address.',true);return;}
@@ -2786,7 +2837,7 @@ async function saveOnboardingCandidate(id=''){
   }
   const idError=validateGovernmentIds(values); if(idError){toast(idError,true);return;}
   const checklist={}; document.querySelectorAll('[data-onboarding-check]').forEach(input=>checklist[input.dataset.onboardingCheck]=input.checked);
-  const existing=id?DB.onboardingCandidates.find(row=>row.id===id):null;
+  const existing=existingCandidate;
   const isNew=!existing;
   const record=existing||{id:uid(),createdAt:new Date().toISOString(),createdBy:SESSION?.id||null};
   const original=existing?JSON.parse(JSON.stringify(existing)):null;
@@ -3053,8 +3104,8 @@ const EMP_FIELDS = [
   {key:'lastName', label:'Last Name', type:'text', required:true},
   {key:'firstName', label:'First Name', type:'text', required:true},
   {key:'middleName', label:'Middle Name', type:'text'},
-  {key:'position', label:'Position', type:'text', required:true},
-  {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
+  {key:'department', label:'Department', type:'select', options:employeeDepartmentNames, placeholder:'Select department', required:true, onchange:"syncPositionSelect('f_position',this.value)"},
+  {key:'position', label:'Position', type:'select', options:()=>employeePositionNames(), placeholder:'Select position', required:true},
   {key:'branchReporting', label:'Branch Reporting', type:'select', options:[], required:true},
   {key:'dailyRate', label:'Daily Rate', type:'number', min:0, step:'0.01'},
   {key:'dateHired', label:'Date Hired', type:'date', required:true},
@@ -3083,7 +3134,7 @@ const EMPLOYEE_IMPORT_COLUMNS = [
   {header:'First Name',key:'firstName',required:true},
   {header:'Middle Name',key:'middleName'},
   {header:'Position',key:'position',required:true},
-  {header:'Department',key:'department',required:true,options:DEPT_OPTIONS},
+  {header:'Department',key:'department',required:true,dynamicOptions:'departments'},
   {header:'Branch Reporting',key:'branchReporting',required:true,dynamicOptions:'branches'},
   {header:'Daily Rate',key:'dailyRate',type:'money'},
   {header:'Date Hired',key:'dateHired',required:true,type:'date'},
@@ -3107,7 +3158,7 @@ const EMPLOYEE_IMPORT_COLUMNS = [
 ];
 function employeeAllowanceFieldKey(name){return `allowance:${name}`;}
 function employeeImportColumns(){
-  const base=EMPLOYEE_IMPORT_COLUMNS.map(column=>column.dynamicOptions==='branches'?{...column,options:employeeBranchLocations()}:column);
+  const base=EMPLOYEE_IMPORT_COLUMNS.map(column=>column.dynamicOptions==='branches'?{...column,options:employeeBranchLocations()}:column.dynamicOptions==='departments'?{...column,options:employeeDepartmentNames()}:column);
   return [...base,...employeeAllowanceTypes().map(name=>({header:`Allowance - ${name}`,key:employeeAllowanceFieldKey(name),type:'money',note:'Optional amount; enter zero or leave blank when not applicable.'}))];
 }
 function employeeAllowanceEntries(employee){
@@ -3213,6 +3264,13 @@ function validateEmployeeImportRow(values,rowNumber,accepted){
     vals[column.key]=value;
   });
   columns.filter(column=>column.required).forEach(column=>{if(!vals[column.key])errors.push(`${column.header} is required`);});
+  if(vals.position&&vals.department){
+    const configuredPositions=positionCatalog();
+    const positionMatch=configuredPositions.find(item=>item.active&&item.name.toLowerCase()===vals.position.toLowerCase()&&item.department.toLowerCase()===vals.department.toLowerCase());
+    if(!configuredPositions.length)errors.push('No positions are configured in Settings > Organization Structure');
+    else if(!positionMatch)errors.push(`Position must be an active position configured for ${vals.department}`);
+    else vals.position=positionMatch.name;
+  }
   if(vals.dateHired&&vals.dateHired>todayISO()) errors.push('Date Hired cannot be in the future');
   if(vals.birthDate&&vals.birthDate>todayISO()) errors.push('Birth Date cannot be in the future');
   if(vals.statusDate&&vals.dateHired&&vals.statusDate<vals.dateHired) errors.push('Status Effective Date cannot be before Date Hired');
@@ -3308,7 +3366,7 @@ function downloadEmployeeImportTemplate(){
   employeeSheet['!autofilter']={ref:`A1:${window.XLSX.utils.encode_col(headers.length-1)}1`};
   const instructions=[['SLSC Employee Import Template'],['Instructions'],['1. Enter one employee per row in the Employees sheet.'],['2. Do not rename or remove required columns.'],['3. Leave Employee No. blank to generate the next available number.'],['4. Dates may use YYYY-MM-DD or MM/DD/YYYY.'],['5. PRF Number and government IDs are optional.'],['6. Branch Reporting must match an Administrator-configured branch.'],['7. Import validates the entire workbook before saving any employee.'],[],['Column','Required','Allowed values / guidance'],...columns.map(column=>[column.header,column.required?'Yes':'No',column.options?.join(' | ')||column.note||''])];
   const instructionSheet=window.XLSX.utils.aoa_to_sheet(instructions);instructionSheet['!cols']=[{wch:34},{wch:12},{wch:95}];
-  const reference=[['Field','Allowed values'],['Department',DEPT_OPTIONS.join(' | ')],['Branch Reporting',employeeBranchLocations().join(' | ')],['Allowance Types',employeeAllowanceTypes().join(' | ')||'No allowance types configured'],['Gender','Male | Female'],['Civil Status','Single | Married | Widowed | Separated | Other'],['Employment Status',EMP_STATUS.join(' | ')],['Classification Override','Auto | Probationary | Regular'],['SSS Number','10 digits; example 09-5421455-9'],['PhilHealth PIN','12 digits; 2-9-1 format'],['Pag-IBIG MID','12 digits; 4-4-4 format'],['BIR TIN','9 digits plus optional 3-digit branch code']];
+  const reference=[['Field','Allowed values'],['Department',employeeDepartmentNames().join(' | ')],['Position',positionCatalog().filter(item=>item.active).map(item=>`${item.name} (${item.department})`).join(' | ')||'Configure positions in Settings'],['Branch Reporting',employeeBranchLocations().join(' | ')],['Allowance Types',employeeAllowanceTypes().join(' | ')||'No allowance types configured'],['Gender','Male | Female'],['Civil Status','Single | Married | Widowed | Separated | Other'],['Employment Status',EMP_STATUS.join(' | ')],['Classification Override','Auto | Probationary | Regular'],['SSS Number','10 digits; example 09-5421455-9'],['PhilHealth PIN','12 digits; 2-9-1 format'],['Pag-IBIG MID','12 digits; 4-4-4 format'],['BIR TIN','9 digits plus optional 3-digit branch code']];
   const referenceSheet=window.XLSX.utils.aoa_to_sheet(reference);referenceSheet['!cols']=[{wch:30},{wch:95}];
   const workbook=window.XLSX.utils.book_new();
   window.XLSX.utils.book_append_sheet(workbook,employeeSheet,'Employees');window.XLSX.utils.book_append_sheet(workbook,instructionSheet,'Instructions');window.XLSX.utils.book_append_sheet(workbook,referenceSheet,'Reference');
@@ -3316,7 +3374,7 @@ function downloadEmployeeImportTemplate(){
 }
 const EMP_FORM_SECTIONS = [
   {title:'Employee Record',description:'Core identifiers and approved hiring reference.',keys:['employeeNo','prfNumber']},
-  {title:'Personal & Employment',description:'Legal name, assignment, and current employment details.',keys:['lastName','firstName','middleName','position','department','dateHired','birthDate','gender','civilStatus','status','statusDate','classOverride','remarks']},
+  {title:'Personal & Employment',description:'Legal name, assignment, and current employment details.',keys:['lastName','firstName','middleName','department','position','dateHired','birthDate','gender','civilStatus','status','statusDate','classOverride','remarks']},
   {title:'Assignment & Compensation',description:'Required reporting location and current employee rate or allowances.',keys:['branchReporting','dailyRate'],allowances:true},
   {title:'Contact & Emergency',description:'Private contact information used by HR when needed.',keys:['mobileNumber','personalEmail','address','emergencyContactName','emergencyContactRelationship','emergencyContactPhone']},
   {title:'Government IDs',description:'Optional statutory identifiers with format validation.',keys:['tin','sssNumber','philHealthNumber','pagIbigNumber']},
@@ -3334,10 +3392,20 @@ function employeeFormSectionsHTML(record){
     <div class="employee-form-grid">${section.keys.map(key=>{
       const field=EMP_FIELDS.find(item=>item.key===key);
       if(!field)return '';
-      const resolved=key==='branchReporting'?{...field,options:['',...uniqueSettingNames([...employeeBranchLocations(),record?.branchReporting||''])]}:field;
+      let resolved=field;
+      if(key==='branchReporting')resolved={...field,options:['',...uniqueSettingNames([...employeeBranchLocations(),record?.branchReporting||''])]};
+      if(key==='department')resolved={...field,options:()=>employeeDepartmentNames(record?.department||'')};
+      if(key==='position')resolved={...field,options:()=>employeePositionNames(record?.department||'',record?.position||'')};
       return fieldHTML(resolved,employeeFormFieldValue(resolved,record));
     }).join('')}${section.allowances?employeeAllowanceFieldsHTML(record):''}</div>
   </section>`).join('');
+}
+function syncPositionSelect(id,department){
+  const select=document.getElementById(id);if(!select)return;
+  const current=select.value;
+  const options=employeePositionNames(department);
+  select.innerHTML=`<option value="">Select position</option>${options.map(name=>`<option value="${esc(name)}" ${name===current?'selected':''}>${esc(name)}</option>`).join('')}`;
+  if(!options.includes(current))select.value='';
 }
 function employeeAllowanceFieldsHTML(record){
   const types=employeeAllowanceTypes();
@@ -3445,6 +3513,10 @@ async function saveEmployee(id){
   vals.allowances=readEmployeeAllowances(id?DB.employees.find(employee=>employee.id===id):null);
   const missing = EMP_FIELDS.filter(f=>f.required && !vals[f.key]);
   if(missing.length){ toast('Please complete: '+missing.map(f=>f.label).join(', ')); return; }
+  const existingEmployee=id?DB.employees.find(employee=>employee.id===id):null;
+  const validDepartment=departmentCatalog().some(item=>item.name===vals.department&&(item.active||existingEmployee?.department===vals.department));
+  const validPosition=positionCatalog().some(item=>item.name===vals.position&&item.department===vals.department&&(item.active||(existingEmployee?.department===vals.department&&existingEmployee?.position===vals.position)));
+  if(!validDepartment||!validPosition){toast('Select an active department and a position configured for that department.',true);return;}
   if(vals.dailyRate!==''&&(!Number.isFinite(Number(vals.dailyRate))||Number(vals.dailyRate)<0)){toast('Daily Rate must be a non-negative amount.',true);return;}
   if(Object.values(vals.allowances).some(amount=>!Number.isFinite(amount)||amount<0)){toast('Allowance amounts must be non-negative numbers.',true);return;}
   vals.dailyRate=vals.dailyRate===''?'':Math.round(Number(vals.dailyRate)*100)/100;
@@ -3525,10 +3597,11 @@ function openTransferForEmployee(id){
       ${employeeWorkspaceNav(emp,'transfer')}
       <div class="formgrid">
         <div class="field full"><label>Employee</label><input value="${esc(employeeDisplayName(emp))}" disabled style="background:var(--paper);"></div>
-        <div class="field"><label>Transferred From *</label><select id="tf_from">${DEPT_OPTIONS.map(d=>`<option ${d===emp.department?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+        <div class="field"><label>Transferred From *</label><select id="tf_from">${employeeDepartmentNames(emp.department).map(d=>`<option ${d===emp.department?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
         <div class="field"><label>From Date *</label><input type="date" id="tf_fromDate" value="${todayISO()}"></div>
-        <div class="field"><label>Transferred To *</label><select id="tf_to">${DEPT_OPTIONS.map(d=>`<option ${d===emp.department?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+        <div class="field"><label>Transferred To *</label><select id="tf_to" onchange="syncPositionSelect('tf_position',this.value)">${employeeDepartmentNames().map(d=>`<option ${d===emp.department?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
         <div class="field"><label>To Date *</label><input type="date" id="tf_toDate" value="${todayISO()}"></div>
+        <div class="field"><label>Position After Transfer *</label><select id="tf_position"><option value="">Select position</option>${employeePositionNames(emp.department,emp.position).map(position=>`<option value="${esc(position)}" ${position===emp.position?'selected':''}>${esc(position)}</option>`).join('')}</select></div>
         <div class="field full"><label>Remarks</label><textarea id="tf_remarks" rows="2"></textarea></div>
       </div>
       <div class="computed-note">This logs the move in Department Transfers and updates the employee's current department and status to "Transferred to Another Department".</div>
@@ -3542,17 +3615,20 @@ async function saveEmployeeTransfer(id){
   const fromDepartment = document.getElementById('tf_from').value;
   const fromDate = document.getElementById('tf_fromDate').value;
   const toDepartment = document.getElementById('tf_to').value;
+  const toPosition = document.getElementById('tf_position').value;
   const toDate = document.getElementById('tf_toDate').value;
   const remarks = document.getElementById('tf_remarks').value.trim();
-  if(!fromDate || !toDate){ toast('Please set both the from and to dates.'); return; }
+  if(!fromDate || !toDate || !toPosition){ toast('Set both transfer dates and the employee position after transfer.'); return; }
   if(fromDepartment===toDepartment){ toast('Transferred From and Transferred To must be different departments.'); return; }
   if(toDate < fromDate){ toast('The "To Date" cannot be before the "From Date".'); return; }
-  const transfer={id:uid(), employeeName:emp.name, fromDepartment, fromDate, toDepartment, toDate, remarks};
+  if(!positionCatalog().some(item=>item.active&&item.department===toDepartment&&item.name===toPosition)){toast('Select an active position configured for the destination department.',true);return;}
+  const transfer={id:uid(), employeeName:emp.name, fromDepartment, fromDate, toDepartment, toDate, position:toPosition, remarks};
   const original=JSON.parse(JSON.stringify(emp));
   DB.transfers.push(transfer);
   emp.department = toDepartment;
+  emp.position = toPosition;
   emp.status = 'Transferred to Another Department';
-  appendEmployeeRecordHistory(emp,'Transferred',`${fromDepartment} to ${toDepartment}`);
+  appendEmployeeRecordHistory(emp,'Transferred',`${fromDepartment} to ${toDepartment} · ${toPosition}`);
   if(!(await saveDB())){DB.transfers=DB.transfers.filter(row=>row!==transfer);Object.keys(emp).forEach(key=>delete emp[key]);Object.assign(emp,original);return;}
   logAudit(`Transferred ${employeeDisplayName(emp)} from ${fromDepartment} to ${toDepartment}`);
   await closeModal(); renderNav(); await renderEmployeeOrigin(); await openEmployeeProfile(id);
@@ -3886,7 +3962,7 @@ function renderDisciplinary(){
   ${informationNoteButton('disciplinaryLevels')}
   <div class="toolbar">
     <div class="search">${iSearch(15)}<input data-search-key="search" placeholder="Search by employee or violation…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderDisciplinary)"></div>
-    <select onchange="STATE.disciplinaryFilter=this.value;STATE.tablePages={};renderDisciplinary()"><option value="">All Levels / Departments</option>${OFFENSE_LEVELS.map(v=>`<option value="${esc(v)}" ${STATE.disciplinaryFilter===v?'selected':''}>${esc(v)}</option>`).join('')}${DEPT_OPTIONS.map(v=>`<option value="${esc(v)}" ${STATE.disciplinaryFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
+    <select onchange="STATE.disciplinaryFilter=this.value;STATE.tablePages={};renderDisciplinary()"><option value="">All Levels / Departments</option>${OFFENSE_LEVELS.map(v=>`<option value="${esc(v)}" ${STATE.disciplinaryFilter===v?'selected':''}>${esc(v)}</option>`).join('')}${employeeDepartmentNames().map(v=>`<option value="${esc(v)}" ${STATE.disciplinaryFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
     <button class="btn btn-ghost btn-sm" onclick="STATE.disciplinaryFilter='';STATE.search='';STATE.tablePages={};renderDisciplinary()">Clear</button>
     <div class="spacer"></div>
     <button class="btn btn-ghost btn-sm" onclick="exportModuleCSV('disciplinary')">${iDownload(14)} Export CSV</button>
@@ -3982,7 +4058,7 @@ function openCVRForm(id){
     <div class="modal-body">
       <div class="formgrid">
         ${employeePickerHTML({id:'cv_employeeName',label:'Employee Name',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true})}
-        <div class="field"><label>Department *</label><select id="cv_department">${DEPT_OPTIONS.map(d=>`<option ${existing&&existing.department===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+        <div class="field"><label>Department *</label><select id="cv_department">${employeeDepartmentNames(existing?.department||'').map(d=>`<option ${existing&&existing.department===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
         <div class="field"><label>Date of CVR *</label><input type="date" id="cv_date" value="${existing?existing.dateOfCVR:todayISO()}"></div>
         <div class="field"><label>Status</label><select id="cv_status">${CVR_STATUS.map(s=>`<option ${(existing?existing.status:CVR_STATUS[0])===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
         <div class="field full">
@@ -4104,7 +4180,7 @@ function openIncidentForm(id){
     <div class="modal-body">
       <div class="formgrid">
         ${employeePickerHTML({id:'in_employeeName',label:'Employee Name',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true})}
-        <div class="field"><label>Department *</label><select id="in_department">${DEPT_OPTIONS.map(d=>`<option ${existing&&existing.department===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+        <div class="field"><label>Department *</label><select id="in_department">${employeeDepartmentNames(existing?.department||'').map(d=>`<option ${existing&&existing.department===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
         <div class="field"><label>Date of Incident *</label><input type="date" id="in_date" value="${existing?existing.dateOfIncident:todayISO()}"></div>
         <div class="field"><label>Severity</label><select id="in_severity">${INCIDENT_SEVERITY.map(s=>`<option ${(existing?existing.severity:INCIDENT_SEVERITY[0])===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
         <div class="field full">
@@ -5269,7 +5345,7 @@ const MODULES = {
     fields:[
       {key:'employeeName', label:'Employee Name', type:'text', required:true},
       {key:'position', label:'Position', type:'text'},
-      {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
+      {key:'department', label:'Department', type:'select', options:employeeDepartmentNames, required:true},
       {key:'leaveType', label:'Type of Leave', type:'select', options:LEAVE_TYPES, required:true},
       {key:'startDate', label:'Leave Start Date', type:'date', required:true},
       {key:'endDate', label:'Leave End Date', type:'date', required:true},
@@ -5295,7 +5371,7 @@ const MODULES = {
     searchFields:['employeeName','violation'], sortKey:'dateOfIncident',
     fields:[
       {key:'employeeName', label:'Employee Name', type:'text', required:true},
-      {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
+      {key:'department', label:'Department', type:'select', options:employeeDepartmentNames, required:true},
       {key:'violation', label:'Violation Committed', type:'text', required:true, full:true},
       {key:'dateOfIncident', label:'Date of Incident', type:'date', required:true},
       {key:'action', label:'Disciplinary Action Taken', type:'text', full:true},
@@ -5316,7 +5392,7 @@ const MODULES = {
     notice:`Uploaded NTE documents use the storage destination selected by the System Administrator (up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each). Dates and text are not extracted automatically here.`,
     fields:[
       {key:'employeeName', label:'Employee Name', type:'text', required:true},
-      {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
+      {key:'department', label:'Department', type:'select', options:employeeDepartmentNames, required:true},
       {key:'violation', label:'Violation / Offense', type:'text', required:true, full:true},
       {key:'dateIssued', label:'Date of NTE Issuance', type:'date', required:true},
       {key:'dateReceived', label:'Date NTE Received', type:'date'},
@@ -5339,7 +5415,7 @@ const MODULES = {
     searchFields:['employeeName','offenseType'], sortKey:'dateOfMemo',
     fields:[
       {key:'employeeName', label:'Employee Name', type:'text', required:true},
-      {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
+      {key:'department', label:'Department', type:'select', options:employeeDepartmentNames, required:true},
       {key:'offenseType', label:'Type of Offense', type:'text', required:true},
       {key:'action', label:'Disciplinary Action', type:'text', required:true},
       {key:'dateOfMemo', label:'Date of Memorandum', type:'date', required:true},
@@ -5361,7 +5437,7 @@ const MODULES = {
     searchFields:['employeeName','relatedOffense'], sortKey:'dateOfNod',
     fields:[
       {key:'employeeName', label:'Employee Name', type:'text', required:true},
-      {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
+      {key:'department', label:'Department', type:'select', options:employeeDepartmentNames, required:true},
       {key:'relatedOffense', label:'Related Offense', type:'text', required:true, full:true},
       {key:'dateOfNod', label:'Date of NOD', type:'date', required:true},
       {key:'dateReceived', label:'Date Received', type:'date'},
@@ -5382,7 +5458,7 @@ const MODULES = {
     searchFields:['employeeName','prfNumber','employeeReplaced'], sortKey:'startDate', filterField:'status', filterOptions:ONCALL_STATUS, filterLabel:'Status',
     fields:[
       {key:'employeeName', label:'Employee Name', type:'text', required:true},
-      {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
+      {key:'department', label:'Department', type:'select', options:employeeDepartmentNames, required:true},
       {key:'prfNumber', label:'PRF Number (optional)', type:'text'},
       {key:'reason', label:'Reason for Request', type:'text', full:true, required:true},
       {key:'employeeReplaced', label:'Employee Being Replaced', type:'text'},
@@ -5410,9 +5486,9 @@ const MODULES = {
     notice:"Use the transfer icon on an employee's row in Employee Information to record a move — that also updates the employee's current department automatically. Adding a record here manually logs history only and does not change the employee record.",
     fields:[
       {key:'employeeName', label:'Employee Name', type:'text', required:true},
-      {key:'fromDepartment', label:'Transferred From', type:'select', options:DEPT_OPTIONS, required:true},
+      {key:'fromDepartment', label:'Transferred From', type:'select', options:employeeDepartmentNames, required:true},
       {key:'fromDate', label:'From Date', type:'date', required:true},
-      {key:'toDepartment', label:'Transferred To', type:'select', options:DEPT_OPTIONS, required:true},
+      {key:'toDepartment', label:'Transferred To', type:'select', options:employeeDepartmentNames, required:true},
       {key:'toDate', label:'To Date', type:'date', required:true},
       {key:'remarks', label:'Remarks', type:'textarea'},
     ],
@@ -5447,7 +5523,7 @@ const MODULES = {
     searchFields:['employeeName','prfNumber','employeeReplaced'], sortKey:'dateOfRequest',
     fields:[
       {key:'employeeName', label:'Employee Name (hired/assigned)', type:'text', required:true},
-      {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
+      {key:'department', label:'Department', type:'select', options:employeeDepartmentNames, required:true},
       {key:'prfNumber', label:'PRF Number (optional)', type:'text'},
       {key:'dateOfRequest', label:'Date of Request', type:'date', required:true},
       {key:'reasonForRequest', label:'Reason for Manpower Request', type:'text', full:true, required:true},
@@ -6101,44 +6177,118 @@ async function saveUser(id){
 /* ================================================================
    SETTINGS
    ================================================================ */
+function settingsCatalogStatus(active){return statusBadge(active?'Active':'Inactive',active?{'Active':'b-green'}:{'Inactive':'b-grey'});}
+function settingsOrganizationHTML(admin){
+  const departments=departmentCatalog();
+  const positions=positionCatalog();
+  return `<div class="settings-section-head"><div><h3>Organization Structure</h3><p>Departments and their approved positions drive employee, applicant, transfer, import, and HR transaction forms.</p></div>${admin?`<div class="page-header-actions"><button class="btn btn-ghost btn-sm" onclick="openDepartmentSetting()">${iPlus(13)} Department</button><button class="btn btn-primary btn-sm" onclick="openPositionSetting()">${iPlus(13)} Position</button></div>`:''}</div>
+    <div class="settings-master-grid">
+      <section class="settings-master-block"><div class="settings-master-title"><div><b>Departments</b><span>${departments.filter(item=>item.active).length} active of ${departments.length}</span></div></div><div class="tablewrap"><table class="data-table settings-table"><thead><tr><th>Department</th><th>Employees</th><th>Status</th>${admin?'<th class="actions-head">Action</th>':''}</tr></thead><tbody>${departments.map((item,index)=>`<tr><td><b>${esc(item.name)}</b></td><td>${DB.employees.filter(employee=>String(employee.department).toLowerCase()===item.name.toLowerCase()).length}</td><td>${settingsCatalogStatus(item.active)}</td>${admin?`<td class="actions-head"><button class="iconbtn" title="Edit department" onclick="openDepartmentSetting(${index})">${iEdit(14)}</button></td>`:''}</tr>`).join('')}</tbody></table></div></section>
+      <section class="settings-master-block"><div class="settings-master-title"><div><b>Positions</b><span>${positions.filter(item=>item.active).length} active of ${positions.length}</span></div></div><div class="tablewrap"><table class="data-table settings-table"><thead><tr><th>Position</th><th>Department</th><th>Employees</th><th>Status</th>${admin?'<th class="actions-head">Action</th>':''}</tr></thead><tbody>${positions.length?positions.map((item,index)=>`<tr><td><b>${esc(item.name)}</b></td><td>${esc(item.department||'Unassigned')}</td><td>${DB.employees.filter(employee=>String(employee.department).toLowerCase()===item.department.toLowerCase()&&String(employee.position).toLowerCase()===item.name.toLowerCase()).length}</td><td>${settingsCatalogStatus(item.active)}</td>${admin?`<td class="actions-head"><button class="iconbtn" title="Edit position" onclick="openPositionSetting(${index})">${iEdit(14)}</button></td>`:''}</tr>`).join(''):`<tr><td colspan="${admin?5:4}"><div class="empty"><b>No positions configured</b><span>Add approved positions before creating or importing employees.</span></div></td></tr>`}</tbody></table></div></section>
+    </div>`;
+}
+function switchSettingsTab(tab){
+  STATE.settingsTab=tab;
+  document.querySelectorAll('[data-settings-tab]').forEach(button=>{const active=button.dataset.settingsTab===tab;button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active));});
+  document.querySelectorAll('[data-settings-panel]').forEach(panel=>panel.hidden=panel.dataset.settingsPanel!==tab);
+}
+function openDepartmentSetting(index=-1){
+  if(SESSION?.role!=='Administrator')return;
+  const item=index>=0?departmentCatalog()[index]:null;
+  openModal(`<div class="modal-head"><div><h3>${item?'Edit Department':'Add Department'}</h3><div class="small">Organization Structure</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="formgrid"><div class="field full"><label>Department Name *</label><input id="os_department_name" value="${esc(item?.name||'')}" maxlength="60" placeholder="e.g. HUMAN RESOURCES"></div>${item?`<div class="field full"><label class="settings-check"><input id="os_department_active" type="checkbox" ${item.active?'checked':''}><span><b>Active department</b><small>Inactive departments remain on historical records but cannot be selected for new transactions.</small></span></label></div>`:''}</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" data-confirm-label="Save department and update linked records" onclick="saveDepartmentSetting(${index})">Save Department</button></div>`);
+}
+async function saveDepartmentSetting(index=-1){
+  if(SESSION?.role!=='Administrator')return;
+  const name=document.getElementById('os_department_name')?.value.trim().toUpperCase()||'';
+  const active=index<0||document.getElementById('os_department_active')?.checked;
+  const catalog=departmentCatalog();const original=index>=0?catalog[index]:null;
+  if(!name){toast('Enter a department name.',true);return;}
+  if(catalog.some((item,itemIndex)=>itemIndex!==index&&item.name.toLowerCase()===name.toLowerCase())){toast('That department already exists.',true);return;}
+  if(!active&&catalog.filter(item=>item.active).length===1&&original?.active){toast('At least one department must remain active.',true);return;}
+  const before=JSON.parse(JSON.stringify(DB));
+  if(original){
+    catalog[index]={name,active};
+    if(original.name!==name){
+      RECORD_MODULES.forEach(module=>(DB[module]||[]).forEach(record=>['department','fromDepartment','toDepartment'].forEach(key=>{if(String(record[key]||'').toLowerCase()===original.name.toLowerCase())record[key]=name;})));
+      DB.settings.positions=positionCatalog().map(position=>position.department.toLowerCase()===original.name.toLowerCase()?{...position,department:name}:position);
+    }
+  }else catalog.push({name,active:true});
+  DB.settings.departments=catalog;
+  if(!(await saveDB())){DB=before;return;}
+  let relatedCaseWarning='';
+  if(original&&original.name!==name){
+    const {error:caseDepartmentError}=await supabase.from('hr_cases').update({department:name,updated_by:SESSION?.id||null}).ilike('department',original.name);
+    if(caseDepartmentError)relatedCaseWarning='Department saved, but linked HR case departments could not be updated: '+caseDepartmentError.message;
+  }
+  logAudit(`${original?'Updated':'Added'} department: ${name}`);await closeModal();renderSettings();toast(relatedCaseWarning||'Department saved.',!!relatedCaseWarning);
+}
+function openPositionSetting(index=-1){
+  if(SESSION?.role!=='Administrator')return;
+  const item=index>=0?positionCatalog()[index]:null;
+  const departments=employeeDepartmentNames(item?.department||'');
+  openModal(`<div class="modal-head"><div><h3>${item?'Edit Position':'Add Position'}</h3><div class="small">Organization Structure</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="formgrid"><div class="field"><label>Position Title *</label><input id="os_position_name" value="${esc(item?.name||'')}" maxlength="80" placeholder="e.g. HR Officer"></div><div class="field"><label>Department *</label><select id="os_position_department"><option value="">Select department</option>${departments.map(name=>`<option value="${esc(name)}" ${name===item?.department?'selected':''}>${esc(name)}</option>`).join('')}</select></div>${item?`<div class="field full"><label class="settings-check"><input id="os_position_active" type="checkbox" ${item.active?'checked':''}><span><b>Active position</b><small>Inactive positions stay on existing employee records but are hidden from new employee and applicant forms.</small></span></label></div>`:''}</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" data-confirm-label="Save position and update linked records" onclick="savePositionSetting(${index})">Save Position</button></div>`);
+}
+async function savePositionSetting(index=-1){
+  if(SESSION?.role!=='Administrator')return;
+  const name=document.getElementById('os_position_name')?.value.trim()||'';
+  const department=document.getElementById('os_position_department')?.value||'';
+  const active=index<0||document.getElementById('os_position_active')?.checked;
+  const catalog=positionCatalog();const original=index>=0?catalog[index]:null;
+  if(!name||!department){toast('Enter a position title and select its department.',true);return;}
+  if(catalog.some((item,itemIndex)=>itemIndex!==index&&item.name.toLowerCase()===name.toLowerCase()&&item.department.toLowerCase()===department.toLowerCase())){toast('That position already exists in this department.',true);return;}
+  const before=JSON.parse(JSON.stringify(DB));
+  if(original){
+    catalog[index]={name,department,active};
+    if(original.name!==name||original.department!==department){
+      RECORD_MODULES.forEach(module=>(DB[module]||[]).forEach(record=>{
+        if(String(record.department||'').toLowerCase()!==original.department.toLowerCase())return;
+        if(String(record.position||'').toLowerCase()===original.name.toLowerCase()){record.position=name;record.department=department;}
+        if(String(record.positionApplied||'').toLowerCase()===original.name.toLowerCase()){record.positionApplied=name;record.department=department;}
+      }));
+    }
+  }else catalog.push({name,department,active:true});
+  DB.settings.positions=catalog;
+  if(!(await saveDB())){DB=before;return;}
+  logAudit(`${original?'Updated':'Added'} position: ${name} · ${department}`);await closeModal();renderSettings();toast('Position saved.');
+}
 function renderSettings(){
   setTitle('Settings', 'Organization preferences and audit log.');
   const admin=SESSION?.role==='Administrator';
   const provider=attachmentStorageProvider();
+  const activeTab=STATE.settingsTab||'general';
   document.getElementById('content').innerHTML = `
-    <div class="grid cols-2">
-      <div class="panel">
-        <h3>Organization</h3>
-        <div class="desc">System-wide settings can only be changed by the System Administrator.</div>
-        ${!admin?'<div class="notice"><b>Read only:</b> Ask a System Administrator to change organization or file-storage settings.</div>':''}
+    ${!admin?'<div class="notice"><b>Read only:</b> Ask a System Administrator to change system configuration.</div>':''}
+    <div class="settings-shell">
+      <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+        ${[['general','General'],['organization','Organization Structure'],['workforce','Branches & Compensation'],['storage','File Storage'],['audit','Audit Trail']].map(([key,label])=>`<button type="button" role="tab" data-settings-tab="${key}" class="${activeTab===key?'active':''}" aria-selected="${activeTab===key}" onclick="switchSettingsTab('${key}')">${label}</button>`).join('')}
+      </div>
+      <section class="settings-panel" data-settings-panel="general" ${activeTab==='general'?'':'hidden'}>
+        <div class="settings-section-head"><div><h3>General</h3><p>Core organization identity and employment defaults.</p></div>${admin?'<button class="btn btn-primary btn-sm" onclick="saveSettings()">Save Changes</button>':''}</div>
         <div class="field"><label>Organization Name</label><input id="s_org" value="${esc(DB.settings.orgName)}" ${admin?'':'disabled'}></div>
-        <div class="field"><label>Default File Storage</label><select id="s_file_storage" onchange="storageSettingsChanged()" ${admin?'':'disabled'}><option value="supabase" ${provider==='supabase'?'selected':''}>Supabase Storage</option><option value="google-drive" ${provider==='google-drive'?'selected':''}>Google Drive</option></select><div class="computed-note">Controls every new file uploaded from HR forms. Existing attachments remain in their original storage.</div></div>
+        <div class="field"><label>Probation → Regularization Threshold (days)</label><input id="s_prob" type="number" value="${DB.settings.probationDays}" ${admin?'':'disabled'}><div class="computed-note">Employee classification recalculates automatically wherever it is displayed.</div></div>
+      </section>
+      <section class="settings-panel" data-settings-panel="organization" ${activeTab==='organization'?'':'hidden'}>${settingsOrganizationHTML(admin)}</section>
+      <section class="settings-panel" data-settings-panel="workforce" ${activeTab==='workforce'?'':'hidden'}>
+        <div class="settings-section-head"><div><h3>Branches &amp; Compensation</h3><p>Reporting locations and configurable employee allowance fields.</p></div>${admin?'<button class="btn btn-primary btn-sm" onclick="saveSettings()">Save Changes</button>':''}</div>
+        <div class="settings-form-grid"><div class="field"><label>Branch Locations (one per line)</label><textarea id="s_branches" rows="10" ${admin?'':'disabled'}>${esc(employeeBranchLocations().join('\n'))}</textarea><div class="computed-note">Every employee must be assigned to one configured reporting branch.</div></div><div class="field"><label>Allowance Types (one per line)</label><textarea id="s_allowances" rows="10" ${admin?'':'disabled'} placeholder="Meal Allowance&#10;Transportation Allowance">${esc(employeeAllowanceTypes().join('\n'))}</textarea><div class="computed-note">Each type becomes an employee amount field and an import-template column.</div></div></div>
+      </section>
+      <section class="settings-panel" data-settings-panel="storage" ${activeTab==='storage'?'':'hidden'}>
+        <div class="settings-section-head"><div><h3>File Storage</h3><p>One administrator-controlled destination for all new HR uploads.</p></div>${admin?'<button class="btn btn-primary btn-sm" onclick="saveSettings()">Save Changes</button>':''}</div>
+        <div class="field"><label>Default File Storage</label><select id="s_file_storage" onchange="storageSettingsChanged()" ${admin?'':'disabled'}><option value="supabase" ${provider==='supabase'?'selected':''}>Supabase Storage</option><option value="google-drive" ${provider==='google-drive'?'selected':''}>Google Drive</option></select><div class="computed-note">Existing attachments remain in their original storage.</div></div>
         <div id="s_drive_settings" class="storage-settings-group" style="display:${provider==='google-drive'?'grid':'none'}">
           <div class="field"><label>Google Drive Root Folder URL</label><input id="s_drive_root" type="url" value="${esc(DB.settings.googleDriveRootUrl||'')}" placeholder="https://drive.google.com/drive/folders/..." ${admin?'':'disabled'}><div class="computed-note">Module folders such as leave, atd, cvr, and onboarding are created inside this root.</div></div>
           <div class="field"><label>Google OAuth Web Client ID</label><input id="s_drive_client" value="${esc(DB.settings.googleDriveClientId||'')}" placeholder="000000000000-….apps.googleusercontent.com" autocomplete="off" ${admin?'':'disabled'}><div class="computed-note">OAuth client IDs are identifiers, not secrets. Tokens stay in browser memory and are never saved.</div></div>
           ${admin?`<button type="button" class="btn btn-ghost btn-sm storage-test-button" onclick="testGoogleDriveConnection()">${iCheck(14)} Test Drive Connection</button>`:''}
         </div>
-        <div class="field"><label>Probation → Regularization Threshold (days)</label><input id="s_prob" type="number" value="${DB.settings.probationDays}" ${admin?'':'disabled'}>
-          <div class="computed-note">Default is 180 days (the standard Philippine probationary period). Employee classification recalculates automatically wherever it is displayed.</div>
-        </div>
-        ${admin?'<button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>':''}
-      </div>
-      <div class="panel">
-        <h3>Employee Assignment &amp; Compensation</h3>
-        <div class="desc">Maintain the branch locations and allowance types used by employee records and import templates.</div>
-        <div class="field"><label>Branch Locations (one per line)</label><textarea id="s_branches" rows="6" ${admin?'':'disabled'}>${esc(employeeBranchLocations().join('\n'))}</textarea><div class="computed-note">Every new or imported employee must be assigned to one of these reporting branches.</div></div>
-        <div class="field"><label>Allowance Types (one per line)</label><textarea id="s_allowances" rows="6" ${admin?'':'disabled'} placeholder="Meal Allowance&#10;Transportation Allowance">${esc(employeeAllowanceTypes().join('\n'))}</textarea><div class="computed-note">Each type becomes an amount field in Employee Information and a column in the employee import template.</div></div>
-        ${admin?'<button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>':''}
-      </div>
-      <div class="panel">
-        <h3>Audit Trail</h3>
-        <div class="desc">Log of record changes made in this session (most recent first).</div>
-        <div style="max-height:320px;overflow-y:auto;">
+        <div class="notice notice-soft"><b>Current upload destination:</b> ${provider==='google-drive'?`Google Drive · module folders are created below the configured root.`:'Private Supabase Storage · files are organized by user and HR module.'}</div>
+      </section>
+      <section class="settings-panel" data-settings-panel="audit" ${activeTab==='audit'?'':'hidden'}>
+        <div class="settings-section-head"><div><h3>Audit Trail</h3><p>Most recent system configuration and record activity.</p></div></div>
+        <div class="settings-audit-list">
         ${DB.audit.length? DB.audit.map(a=>`<div class="cal-list-item"><span>${esc(a.action)}</span><span class="small">${esc(a.user)} · ${new Date(a.ts).toLocaleString()}</span></div>`).join('') : '<div class="small">No activity yet.</div>'}
         </div>
-      </div>
+      </section>
     </div>
-    <div class="notice" style="margin-top:16px;"><b>Current upload destination:</b> ${provider==='google-drive'?`Google Drive · files are organized below the configured root folder by HR module.`:'Private Supabase Storage · files are organized by user and HR module.'} Existing files are not moved when this setting changes.</div>
   `;
 }
 function storageSettingsChanged(){
@@ -6825,7 +6975,7 @@ Object.assign(window, {
   renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
-  saveEval, saveIncident, saveRecord, saveSettings, saveUser, setTitle, shiftDate, statusBadge, storageSettingsChanged, testGoogleDriveConnection, switchAuthTab, toCSV,
+  saveEval, saveIncident, saveRecord, saveSettings, saveUser, saveDepartmentSetting, savePositionSetting, setTitle, shiftDate, statusBadge, storageSettingsChanged, testGoogleDriveConnection, switchAuthTab, switchSettingsTab, syncPositionSelect, openDepartmentSetting, openPositionSetting, toCSV,
   toast, todayISO, togglePasswordVisibility, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, openInformationNote, paginationMeta, paginationHTML, paginationReset, paginateRows
 });
 
