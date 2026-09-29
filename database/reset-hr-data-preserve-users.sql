@@ -2,66 +2,104 @@
 -- DESTRUCTIVE: removes employee/applicant/HR records, cases, requests, and audit history.
 -- PRESERVED: auth.users, public.profiles, public.hr_settings, and public.hr_user_preferences.
 --
--- Required file cleanup before running:
--- 1. Supabase Dashboard > Storage > hr-documents > Empty bucket.
--- 2. If Google Drive storage was used, delete the HRIS-created module folders/files
---    below the configured Google Drive root folder.
+-- Run this entire file in Supabase Dashboard > SQL Editor as the project owner.
+-- The reset is migration-tolerant: optional tables that do not exist are skipped.
 --
--- Never delete directly from storage.objects. That removes only metadata and can
--- orphan the physical file. This script aborts while the Supabase bucket is nonempty.
+-- Uploaded files require separate cleanup:
+-- 1. Supabase Dashboard > Storage > hr-documents > Empty bucket.
+-- 2. For Google Drive, delete the HRIS-created module folders below the configured root.
+-- SQL must not delete directly from storage.objects because that can leave physical
+-- files orphaned. The result table reports how many Supabase files still need cleanup.
 
 begin;
 
+create temporary table if not exists reset_hr_results (
+  table_name text primary key,
+  deleted_rows bigint not null default 0,
+  remaining_rows bigint not null default 0,
+  note text
+) on commit preserve rows;
+
+truncate table reset_hr_results;
+
 do $$
+declare
+  target_table text;
+  affected bigint;
+  remaining bigint;
+  storage_files bigint := 0;
 begin
-  if exists (
-    select 1
-    from storage.objects
-    where bucket_id = 'hr-documents'
-  ) then
-    raise exception
-      'Reset stopped: empty the hr-documents bucket through Supabase Storage first.';
+  -- Preserve login/profile rows while removing links to deleted employee records.
+  if to_regclass('public.profiles') is not null
+     and exists (
+       select 1 from information_schema.columns
+       where table_schema = 'public'
+         and table_name = 'profiles'
+         and column_name = 'employee_record_id'
+     ) then
+    update public.profiles
+    set employee_record_id = null,
+        updated_at = now()
+    where employee_record_id is not null;
   end if;
+
+  -- Dependency order matters. Each table is optional so the script also works
+  -- when only part of the migration set has been installed.
+  foreach target_table in array array[
+    'hr_case_activity',
+    'hr_case_links',
+    'hr_cases',
+    'hr_service_requests',
+    'hr_records',
+    'hr_app_state',
+    'hr_audit_logs'
+  ] loop
+    if to_regclass('public.' || target_table) is not null then
+      execute format('delete from public.%I', target_table);
+      get diagnostics affected = row_count;
+      execute format('select count(*) from public.%I', target_table) into remaining;
+      insert into reset_hr_results(table_name, deleted_rows, remaining_rows, note)
+      values (target_table, affected, remaining, 'Reset completed')
+      on conflict (table_name) do update
+      set deleted_rows = excluded.deleted_rows,
+          remaining_rows = excluded.remaining_rows,
+          note = excluded.note;
+    else
+      insert into reset_hr_results(table_name, note)
+      values (target_table, 'Skipped because this optional table is not installed')
+      on conflict (table_name) do update set note = excluded.note;
+    end if;
+  end loop;
+
+  if to_regclass('storage.objects') is not null then
+    select count(*) into storage_files
+    from storage.objects
+    where bucket_id = 'hr-documents';
+  end if;
+
+  insert into reset_hr_results(table_name, remaining_rows, note)
+  values (
+    'storage:hr-documents',
+    storage_files,
+    case when storage_files = 0
+      then 'Bucket is empty'
+      else 'Manual cleanup required in Supabase Storage to remove physical files'
+    end
+  )
+  on conflict (table_name) do update
+  set remaining_rows = excluded.remaining_rows,
+      note = excluded.note;
 end
 $$;
 
--- Preserve login/profile rows, but remove links to employee records being deleted.
-update public.profiles
-set employee_record_id = null,
-    updated_at = now()
-where employee_record_id is not null;
-
--- Delete dependent operational data before the master HR records.
-delete from public.hr_case_activity;
-delete from public.hr_case_links;
-delete from public.hr_cases;
-delete from public.hr_service_requests;
-
--- All module records live here, including employees, applicants, memos, NTE,
--- NOD, leave, PRF, ATD, incidents, evaluations, documents, and checklists.
-delete from public.hr_records;
-
--- Remove legacy state and operational audit history.
-delete from public.hr_app_state;
-delete from public.hr_audit_logs;
-
 commit;
 
--- Verification: all counts should be zero.
-select 'hr_records' as table_name, count(*) as remaining_rows from public.hr_records
-union all
-select 'hr_cases', count(*) from public.hr_cases
-union all
-select 'hr_case_links', count(*) from public.hr_case_links
-union all
-select 'hr_case_activity', count(*) from public.hr_case_activity
-union all
-select 'hr_service_requests', count(*) from public.hr_service_requests
-union all
-select 'hr_audit_logs', count(*) from public.hr_audit_logs
-union all
-select 'hr_app_state', count(*) from public.hr_app_state;
+-- Every installed database table should show remaining_rows = 0.
+-- A nonzero storage row is a cleanup reminder and does not roll back the reset.
+select table_name, deleted_rows, remaining_rows, note
+from reset_hr_results
+order by case when table_name like 'storage:%' then 2 else 1 end, table_name;
 
--- User verification: these rows are intentionally preserved.
+-- These user/profile rows are intentionally preserved.
 select count(*) as preserved_profiles from public.profiles;
 

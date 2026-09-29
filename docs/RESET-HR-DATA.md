@@ -25,7 +25,7 @@ If Supabase Storage has been used:
 4. Use **Empty bucket** to remove its files through the Storage service.
 5. Confirm that the bucket is empty.
 
-Do not run `delete from storage.objects`. Direct SQL deletion removes only Storage metadata and can leave billable physical files orphaned. The reset SQL aborts if the bucket is not empty.
+Do not run `delete from storage.objects`. Direct SQL deletion removes only Storage metadata and can leave billable physical files orphaned. You may empty the bucket before or after the database reset; a nonempty bucket is reported as a cleanup reminder and does not roll back the database reset.
 
 ## 3. Remove Google Drive Files
 
@@ -47,11 +47,13 @@ SQL cannot remove files from Google Drive.
 5. Review the preserved and deleted tables listed at the top of the script.
 6. Click **Run**.
 
-If the `hr-documents` bucket still contains objects, the transaction stops without deleting HR data.
+The result table identifies each deleted or skipped table. Optional tables from migrations that are not installed are skipped safely.
 
 ## 5. Verify the Reset
 
-The script returns record counts after the transaction. Every operational table shown should report zero rows, while `preserved_profiles` should still show the number of user profiles.
+The script returns deleted and remaining record counts. Every installed operational table should report `remaining_rows = 0`, while `preserved_profiles` should still show the number of user profiles. A nonzero `storage:hr-documents` row means the database reset succeeded but the bucket still needs to be emptied through Storage.
+
+Deploy the matching application update and hard-refresh the browser after resetting. Older builds automatically inserted demo records when they encountered an empty database.
 
 Sign back in to the HRIS and confirm:
 

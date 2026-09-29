@@ -169,6 +169,14 @@ if(!resetSql.includes("where bucket_id = 'hr-documents'") || resetSql.includes('
   console.error('HR data reset must guard Storage cleanup without deleting storage metadata through SQL.');
   process.exit(1);
 }
+if(!resetSql.includes("to_regclass('public.' || target_table)") || !resetSql.includes('reset_hr_results')){
+  console.error('HR data reset must tolerate optional migration tables and report reset results.');
+  process.exit(1);
+}
+if(!app.includes('let DB = blankDB();') || /DB\s*=\s*seedDB\(\)/.test(app)){
+  console.error('The application must not restore demo data after an intentional database reset.');
+  process.exit(1);
+}
 for(const feature of ['renderOnboarding','saveOnboardingCandidate','convertOnboardingCandidate','formatGovernmentId','onboardingCandidates']){
   if(!app.includes(feature)){
     console.error(`Onboarding feature contract is missing: ${feature}`);

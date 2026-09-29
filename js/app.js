@@ -498,7 +498,7 @@ function normalizeEmployeeMasterData(){
 
 function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); return d.toISOString().slice(0,10); }
 
-let DB = seedDB();
+let DB = blankDB();
 
 let SESSION = null; // current user
 let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', checklistSearch:'', checklistType:'', checklistStatus:'Active', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', tablePages:{}, tablePageSizes:{} };
@@ -580,8 +580,9 @@ async function bootAuthenticated(user){
     if(profileError) throw profileError;
     SESSION=ownProfile?{id:ownProfile.id,fullName:ownProfile.full_name,username:ownProfile.username,email:ownProfile.email,role:ownProfile.role,employeeRecordId:ownProfile.employee_record_id||'',managerProfileId:ownProfile.manager_profile_id||'',createdAt:ownProfile.created_at?.slice(0,10)||todayISO()}:{id:user.id,fullName:user.user_metadata?.full_name||user.email,username:user.user_metadata?.username||'',email:user.email,role:'Employee',employeeRecordId:'',managerProfileId:''};
     let state=await loadDB();
-    const hasAny=RECORD_MODULES.some(k=>(state[k]||[]).length);
-    if(!hasAny&&isHRRole()){ DB=seedDB(); DB.serviceRequests=state.serviceRequests||[]; await saveDB(); } else DB=state;
+    // An empty database is a valid production state, including after an
+    // administrator performs the user-preserving reset.
+    DB=state;
     if(!DB.audit) DB.audit=[]; if(!DB.onboardingCandidates) DB.onboardingCandidates=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; DB.prf.forEach(p=>{if(!p.status)p.status='Draft';}); if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; if(!DB.workflowTasks) DB.workflowTasks=[]; if(!DB.automationRuns) DB.automationRuns=[]; if(!DB.documents) DB.documents=[]; if(!DB.lifecycleChecklists) DB.lifecycleChecklists=[]; if(!DB.serviceRequests) DB.serviceRequests=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];}); if(!DB.settings) DB.settings={orgName:'SCPA',probationDays:180};
     const employeeMasterChanged=isHRRole()?normalizeEmployeeMasterData():false;
     DB_SNAPSHOT=JSON.parse(JSON.stringify(DB));
