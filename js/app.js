@@ -3,6 +3,8 @@ import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '../supabase-config.js';
 import { paginationMeta, paginationHTML, paginationReset, paginateRows } from './core/pagination.js?v=20260928-4';
 import { installTableEnhancer } from './core/table-enhancer.js?v=20260928-4';
 import { compactRedundantPageIntros } from './core/content-layout.js?v=20260928-4';
+import { addressComponentHTML, addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom, initializeAddressComponents, readAddressComponent } from './address/address-component.js?v=20260929-1';
+import { formatPhilippineAddress, normalizeAddress } from './address/address-models.js?v=20260929-1';
 
 if(!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('YOUR_PROJECT_REF')){
   document.body.innerHTML = '<div style="font-family:system-ui;padding:40px;max-width:760px;margin:auto"><h2>Supabase configuration missing</h2><p>Edit <b>supabase-config.js</b> with your Supabase project URL and publishable key.</p></div>';
@@ -547,6 +549,12 @@ function normalizeEmployeeMasterData(){
     ['birthDate','civilStatus','mobileNumber','personalEmail','address','remarks','branchReporting','tin','sssNumber','philHealthNumber','pagIbigNumber','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'].forEach(k=>{ if(e[k]===undefined){ e[k]=''; changed=true; } });
     if(e.dailyRate===undefined){e.dailyRate='';changed=true;}
     if(!e.allowances||typeof e.allowances!=='object'||Array.isArray(e.allowances)){e.allowances={};changed=true;}
+    const normalizedHome=normalizeAddress(e.homeAddress,e.address||'');
+    const normalizedPresent=normalizeAddress(e.presentAddress,e.presentAddressText||e.address||'');
+    if(JSON.stringify(e.homeAddress||null)!==JSON.stringify(normalizedHome)){e.homeAddress=normalizedHome;changed=true;}
+    if(JSON.stringify(e.presentAddress||null)!==JSON.stringify(normalizedPresent)){e.presentAddress=normalizedPresent;changed=true;}
+    const formattedHome=formatPhilippineAddress(normalizedHome);
+    if(e.address!==formattedHome){e.address=formattedHome;changed=true;}
     const nameParts=splitEmployeeName(e);
     ['lastName','firstName','middleName'].forEach(key=>{if(e[key]===undefined){e[key]=nameParts[key]||'';changed=true;}});
     if(!Array.isArray(e.employmentHistory)){
@@ -863,7 +871,7 @@ function serviceRequestOwner(request){
 function serviceRequestSummary(request){
   const payload=request.payload||{};
   if(request.request_type==='leave') return `${payload.leaveType||'Leave'} · ${fmtDate(payload.startDate)} – ${fmtDate(payload.endDate)}`;
-  const labels={mobileNumber:'Mobile number',personalEmail:'Personal email',address:'Home address',civilStatus:'Civil status',emergencyContactName:'Emergency contact',emergencyContactRelationship:'Contact relationship',emergencyContactPhone:'Emergency phone'};
+  const labels={mobileNumber:'Mobile number',personalEmail:'Personal email',address:'Home address',homeAddress:'Home address',presentAddress:'Present address',civilStatus:'Civil status',emergencyContactName:'Emergency contact',emergencyContactRelationship:'Contact relationship',emergencyContactPhone:'Emergency phone'};
   const changed=Object.keys(payload).filter(key=>labels[key]).map(key=>labels[key]);
   return changed.length?changed.join(', '):'Personal information correction';
 }
@@ -898,7 +906,7 @@ function renderSelfService(){
       <div class="portal-grid">
         <section class="panel portal-profile"><div class="portal-section-head"><div><h2>My employment profile</h2><p>Employment fields are maintained by HR. Personal corrections can be submitted for approval.</p></div><button class="btn btn-ghost btn-sm" onclick="openProfileChangeRequest()">Request correction</button></div>
           <div class="portal-identity"><div class="portal-avatar">${esc(employeeDisplayName(employee).split(/[\s,]+/).filter(Boolean).map(part=>part[0]).slice(0,2).join('').toUpperCase()||'E')}</div><div><h3>${esc(employeeDisplayName(employee))}</h3><p>${esc(employee.employeeNo||'—')} · ${esc(employee.position||'—')}</p><div>${statusBadge(employee.status||'—',EMP_STATUS_MAP)} ${statusBadge(classify(employee),{'Regular':'b-green','Probationary':'b-amber'})}</div></div></div>
-          <dl class="portal-details"><div><dt>Department</dt><dd>${esc(employee.department||'—')}</dd></div><div><dt>Date hired</dt><dd>${fmtDate(employee.dateHired)}</dd></div><div><dt>Mobile number</dt><dd>${esc(employee.mobileNumber||'Not provided')}</dd></div><div><dt>Personal email</dt><dd>${esc(employee.personalEmail||'Not provided')}</dd></div><div><dt>Home address</dt><dd>${esc(employee.address||'Not provided')}</dd></div><div><dt>Emergency contact</dt><dd>${esc(employee.emergencyContactName||'Not provided')}${employee.emergencyContactPhone?' · '+esc(employee.emergencyContactPhone):''}</dd></div></dl>
+          <dl class="portal-details"><div><dt>Department</dt><dd>${esc(employee.department||'—')}</dd></div><div><dt>Date hired</dt><dd>${fmtDate(employee.dateHired)}</dd></div><div><dt>Mobile number</dt><dd>${esc(employee.mobileNumber||'Not provided')}</dd></div><div><dt>Personal email</dt><dd>${esc(employee.personalEmail||'Not provided')}</dd></div><div><dt>Home address</dt><dd>${esc(formatPhilippineAddress(employee.homeAddress)||employee.address||'Not provided')}</dd></div><div><dt>Present address</dt><dd>${esc(formatPhilippineAddress(employee.presentAddress)||employee.presentAddressText||'Not provided')}</dd></div><div><dt>Emergency contact</dt><dd>${esc(employee.emergencyContactName||'Not provided')}${employee.emergencyContactPhone?' · '+esc(employee.emergencyContactPhone):''}</dd></div></dl>
         </section>
         <section class="panel portal-guide"><div class="portal-section-head"><div><h2>Request center</h2><p>Choose the transaction that matches what you need.</p></div></div><button class="portal-action" onclick="openLeaveRequest()"><span>${iCal(18)}</span><div><b>File a leave request</b><small>Send dates, leave type, and reason for review.</small></div><strong>›</strong></button><button class="portal-action" onclick="openProfileChangeRequest()"><span>${iUser(18)}</span><div><b>Correct personal information</b><small>Update contact, address, or emergency details.</small></div><strong>›</strong></button><div class="portal-security-note">Employment status, position, department, and classification remain HR-controlled fields.</div></section>
       </div>
@@ -911,11 +919,13 @@ function renderSelfService(){
 }
 function openProfileChangeRequest(){
   const employee=currentEmployeeRecord(); if(!employee){toast('Your account is not linked to an employee record.',true);return;}
-  openModal(`<div class="modal-head"><div><h3>Request Profile Update</h3><div class="small">Changes are applied only after manager or HR approval.</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="formgrid"><div class="field"><label>Mobile Number</label><input id="ss_mobile" value="${esc(employee.mobileNumber||'')}"></div><div class="field"><label>Personal Email</label><input id="ss_email" type="email" value="${esc(employee.personalEmail||'')}"></div><div class="field full"><label>Home Address</label><input id="ss_address" value="${esc(employee.address||'')}"></div><div class="field"><label>Civil Status</label><select id="ss_civil">${['','Single','Married','Widowed','Separated','Other'].map(value=>`<option value="${value}" ${employee.civilStatus===value?'selected':''}>${value||'Select status'}</option>`).join('')}</select></div><div class="field"><label>Emergency Contact Name</label><input id="ss_emergency_name" value="${esc(employee.emergencyContactName||'')}"></div><div class="field"><label>Emergency Contact Relationship</label><input id="ss_emergency_relation" value="${esc(employee.emergencyContactRelationship||'')}"></div><div class="field"><label>Emergency Contact Phone</label><input id="ss_emergency_phone" value="${esc(employee.emergencyContactPhone||'')}"></div><div class="field full"><label>Note for reviewer</label><textarea id="ss_profile_note" rows="3" placeholder="Briefly explain the correction, if needed."></textarea></div></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveProfileChangeRequest()">Submit Request</button></div>`);
+  openEmployeeWorkspaceModal(`<div class="modal-head"><div><h3>Request Profile Update</h3><div class="small">Changes are applied only after manager or HR approval.</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="formgrid"><div class="field"><label>Mobile Number</label><input id="ss_mobile" value="${esc(employee.mobileNumber||'')}"></div><div class="field"><label>Personal Email</label><input id="ss_email" type="email" value="${esc(employee.personalEmail||'')}"></div><div class="field"><label>Civil Status</label><select id="ss_civil">${['','Single','Married','Widowed','Separated','Other'].map(value=>`<option value="${value}" ${employee.civilStatus===value?'selected':''}>${value||'Select status'}</option>`).join('')}</select></div><div class="field"><label>Emergency Contact Name</label><input id="ss_emergency_name" value="${esc(employee.emergencyContactName||'')}"></div><div class="field"><label>Emergency Contact Relationship</label><input id="ss_emergency_relation" value="${esc(employee.emergencyContactRelationship||'')}"></div><div class="field"><label>Emergency Contact Phone</label><input id="ss_emergency_phone" value="${esc(employee.emergencyContactPhone||'')}"></div></div><div class="employee-address-stack profile-address-stack">${addressComponentHTML({prefix:'ss_home',label:'Home Address',value:employee.homeAddress||employee.address,required:true})}${addressComponentHTML({prefix:'ss_present',label:'Present Address',value:employee.presentAddress||employee.presentAddressText||employee.address,required:true,showCopy:true,copyFromPrefix:'ss_home'})}</div><div class="field"><label>Note for reviewer</label><textarea id="ss_profile_note" rows="3" placeholder="Briefly explain the correction, if needed."></textarea></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveProfileChangeRequest()">Submit Request</button></div>`);
 }
 async function saveProfileChangeRequest(){
   if(!SELF_SERVICE_READY) return;
-  const payload={mobileNumber:document.getElementById('ss_mobile').value.trim(),personalEmail:document.getElementById('ss_email').value.trim(),address:document.getElementById('ss_address').value.trim(),civilStatus:document.getElementById('ss_civil').value,emergencyContactName:document.getElementById('ss_emergency_name').value.trim(),emergencyContactRelationship:document.getElementById('ss_emergency_relation').value.trim(),emergencyContactPhone:document.getElementById('ss_emergency_phone').value.trim(),note:document.getElementById('ss_profile_note').value.trim()};
+  const [homeResult,presentResult]=await Promise.all([readAddressComponent('ss_home',{required:true}),readAddressComponent('ss_present',{required:true})]);
+  if(!homeResult.valid||!presentResult.valid){toast(homeResult.message||presentResult.message||'Complete both addresses using valid location suggestions.',true);return;}
+  const payload={mobileNumber:document.getElementById('ss_mobile').value.trim(),personalEmail:document.getElementById('ss_email').value.trim(),address:formatPhilippineAddress(homeResult.address),homeAddress:homeResult.address,presentAddress:presentResult.address,presentAddressText:formatPhilippineAddress(presentResult.address),civilStatus:document.getElementById('ss_civil').value,emergencyContactName:document.getElementById('ss_emergency_name').value.trim(),emergencyContactRelationship:document.getElementById('ss_emergency_relation').value.trim(),emergencyContactPhone:document.getElementById('ss_emergency_phone').value.trim(),note:document.getElementById('ss_profile_note').value.trim()};
   const {error}=await supabase.rpc('submit_hr_service_request',{p_request_type:'profile_update',p_payload:payload});
   if(error){toast('Could not submit request: '+error.message,true);return;}
   await closeModal(); await refreshServiceRequests(); toast('Profile update request submitted.'); renderSelfService();
@@ -1866,7 +1876,7 @@ function openModal(html){
     modal.scrollTop=0;
     modal.querySelector('.modal-body')?.scrollTo(0,0);
     enhanceRowActionMenus();
-    captureModalEditState();
+    Promise.resolve(initializeAddressComponents(modal)).finally(()=>captureModalEditState());
     (modal.querySelector('.modal-head button')||modal).focus();
   });
 }
@@ -2884,7 +2894,7 @@ function openOnboardingDetails(id){
 function openOnboardingHire(id){
   const candidate=DB.onboardingCandidates.find(row=>row.id===id);if(!candidate)return;
   const blockers=onboardingHireBlockers(candidate);
-  openModal(`<div class="modal-head"><div><h3>Convert to Employee</h3><div class="small">${esc(candidateDisplayName(candidate))}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="onboarding-convert-summary"><div><span>Employee No.</span><b>${esc(nextEmployeeNumber(DB.employees))}</b></div><div><span>PRF Number</span><b>${esc(candidate.prfNumber||'—')}</b></div><div><span>Position</span><b>${esc(candidate.positionApplied||'—')}</b></div><div><span>Start Date</span><b>${fmtDate(candidate.proposedStartDate)}</b></div></div><section class="onboarding-form-section"><div class="onboarding-form-heading"><h4>Assignment &amp; Compensation</h4><p>Set the employee's reporting branch before activation.</p></div><div class="formgrid"><div class="field"><label>Branch Reporting *</label><select id="oh_branch"><option value="">Select branch</option>${employeeBranchLocations().map(branch=>`<option value="${esc(branch)}">${esc(branch)}</option>`).join('')}</select></div><div class="field"><label>Daily Rate</label><div class="money-input"><span>₱</span><input id="oh_daily_rate" type="number" min="0" step="0.01"></div></div>${employeeAllowanceFieldsHTML(null)}</div></section>${blockers.length?`<div class="notice"><b>Not ready to convert.</b> Complete: ${esc(blockers.join(', '))}.</div>`:`<div class="notice notice-soft"><b>Ready:</b> This creates an active employee master record and preserves this applicant history.</div>`}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ghost" onclick="openOnboardingForm('${candidate.id}')">Edit Applicant</button><button class="btn btn-primary" data-confirm-change="true" ${blockers.length?'disabled':''} onclick="convertOnboardingCandidate('${candidate.id}')">Create Employee</button></div>`);
+  openEmployeeWorkspaceModal(`<div class="modal-head"><div><h3>Convert to Employee</h3><div class="small">${esc(candidateDisplayName(candidate))}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="onboarding-convert-summary"><div><span>Employee No.</span><b>${esc(nextEmployeeNumber(DB.employees))}</b></div><div><span>PRF Number</span><b>${esc(candidate.prfNumber||'—')}</b></div><div><span>Position</span><b>${esc(candidate.positionApplied||'—')}</b></div><div><span>Start Date</span><b>${fmtDate(candidate.proposedStartDate)}</b></div></div><section class="onboarding-form-section"><div class="onboarding-form-heading"><h4>Assignment &amp; Compensation</h4><p>Set the employee's reporting branch before activation.</p></div><div class="formgrid"><div class="field"><label>Branch Reporting *</label><select id="oh_branch"><option value="">Select branch</option>${employeeBranchLocations().map(branch=>`<option value="${esc(branch)}">${esc(branch)}</option>`).join('')}</select></div><div class="field"><label>Daily Rate</label><div class="money-input"><span>₱</span><input id="oh_daily_rate" type="number" min="0" step="0.01"></div></div>${employeeAllowanceFieldsHTML(null)}</div></section><div class="employee-address-stack onboarding-hire-addresses">${addressComponentHTML({prefix:'hire_home',label:'Home Address',value:candidate.homeAddress||candidate.address,required:true})}${addressComponentHTML({prefix:'hire_present',label:'Present Address',value:candidate.presentAddress||candidate.address,required:true,showCopy:true,copyFromPrefix:'hire_home'})}</div>${blockers.length?`<div class="notice"><b>Not ready to convert.</b> Complete: ${esc(blockers.join(', '))}.</div>`:`<div class="notice notice-soft"><b>Ready:</b> This creates an active employee master record and preserves this applicant history.</div>`}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ghost" onclick="openOnboardingForm('${candidate.id}')">Edit Applicant</button><button class="btn btn-primary" data-confirm-change="true" ${blockers.length?'disabled':''} onclick="convertOnboardingCandidate('${candidate.id}')">Create Employee</button></div>`);
 }
 async function convertOnboardingCandidate(id){
   const candidate=DB.onboardingCandidates.find(row=>row.id===id);if(!candidate)return;
@@ -2894,11 +2904,13 @@ async function convertOnboardingCandidate(id){
   const dailyRateRaw=document.getElementById('oh_daily_rate')?.value.trim()||'';
   const allowances=readEmployeeAllowances();
   if(!branchReporting){toast('Select the employee Branch Reporting location.',true);return;}
+  const [homeResult,presentResult]=await Promise.all([readAddressComponent('hire_home',{required:true}),readAddressComponent('hire_present',{required:true})]);
+  if(!homeResult.valid||!presentResult.valid){toast(homeResult.message||presentResult.message||'Complete both addresses using valid location suggestions.',true);return;}
   if(dailyRateRaw!==''&&(!Number.isFinite(Number(dailyRateRaw))||Number(dailyRateRaw)<0)){toast('Daily Rate must be a non-negative amount.',true);return;}
   if(Object.values(allowances).some(amount=>!Number.isFinite(amount)||amount<0)){toast('Allowance amounts must be non-negative numbers.',true);return;}
   const createdAt=new Date().toISOString();
   const createdByName=SESSION?.fullName||'System';
-  const employee={id:uid(),employeeNo:nextEmployeeNumber(DB.employees),prfNumber:candidate.prfNumber,lastName:candidate.lastName,firstName:candidate.firstName,middleName:candidate.middleName,name:formatEmployeeName(candidate),position:candidate.positionApplied,department:candidate.department,branchReporting,dailyRate:dailyRateRaw===''?'':Math.round(Number(dailyRateRaw)*100)/100,allowances,dateHired:candidate.proposedStartDate,birthDate:candidate.birthDate,gender:candidate.gender,civilStatus:candidate.civilStatus||'',status:'Newly Hired',statusDate:candidate.proposedStartDate,mobileNumber:candidate.mobileNumber||'',personalEmail:candidate.personalEmail||'',address:candidate.address||'',tin:candidate.tin||'',sssNumber:candidate.sssNumber||'',philHealthNumber:candidate.philHealthNumber||'',pagIbigNumber:candidate.pagIbigNumber||'',emergencyContactName:'',emergencyContactRelationship:'',emergencyContactPhone:'',classOverride:'Auto',sourceCandidateId:candidate.id,createdAt,createdBy:SESSION?.id||null,createdByName,updatedAt:createdAt,updatedBy:SESSION?.id||null,updatedByName:createdByName,recordHistory:[{action:'Created',at:createdAt,by:createdByName,byId:SESSION?.id||null,detail:'Converted from Onboarding & Applicants'}],employmentHistory:[{type:'Employment Status',from:'Applicant',to:'Newly Hired',effectiveDate:candidate.proposedStartDate,remarks:'Converted from Onboarding & Applicants',changedAt:createdAt,changedBy:createdByName}]};
+  const employee={id:uid(),employeeNo:nextEmployeeNumber(DB.employees),prfNumber:candidate.prfNumber,lastName:candidate.lastName,firstName:candidate.firstName,middleName:candidate.middleName,name:formatEmployeeName(candidate),position:candidate.positionApplied,department:candidate.department,branchReporting,dailyRate:dailyRateRaw===''?'':Math.round(Number(dailyRateRaw)*100)/100,allowances,dateHired:candidate.proposedStartDate,birthDate:candidate.birthDate,gender:candidate.gender,civilStatus:candidate.civilStatus||'',status:'Newly Hired',statusDate:candidate.proposedStartDate,mobileNumber:candidate.mobileNumber||'',personalEmail:candidate.personalEmail||'',homeAddress:homeResult.address,presentAddress:presentResult.address,address:formatPhilippineAddress(homeResult.address),presentAddressText:formatPhilippineAddress(presentResult.address),tin:candidate.tin||'',sssNumber:candidate.sssNumber||'',philHealthNumber:candidate.philHealthNumber||'',pagIbigNumber:candidate.pagIbigNumber||'',emergencyContactName:'',emergencyContactRelationship:'',emergencyContactPhone:'',classOverride:'Auto',sourceCandidateId:candidate.id,createdAt,createdBy:SESSION?.id||null,createdByName,updatedAt:createdAt,updatedBy:SESSION?.id||null,updatedByName:createdByName,recordHistory:[{action:'Created',at:createdAt,by:createdByName,byId:SESSION?.id||null,detail:'Converted from Onboarding & Applicants'}],employmentHistory:[{type:'Employment Status',from:'Applicant',to:'Newly Hired',effectiveDate:candidate.proposedStartDate,remarks:'Converted from Onboarding & Applicants',changedAt:createdAt,changedBy:createdByName}]};
   const original=JSON.parse(JSON.stringify(candidate));
   DB.employees.push(employee);Object.assign(candidate,{stage:'Hired',employeeRecordId:employee.id,hiredAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
   if(!(await saveDB())){DB.employees=DB.employees.filter(row=>row!==employee);Object.keys(candidate).forEach(key=>delete candidate[key]);Object.assign(candidate,original);return;}
@@ -2933,7 +2945,8 @@ const EMPLOYEE_COLUMN_DEFS = [
   {key:'classification',label:'Classification',default:true,width:124,cell:e=>statusBadge(classify(e),classify(e)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})},
   {key:'mobileNumber',label:'Mobile Number',default:false,width:132,cell:e=>esc(e.mobileNumber||'—')},
   {key:'personalEmail',label:'Contact Email',default:false,width:210,cell:e=>esc(e.personalEmail||'—')},
-  {key:'address',label:'Home Address',default:false,width:250,cell:e=>esc(e.address||'—')},
+  {key:'address',label:'Home Address',default:false,width:250,cell:e=>esc(formatPhilippineAddress(e.homeAddress)||e.address||'—')},
+  {key:'presentAddress',label:'Present Address',default:false,width:250,cell:e=>esc(formatPhilippineAddress(e.presentAddress)||e.presentAddressText||'—')},
   {key:'remarks',label:'Remarks',default:false,width:260,cell:e=>esc(e.remarks||'—')},
   {key:'dailyRate',label:'Daily Rate',default:false,width:112,cell:e=>e.dailyRate!==''&&e.dailyRate!=null?peso(Number(e.dailyRate)||0):'—'},
   {key:'allowances',label:'Allowances',default:false,width:210,cell:e=>employeeAllowanceSummary(e)},
@@ -2997,7 +3010,7 @@ function renderEmployees(){
   const classFilter = STATE.employeeClassFilter||'';
   const hasFilters=Boolean(q||deptFilter||branchFilter||statusFilter||classFilter);
   let rows = DB.employees.filter(e=>{
-    const hay=[e.employeeNo,e.prfNumber,e.name,employeeDisplayName(e),e.position,e.department,e.branchReporting,e.mobileNumber,e.personalEmail,e.address,e.remarks,...Object.keys(e.allowances||{})].map(v=>String(v||'').toLowerCase());
+    const hay=[e.employeeNo,e.prfNumber,e.name,employeeDisplayName(e),e.position,e.department,e.branchReporting,e.mobileNumber,e.personalEmail,formatPhilippineAddress(e.homeAddress)||e.address,formatPhilippineAddress(e.presentAddress)||e.presentAddressText,e.remarks,...Object.keys(e.allowances||{})].map(v=>String(v||'').toLowerCase());
     const matches = !q || hay.some(v=>v.includes(q));
     const deptOk = !deptFilter || e.department===deptFilter;
     const branchOk = !branchFilter || e.branchReporting===branchFilter;
@@ -3098,6 +3111,7 @@ function employeeWorkspaceNav(emp,active='overview'){
 function employeeWorkspaceFooter(emp,saveLabel,saveHandler){
   return `<div class="modal-foot employee-workspace-foot"><button class="btn btn-ghost" onclick="closeModal();openEmployeeProfile('${emp.id}')">Back to Employee</button><div class="toolbar-spacer"></div><button class="btn btn-primary" onclick="${saveHandler}">${esc(saveLabel)}</button></div>`;
 }
+
 const EMP_FIELDS = [
   {key:'employeeNo', label:'Employee No.', type:'text', readonly:true},
   {key:'prfNumber', label:'PRF Number (optional)', type:'text'},
@@ -3120,7 +3134,6 @@ const EMP_FIELDS = [
   {key:'sssNumber', label:'SSS Number', type:'text', format:'sss'},
   {key:'philHealthNumber', label:'PhilHealth PIN', type:'text', format:'philHealth'},
   {key:'pagIbigNumber', label:'Pag-IBIG MID', type:'text', format:'pagIbig'},
-  {key:'address', label:'Home Address', type:'text', full:true},
   {key:'remarks', label:'Remarks', type:'textarea', maxLength:1000},
   {key:'emergencyContactName', label:'Emergency Contact Name', type:'text'},
   {key:'emergencyContactRelationship', label:'Emergency Contact Relationship', type:'text'},
@@ -3145,7 +3158,7 @@ const EMPLOYEE_IMPORT_COLUMNS = [
   {header:'Status Effective Date',key:'statusDate',type:'date'},
   {header:'Mobile Number',key:'mobileNumber'},
   {header:'Personal Email',key:'personalEmail'},
-  {header:'Home Address',key:'address'},
+  {header:'Home Address',key:'address',note:'Complete free-text address. Imported as Street / House / Unit details for later PSGC validation.'},
   {header:'Remarks',key:'remarks',note:'Optional HR context or note for this employee record.'},
   {header:'Emergency Contact Name',key:'emergencyContactName'},
   {header:'Emergency Contact Relationship',key:'emergencyContactRelationship'},
@@ -3349,6 +3362,9 @@ async function commitEmployeeImport(){
   const now=new Date().toISOString();const actorName=SESSION?.fullName||'System';const added=[];
   EMPLOYEE_IMPORT_PREVIEW.rows.forEach(row=>{
     const employee={id:uid(),...row.values,employmentHistory:[],recordHistory:[],createdAt:now,createdBy:SESSION?.id||null,createdByName:actorName,updatedAt:now,updatedBy:SESSION?.id||null,updatedByName:actorName};
+    employee.homeAddress=normalizeAddress(null,employee.address||'');
+    employee.presentAddress=normalizeAddress(null,employee.address||'');
+    employee.presentAddressText=employee.address||'';
     employee.recordHistory.push({action:'Imported',at:now,by:actorName,byId:SESSION?.id||null,detail:`Employee record imported from ${EMPLOYEE_IMPORT_PREVIEW.fileName}`});
     employee.employmentHistory.push({type:'Employment Status',from:'',to:employee.status,effectiveDate:employee.statusDate||employee.dateHired,remarks:'Initial employee record imported from Excel',changedAt:now,changedBy:actorName});
     DB.employees.push(employee);added.push(employee);
@@ -3364,7 +3380,7 @@ function downloadEmployeeImportTemplate(){
   const employeeSheet=window.XLSX.utils.aoa_to_sheet([headers]);
   employeeSheet['!cols']=columns.map(column=>({wch:Math.max(15,column.header.length+3)}));
   employeeSheet['!autofilter']={ref:`A1:${window.XLSX.utils.encode_col(headers.length-1)}1`};
-  const instructions=[['SLSC Employee Import Template'],['Instructions'],['1. Enter one employee per row in the Employees sheet.'],['2. Do not rename or remove required columns.'],['3. Leave Employee No. blank to generate the next available number.'],['4. Dates may use YYYY-MM-DD or MM/DD/YYYY.'],['5. PRF Number and government IDs are optional.'],['6. Branch Reporting must match an Administrator-configured branch.'],['7. Import validates the entire workbook before saving any employee.'],[],['Column','Required','Allowed values / guidance'],...columns.map(column=>[column.header,column.required?'Yes':'No',column.options?.join(' | ')||column.note||''])];
+  const instructions=[['SLSC Employee Import Template'],['Instructions'],['1. Enter one employee per row in the Employees sheet.'],['2. Do not rename or remove required columns.'],['3. Leave Employee No. blank to generate the next available number.'],['4. Dates may use YYYY-MM-DD or MM/DD/YYYY.'],['5. PRF Number and government IDs are optional.'],['6. Branch Reporting must match an Administrator-configured branch.'],['7. Home Address accepts a complete free-text address and is imported into Street / House / Unit details. Select its official Region through Barangay when the employee is next edited.'],['8. Import validates the entire workbook before saving any employee.'],[],['Column','Required','Allowed values / guidance'],...columns.map(column=>[column.header,column.required?'Yes':'No',column.options?.join(' | ')||column.note||''])];
   const instructionSheet=window.XLSX.utils.aoa_to_sheet(instructions);instructionSheet['!cols']=[{wch:34},{wch:12},{wch:95}];
   const reference=[['Field','Allowed values'],['Department',employeeDepartmentNames().join(' | ')],['Position',positionCatalog().filter(item=>item.active).map(item=>`${item.name} (${item.department})`).join(' | ')||'Configure positions in Settings'],['Branch Reporting',employeeBranchLocations().join(' | ')],['Allowance Types',employeeAllowanceTypes().join(' | ')||'No allowance types configured'],['Gender','Male | Female'],['Civil Status','Single | Married | Widowed | Separated | Other'],['Employment Status',EMP_STATUS.join(' | ')],['Classification Override','Auto | Probationary | Regular'],['SSS Number','10 digits; example 09-5421455-9'],['PhilHealth PIN','12 digits; 2-9-1 format'],['Pag-IBIG MID','12 digits; 4-4-4 format'],['BIR TIN','9 digits plus optional 3-digit branch code']];
   const referenceSheet=window.XLSX.utils.aoa_to_sheet(reference);referenceSheet['!cols']=[{wch:30},{wch:95}];
@@ -3376,7 +3392,7 @@ const EMP_FORM_SECTIONS = [
   {title:'Employee Record',description:'Core identifiers and approved hiring reference.',keys:['employeeNo','prfNumber']},
   {title:'Personal & Employment',description:'Legal name, assignment, and current employment details.',keys:['lastName','firstName','middleName','department','position','dateHired','birthDate','gender','civilStatus','status','statusDate','classOverride','remarks']},
   {title:'Assignment & Compensation',description:'Required reporting location and current employee rate or allowances.',keys:['branchReporting','dailyRate'],allowances:true},
-  {title:'Contact & Emergency',description:'Private contact information used by HR when needed.',keys:['mobileNumber','personalEmail','address','emergencyContactName','emergencyContactRelationship','emergencyContactPhone']},
+  {title:'Contact & Emergency',description:'Private contact information used by HR when needed.',keys:['mobileNumber','personalEmail','emergencyContactName','emergencyContactRelationship','emergencyContactPhone']},
   {title:'Government IDs',description:'Optional statutory identifiers with format validation.',keys:['tin','sssNumber','philHealthNumber','pagIbigNumber']},
 ];
 function employeeFormFieldValue(field,record){
@@ -3387,7 +3403,7 @@ function employeeFormFieldValue(field,record){
   return '';
 }
 function employeeFormSectionsHTML(record){
-  return EMP_FORM_SECTIONS.map((section,index)=>`<section class="employee-form-section">
+  const fieldSections=EMP_FORM_SECTIONS.map((section,index)=>`<section class="employee-form-section">
     <div class="employee-form-section-head"><span>${String(index+1).padStart(2,'0')}</span><div><h4>${esc(section.title)}</h4><p>${esc(section.description)}</p></div></div>
     <div class="employee-form-grid">${section.keys.map(key=>{
       const field=EMP_FIELDS.find(item=>item.key===key);
@@ -3399,6 +3415,12 @@ function employeeFormSectionsHTML(record){
       return fieldHTML(resolved,employeeFormFieldValue(resolved,record));
     }).join('')}${section.allowances?employeeAllowanceFieldsHTML(record):''}</div>
   </section>`).join('');
+  const homeAddress=normalizeAddress(record?.homeAddress,record?.address||'');
+  const presentAddress=normalizeAddress(record?.presentAddress,record?.presentAddressText||record?.address||'');
+  return `${fieldSections}<section class="employee-form-section employee-address-section">
+    <div class="employee-form-section-head"><span>${String(EMP_FORM_SECTIONS.length+1).padStart(2,'0')}</span><div><h4>Addresses</h4><p>Validated Philippine home and present addresses with PSGC location codes.</p></div></div>
+    <div class="employee-address-stack">${addressComponentHTML({prefix:'emp_home',label:'Home Address',value:homeAddress,required:true})}${addressComponentHTML({prefix:'emp_present',label:'Present Address',value:presentAddress,required:true,showCopy:true,copyFromPrefix:'emp_home'})}</div>
+  </section>`;
 }
 function syncPositionSelect(id,department){
   const select=document.getElementById(id);if(!select)return;
@@ -3514,6 +3536,15 @@ async function saveEmployee(id){
   const missing = EMP_FIELDS.filter(f=>f.required && !vals[f.key]);
   if(missing.length){ toast('Please complete: '+missing.map(f=>f.label).join(', ')); return; }
   const existingEmployee=id?DB.employees.find(employee=>employee.id===id):null;
+  const [homeResult,presentResult]=await Promise.all([
+    readAddressComponent('emp_home',{required:true}),
+    readAddressComponent('emp_present',{required:true}),
+  ]);
+  if(!homeResult.valid||!presentResult.valid){toast(homeResult.message||presentResult.message||'Complete both addresses using valid location suggestions.',true);return;}
+  vals.homeAddress=homeResult.address;
+  vals.presentAddress=presentResult.address;
+  vals.address=formatPhilippineAddress(homeResult.address);
+  vals.presentAddressText=formatPhilippineAddress(presentResult.address);
   const validDepartment=departmentCatalog().some(item=>item.name===vals.department&&(item.active||existingEmployee?.department===vals.department));
   const validPosition=positionCatalog().some(item=>item.name===vals.position&&item.department===vals.department&&(item.active||(existingEmployee?.department===vals.department&&existingEmployee?.position===vals.position)));
   if(!validDepartment||!validPosition){toast('Select an active department and a position configured for that department.',true);return;}
@@ -3542,6 +3573,8 @@ async function saveEmployee(id){
   const now=new Date().toISOString();
   const actorName=SESSION?.fullName||'System';
   const changedFields=isNew?[]:EMP_FIELDS.filter(field=>String(original?.[field.key]??'')!==String(vals[field.key]??'')).map(field=>field.label);
+  if(!isNew&&JSON.stringify(original?.homeAddress||{})!==JSON.stringify(vals.homeAddress||{}))changedFields.push('Home Address');
+  if(!isNew&&JSON.stringify(original?.presentAddress||{})!==JSON.stringify(vals.presentAddress||{}))changedFields.push('Present Address');
   if(!isNew&&JSON.stringify(original?.allowances||{})!==JSON.stringify(vals.allowances||{}))changedFields.push('Allowances');
   Object.assign(rec, vals);
   if(!Array.isArray(rec.employmentHistory)) rec.employmentHistory=[];
@@ -3703,7 +3736,10 @@ function exportEmployeesCSV(){
     ...allowanceNames.map(name=>({header:`Allowance - ${name}`,get:r=>r.allowances?.[name]??''})),
     {header:'Date Hired',get:r=>r.dateHired},{header:'Birth Date',get:r=>r.birthDate},{header:'Gender',get:r=>r.gender},{header:'Civil Status',get:r=>r.civilStatus},
     {header:'Employment Status',get:r=>r.status},{header:'Status Effective Date',get:r=>r.statusDate},{header:'Classification Override',get:r=>r.classOverride||'Auto'},{header:'Computed Classification',get:r=>classify(r)},
-    {header:'Mobile Number',get:r=>r.mobileNumber},{header:'Personal Email',get:r=>r.personalEmail},{header:'Home Address',get:r=>r.address},{header:'Remarks',get:r=>r.remarks},{header:'Emergency Contact Name',get:r=>r.emergencyContactName},{header:'Emergency Contact Relationship',get:r=>r.emergencyContactRelationship},{header:'Emergency Contact Phone',get:r=>r.emergencyContactPhone},
+    {header:'Mobile Number',get:r=>r.mobileNumber},{header:'Personal Email',get:r=>r.personalEmail},
+    {header:'Home Address',get:r=>formatPhilippineAddress(r.homeAddress)||r.address},{header:'Home Region Code',get:r=>r.homeAddress?.regionCode},{header:'Home Province Code',get:r=>r.homeAddress?.provinceCode},{header:'Home City/Municipality Code',get:r=>r.homeAddress?.cityCode},{header:'Home Barangay Code',get:r=>r.homeAddress?.barangayCode},
+    {header:'Present Address',get:r=>formatPhilippineAddress(r.presentAddress)||r.presentAddressText},{header:'Present Region Code',get:r=>r.presentAddress?.regionCode},{header:'Present Province Code',get:r=>r.presentAddress?.provinceCode},{header:'Present City/Municipality Code',get:r=>r.presentAddress?.cityCode},{header:'Present Barangay Code',get:r=>r.presentAddress?.barangayCode},
+    {header:'Remarks',get:r=>r.remarks},{header:'Emergency Contact Name',get:r=>r.emergencyContactName},{header:'Emergency Contact Relationship',get:r=>r.emergencyContactRelationship},{header:'Emergency Contact Phone',get:r=>r.emergencyContactPhone},
     {header:'BIR TIN',get:r=>formatGovernmentId('tin',r.tin)},{header:'SSS Number',get:r=>formatGovernmentId('sss',r.sssNumber)},{header:'PhilHealth PIN',get:r=>formatGovernmentId('philHealth',r.philHealthNumber)},{header:'Pag-IBIG MID',get:r=>formatGovernmentId('pagIbig',r.pagIbigNumber)},
     {header:'Created At',get:r=>r.createdAt},{header:'Created By',get:r=>r.createdByName},{header:'Updated At',get:r=>r.updatedAt},{header:'Updated By',get:r=>r.updatedByName},
   ];
@@ -3790,7 +3826,8 @@ async function openEmployeeProfile(id){
         <div class="item"><div class="label">Civil Status</div><div class="value">${esc(emp.civilStatus||'—')}</div></div>
         <div class="item"><div class="label">Mobile</div><div class="value">${esc(emp.mobileNumber||'—')}</div></div>
         <div class="item"><div class="label">Email</div><div class="value">${esc(emp.personalEmail||'—')}</div></div>
-        <div class="item" style="grid-column:1/-1;"><div class="label">Home Address</div><div class="value">${esc(emp.address||'—')}</div></div>
+        <div class="item" style="grid-column:1/-1;"><div class="label">Home Address</div><div class="value">${esc(formatPhilippineAddress(emp.homeAddress)||emp.address||'—')}</div></div>
+        <div class="item" style="grid-column:1/-1;"><div class="label">Present Address</div><div class="value">${esc(formatPhilippineAddress(emp.presentAddress)||emp.presentAddressText||'—')}</div></div>
         <div class="item"><div class="label">Emergency Contact</div><div class="value">${esc(emp.emergencyContactName||'—')}</div></div>
         <div class="item"><div class="label">Relationship</div><div class="value">${esc(emp.emergencyContactRelationship||'—')}</div></div>
         <div class="item"><div class="label">Emergency Phone</div><div class="value">${esc(emp.emergencyContactPhone||'—')}</div></div>
@@ -6976,7 +7013,8 @@ Object.assign(window, {
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, saveDepartmentSetting, savePositionSetting, setTitle, shiftDate, statusBadge, storageSettingsChanged, testGoogleDriveConnection, switchAuthTab, switchSettingsTab, syncPositionSelect, openDepartmentSetting, openPositionSetting, toCSV,
-  toast, todayISO, togglePasswordVisibility, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, openInformationNote, paginationMeta, paginationHTML, paginationReset, paginateRows
+  toast, todayISO, togglePasswordVisibility, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, openInformationNote, paginationMeta, paginationHTML, paginationReset, paginateRows,
+  addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom
 });
 
 (async function initSupabase(){

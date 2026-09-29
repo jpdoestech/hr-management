@@ -223,7 +223,7 @@ begin
     select coalesce(jsonb_object_agg(key,value),'{}'::jsonb) into v_patch
     from jsonb_each(v_request.payload)
     where key in (
-      'mobileNumber','personalEmail','address','civilStatus',
+      'mobileNumber','personalEmail','address','homeAddress','presentAddress','presentAddressText','civilStatus',
       'emergencyContactName','emergencyContactRelationship','emergencyContactPhone'
     );
     update public.hr_records

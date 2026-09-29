@@ -1,0 +1,10 @@
+{
+  "name": "slsc-hr-management",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "node scripts/lint.mjs",
+    "test": "node --test tests/address/*.test.mjs",
+    "build": "node scripts/build.mjs"
+  }
+}

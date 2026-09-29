@@ -16,6 +16,8 @@ function existsWithExactCase(filePath){
 }
 const required=[
   'index.html','css/app.css','css/professional.css','js/app.js','js/vendor/xlsx.full.min.js','js/vendor/SHEETJS-LICENSE.txt',
+  'js/address/address-component.js','js/address/address-index.js','js/address/address-models.js','js/address/address-validation.js',
+  'assets/data/philippine-address/regions.json','assets/data/philippine-address/provinces.json','assets/data/philippine-address/cities.json',
   'js/core/pagination.js','js/core/table-enhancer.js','js/core/content-layout.js','supabase-config.js',
   'supabase/phase10-self-service.sql','supabase/phase11-lifecycle-checklists.sql',
   'database/migrations/phase11-lifecycle-checklists.sql','supabase/phase12-user-preferences.sql',
@@ -80,6 +82,12 @@ if(preferencesMigration!==preferencesMigrationCopy || !preferencesMigration.incl
   console.error('User preference migration copies are missing or out of sync.');
   process.exit(1);
 }
+const selfServiceMigration=fs.readFileSync(path.join(root,'supabase/phase10-self-service.sql'),'utf8');
+const selfServiceMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase10-self-service.sql'),'utf8');
+if(selfServiceMigration!==selfServiceMigrationCopy || !selfServiceMigration.includes("'homeAddress','presentAddress','presentAddressText'")){
+  console.error('Self-service address migration copies are missing or out of sync.');
+  process.exit(1);
+}
 for(const feature of ['openEmployeeColumnManager','persistUserPreferences','DB.employees.push(rec)','PRF Number']){
   if(!app.includes(feature)){
     console.error(`Employee directory contract is missing: ${feature}`);
@@ -119,6 +127,16 @@ for(const feature of ['employeeBranchLocations','employeeAllowanceTypes','Branch
     console.error(`Employee assignment or compensation contract is missing: ${feature}`);
     process.exit(1);
   }
+}
+for(const feature of ['addressComponentHTML','readAddressComponent','emp_home','emp_present','homeAddress','presentAddress','initializeAddressComponents']){
+  if(!app.includes(feature)){
+    console.error(`Philippine address entry contract is missing: ${feature}`);
+    process.exit(1);
+  }
+}
+if(/Member Records|renderMembers|DB\.members/.test(app)){
+  console.error('Address work must not introduce a Member Records module into this application.');
+  process.exit(1);
 }
 if(!/header:'Branch Reporting',key:'branchReporting',required:true/.test(app) || !/key:'branchReporting', label:'Branch Reporting'[^\n]*required:true/.test(app)){
   console.error('Branch Reporting must be required for employee forms and imports.');
