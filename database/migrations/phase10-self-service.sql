@@ -163,6 +163,7 @@ begin
       'leaves',v_leave_id,
       jsonb_build_object(
         'id',v_leave_id,
+        '_dataResetAt',coalesce((select data->>'dataResetAt' from public.hr_settings where id='singleton'),''),
         'employeeId',v_profile.employee_record_id,
         'employeeName',coalesce(v_employee->>'name',v_profile.full_name),
         'position',coalesce(v_employee->>'position',''),

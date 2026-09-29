@@ -6,9 +6,8 @@
 -- The reset is migration-tolerant: optional tables that do not exist are skipped.
 -- This version creates no helper table, so Supabase will not show an RLS warning.
 --
--- IMPORTANT: deploy the current app version and close every open HRIS browser tab
--- before running this reset. The reset marker below prevents current clients from
--- writing a pre-reset in-memory copy back to the database.
+-- IMPORTANT: deploy the current app version before running this reset. The
+-- database trigger below blocks old open tabs from restoring pre-reset data.
 --
 -- Uploaded files require separate cleanup:
 -- 1. Supabase Dashboard > Storage > hr-documents > Empty bucket.
@@ -17,6 +16,41 @@
 -- files orphaned. The final notice reports how many Supabase files still need cleanup.
 
 begin;
+
+-- Enforce the reset epoch inside PostgreSQL. This closes the race where a stale
+-- browser starts a save before the reset and finishes its upsert afterward.
+create or replace function public.enforce_hr_record_reset_epoch()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  server_reset_at text;
+  client_reset_at text;
+begin
+  select data ->> 'dataResetAt'
+  into server_reset_at
+  from public.hr_settings
+  where id = 'singleton';
+
+  if coalesce(server_reset_at, '') = '' then
+    return new;
+  end if;
+
+  client_reset_at := coalesce(new.data ->> '_dataResetAt', '');
+  if client_reset_at <> server_reset_at then
+    raise exception 'Stale HRIS session blocked after data reset. Reload the application.';
+  end if;
+
+  return new;
+end
+$$;
+
+drop trigger if exists hr_records_reset_epoch on public.hr_records;
+create trigger hr_records_reset_epoch
+before insert or update on public.hr_records
+for each row execute function public.enforce_hr_record_reset_epoch();
 
 do $$
 declare
@@ -43,11 +77,12 @@ begin
   -- Stamp the preserved settings row. The app compares this marker before every
   -- write so an already-open page cannot silently restore the deleted records.
   if to_regclass('public.hr_settings') is not null then
-    update public.hr_settings
-    set data = jsonb_set(coalesce(data, '{}'::jsonb), '{dataResetAt}', to_jsonb(reset_at), true),
+    insert into public.hr_settings (id, data, updated_at, updated_by)
+    values ('singleton', jsonb_build_object('dataResetAt', reset_at), now(), null)
+    on conflict (id) do update
+    set data = jsonb_set(coalesce(public.hr_settings.data, '{}'::jsonb), '{dataResetAt}', to_jsonb(reset_at), true),
         updated_at = now(),
-        updated_by = null
-    where id = 'singleton';
+        updated_by = null;
   end if;
 
   -- Dependency order matters. Each table is optional so the script also works
@@ -92,5 +127,7 @@ commit;
 select
   'HR operational data reset completed' as result,
   (select count(*) from public.profiles) as preserved_profiles,
+  (select count(*) from public.hr_records) as remaining_hr_records,
+  (select count(*) from public.hr_app_state) as remaining_legacy_states,
   (select data ->> 'dataResetAt' from public.hr_settings where id = 'singleton') as reset_marker;
 

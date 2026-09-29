@@ -215,8 +215,18 @@ if(!resetSql.includes("to_regclass('public.' || target_table)") || !resetSql.inc
   console.error('HR data reset must tolerate optional migration tables and report reset results.');
   process.exit(1);
 }
-if(!app.includes('serverResetAt') || !app.includes('clientResetAt')){
+for(const safeguard of ['enforce_hr_record_reset_epoch','hr_records_reset_epoch','on conflict (id) do update','remaining_hr_records','remaining_legacy_states']){
+  if(!resetSql.includes(safeguard)){
+    console.error(`HR data reset stale-session safeguard is missing: ${safeguard}`);
+    process.exit(1);
+  }
+}
+if(!app.includes('serverResetAt') || !app.includes('clientResetAt') || !app.includes('_dataResetAt:clientResetAt') || !app.includes('delete record._dataResetAt')){
   console.error('Database saves must reject stale browser state after an HR data reset.');
+  process.exit(1);
+}
+if(!selfServiceMigration.includes("'_dataResetAt',coalesce((select data->>'dataResetAt'")){
+  console.error('Self-service inserts must carry the current reset epoch.');
   process.exit(1);
 }
 if(!app.includes('let DB = blankDB();') || /DB\s*=\s*seedDB\(\)/.test(app)){

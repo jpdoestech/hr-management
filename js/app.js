@@ -135,7 +135,12 @@ async function loadDB(){
   const empty = blankDB();
   const {data:rows,error} = await supabase.from('hr_records').select('module,record_id,data,updated_at').order('updated_at',{ascending:true});
   if(error) throw error;
-  (rows||[]).forEach(r=>{ if(RECORD_MODULES.includes(r.module)) (empty[r.module]||(empty[r.module]=[])).push(r.data); });
+  (rows||[]).forEach(r=>{
+    if(!RECORD_MODULES.includes(r.module))return;
+    const record={...(r.data||{})};
+    delete record._dataResetAt;
+    (empty[r.module]||(empty[r.module]=[])).push(record);
+  });
 
   const {data:settings,error:settingsError}=await supabase.from('hr_settings').select('data').eq('id','singleton').maybeSingle();
   if(settingsError) throw settingsError;
@@ -174,7 +179,7 @@ async function saveDBInternal(state){
     throw new Error('The HR database was reset in another session. Reload this page before making changes.');
   }
   for(const module of RECORD_MODULES){
-    const rows=(state[module]||[]).map(r=>({module,record_id:String(r.id),data:r,updated_at:now,updated_by:SESSION?.id||null}));
+    const rows=(state[module]||[]).map(r=>({module,record_id:String(r.id),data:{...r,_dataResetAt:clientResetAt},updated_at:now,updated_by:SESSION?.id||null}));
     if(rows.length){
       const {error}=await supabase.from('hr_records').upsert(rows,{onConflict:'module,record_id'});
       if(error) throw error;
@@ -198,7 +203,12 @@ function saveDB(){
   const snapshot=JSON.parse(JSON.stringify(DB));
   SAVE_QUEUE=SAVE_QUEUE.then(async()=>{
     try{ await saveDBInternal(snapshot); return true; }
-    catch(error){ toast('Database save failed: '+error.message,true); return false; }
+    catch(error){
+      const resetConflict=/reset|stale HRIS session/i.test(error.message||'');
+      toast(resetConflict?'The database was reset. Reloading this stale session…':'Database save failed: '+error.message,true);
+      if(resetConflict)setTimeout(()=>window.location.reload(),900);
+      return false;
+    }
   });
   return SAVE_QUEUE;
 }
