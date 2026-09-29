@@ -18,7 +18,8 @@ const required=[
   'index.html','css/app.css','css/professional.css','js/app.js',
   'js/core/pagination.js','js/core/table-enhancer.js','js/core/content-layout.js','supabase-config.js',
   'supabase/phase10-self-service.sql','supabase/phase11-lifecycle-checklists.sql',
-  'database/migrations/phase11-lifecycle-checklists.sql'
+  'database/migrations/phase11-lifecycle-checklists.sql','supabase/phase12-user-preferences.sql',
+  'database/migrations/phase12-user-preferences.sql'
 ];
 const missing=required.filter(f=>!fs.existsSync(path.join(root,f)));
 if(missing.length){
@@ -70,6 +71,18 @@ const lifecycleMigrationCopy=fs.readFileSync(path.join(root,'database/migrations
 if(lifecycleMigration!==lifecycleMigrationCopy){
   console.error('Lifecycle checklist migration copies are out of sync.');
   process.exit(1);
+}
+const preferencesMigration=fs.readFileSync(path.join(root,'supabase/phase12-user-preferences.sql'),'utf8');
+const preferencesMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase12-user-preferences.sql'),'utf8');
+if(preferencesMigration!==preferencesMigrationCopy || !preferencesMigration.includes('hr_user_preferences')){
+  console.error('User preference migration copies are missing or out of sync.');
+  process.exit(1);
+}
+for(const feature of ['openEmployeeColumnManager','persistUserPreferences','DB.employees.push(rec)','PRF Number']){
+  if(!app.includes(feature)){
+    console.error(`Employee directory contract is missing: ${feature}`);
+    process.exit(1);
+  }
 }
 const paginationState={tablePages:{},tablePageSizes:{}};
 paginationState.tablePageSizes['qa:list']=25;

@@ -19,6 +19,8 @@ const RECORD_MODULES = ['employees','leaves','disciplinary','nte','memos','nod',
 let DB_SNAPSHOT = null;
 let SAVE_QUEUE = Promise.resolve();
 let SELF_SERVICE_READY = true;
+let USER_PREFERENCES = {employeeColumns:[]};
+let USER_PREFERENCES_SYNC_READY = true;
 
 function blankDB(){
   return {employees:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],lifecycleChecklists:[],serviceRequests:[],settings:{orgName:'SCPA',probationDays:180},audit:[],users:[]};
@@ -26,6 +28,42 @@ function blankDB(){
 
 function isMissingSelfServiceTable(error){
   return ['42P01','PGRST205','PGRST204'].includes(error?.code) || /hr_service_requests/i.test(error?.message||'')&&/not find|does not exist|schema cache/i.test(error?.message||'');
+}
+function isMissingPreferencesTable(error){
+  return ['42P01','PGRST205','PGRST204'].includes(error?.code) || /hr_user_preferences/i.test(error?.message||'')&&/not find|does not exist|schema cache/i.test(error?.message||'');
+}
+function userPreferencesStorageKey(){ return `slsc_hr_preferences_v1:${SESSION?.id||'guest'}`; }
+function localUserPreferences(){
+  try{
+    const parsed=JSON.parse(localStorage.getItem(userPreferencesStorageKey())||'{}');
+    return parsed&&typeof parsed==='object'?parsed:{};
+  }catch(e){ return {}; }
+}
+async function loadUserPreferences(){
+  USER_PREFERENCES={...USER_PREFERENCES,...localUserPreferences()};
+  if(!SESSION?.id) return USER_PREFERENCES;
+  const {data,error}=await supabase.from('hr_user_preferences').select('data').eq('user_id',SESSION.id).maybeSingle();
+  if(error){
+    if(isMissingPreferencesTable(error)){USER_PREFERENCES_SYNC_READY=false;return USER_PREFERENCES;}
+    console.warn('Could not load account preferences',error);
+    return USER_PREFERENCES;
+  }
+  USER_PREFERENCES_SYNC_READY=true;
+  if(data?.data&&typeof data.data==='object') USER_PREFERENCES={...USER_PREFERENCES,...data.data};
+  try{ localStorage.setItem(userPreferencesStorageKey(),JSON.stringify(USER_PREFERENCES)); }catch(e){}
+  return USER_PREFERENCES;
+}
+async function persistUserPreferences(){
+  try{ localStorage.setItem(userPreferencesStorageKey(),JSON.stringify(USER_PREFERENCES)); }catch(e){}
+  if(!SESSION?.id) return false;
+  const {error}=await supabase.from('hr_user_preferences').upsert({user_id:SESSION.id,data:USER_PREFERENCES,updated_at:new Date().toISOString()},{onConflict:'user_id'});
+  if(error){
+    if(isMissingPreferencesTable(error)){USER_PREFERENCES_SYNC_READY=false;return false;}
+    toast('Column view was saved on this browser, but account sync failed: '+error.message,true);
+    return false;
+  }
+  USER_PREFERENCES_SYNC_READY=true;
+  return true;
 }
 async function loadServiceRequests(target=DB){
   const {data,error}=await supabase.from('hr_service_requests').select('id,request_type,employee_profile_id,employee_record_id,manager_profile_id,status,payload,employee_note,reviewer_remarks,submitted_at,reviewed_at,reviewed_by,updated_at').order('submitted_at',{ascending:false});
@@ -229,14 +267,14 @@ function seedDB(){
   const users = [
   ];
   const employees = [
-    {id:uid(), name:'Ramon Dizon', position:'Warehouse Supervisor', department:'WAREHOUSE', dateHired:'2019-03-11', gender:'Male', status:'Active', classOverride:'Auto'},
-    {id:uid(), name:'Liza Fernandez', position:'HR Officer', department:'ADMIN', dateHired:'2023-01-16', gender:'Female', status:'Active', classOverride:'Auto'},
-    {id:uid(), name:'Carlo Mendoza', position:'Maintenance Technician', department:'MAINTENANCE', dateHired:'2026-06-01', gender:'Male', status:'Newly Hired', classOverride:'Auto'},
-    {id:uid(), name:'Angela Reyes', position:'Accounting Clerk', department:'ADMIN', dateHired:'2021-09-20', gender:'Female', status:'Active', classOverride:'Auto'},
-    {id:uid(), name:'Bryan Torres', position:'Utility Worker', department:'UTILITY', dateHired:'2024-11-04', gender:'Male', status:'AWOL', classOverride:'Auto'},
-    {id:uid(), name:'Kristine Uy', position:'Production Analyst', department:'PRODUCTION', dateHired:'2020-05-18', gender:'Female', status:'Transferred to Another Department', classOverride:'Auto'},
-    {id:uid(), name:'Noel Bautista', position:'Logistics Coordinator', department:'LOGISTICS', dateHired:'2018-02-09', gender:'Male', status:'Active', classOverride:'Auto'},
-    {id:uid(), name:'Fatima Castillo', position:'Sales Associate', department:'SALES', dateHired:'2026-07-15', gender:'Female', status:'Newly Hired', classOverride:'Auto'},
+    {id:uid(), prfNumber:'PRF-2019-0011', name:'Ramon Dizon', position:'Warehouse Supervisor', department:'WAREHOUSE', dateHired:'2019-03-11', gender:'Male', status:'Active', classOverride:'Auto'},
+    {id:uid(), prfNumber:'PRF-2023-0004', name:'Liza Fernandez', position:'HR Officer', department:'ADMIN', dateHired:'2023-01-16', gender:'Female', status:'Active', classOverride:'Auto'},
+    {id:uid(), prfNumber:'PRF-2026-0128', name:'Carlo Mendoza', position:'Maintenance Technician', department:'MAINTENANCE', dateHired:'2026-06-01', gender:'Male', status:'Newly Hired', classOverride:'Auto'},
+    {id:uid(), prfNumber:'PRF-2021-0037', name:'Angela Reyes', position:'Accounting Clerk', department:'ADMIN', dateHired:'2021-09-20', gender:'Female', status:'Active', classOverride:'Auto'},
+    {id:uid(), prfNumber:'PRF-2024-0086', name:'Bryan Torres', position:'Utility Worker', department:'UTILITY', dateHired:'2024-11-04', gender:'Male', status:'AWOL', classOverride:'Auto'},
+    {id:uid(), prfNumber:'PRF-2020-0024', name:'Kristine Uy', position:'Production Analyst', department:'PRODUCTION', dateHired:'2020-05-18', gender:'Female', status:'Transferred to Another Department', classOverride:'Auto'},
+    {id:uid(), prfNumber:'PRF-2018-0006', name:'Noel Bautista', position:'Logistics Coordinator', department:'LOGISTICS', dateHired:'2018-02-09', gender:'Male', status:'Active', classOverride:'Auto'},
+    {id:uid(), prfNumber:'PRF-2026-0148', name:'Fatima Castillo', position:'Sales Associate', department:'SALES', dateHired:'2026-07-15', gender:'Female', status:'Newly Hired', classOverride:'Auto'},
   ];
   const byName = n => employees.find(e=>e.name===n);
   const leaves = [
@@ -395,6 +433,7 @@ async function bootAuthenticated(user){
     await loadProfiles();
     const profile=DB.users.find(x=>x.id===user.id);
     if(profile) SESSION=profile;
+    await loadUserPreferences();
     if(isHRRole()){
       ensureAutomationSettings();
       await workflowSyncTasks({silent:true});
@@ -1273,7 +1312,9 @@ async function go(view,{skipUnsaved=false}={}){
   if(navItem&&!navItemVisible(navItem)){toast('This workspace is not available for your role.',true);return;}
   if(!skipUnsaved && !(await requestPageNavigation(view))) return;
   STATE.view=view; STATE.search=''; STATE.filter=''; STATE.filterDept=''; STATE.filterStatus='';
-  document.getElementById('content')?.classList.toggle('employee-directory-content',view==='employees');
+  const content=document.getElementById('content');
+  content?.classList.toggle('employee-directory-content',view==='employees');
+  content?.classList.toggle('data-focused-content',DATA_FOCUSED_VIEWS.has(view));
   STATE.tablePages={};
   closeSidebar();
   renderNav();
@@ -1285,6 +1326,10 @@ async function go(view,{skipUnsaved=false}={}){
     capturePageEditState();
   });
 }
+
+const DATA_FOCUSED_VIEWS=new Set([
+  'teamApprovals','lifecycleChecklists','workflow','automation','operations','employees','employeeLifecycle','leaves','evaluations','transfers','prf','oncall','atd','cases','incidents','cvr','nte','memos','nod','disciplinary','offenseCatalog','offenseSummary','documents','dataQuality','users'
+]);
 
 const SEARCH_RENDER_TIMERS=new Map();
 function queueSearchRender(input,stateKey,renderFn,delay=460){
@@ -1415,6 +1460,7 @@ function iTrash(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" f
 function iMore(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/></svg>`;}
 function iSearch(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>`;}
 function iDownload(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>`;}
+function iColumns(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg>`;}
 function iBell(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 9a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9z"/><path d="M10 21h4"/></svg>`;}
 
 /* ---------------- audit / permissions ---------------- */
@@ -2392,6 +2438,61 @@ function resetEmployeeDirectoryFilters(){
   renderEmployees();
   requestAnimationFrame(()=>document.getElementById('employee-directory-search')?.focus());
 }
+const EMPLOYEE_COLUMN_DEFS = [
+  {key:'employeeNo',label:'Employee No.',locked:true,default:true,width:104,cell:e=>`<span class="mono">${esc(e.employeeNo||'—')}</span>`},
+  {key:'prfNumber',label:'PRF Number',locked:true,default:true,width:118,cell:e=>`<span class="mono">${esc(e.prfNumber||'—')}</span>`},
+  {key:'name',label:'Name',locked:true,default:true,width:168,cell:e=>`<b>${esc(e.name||'—')}</b>`},
+  {key:'position',label:'Position',default:true,width:172,cell:e=>esc(e.position||'—')},
+  {key:'department',label:'Department',default:true,width:124,cell:e=>esc(e.department||'—')},
+  {key:'dateHired',label:'Date Hired',default:true,width:112,cell:e=>fmtDate(e.dateHired)},
+  {key:'gender',label:'Gender',default:false,width:86,cell:e=>esc(e.gender||'—')},
+  {key:'status',label:'Status',default:true,width:142,cell:e=>statusBadge(e.status,EMP_STATUS_MAP)},
+  {key:'classification',label:'Classification',default:true,width:124,cell:e=>statusBadge(classify(e),classify(e)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})},
+  {key:'mobileNumber',label:'Mobile Number',default:false,width:132,cell:e=>esc(e.mobileNumber||'—')},
+  {key:'personalEmail',label:'Contact Email',default:false,width:210,cell:e=>esc(e.personalEmail||'—')},
+  {key:'address',label:'Home Address',default:false,width:250,cell:e=>esc(e.address||'—')},
+  {key:'birthDate',label:'Birth Date',default:false,width:112,cell:e=>fmtDate(e.birthDate)},
+  {key:'civilStatus',label:'Civil Status',default:false,width:104,cell:e=>esc(e.civilStatus||'—')},
+  {key:'emergencyContactName',label:'Emergency Contact',default:false,width:174,cell:e=>esc(e.emergencyContactName||'—')},
+  {key:'emergencyContactRelationship',label:'Relationship',default:false,width:124,cell:e=>esc(e.emergencyContactRelationship||'—')},
+  {key:'emergencyContactPhone',label:'Emergency Phone',default:false,width:142,cell:e=>esc(e.emergencyContactPhone||'—')},
+];
+function defaultEmployeeColumns(){ return EMPLOYEE_COLUMN_DEFS.filter(c=>c.default||c.locked).map(c=>c.key); }
+function sanitizeEmployeeColumns(keys){
+  const selected=new Set(Array.isArray(keys)?keys:defaultEmployeeColumns());
+  EMPLOYEE_COLUMN_DEFS.filter(c=>c.locked).forEach(c=>selected.add(c.key));
+  return EMPLOYEE_COLUMN_DEFS.filter(c=>selected.has(c.key)).map(c=>c.key);
+}
+function employeeVisibleColumns(){
+  const keys=sanitizeEmployeeColumns(USER_PREFERENCES.employeeColumns?.length?USER_PREFERENCES.employeeColumns:defaultEmployeeColumns());
+  return EMPLOYEE_COLUMN_DEFS.filter(c=>keys.includes(c.key));
+}
+function openEmployeeColumnManager(){
+  const selected=new Set(employeeVisibleColumns().map(c=>c.key));
+  openModal(`
+    <div class="modal-head"><div><h3>Customize employee columns</h3><div class="small">Choose the employee data shown in your directory.</div></div><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body column-manager-body">
+      <div class="column-manager-list">${EMPLOYEE_COLUMN_DEFS.map(c=>`<label class="column-manager-option ${c.locked?'locked':''}"><input type="checkbox" data-employee-column value="${esc(c.key)}" ${selected.has(c.key)?'checked':''} ${c.locked?'disabled':''}><span><b>${esc(c.label)}</b>${c.locked?'<small>Required column</small>':'<small>Optional employee data</small>'}</span></label>`).join('')}</div>
+      <div class="computed-note">Your view is saved per user. Required identity columns always remain visible.</div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-confirm-change="false" onclick="resetEmployeeColumnPreferences()">Reset default</button><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployeeColumnPreferences()">Save view</button></div>
+  `);
+}
+async function saveEmployeeColumnPreferences(){
+  const checked=[...document.querySelectorAll('[data-employee-column]:checked')].map(el=>el.value);
+  USER_PREFERENCES.employeeColumns=sanitizeEmployeeColumns(checked);
+  const synced=await persistUserPreferences();
+  await closeModal();
+  renderEmployees();
+  toast(synced?'Column view saved to your account.':'Column view saved on this browser. Run the Phase 12 SQL migration to enable account sync.');
+}
+async function resetEmployeeColumnPreferences(){
+  USER_PREFERENCES.employeeColumns=defaultEmployeeColumns();
+  const synced=await persistUserPreferences();
+  await closeModal();
+  renderEmployees();
+  toast(synced?'Default employee columns restored.':'Default columns restored on this browser.');
+}
 function renderEmployees(){
   const q=(STATE.employeeSearch||'').trim().toLowerCase();
   const deptFilter = STATE.employeeDepartmentFilter||'';
@@ -2399,7 +2500,7 @@ function renderEmployees(){
   const classFilter = STATE.employeeClassFilter||'';
   const hasFilters=Boolean(q||deptFilter||statusFilter||classFilter);
   let rows = DB.employees.filter(e=>{
-    const hay=[e.employeeNo,e.name,e.position,e.department,e.mobileNumber,e.personalEmail].map(v=>String(v||'').toLowerCase());
+    const hay=[e.employeeNo,e.prfNumber,e.name,e.position,e.department,e.mobileNumber,e.personalEmail,e.address].map(v=>String(v||'').toLowerCase());
     const matches = !q || hay.some(v=>v.includes(q));
     const deptOk = !deptFilter || e.department===deptFilter;
     const statusOk = !statusFilter || e.status===statusFilter;
@@ -2408,6 +2509,8 @@ function renderEmployees(){
   });
   const depts = [...new Set(DB.employees.map(e=>e.department).filter(Boolean))];
   const statusOptions=[...new Set(DB.employees.map(e=>e.status).filter(Boolean))];
+  const columns=employeeVisibleColumns();
+  const tableMinWidth=columns.reduce((sum,c)=>sum+c.width,0)+92;
   setTitle('Employee Information', `${rows.length} of ${DB.employees.length} employees · ${depts.length} departments`);
   document.getElementById('content')?.classList.add('employee-directory-content');
 
@@ -2431,23 +2534,18 @@ function renderEmployees(){
         </select>
         <div class="employee-toolbar-actions">
           ${hasFilters?`<button class="btn btn-ghost btn-sm employee-reset" onclick="resetEmployeeDirectoryFilters()">Reset</button>`:''}
+          <button class="btn btn-ghost btn-sm" onclick="openEmployeeColumnManager()" title="Customize visible employee columns">${iColumns(13)} <span>Columns</span></button>
           <button class="btn btn-ghost btn-sm" onclick="exportEmployeesCSV()" title="Export employee records">${iDownload(13)} <span>Export</span></button>
           ${canEdit()? `<button class="btn btn-primary btn-sm" onclick="openEmployeeForm()">${iPlus(13)} <span>Add Employee</span></button>`:''}
         </div>
       </div>
       <div class="tablewrap employee-directory-tablewrap">
-        <table class="data-table employee-directory-table">
-          <thead><tr><th>Employee No.</th><th>Name</th><th>Position</th><th>Department</th><th>Date Hired</th><th>Gender</th><th>Status</th><th>Classification</th><th class="actions-head">Actions</th></tr></thead>
+        <table class="data-table employee-directory-table" style="min-width:${tableMinWidth}px!important">
+          <colgroup>${columns.map(c=>`<col style="width:${c.width}px">`).join('')}<col style="width:92px"></colgroup>
+          <thead><tr>${columns.map(c=>`<th>${esc(c.label)}</th>`).join('')}<th class="actions-head">Actions</th></tr></thead>
           <tbody>
             ${rows.length? rows.map(e=>`<tr>
-              <td class="mono">${esc(e.employeeNo||'—')}</td>
-              <td><b>${esc(e.name)}</b></td>
-              <td>${esc(e.position||'—')}</td>
-              <td>${esc(e.department||'—')}</td>
-              <td>${fmtDate(e.dateHired)}</td>
-              <td>${esc(e.gender||'—')}</td>
-              <td>${statusBadge(e.status, EMP_STATUS_MAP)}</td>
-              <td>${statusBadge(classify(e), classify(e)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</td>
+              ${columns.map(c=>`<td data-column="${esc(c.key)}">${c.cell(e)}</td>`).join('')}
               <td><div class="rowactions">
                 <button class="iconbtn" onclick="openEmployeeProfile('${e.id}')" title="View employee profile">${iUser(14)}</button>
                 ${canEdit()? `<button class="iconbtn" onclick="openEmployeeForm('${e.id}')" title="Edit">${iEdit(14)}</button>
@@ -2455,7 +2553,7 @@ function renderEmployees(){
                 <button class="iconbtn" onclick="openEmployeeStatusForm('${e.id}')" title="Update Employment Status">${iShield(14)}</button>
                 <button class="iconbtn" onclick="deleteEmployee('${e.id}')" title="Delete">${iTrash(14)}</button>`:''}
               </div></td>
-            </tr>`).join('') : `<tr><td colspan="9"><div class="empty"><b>No employees found</b><span>${hasFilters?'Try adjusting the search or filters.':'Add an employee to begin building the directory.'}</span>${hasFilters?`<button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="resetEmployeeDirectoryFilters()">Reset search and filters</button>`:''}</div></td></tr>`}
+            </tr>`).join('') : `<tr><td colspan="${columns.length+1}"><div class="empty"><b>No employees found</b><span>${hasFilters?'Try adjusting the search or filters.':'Add an employee to begin building the directory.'}</span>${hasFilters?`<button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="resetEmployeeDirectoryFilters()">Reset search and filters</button>`:''}</div></td></tr>`}
           </tbody>
         </table>
       </div>
@@ -2465,6 +2563,7 @@ function renderEmployees(){
 }
 const EMP_FIELDS = [
   {key:'employeeNo', label:'Employee No.', type:'text', readonly:true},
+  {key:'prfNumber', label:'PRF Number', type:'text', required:true},
   {key:'name', label:'Employee Name', type:'text', required:true},
   {key:'position', label:'Position', type:'text', required:true},
   {key:'department', label:'Department', type:'select', options:DEPT_OPTIONS, required:true},
@@ -2474,7 +2573,6 @@ const EMP_FIELDS = [
   {key:'civilStatus', label:'Civil Status', type:'select', options:['Single','Married','Widowed','Separated','Other',''], required:false},
   {key:'status', label:'Employment Status', type:'select', options:EMP_STATUS, required:true},
   {key:'statusDate', label:'Status Effective Date (resignation/AWOL/separation/etc.)', type:'date'},
-  {key:'prfNumber', label:'PRF Number (if applicable)', type:'text'},
   {key:'mobileNumber', label:'Mobile Number', type:'tel'},
   {key:'personalEmail', label:'Personal / Contact Email', type:'email'},
   {key:'address', label:'Home Address', type:'text', full:true},
@@ -2491,7 +2589,7 @@ function openEmployeeForm(id){
       <div class="formgrid">
         ${EMP_FIELDS.map(f=>fieldHTML(f, existing? existing[f.key] : (f.key==='employeeNo'?nextEmployeeNumber(DB.employees):f.key==='status'?'Newly Hired':f.key==='classOverride'?'Auto':''))).join('')}
       </div>
-      <div class="employee-master-note"><b>Employee master data:</b> Employee No. is system-generated. Contact and emergency information is optional and can be completed later.</div>
+      <div class="employee-master-note"><b>Employee master data:</b> Employee No. is system-generated. PRF Number links the employee to the approved personnel request; contact and emergency information can be completed later.</div>
       <div class="computed-note">Classification is calculated automatically from Date Hired against the ${DB.settings.probationDays}-day regularization threshold (set in Settings). Choose "Auto" unless you need to manually correct a record.</div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployee('${id||''}')">Save Employee</button></div>
@@ -2511,35 +2609,47 @@ async function saveEmployee(id){
   if(vals.birthDate && vals.birthDate>todayISO()){ toast('Birth Date cannot be in the future.'); return; }
   if(vals.statusDate && vals.statusDate<vals.dateHired){ toast('Status Effective Date cannot be before Date Hired.'); return; }
   if(vals.employeeNo && DB.employees.some(e=>e.id!==id && String(e.employeeNo||'').toUpperCase()===String(vals.employeeNo).toUpperCase())){ vals.employeeNo=nextEmployeeNumber(DB.employees); }
+  if(DB.employees.some(e=>e.id!==id && String(e.prfNumber||'').trim().toUpperCase()===String(vals.prfNumber||'').trim().toUpperCase())){ toast('PRF Number is already assigned to another employee.'); return; }
   const duplicateCandidates=findEmployeeDuplicates(vals,id);
   if(duplicateCandidates.length){
     const sample=duplicateCandidates.slice(0,3).map(e=>e.name+' — '+e.department).join('; ');
     if(!(await confirmDataChange({title:'Possible duplicate employee',message:`A similar employee record was found: ${sample}. Save this employee anyway?`,confirmLabel:'Save anyway'}))) return;
   }
-  const rec=id?DB.employees.find(e=>e.id===id):{id:uid(), employmentHistory:[], ...vals};
+  const isNew=!id;
+  const rec=id?DB.employees.find(e=>e.id===id):{id:uid(), employmentHistory:[]};
+  if(!rec){ toast('Employee record could not be found.',true); return; }
+  const original=isNew?null:JSON.parse(JSON.stringify(rec));
   const oldStoragePaths=recordStoragePaths(id?rec:null);
   const previousStatus=id?rec.status:'';
   const previousStatusDate=id?rec.statusDate:'';
   Object.assign(rec, vals);
   if(!Array.isArray(rec.employmentHistory)) rec.employmentHistory=[];
-  if(!id){
+  if(isNew){
     rec.employmentHistory.push({type:'Employment Status',from:'',to:rec.status,effectiveDate:rec.statusDate||rec.dateHired,remarks:'Initial employee record',changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
   } else if(previousStatus!==rec.status || previousStatusDate!==rec.statusDate){
     rec.employmentHistory.push({type:'Employment Status',from:previousStatus||'',to:rec.status||'',effectiveDate:rec.statusDate||todayISO(),remarks:'Updated from Employee Information',changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
   }
+  if(isNew) DB.employees.push(rec);
+  if(!(await saveDB())){
+    if(isNew) DB.employees=DB.employees.filter(e=>e!==rec);
+    else { Object.keys(rec).forEach(key=>delete rec[key]); Object.assign(rec,original); }
+    return;
+  }
   logAudit((id?'Updated':'Added new')+' employee record: '+vals.name);
-  toast('Employee '+(id?'updated.':'added.'));
-  await saveDB();
   const newStoragePaths=recordStoragePaths(rec); rememberCommittedRecordFiles(rec);
   await deleteStorageObjects([...oldStoragePaths].filter(path=>!newStoragePaths.has(path)));
   await closeModal([...newStoragePaths]); renderNav(); renderEmployees();
+  toast('Employee '+(id?'updated.':'added.'));
 }
 async function deleteEmployee(id){
   const emp = DB.employees.find(e=>e.id===id);
+  if(!emp) return;
   const storagePaths=recordStoragePaths(emp);
+  const originalIndex=DB.employees.indexOf(emp);
   DB.employees = DB.employees.filter(e=>e.id!==id);
-  logAudit('Deleted employee record: '+(emp?emp.name:''));
-  await saveDB(); await deleteStorageObjects(storagePaths); renderNav(); renderEmployees(); toast('Employee deleted.');
+  if(!(await saveDB())){ DB.employees.splice(originalIndex,0,emp); renderEmployees(); return; }
+  logAudit('Deleted employee record: '+emp.name);
+  await deleteStorageObjects(storagePaths); renderNav(); renderEmployees(); toast('Employee deleted.');
 }
 function openTransferForEmployee(id){
   const emp = DB.employees.find(e=>e.id===id);
@@ -2579,7 +2689,7 @@ function saveEmployeeTransfer(id){
   toast('Transfer recorded.');
 }
 function employeeCompleteness(emp){
-  const keys=['employeeNo','name','position','department','dateHired','birthDate','gender','civilStatus','mobileNumber','personalEmail','address','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'];
+  const keys=['employeeNo','prfNumber','name','position','department','dateHired','birthDate','gender','civilStatus','mobileNumber','personalEmail','address','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'];
   const filled=keys.filter(k=>String(emp?.[k]??'').trim()!=='').length;
   return Math.round((filled/keys.length)*100);
 }
@@ -2635,7 +2745,7 @@ async function saveEmployeeStatus(id){
 
 function exportEmployeesCSV(){
   const csv = toCSV(DB.employees, [
-    {label:'Employee No.', get:r=>r.employeeNo},{label:'Name', get:r=>r.name},{label:'Position', get:r=>r.position},{label:'Department', get:r=>r.department},
+    {label:'Employee No.', get:r=>r.employeeNo},{label:'PRF Number', get:r=>r.prfNumber},{label:'Name', get:r=>r.name},{label:'Position', get:r=>r.position},{label:'Department', get:r=>r.department},
     {label:'Date Hired', get:r=>r.dateHired},{label:'Birth Date', get:r=>r.birthDate},{label:'Gender', get:r=>r.gender},{label:'Civil Status', get:r=>r.civilStatus},
     {label:'Mobile', get:r=>r.mobileNumber},{label:'Email', get:r=>r.personalEmail},{label:'Emergency Contact', get:r=>r.emergencyContactName},{label:'Emergency Phone', get:r=>r.emergencyContactPhone},
     {label:'Status', get:r=>r.status},
@@ -4709,7 +4819,7 @@ function qualityIssues(caseRows=[]){
 
   employees.forEach((e,idx)=>{
     const base=`employee:${e.id||idx}`;
-    const required=[['employeeNo','Employee No.'],['name','Employee Name'],['position','Position'],['department','Department'],['dateHired','Date Hired'],['gender','Gender'],['status','Employment Status']];
+    const required=[['employeeNo','Employee No.'],['prfNumber','PRF Number'],['name','Employee Name'],['position','Position'],['department','Department'],['dateHired','Date Hired'],['gender','Gender'],['status','Employment Status']];
     required.forEach(([k,label])=>{ if(!String(e[k]??'').trim()) add(`${base}:missing:${k}`,'error','employees',`${label} is missing`,`${e.name||'Employee record'} has incomplete required master data.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Required field']); });
     if(e.dateHired && e.dateHired>today) add(`${base}:future-hire`,'error','employees','Date Hired is in the future',`${e.name||'Employee'} is recorded as hired on ${fmtDate(e.dateHired)}.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Date']);
     if(e.birthDate && e.birthDate>today) add(`${base}:future-birth`,'error','employees','Birth Date is in the future',`${e.name||'Employee'} has a Birth Date later than today.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Date']);
@@ -5741,7 +5851,7 @@ Object.assign(window, {
   loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
   openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard,
-  renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
+  renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, openEmployeeColumnManager, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, setTitle, shiftDate, statusBadge, switchAuthTab, toCSV,
