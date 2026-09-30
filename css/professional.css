@@ -1283,3 +1283,34 @@ label.onboarding-check{cursor:pointer;}
   .analytics-command-actions .information-note-label{display:none;}
   .analytics-kpis{grid-template-columns:1fr 1fr;}
 }
+
+/* Employee directory toolbar: prioritize search and table space over button labels. */
+.employee-filter-toggle{display:none!important;}
+.employee-filter-set{display:flex;align-items:center;gap:6px;min-width:0;flex:0 1 auto;}
+.employee-filter-set>select{width:128px;min-width:98px;height:38px;min-height:38px;padding:0 27px 0 9px;border-radius:7px;font-size:10.5px;}
+.employee-directory-toolbar .employee-toolbar-actions{flex:0 0 auto;gap:5px;}
+.employee-directory-toolbar .employee-tool-btn{display:inline-grid!important;width:38px;min-width:38px;padding:0!important;place-items:center;}
+.employee-directory-toolbar .employee-tool-btn>span{display:none;}
+.employee-directory-toolbar .employee-add-button{padding-right:13px!important;padding-left:12px!important;}
+.employee-directory-toolbar .employee-reset{padding-right:10px!important;padding-left:10px!important;}
+@media (max-width:1350px){
+  .toolbar.employee-directory-toolbar{flex-wrap:wrap;}
+  .toolbar.employee-directory-toolbar .employee-directory-search{flex:1 1 calc(100% - 160px);}
+  .employee-filter-set{flex:1 1 540px;}
+  .employee-filter-set>select{flex:1 1 118px;width:auto;}
+}
+@media (max-width:720px){
+  .toolbar.employee-directory-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;}
+  .toolbar.employee-directory-toolbar .employee-directory-search{grid-column:1;min-width:0;width:100%;}
+  .employee-filter-toggle{display:inline-flex!important;grid-column:2;align-items:center;justify-content:center;gap:6px;height:38px!important;min-height:38px!important;padding:0 11px!important;white-space:nowrap;}
+  .employee-filter-toggle.active{border-color:#C9C0F2;background:#F5F2FF;color:var(--accent);}
+  .employee-filter-set{display:none;grid-column:1/-1;grid-template-columns:1fr 1fr;gap:7px;width:100%;}
+  .employee-filter-set.expanded{display:grid;}
+  .employee-filter-set>select{width:100%;min-width:0;}
+  .employee-directory-toolbar .employee-toolbar-actions{grid-column:1/-1;width:100%;margin-left:0;justify-content:flex-end;}
+  .employee-directory-toolbar .employee-toolbar-actions .employee-tool-btn{flex:0 0 38px;}
+  .employee-directory-toolbar .employee-toolbar-actions .employee-add-button{flex:1 1 auto;}
+  .employee-directory-toolbar .employee-toolbar-actions .employee-reset{flex:0 0 auto;}
+  .employee-directory-tablewrap{max-height:calc(100dvh - 235px);}
+  .employee-directory-toolbar:has(.employee-filter-set.expanded)+.employee-directory-tablewrap{max-height:calc(100dvh - 325px);}
+}

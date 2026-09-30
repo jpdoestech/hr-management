@@ -631,7 +631,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = blankDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeBranchFilter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', checklistSearch:'', checklistType:'', checklistStatus:'Active', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', actionSearch:'', actionLevel:'all', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', workflowPriority:'', workflowDepartment:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', analyticsBranch:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', manpowerView:'requests', manpowerSearch:'', manpowerBranch:'', manpowerStatus:'', manpowerRisk:'', manpowerType:'', tablePages:{}, tablePageSizes:{} };
+let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeBranchFilter:'', employeeStatusFilter:'', employeeClassFilter:'', employeeFiltersExpanded:false, lifecycleSearch:'', lifecycleFilter:'', checklistSearch:'', checklistType:'', checklistStatus:'Active', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', actionSearch:'', actionLevel:'all', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', workflowPriority:'', workflowDepartment:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', analyticsBranch:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', manpowerView:'requests', manpowerSearch:'', manpowerBranch:'', manpowerStatus:'', manpowerRisk:'', manpowerType:'', tablePages:{}, tablePageSizes:{} };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
@@ -1811,6 +1811,7 @@ function iSearch(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" 
 function iDownload(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>`;}
 function iUpload(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21V9M7 14l5-5 5 5M4 4h16"/></svg>`;}
 function iColumns(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg>`;}
+function iFilter(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16l-6.2 7.1v5.4l-3.6 1.7v-7.1z"/></svg>`;}
 function iInfo(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg>`;}
 function iBell(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 9a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9z"/><path d="M10 21h4"/></svg>`;}
 function iArrowLeft(s){return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 12H5M11 18l-6-6 6-6"/></svg>`;}
@@ -3132,8 +3133,13 @@ function resetEmployeeDirectoryFilters(){
   STATE.employeeBranchFilter='';
   STATE.employeeStatusFilter='';
   STATE.employeeClassFilter='';
+  STATE.employeeFiltersExpanded=false;
   renderEmployees();
   requestAnimationFrame(()=>document.getElementById('employee-directory-search')?.focus());
+}
+function toggleEmployeeDirectoryFilters(){
+  STATE.employeeFiltersExpanded=!STATE.employeeFiltersExpanded;
+  renderEmployees();
 }
 const EMPLOYEE_COLUMN_DEFS = [
   {key:'employeeNo',label:'Employee No.',locked:true,default:true,width:104,cell:e=>`<span class="mono">${esc(e.employeeNo||'—')}</span>`},
@@ -3212,6 +3218,7 @@ async function renderEmployees(){
   const statusFilter = STATE.employeeStatusFilter||'';
   const classFilter = STATE.employeeClassFilter||'';
   const hasFilters=Boolean(q||deptFilter||branchFilter||statusFilter||classFilter);
+  const activeFilterCount=[deptFilter,branchFilter,statusFilter,classFilter].filter(Boolean).length;
   let filteredRows = DB.employees.filter(e=>{
     const hay=[e.employeeNo,e.prfNumber,e.name,employeeDisplayName(e),e.position,e.department,e.branchReporting,e.mobileNumber,e.personalEmail,formatPhilippineAddress(e.homeAddress)||e.address,formatPhilippineAddress(e.presentAddress)||e.presentAddressText,e.remarks,...Object.keys(e.allowances||{})].map(v=>String(v||'').toLowerCase());
     const matches = !q || hay.some(v=>v.includes(q));
@@ -3242,29 +3249,19 @@ async function renderEmployees(){
     <section class="employee-directory-surface" aria-label="Employee directory">
       <div class="toolbar employee-directory-toolbar" aria-label="Employee directory search and filters">
         <div class="search employee-directory-search">${iSearch(14)}<input id="employee-directory-search" data-search-key="employeeSearch" type="search" autocomplete="off" spellcheck="false" aria-label="Search employees" placeholder="Search employees…" value="${esc(STATE.employeeSearch)}" oninput="employeeSearchInput(this.value)"></div>
-        <select aria-label="Filter employees by department" onchange="STATE.employeeDepartmentFilter=this.value; renderEmployees()">
-          <option value="">Department</option>
-          ${depts.map(d=>`<option value="${esc(d)}" ${deptFilter===d?'selected':''}>${esc(d)}</option>`).join('')}
-        </select>
-        <select aria-label="Filter employees by reporting branch" onchange="STATE.employeeBranchFilter=this.value; renderEmployees()">
-          <option value="">Branch</option>
-          ${branches.map(branch=>`<option value="${esc(branch)}" ${branchFilter===branch?'selected':''}>${esc(branch)}</option>`).join('')}
-        </select>
-        <select aria-label="Filter employees by employment status" onchange="STATE.employeeStatusFilter=this.value; renderEmployees()">
-          <option value="">Status</option>
-          ${statusOptions.map(v=>`<option value="${esc(v)}" ${statusFilter===v?'selected':''}>${esc(v)}</option>`).join('')}
-        </select>
-        <select aria-label="Filter employees by classification" onchange="STATE.employeeClassFilter=this.value; renderEmployees()">
-          <option value="">Classification</option>
-          <option value="Probationary" ${classFilter==='Probationary'?'selected':''}>Probationary</option>
-          <option value="Regular" ${classFilter==='Regular'?'selected':''}>Regular</option>
-        </select>
+        <button class="btn btn-ghost employee-filter-toggle ${activeFilterCount?'active':''}" type="button" onclick="toggleEmployeeDirectoryFilters()" aria-expanded="${Boolean(STATE.employeeFiltersExpanded)}" aria-controls="employee-filter-set">${iFilter(14)} <span>Filters${activeFilterCount?` (${activeFilterCount})`:''}</span></button>
+        <div id="employee-filter-set" class="employee-filter-set ${STATE.employeeFiltersExpanded?'expanded':''}">
+          <select aria-label="Filter employees by department" onchange="STATE.employeeDepartmentFilter=this.value; renderEmployees()"><option value="">Department</option>${depts.map(d=>`<option value="${esc(d)}" ${deptFilter===d?'selected':''}>${esc(d)}</option>`).join('')}</select>
+          <select aria-label="Filter employees by reporting branch" onchange="STATE.employeeBranchFilter=this.value; renderEmployees()"><option value="">Branch</option>${branches.map(branch=>`<option value="${esc(branch)}" ${branchFilter===branch?'selected':''}>${esc(branch)}</option>`).join('')}</select>
+          <select aria-label="Filter employees by employment status" onchange="STATE.employeeStatusFilter=this.value; renderEmployees()"><option value="">Status</option>${statusOptions.map(v=>`<option value="${esc(v)}" ${statusFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
+          <select aria-label="Filter employees by classification" onchange="STATE.employeeClassFilter=this.value; renderEmployees()"><option value="">Classification</option><option value="Probationary" ${classFilter==='Probationary'?'selected':''}>Probationary</option><option value="Regular" ${classFilter==='Regular'?'selected':''}>Regular</option></select>
+        </div>
         <div class="employee-toolbar-actions">
-          ${hasFilters?`<button class="btn btn-ghost btn-sm employee-reset" onclick="resetEmployeeDirectoryFilters()">Reset</button>`:''}
-          <button class="btn btn-ghost btn-sm" onclick="openEmployeeColumnManager()" title="Customize visible employee columns">${iColumns(13)} <span>Columns</span></button>
-          ${SESSION?.role==='Administrator'?`<button class="btn btn-ghost btn-sm" onclick="downloadEmployeeImportTemplate()" title="Download employee import template">${iDownload(13)} <span>Template</span></button><button class="btn btn-ghost btn-sm" onclick="openEmployeeImport()" title="Import employee records">${iUpload(13)} <span>Import</span></button>`:''}
-          ${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportEmployeesCSV()" title="Export complete employee records">${iDownload(13)} <span>Export</span></button>`:''}
-          ${canEdit()? `<button class="btn btn-primary btn-sm" onclick="openEmployeeForm()">${iPlus(13)} <span>Add Employee</span></button>`:''}
+          ${hasFilters?`<button class="btn btn-ghost btn-sm employee-reset" onclick="resetEmployeeDirectoryFilters()">Clear</button>`:''}
+          <button class="btn btn-ghost btn-sm employee-tool-btn" onclick="openEmployeeColumnManager()" title="Customize visible employee columns" aria-label="Customize visible employee columns">${iColumns(15)} <span>Columns</span></button>
+          ${SESSION?.role==='Administrator'?`<button class="btn btn-ghost btn-sm employee-tool-btn" onclick="downloadEmployeeImportTemplate()" title="Download employee import template" aria-label="Download employee import template">${iDownload(15)} <span>Template</span></button><button class="btn btn-ghost btn-sm employee-tool-btn" onclick="openEmployeeImport()" title="Import employee records" aria-label="Import employee records">${iUpload(15)} <span>Import</span></button>`:''}
+          ${canExport()?`<button class="btn btn-ghost btn-sm employee-tool-btn" onclick="exportEmployeesCSV()" title="Export complete employee records" aria-label="Export complete employee records">${iDownload(15)} <span>Export</span></button>`:''}
+          ${canEdit()? `<button class="btn btn-primary btn-sm employee-add-button" onclick="openEmployeeForm()">${iPlus(14)} <span>Add Employee</span></button>`:''}
         </div>
       </div>
       <div class="tablewrap employee-directory-tablewrap">
@@ -7611,7 +7608,7 @@ Object.assign(window, {
   loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
   openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard, dashboardOpenEmployees, dashboardOpenCases,
-  renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
+  renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, toggleEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, closeNavGroupPanel, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts, actionCenterSetLevel, actionCenterResetFilters, actionCenterPageGo, actionCenterPageSize,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   renderManpowerFulfillment, manpowerSetView, manpowerResetFilters, openManpowerRequestForm, saveManpowerRequest, deleteManpowerRequest, openManpowerRequestDetails, openManpowerRequirementForm, saveManpowerRequirement, openManpowerSlotForm, saveManpowerSlot, manpowerSlotReplacementChanged, exportManpowerFulfillment,
