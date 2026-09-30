@@ -6308,19 +6308,16 @@ async function renderAnalytics(){
 
     const rangeButtons=[['30d','30D'],['90d','90D'],['180d','180D'],['365d','1Y']];
     const html=`
-      <div class="sectionhead">
-        <div><h2>Management Analytics</h2><p>${fmtDate(start)} – ${fmtDate(end)} · ${branch?esc(branch):'All Branches'} · ${dept?esc(dept):'All Departments'}</p></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">${informationNoteButton('workforceAnalytics')}${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportAnalyticsSnapshot()">${iDownload(14)} Export Snapshot</button>`:''}<button class="btn btn-brass btn-sm" onclick="go('reports')">Reports</button></div>
-      </div>
-      <div class="analytics-toolbar">
-        <div><div class="small" style="font-weight:800;color:var(--ink);margin-bottom:7px;">Reporting range</div><div class="range-buttons">${rangeButtons.map(([v,l])=>`<button class="range-btn ${STATE.analyticsRange===v?'active':''}" onclick="analyticsSetPreset('${v}')">${l}</button>`).join('')}<button class="range-btn ${STATE.analyticsRange==='custom'?'active':''}" onclick="STATE.analyticsRange='custom';document.getElementById('analytics-start')?.focus()">Custom</button></div></div>
+      <div class="analytics-commandbar" aria-label="Analytics filters and actions">
+        <div class="analytics-range-control"><span class="analytics-control-label">Range</span><div class="range-buttons">${rangeButtons.map(([v,l])=>`<button class="range-btn ${STATE.analyticsRange===v?'active':''}" onclick="analyticsSetPreset('${v}')">${l}</button>`).join('')}<button class="range-btn ${STATE.analyticsRange==='custom'?'active':''}" onclick="STATE.analyticsRange='custom';document.getElementById('analytics-start')?.focus()">Custom</button></div></div>
         <div class="range-fields">
-          <div class="field"><label>From</label><input id="analytics-start" type="date" value="${esc(start)}"></div>
-          <div class="field"><label>To</label><input id="analytics-end" type="date" value="${esc(end)}"></div>
-          <div class="field"><label>Branch</label><select id="analytics-branch"><option value="">All Branches</option>${uniqueSettingNames([...employeeBranchLocations(),...DB.employees.map(employee=>employee.branchReporting)]).map(value=>`<option value="${esc(value)}" ${branch===value?'selected':''}>${esc(value)}</option>`).join('')}</select></div>
-          <div class="field"><label>Department</label><select id="analytics-dept"><option value="">All Departments</option>${reportDepartments().map(d=>`<option value="${esc(d)}" ${dept===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
-          <button class="btn btn-primary" onclick="analyticsApplyFilters()">Apply</button>
+          <div class="field analytics-date"><label>From</label><input id="analytics-start" type="date" value="${esc(start)}"></div>
+          <div class="field analytics-date"><label>To</label><input id="analytics-end" type="date" value="${esc(end)}"></div>
+          <div class="field analytics-scope"><label>Branch</label><select id="analytics-branch"><option value="">All Branches</option>${uniqueSettingNames([...employeeBranchLocations(),...DB.employees.map(employee=>employee.branchReporting)]).map(value=>`<option value="${esc(value)}" ${branch===value?'selected':''}>${esc(value)}</option>`).join('')}</select></div>
+          <div class="field analytics-scope"><label>Department</label><select id="analytics-dept"><option value="">All Departments</option>${reportDepartments().map(d=>`<option value="${esc(d)}" ${dept===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+          <button class="btn btn-primary analytics-apply" onclick="analyticsApplyFilters()">Apply</button>
         </div>
+        <div class="analytics-command-actions">${informationNoteButton('workforceAnalytics')}${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportAnalyticsSnapshot()">${iDownload(14)} Export</button>`:''}<button class="btn btn-brass btn-sm" onclick="go('reports')">Reports</button></div>
       </div>
 
       <div class="analytics-kpis">
