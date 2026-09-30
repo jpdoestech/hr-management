@@ -1500,32 +1500,49 @@ const NAV = [
     {v:'settings',label:'Settings',icon:iGear,roles:['Administrator','HR Staff']},
   ]},
 ];
+const NAV_SECTION_ICONS={
+  'My Workspace':iUser,
+  'Overview':iGrid,
+  'People & Records':iUsers,
+  'Employee Relations':iShield,
+  'Documents & Governance':iDoc,
+};
 function navItemVisible(item){
   const role=SESSION?.role||'HR Staff';
   if(item.roles) return item.roles.includes(role);
   return !['Employee','Manager'].includes(role);
 }
-let NAV_COLLAPSED={};
-try{ NAV_COLLAPSED=JSON.parse(localStorage.getItem('scpa_nav_collapsed')||'{}')||{}; }catch(e){ NAV_COLLAPSED={}; }
+let NAV_OPEN_SECTION='';
+try{NAV_OPEN_SECTION=localStorage.getItem('slsc_nav_open_section')||'';}catch(e){NAV_OPEN_SECTION='';}
+function navSectionForView(view){return NAV.find(group=>group.items.some(item=>item.v===view&&navItemVisible(item)))?.sec||'';}
+function rememberNavSection(section){
+  NAV_OPEN_SECTION=section;
+  try{localStorage.setItem('slsc_nav_open_section',section);}catch(e){}
+}
 function toggleNavGroup(sec){
-  NAV_COLLAPSED[sec]=!NAV_COLLAPSED[sec];
-  try{localStorage.setItem('scpa_nav_collapsed',JSON.stringify(NAV_COLLAPSED));}catch(e){}
+  rememberNavSection(NAV_OPEN_SECTION===sec?'':sec);
   renderNav();
 }
 function renderNav(){
   const nav=document.getElementById('nav'); nav.innerHTML='';
+  const visibleSections=NAV.filter(group=>group.items.some(navItemVisible)).map(group=>group.sec);
+  if(NAV_OPEN_SECTION&&!visibleSections.includes(NAV_OPEN_SECTION))rememberNavSection('');
+  const fallbackSection=navSectionForView(STATE.view)||visibleSections[0]||'';
+  const openSection=NAV_OPEN_SECTION||fallbackSection;
   NAV.forEach(group=>{
     const items=group.items.filter(navItemVisible);
     if(!items.length) return;
     const active=items.some(it=>STATE.view===it.v);
-    const collapsed=!active && NAV_COLLAPSED[group.sec]===true;
-    const g=document.createElement('section'); g.className='navgroup'+(collapsed?' collapsed':'');
-    const head=document.createElement('button'); head.type='button'; head.className='navgroup-head'; head.setAttribute('aria-expanded',collapsed?'false':'true'); head.innerHTML=`<span class="navgroup-title">${esc(group.sec)}</span><span class="navgroup-chevron">${collapsed?'›':'⌄'}</span>`; head.onclick=()=>toggleNavGroup(group.sec); g.appendChild(head);
-    const body=document.createElement('div'); body.className='navgroup-items';
+    const collapsed=openSection!==group.sec;
+    const sectionId=`navgroup-${group.sec.toLowerCase().replace(/[^a-z0-9]+/g,'-')}`;
+    const sectionIcon=NAV_SECTION_ICONS[group.sec]||iGrid;
+    const g=document.createElement('section'); g.className='navgroup'+(collapsed?' collapsed':'')+(active?' has-active':'');
+    const head=document.createElement('button');head.type='button';head.className='navgroup-head';head.setAttribute('aria-expanded',collapsed?'false':'true');head.setAttribute('aria-controls',sectionId);head.innerHTML=`<span class="navgroup-head-main"><span class="navgroup-icon">${sectionIcon(15)}</span><span class="navgroup-title">${esc(group.sec)}</span><span class="navgroup-size">${items.length}</span></span><span class="navgroup-chevron">${iArrowLeft(13)}</span>`;head.onclick=()=>toggleNavGroup(group.sec);g.appendChild(head);
+    const body=document.createElement('div');body.className='navgroup-items';body.id=sectionId;body.setAttribute('aria-hidden',collapsed?'true':'false');
     items.forEach(it=>{
       const b=document.createElement('button');
       b.className='navitem'+(STATE.view===it.v?' active':'');
-      b.onclick=()=>go(it.v);
+      b.onclick=()=>{rememberNavSection(group.sec);go(it.v);};
       b.innerHTML = it.icon(16) + `<span>${esc(it.label)}</span>` + (it.count? `<span class="cnt">${it.count()}</span>`:'');
       body.appendChild(b);
     });
@@ -1551,6 +1568,7 @@ async function go(view,{skipUnsaved=false}={}){
   if(navItem&&!navItemVisible(navItem)){toast('This workspace is not available for your role.',true);return;}
   if(!skipUnsaved && !(await requestPageNavigation(view))) return;
   STATE.view=view; STATE.search=''; STATE.filter=''; STATE.filterDept=''; STATE.filterStatus='';
+  const destinationSection=navSectionForView(view);if(destinationSection)rememberNavSection(destinationSection);
   const content=document.getElementById('content');
   content?.classList.toggle('employee-directory-content',view==='employees');
   content?.classList.toggle('data-focused-content',DATA_FOCUSED_VIEWS.has(view));

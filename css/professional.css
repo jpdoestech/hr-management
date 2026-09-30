@@ -640,10 +640,15 @@ body{background:var(--page);color:var(--text);}
   .page-header h1,.ops-pro-header h1,.dashboard-hero h1{font-size:22px;}
   .panel{padding:14px;}
 }
-.navgroup-items{display:grid;gap:2px;overflow:hidden;max-height:900px;transition:max-height .18s ease,opacity .18s ease;}
-.navgroup.collapsed .navgroup-items{max-height:0;opacity:0;pointer-events:none;}
-.navitem{width:100%;}
-@media (max-width:720px){.navgroup-head{padding-left:10px;padding-right:10px;}.navitem{padding-left:10px;padding-right:10px;}}
+.navgroup{margin:0 0 4px;}
+.navgroup-head{min-height:42px;padding:6px 8px;border:1px solid transparent;border-radius:7px;color:#625F69;text-transform:none;font-size:11px;letter-spacing:0;font-weight:750;}
+.navgroup-head:hover{border-color:var(--border);background:#F8F7FA;}.navgroup:not(.collapsed) .navgroup-head{border-color:#DED8F5;background:#F8F6FF;color:var(--accent);}
+.navgroup-head-main{display:flex;align-items:center;min-width:0;gap:9px;}.navgroup-icon{display:grid;flex:0 0 26px;width:26px;height:26px;place-items:center;border-radius:6px;background:#F1F0F4;color:#77727F;}.navgroup:not(.collapsed) .navgroup-icon{background:#EAE5FF;color:var(--accent);}.navgroup-title{flex:1;text-align:left;}.navgroup-size{display:grid;min-width:19px;height:19px;padding:0 5px;place-items:center;border-radius:10px;background:#F0EFF2;color:#807B87;font-size:8.5px;font-weight:800;}.navgroup.has-active.collapsed .navgroup-size{background:#EAE5FF;color:var(--accent);}
+.navgroup-chevron{width:22px;height:22px;background:transparent;color:#8B8791;}.navgroup-chevron svg{transition:transform .18s ease;transform:rotate(-90deg)}.navgroup.collapsed .navgroup-chevron svg{transform:rotate(180deg)}
+.navgroup-items{display:grid;gap:1px;overflow:hidden;max-height:900px;margin:3px 0 4px 20px;padding:2px 0 5px 10px;border-left:1px solid #E5E2EA;opacity:1;transition:max-height .18s ease,opacity .14s ease,padding .18s ease,margin .18s ease;}
+.navgroup.collapsed .navgroup-items{max-height:0;margin-top:0;margin-bottom:0;padding-top:0;padding-bottom:0;border-left-color:transparent;opacity:0;pointer-events:none;}
+.navitem{width:100%;min-height:35px;padding:7px 9px;font-size:11px;}
+@media (max-width:720px){.navgroup-head{padding-left:8px;padding-right:8px;}.navitem{padding-left:9px;padding-right:9px;}}
 
 /* Final workspace layout: prioritize the primary data surface over side-panel density. */
 .ops-pro-grid{grid-template-columns:1fr;}
