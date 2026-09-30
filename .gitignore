@@ -8,3 +8,4 @@ node_modules/
 .ver/*
 dist/
 .gs_backend/*
+.excel_templates/*
