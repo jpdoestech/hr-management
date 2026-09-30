@@ -630,7 +630,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = blankDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeBranchFilter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', checklistSearch:'', checklistType:'', checklistStatus:'Active', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', tablePages:{}, tablePageSizes:{} };
+let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeBranchFilter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', checklistSearch:'', checklistType:'', checklistStatus:'Active', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', actionSearch:'', actionLevel:'all', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', workflowPriority:'', workflowDepartment:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', tablePages:{}, tablePageSizes:{} };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
@@ -1230,6 +1230,32 @@ function actionCenterItems(caseRows){
 function actionCenterCounts(items){
   return {total:items.length,danger:items.filter(x=>x.level==='danger').length,warning:items.filter(x=>x.level==='warning').length,info:items.filter(x=>x.level==='info').length};
 }
+function actionCenterSetLevel(level){
+  STATE.actionLevel=level;
+  paginationReset(STATE,'action-center:list');
+  renderActionCenter();
+}
+function actionCenterResetFilters(){
+  STATE.actionSearch='';
+  STATE.actionLevel='all';
+  paginationReset(STATE,'action-center:list');
+  renderActionCenter();
+}
+function actionCenterPageGo(_scope,page){
+  STATE.tablePages ||= {};
+  const cur=STATE.tablePages['action-center:list']||{page:1,size:10,signature:''};
+  STATE.tablePages['action-center:list']={...cur,page:Math.max(1,Number(page)||1)};
+  renderActionCenter();
+}
+function actionCenterPageSize(_scope,size){
+  STATE.tablePages ||= {};
+  STATE.tablePageSizes ||= {};
+  const nextSize=Number(size)||10;
+  const cur=STATE.tablePages['action-center:list']||{page:1,size:nextSize,signature:''};
+  STATE.tablePageSizes['action-center:list']=nextSize;
+  STATE.tablePages['action-center:list']={...cur,page:1,size:nextSize,signature:''};
+  renderActionCenter();
+}
 async function renderActionCenter(){
   setTitle('Action Center','A prioritized work queue for follow-ups, deadlines, and records needing attention.');
   document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Loading action items…</div></div>';
@@ -1238,28 +1264,36 @@ async function renderActionCenter(){
     if(error) throw error;
     const items=actionCenterItems(caseRows||[]);
     const counts=actionCenterCounts(items);
-    const visible=items.slice(0,30);
+    const q=String(STATE.actionSearch||'').trim().toLowerCase();
+    const filtered=items.filter(item=>(STATE.actionLevel==='all'||item.level===STATE.actionLevel)&&(!q||[item.title,item.detail,...(item.meta||[])].some(value=>String(value||'').toLowerCase().includes(q))));
+    const page=paginateRows(filtered,STATE,'action-center:list',10);
+    const visible=page.rows;
     const html=`
       <div class="action-center-hero">
         <div><h1>Action Center</h1><p>One queue for urgent, upcoming, and informational HR follow-ups.</p></div>
         <div class="action-center-count"><span>Open items</span><b>${counts.total}</b></div>
       </div>
       <div class="action-grid">
-        <div class="panel">
-          <div class="dashboard-panel-head"><div><h3>Priority Work Queue</h3><div class="desc">Click an item to open the related module.</div></div></div>
-          <div class="action-list">
-            ${visible.length?visible.map(x=>`<div class="action-item ${x.level}" onclick="go('${x.view}')"><span class="flag"></span><div class="body"><div class="title">${esc(x.title)}</div><div class="detail">${esc(x.detail)}</div><div class="meta">${(x.meta||[]).map(m=>`<span>${esc(m)}</span>`).join('')}</div></div><span style="font-size:16px;color:var(--slate);">›</span></div>`).join(''):'<div class="action-empty"><b>No active follow-ups.</b><div style="margin-top:5px;">The current records do not show outstanding action items.</div></div>'}
+        <div class="panel action-queue-panel">
+          <div class="dashboard-panel-head"><div><h3>Priority Work Queue</h3><div class="desc">Select an item to open its related module.</div></div><span class="record-count">${filtered.length} item${filtered.length===1?'':'s'}</span></div>
+          <div class="data-toolbar action-toolbar">
+            <label class="searchbox">${iSearch(15)}<input data-search-key="actionSearch" type="search" autocomplete="off" placeholder="Search work queue…" value="${esc(STATE.actionSearch)}" oninput="queueSearchRender(this,'actionSearch',renderActionCenter)"></label>
+            <select class="filter-select" aria-label="Filter queue by urgency" onchange="STATE.actionLevel=this.value; paginationReset(STATE,'action-center:list'); renderActionCenter()"><option value="all" ${STATE.actionLevel==='all'?'selected':''}>All urgency</option><option value="danger" ${STATE.actionLevel==='danger'?'selected':''}>Urgent</option><option value="warning" ${STATE.actionLevel==='warning'?'selected':''}>Attention</option><option value="info" ${STATE.actionLevel==='info'?'selected':''}>Information</option></select>
+            ${(STATE.actionSearch||STATE.actionLevel!=='all')?`<button class="btn btn-ghost btn-sm" onclick="actionCenterResetFilters()">Reset</button>`:''}
           </div>
-          ${items.length>30?`<div class="analytics-note">Showing the first 30 items. Use the source modules for complete record-level review.</div>`:''}
+          <div class="action-list-scroll"><div class="action-list">
+            ${visible.length?visible.map(x=>`<button type="button" class="action-item ${x.level}" onclick="go('${x.view}')"><span class="flag"></span><span class="body"><span class="title">${esc(x.title)}</span><span class="detail">${esc(x.detail)}</span><span class="meta">${(x.meta||[]).map(m=>`<span>${esc(m)}</span>`).join('')}</span></span><span class="action-arrow" aria-hidden="true">›</span></button>`).join(''):'<div class="action-empty"><b>No work items match this view.</b><div style="margin-top:5px;">Clear the search or choose another urgency.</div></div>'}
+          </div></div>
+          <div class="table-pagination-wrap"><div class="table-pagination-meta">${page.meta.start?`${page.meta.start}–${page.meta.end}`:'0'} <span>of ${page.meta.total} work items</span></div>${paginationHTML(page.meta,'action-center:list',{go:'actionCenterPageGo',size:'actionCenterPageSize'})}</div>
         </div>
         <div class="action-side">
           <div class="panel">
             <h3>Queue Summary</h3><div class="desc">Grouped by urgency.</div>
             <div class="action-summary">
-              <div class="metric-card"><div class="k">Urgent</div><div class="v">${counts.danger}</div><div class="s">Overdue / aged</div></div>
-              <div class="metric-card"><div class="k">Attention</div><div class="v">${counts.warning}</div><div class="s">Needs follow-up</div></div>
-              <div class="metric-card"><div class="k">Info</div><div class="v">${counts.info}</div><div class="s">Upcoming / balance</div></div>
-              <div class="metric-card"><div class="k">Total</div><div class="v">${counts.total}</div><div class="s">Current queue</div></div>
+              <button type="button" class="metric-card metric-card-link ${STATE.actionLevel==='danger'?'active':''}" onclick="actionCenterSetLevel('danger')"><span class="k">Urgent</span><span class="v">${counts.danger}</span><span class="s">Overdue / aged</span></button>
+              <button type="button" class="metric-card metric-card-link ${STATE.actionLevel==='warning'?'active':''}" onclick="actionCenterSetLevel('warning')"><span class="k">Attention</span><span class="v">${counts.warning}</span><span class="s">Needs follow-up</span></button>
+              <button type="button" class="metric-card metric-card-link ${STATE.actionLevel==='info'?'active':''}" onclick="actionCenterSetLevel('info')"><span class="k">Info</span><span class="v">${counts.info}</span><span class="s">Upcoming / balance</span></button>
+              <button type="button" class="metric-card metric-card-link ${STATE.actionLevel==='all'?'active':''}" onclick="actionCenterSetLevel('all')"><span class="k">Total</span><span class="v">${counts.total}</span><span class="s">Current queue</span></button>
             </div>
           </div>
           <div class="panel">
@@ -2258,6 +2292,18 @@ function validateGovernmentIds(values){
 /* ================================================================
    DASHBOARD
    ================================================================ */
+async function dashboardOpenEmployees(classification=''){
+  STATE.employeeSearch='';
+  STATE.employeeDepartmentFilter='';
+  STATE.employeeBranchFilter='';
+  STATE.employeeStatusFilter='';
+  STATE.employeeClassFilter=classification;
+  await go('employees');
+}
+async function dashboardOpenCases(status=''){
+  await go('cases');
+  if(status){ STATE.filter=status; STATE.tablePages={}; await renderCases(); }
+}
 async function renderDashboard(){
   setTitle('Dashboard', `Overview of all HR & disciplinary records — ${DB.settings.orgName}`);
   document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Loading dashboard…</div></div>';
@@ -2332,11 +2378,11 @@ async function renderDashboard(){
       </div>
 
       <div class="dashboard-kpis">
-        <div class="dashboard-kpi" style="--accent:var(--brass)"><div class="top"><div class="label">Employees</div><div class="icon">${iUsers(15)}</div></div><div class="value">${total}</div><div class="meta">${statusCounts['Active']||0} active · ${probationary} probationary</div></div>
-        <div class="dashboard-kpi" style="--accent:var(--rust)"><div class="top"><div class="label">Active Cases</div><div class="icon">${iShield(15)}</div></div><div class="value">${activeCases.length}</div><div class="meta">${agedCases.length} aged 30+ days</div></div>
-        <div class="dashboard-kpi" style="--accent:var(--forest)"><div class="top"><div class="label">On Leave Today</div><div class="icon">${iCal(15)}</div></div><div class="value">${onLeaveToday}</div><div class="meta">${upcomingLeaves.length} upcoming in 30 days</div></div>
-        <div class="dashboard-kpi" style="--accent:var(--amber)"><div class="top"><div class="label">Open Follow-ups</div><div class="icon">${iDoc(15)}</div></div><div class="value">${openNTE+evalOverdue.length}</div><div class="meta">${openNTE} NTE · ${evalOverdue.length} overdue evaluations</div></div>
-        <div class="dashboard-kpi" style="--accent:var(--ink)"><div class="top"><div class="label">ATD Outstanding</div><div class="icon">₱</div></div><div class="value" style="font-size:22px;">${peso(atdOutstanding)}</div><div class="meta">${atdOpen} record(s) with balance</div></div>
+        <button type="button" class="dashboard-kpi dashboard-kpi-link" style="--accent:var(--brass)" onclick="dashboardOpenEmployees()"><span class="top"><span class="label">Employees</span><span class="icon">${iUsers(15)}</span></span><span class="value">${total}</span><span class="meta">${statusCounts['Active']||0} active · ${probationary} probationary</span></button>
+        <button type="button" class="dashboard-kpi dashboard-kpi-link" style="--accent:var(--rust)" onclick="dashboardOpenCases()"><span class="top"><span class="label">Active Cases</span><span class="icon">${iShield(15)}</span></span><span class="value">${activeCases.length}</span><span class="meta">${agedCases.length} aged 30+ days</span></button>
+        <button type="button" class="dashboard-kpi dashboard-kpi-link" style="--accent:var(--forest)" onclick="go('leaves')"><span class="top"><span class="label">On Leave Today</span><span class="icon">${iCal(15)}</span></span><span class="value">${onLeaveToday}</span><span class="meta">${upcomingLeaves.length} upcoming in 30 days</span></button>
+        <button type="button" class="dashboard-kpi dashboard-kpi-link" style="--accent:var(--amber)" onclick="go('actionCenter')"><span class="top"><span class="label">Open Follow-ups</span><span class="icon">${iDoc(15)}</span></span><span class="value">${openNTE+evalOverdue.length}</span><span class="meta">${openNTE} NTE · ${evalOverdue.length} overdue evaluations</span></button>
+        <button type="button" class="dashboard-kpi dashboard-kpi-link" style="--accent:var(--ink)" onclick="go('atd')"><span class="top"><span class="label">ATD Outstanding</span><span class="icon">₱</span></span><span class="value" style="font-size:22px;">${peso(atdOutstanding)}</span><span class="meta">${atdOpen} record(s) with balance</span></button>
       </div>
 
       <div class="dashboard-grid">
@@ -2349,7 +2395,7 @@ async function renderDashboard(){
         <div class="panel">
           <div class="dashboard-panel-head"><div><h3>Case Pipeline</h3><div class="desc">Current distribution of HR case stages.</div></div><button class="btn btn-ghost btn-sm" onclick="go('cases')">Manage</button></div>
           <div class="case-pipeline">
-            ${statusList.map(s=>{const c=caseStatus[s]||0;const pct=Math.round(c/statusMax*100);const stage=s==='Open'?'var(--brass)':s==='NTE Issued'||s==='Memo Issued'?'var(--amber)':s==='For Decision'?'var(--ink)':s==='Resolved'?'var(--forest)':'var(--slate)';return `<div class="case-stage"><div class="stage-label">${esc(s)}</div><div class="stage-count">${c}</div><div class="stage-bar"><div class="stage-fill" style="--stage:${stage};width:${pct}%"></div></div></div>`;}).join('')}
+            ${statusList.map(s=>{const c=caseStatus[s]||0;const pct=Math.round(c/statusMax*100);const stage=s==='Open'?'var(--brass)':s==='NTE Issued'||s==='Memo Issued'?'var(--amber)':s==='For Decision'?'var(--ink)':s==='Resolved'?'var(--forest)':'var(--slate)';return `<button type="button" class="case-stage case-stage-link" onclick="dashboardOpenCases('${esc(s)}')"><span class="stage-label">${esc(s)}</span><span class="stage-count">${c}</span><span class="stage-bar"><span class="stage-fill" style="--stage:${stage};width:${pct}%"></span></span></button>`;}).join('')}
           </div>
         </div>
       </div>
@@ -2385,8 +2431,8 @@ async function renderDashboard(){
           </div>
           <div style="height:1px;background:var(--line);margin:8px 0 12px;"></div>
           <div class="grid cols-2" style="gap:10px;">
-            <div class="metric-card"><div class="k">Regular</div><div class="v">${regular}</div><div class="s">Classified by threshold</div></div>
-            <div class="metric-card"><div class="k">Probationary</div><div class="v">${probationary}</div><div class="s">Within probation period</div></div>
+            <button type="button" class="metric-card metric-card-link" onclick="dashboardOpenEmployees('Regular')"><span class="k">Regular</span><span class="v">${regular}</span><span class="s">Classified by threshold</span></button>
+            <button type="button" class="metric-card metric-card-link" onclick="dashboardOpenEmployees('Probationary')"><span class="k">Probationary</span><span class="v">${probationary}</span><span class="s">Within probation period</span></button>
           </div>
         </div>
       </div>
@@ -5293,6 +5339,22 @@ async function saveWorkflowManualTask(){
 }
 function workflowPageGo(_scope,page){ STATE.tablePages ||= {}; const cur=STATE.tablePages['workflow:list']||{page:1,size:10,signature:''}; STATE.tablePages['workflow:list']={...cur,page:Math.max(1,Number(page)||1)}; renderWorkflowCenter(); }
 function workflowPageSize(_scope,size){ STATE.tablePages ||= {}; STATE.tablePageSizes ||= {}; const nextSize=Number(size)||10; const cur=STATE.tablePages['workflow:list']||{page:1,size:nextSize,signature:''}; STATE.tablePageSizes['workflow:list']=nextSize; STATE.tablePages['workflow:list']={...cur,page:1,size:nextSize,signature:''}; renderWorkflowCenter(); }
+function workflowSetQuickFilter(scope){
+  STATE.workflowFilter=scope;
+  STATE.workflowStatus='Pending';
+  paginationReset(STATE,'workflow:list');
+  renderWorkflowCenter();
+}
+function workflowResetFilters(){
+  STATE.search='';
+  STATE.workflowFilter='queue';
+  STATE.workflowStatus='Pending';
+  STATE.workflowType='';
+  STATE.workflowPriority='';
+  STATE.workflowDepartment='';
+  paginationReset(STATE,'workflow:list');
+  renderWorkflowCenter();
+}
 function automationPageGo(_scope,page){ STATE.tablePages ||= {}; const cur=STATE.tablePages['automation:tasks']||{page:1,size:10,signature:''}; STATE.tablePages['automation:tasks']={...cur,page:Math.max(1,Number(page)||1)}; renderAutomationCenter(); }
 function automationPageSize(_scope,size){ STATE.tablePages ||= {}; STATE.tablePageSizes ||= {}; const nextSize=Number(size)||10; const cur=STATE.tablePages['automation:tasks']||{page:1,size:nextSize,signature:''}; STATE.tablePageSizes['automation:tasks']=nextSize; STATE.tablePages['automation:tasks']={...cur,page:1,size:nextSize,signature:''}; renderAutomationCenter(); }
 
@@ -5300,24 +5362,30 @@ async function renderWorkflowCenter(){
   setTitle('Workflow & Approvals','A unified work queue for approvals, reviews, deadlines, and HR tasks.');
   document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Synchronizing current HR workflow items…</div></div>';
   await workflowSyncTasks({silent:true});
+  if(STATE.view!=='workflow') return;
   const all=DB.workflowTasks||[];
-  const pending=all.filter(t=>t.status==='Pending');
   const visible=all.filter(workflowVisibleToSession);
+  const pending=visible.filter(t=>t.status==='Pending');
   const today=todayISO(), next7=addDaysISO(today,7);
   const overdue=visible.filter(t=>t.status==='Pending'&&t.dueDate&&t.dueDate<today);
   const due7=visible.filter(t=>t.status==='Pending'&&t.dueDate&&t.dueDate>=today&&t.dueDate<=next7);
   const my=visible.filter(t=>t.status==='Pending'&&String(t.assigneeId||'')===String(SESSION?.id||''));
   const unassigned=visible.filter(t=>t.status==='Pending'&&!t.assigneeId);
+  const departments=[...new Set(visible.map(t=>String(t.department||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const q=(STATE.search||'').toLowerCase();
   let rows=visible.filter(t=>{
-    const searchOk=!q||[t.title,t.description,t.employeeName,t.department,t.module,t.priority].some(v=>String(v||'').toLowerCase().includes(q));
-    let statusOk=STATE.workflowStatus==='All'||t.status===STATE.workflowStatus;
-    let typeOk=!STATE.workflowType||t.workflowType===STATE.workflowType;
+    const searchOk=!q||[t.title,t.description,t.employeeName,t.department,t.module,t.priority,t.status,workflowSourceTitle(t)].some(v=>String(v||'').toLowerCase().includes(q));
+    const statusOk=STATE.workflowStatus==='All'||t.status===STATE.workflowStatus;
+    const typeOk=!STATE.workflowType||t.workflowType===STATE.workflowType;
+    const priorityOk=!STATE.workflowPriority||t.priority===STATE.workflowPriority;
+    const departmentOk=!STATE.workflowDepartment||t.department===STATE.workflowDepartment;
     let scopeOk=true;
     if(STATE.workflowFilter==='mine') scopeOk=String(t.assigneeId||'')===String(SESSION?.id||'');
     if(STATE.workflowFilter==='queue') scopeOk=t.status==='Pending';
     if(STATE.workflowFilter==='unassigned') scopeOk=t.status==='Pending'&&!t.assigneeId;
-    return searchOk&&statusOk&&typeOk&&scopeOk;
+    if(STATE.workflowFilter==='overdue') scopeOk=t.status==='Pending'&&t.dueDate&&t.dueDate<today;
+    if(STATE.workflowFilter==='due7') scopeOk=t.status==='Pending'&&t.dueDate&&t.dueDate>=today&&t.dueDate<=next7;
+    return searchOk&&statusOk&&typeOk&&priorityOk&&departmentOk&&scopeOk;
   }).sort((a,b)=>{
     const pa={Urgent:0,High:1,Normal:2,Low:3};
     if(a.status!==b.status) return a.status==='Pending'?-1:1;
@@ -5326,16 +5394,18 @@ async function renderWorkflowCenter(){
   });
   const page=paginateRows(rows,STATE,'workflow:list',10);
   const pageRows=page.rows;
+  const hasFilters=STATE.search||STATE.workflowFilter!=='queue'||STATE.workflowStatus!=='Pending'||STATE.workflowType||STATE.workflowPriority||STATE.workflowDepartment;
+  const workflowStatusMap={Pending:'b-amber',Completed:'b-green',Rejected:'b-red',Cancelled:'b-grey'};
   const html=`<div class="workflow-hero"><div><h1>Workflow &amp; Approvals</h1><p>${visible.filter(t=>t.status==='Pending').length} pending workflow item${visible.filter(t=>t.status==='Pending').length===1?'':'s'} across cases, leave, PRF, evaluations, and HR reviews.</p></div><div class="workflow-actions">${canEdit()?`<button class="btn btn-brass" onclick="openWorkflowCreateForm()">${iPlus(15)} New HR Task</button>`:''}<button class="btn btn-ghost" onclick="go('actionCenter')">Action Center</button></div></div>
     <div class="workflow-kpis">
-      <div class="workflow-kpi" style="--accent:var(--amber)"><div class="k">Pending Queue</div><div class="v">${pending.length}</div><div class="s">All workflow items</div></div>
-      <div class="workflow-kpi" style="--accent:var(--ink)"><div class="k">My Work</div><div class="v">${my.length}</div><div class="s">Assigned to me</div></div>
-      <div class="workflow-kpi" style="--accent:${overdue.length?'var(--rust)':'var(--forest)'}"><div class="k">Overdue</div><div class="v">${overdue.length}</div><div class="s">Past due date</div></div>
-      <div class="workflow-kpi" style="--accent:var(--brass)"><div class="k">Due · 7d</div><div class="v">${due7.length}</div><div class="s">Upcoming deadlines</div></div>
-      <div class="workflow-kpi" style="--accent:var(--forest)"><div class="k">Unassigned</div><div class="v">${unassigned.length}</div><div class="s">Needs an owner</div></div>
+      <button type="button" class="workflow-kpi workflow-kpi-link ${STATE.workflowFilter==='queue'?'active':''}" style="--accent:var(--amber)" onclick="workflowSetQuickFilter('queue')"><span class="k">Pending Queue</span><span class="v">${pending.length}</span><span class="s">All pending items</span></button>
+      <button type="button" class="workflow-kpi workflow-kpi-link ${STATE.workflowFilter==='mine'?'active':''}" style="--accent:var(--ink)" onclick="workflowSetQuickFilter('mine')"><span class="k">My Work</span><span class="v">${my.length}</span><span class="s">Assigned to me</span></button>
+      <button type="button" class="workflow-kpi workflow-kpi-link ${STATE.workflowFilter==='overdue'?'active':''}" style="--accent:${overdue.length?'var(--rust)':'var(--forest)'}" onclick="workflowSetQuickFilter('overdue')"><span class="k">Overdue</span><span class="v">${overdue.length}</span><span class="s">Past due date</span></button>
+      <button type="button" class="workflow-kpi workflow-kpi-link ${STATE.workflowFilter==='due7'?'active':''}" style="--accent:var(--brass)" onclick="workflowSetQuickFilter('due7')"><span class="k">Due · 7d</span><span class="v">${due7.length}</span><span class="s">Upcoming deadlines</span></button>
+      <button type="button" class="workflow-kpi workflow-kpi-link ${STATE.workflowFilter==='unassigned'?'active':''}" style="--accent:var(--forest)" onclick="workflowSetQuickFilter('unassigned')"><span class="k">Unassigned</span><span class="v">${unassigned.length}</span><span class="s">Needs an owner</span></button>
     </div>
-    <div class="workflow-panel"><div class="workflow-toolbar"><div class="search">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search tasks, employees, departments…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderWorkflowCenter)"></div><select onchange="STATE.workflowFilter=this.value; renderWorkflowCenter()"><option value="queue" ${STATE.workflowFilter==='queue'?'selected':''}>Pending Queue</option><option value="mine" ${STATE.workflowFilter==='mine'?'selected':''}>My Work</option><option value="unassigned" ${STATE.workflowFilter==='unassigned'?'selected':''}>Unassigned</option><option value="all" ${STATE.workflowFilter==='all'?'selected':''}>All Tasks</option></select><select onchange="STATE.workflowStatus=this.value; renderWorkflowCenter()"><option value="Pending" ${STATE.workflowStatus==='Pending'?'selected':''}>Pending</option><option value="Completed" ${STATE.workflowStatus==='Completed'?'selected':''}>Completed</option><option value="Rejected" ${STATE.workflowStatus==='Rejected'?'selected':''}>Rejected</option><option value="Cancelled" ${STATE.workflowStatus==='Cancelled'?'selected':''}>Cancelled</option><option value="All" ${STATE.workflowStatus==='All'?'selected':''}>All Statuses</option></select><select onchange="STATE.workflowType=this.value; renderWorkflowCenter()"><option value="" ${!STATE.workflowType?'selected':''}>All Types</option>${WORKFLOW_TYPES.map(t=>`<option value="${t}" ${STATE.workflowType===t?'selected':''}>${t}</option>`).join('')}</select></div>
-    ${rows.length?`<div class="workflow-list">${pageRows.map(t=>{const sev=workflowTaskSeverity(t);return `<div class="workflow-row ${sev}"><span class="dot"></span><div class="main"><div class="title">${esc(t.title)}</div><div class="meta">${esc(t.employeeName||workflowSourceTitle(t))}${t.department?' · '+esc(t.department):''} · ${esc(t.description||'')} ${t.assigneeId?' · '+esc(DB.users.find(u=>String(u.id)===String(t.assigneeId))?.fullName||'Assigned'): ' · Unassigned'}</div></div><div class="right"><div>${workflowPriorityBadge(t.priority)}</div><div class="due">${esc(workflowDueText(t))}</div></div><div class="actions">${workflowActionButtons(t)}</div></div>`;}).join('')}</div><div class="table-pagination-wrap"><div class="table-pagination-meta">${page.meta.start?`${page.meta.start}–${page.meta.end}`:'0'} <span>of ${page.meta.total} workflow items</span></div>${paginationHTML(page.meta,'workflow:list',{go:'workflowPageGo',size:'workflowPageSize'})}</div>`:`<div class="workflow-empty"><b>No workflow items match this view.</b>Try another filter or create a manual HR task.</div>`}</div>
+    <div class="workflow-panel table-card workflow-table-card"><div class="workflow-toolbar data-toolbar"><label class="searchbox">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search task, employee, department…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderWorkflowCenter)"></label><select class="filter-select" aria-label="Workflow scope" onchange="STATE.workflowFilter=this.value;paginationReset(STATE,'workflow:list');renderWorkflowCenter()"><option value="queue" ${STATE.workflowFilter==='queue'?'selected':''}>Pending Queue</option><option value="mine" ${STATE.workflowFilter==='mine'?'selected':''}>My Work</option><option value="overdue" ${STATE.workflowFilter==='overdue'?'selected':''}>Overdue</option><option value="due7" ${STATE.workflowFilter==='due7'?'selected':''}>Due in 7 days</option><option value="unassigned" ${STATE.workflowFilter==='unassigned'?'selected':''}>Unassigned</option><option value="all" ${STATE.workflowFilter==='all'?'selected':''}>All Tasks</option></select><select class="filter-select" aria-label="Workflow status" onchange="STATE.workflowStatus=this.value;paginationReset(STATE,'workflow:list');renderWorkflowCenter()">${[...WORKFLOW_STATUS,'All'].map(value=>`<option value="${value}" ${STATE.workflowStatus===value?'selected':''}>${value==='All'?'All Statuses':value}</option>`).join('')}</select><select class="filter-select" aria-label="Workflow type" onchange="STATE.workflowType=this.value;paginationReset(STATE,'workflow:list');renderWorkflowCenter()"><option value="">All Types</option>${WORKFLOW_TYPES.map(t=>`<option value="${t}" ${STATE.workflowType===t?'selected':''}>${t}</option>`).join('')}</select><select class="filter-select" aria-label="Workflow priority" onchange="STATE.workflowPriority=this.value;paginationReset(STATE,'workflow:list');renderWorkflowCenter()"><option value="">All Priorities</option>${['Urgent','High','Normal','Low'].map(value=>`<option value="${value}" ${STATE.workflowPriority===value?'selected':''}>${value}</option>`).join('')}</select>${departments.length?`<select class="filter-select" aria-label="Workflow department" onchange="STATE.workflowDepartment=this.value;paginationReset(STATE,'workflow:list');renderWorkflowCenter()"><option value="">All Departments</option>${departments.map(value=>`<option value="${esc(value)}" ${STATE.workflowDepartment===value?'selected':''}>${esc(value)}</option>`).join('')}</select>`:''}${hasFilters?`<button class="btn btn-ghost btn-sm" onclick="workflowResetFilters()">Reset</button>`:''}</div>
+    ${rows.length?`<div class="tablewrap workflow-table-scroll"><table class="data-table" data-server-paginated="true"><thead><tr><th>Task</th><th>Employee / Source</th><th>Department</th><th>Type</th><th>Priority</th><th>Due</th><th>Assignee</th><th>Status</th><th class="actions-head">Actions</th></tr></thead><tbody>${pageRows.map(t=>{const assignee=t.assigneeId?(DB.users.find(u=>String(u.id)===String(t.assigneeId))?.fullName||'Assigned'):'Unassigned';return `<tr><td><b>${esc(t.title)}</b>${t.description?`<div class="cell-secondary">${esc(t.description)}</div>`:''}</td><td>${esc(t.employeeName||workflowSourceTitle(t))}</td><td>${esc(t.department||'—')}</td><td>${esc(t.workflowType||'Task')}</td><td>${workflowPriorityBadge(t.priority)}</td><td><span class="workflow-due ${workflowTaskSeverity(t)}">${esc(workflowDueText(t))}</span></td><td>${esc(assignee)}</td><td>${statusBadge(t.status,workflowStatusMap)}</td><td><div class="rowactions">${workflowActionButtons(t)}</div></td></tr>`;}).join('')}</tbody></table></div><div class="table-pagination-wrap"><div class="table-pagination-meta">${page.meta.start?`${page.meta.start}–${page.meta.end}`:'0'} <span>of ${page.meta.total} workflow items</span></div>${paginationHTML(page.meta,'workflow:list',{go:'workflowPageGo',size:'workflowPageSize'})}</div>`:`<div class="workflow-empty"><b>No workflow items match this view.</b>Try another filter or create a manual HR task.</div>`}</div>
     <div class="notice" style="margin-top:12px;"><b>Workflow rule:</b> Source records remain the system of record. Approvals and task state coordinate HR work around those records and are retained in the audit trail.</div>`;
   document.getElementById('content').innerHTML=html;
 }
@@ -7204,7 +7274,7 @@ Object.assign(window, {
   addCaseActivity, addCaseNote, caseActivityIcon, caseActivityLabel, caseDeadlineInfo, casePriorityBadge, caseWorkflowSteps, caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, setCaseWorkflowStatus, buildNotificationItems, closeNotificationPanel, markAllNotificationsRead, openNotification, goFromNotifications, refreshNotificationBadge, renderNotificationPanel, toggleNotificationPanel, analyticsApplyFilters, analyticsSetPreset, exportAnalyticsSnapshot,
   renderSelfService, renderTeamApprovals, openProfileChangeRequest, saveProfileChangeRequest, openLeaveRequest, saveLeaveRequest, cancelSelfServiceRequest, openServiceRequestReview, reviewServiceRequest,
   renderLifecycleChecklists, openLifecycleChecklistForm, saveLifecycleChecklist, openLifecycleChecklist, openLifecycleChecklistItem, returnToLifecycleChecklist, saveLifecycleChecklistItem, cancelLifecycleChecklist, lifecycleTemplateChanged,
-  workflowSyncTasks, workflowPendingCount, workflowFindTask, workflowOpenSource, workflowSaveTaskNote, saveWorkflowTaskNote, workflowAssignTask, workflowSaveAssignment, workflowCompleteTask, workflowDecideTask, openWorkflowTask, openWorkflowCreateForm, saveWorkflowManualTask, renderWorkflowCenter, workflowActionButtons, workflowPriorityBadge, workflowDueText, workflowPageGo, workflowPageSize, automationPageGo, automationPageSize,
+  workflowSyncTasks, workflowPendingCount, workflowFindTask, workflowOpenSource, workflowSaveTaskNote, saveWorkflowTaskNote, workflowAssignTask, workflowSaveAssignment, workflowCompleteTask, workflowDecideTask, openWorkflowTask, openWorkflowCreateForm, saveWorkflowManualTask, renderWorkflowCenter, workflowActionButtons, workflowPriorityBadge, workflowDueText, workflowPageGo, workflowPageSize, workflowSetQuickFilter, workflowResetFilters, automationPageGo, automationPageSize,
   AUTOMATION_RULES, automationPendingCount, ensureAutomationSettings, automationRuleEnabled, runAutomationEngine, toggleAutomationRule, automationOpenTask, renderAutomationCenter,
   countStoredDocuments, renderDocuments, openStoredDocument, collectStoredDocuments, collectDocumentIndex, openDriveDocument, openDriveDocumentForm, saveDriveDocument, deleteDriveDocument, countDriveDocuments, documentExpiryInfo, openDriveWorkspace,
   attachCellHTML, attachPreviewHTML, authErr, bootAuthenticated, calShift, canEdit, classify, clearFileField, closeModal,
@@ -7216,9 +7286,9 @@ Object.assign(window, {
   toggleSidebar, closeSidebar, applyReportFilters, exportReportEmployees, exportReportActivity, exportReportATD, exportReportCases,
   loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
   openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
-  openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard,
+  openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard, dashboardOpenEmployees, dashboardOpenCases,
   renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
-  renderLeaveSummary, renderLeaves, renderModuleView, renderNav, closeNavGroupPanel, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
+  renderLeaveSummary, renderLeaves, renderModuleView, renderNav, closeNavGroupPanel, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts, actionCenterSetLevel, actionCenterResetFilters, actionCenterPageGo, actionCenterPageSize,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, saveDepartmentSetting, savePositionSetting, setTitle, shiftDate, statusBadge, storageSettingsChanged, testGoogleDriveConnection, switchAuthTab, switchSettingsTab, syncPositionSelect, syncUserExportControl, toggleCatalogQuickAdd, catalogQuickAddKeydown, saveCatalogQuickAdd, openDepartmentSetting, openPositionSetting, toCSV,
   toast, todayISO, togglePasswordVisibility, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, serverTablePageGo, serverTablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, openInformationNote, paginationMeta, paginationHTML, paginationReset, paginateRows,
