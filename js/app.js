@@ -4,6 +4,7 @@ import { paginationMeta, paginationHTML, paginationReset, paginateRows } from '.
 import { installTableEnhancer } from './core/table-enhancer.js?v=20260930-1';
 import { compactRedundantPageIntros } from './core/content-layout.js?v=20260928-4';
 import { buildRecordChanges, valuesEqual } from './core/record-diff.js?v=20260930-1';
+import { roleCanExport } from './core/export-access.js?v=20260930-1';
 import { addressComponentHTML, addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom, initializeAddressComponents, readAddressComponent } from './address/address-component.js?v=20260929-1';
 import { formatPhilippineAddress, normalizeAddress } from './address/address-models.js?v=20260929-1';
 
@@ -262,9 +263,10 @@ function serverTablePageSize(scope,size){
 }
 
 async function loadProfiles(){
-  const {data,error}=await supabase.from('profiles').select('id,full_name,username,email,role,employee_record_id,manager_profile_id,created_at').order('created_at');
+  let {data,error}=await supabase.from('profiles').select('id,full_name,username,email,role,can_export,employee_record_id,manager_profile_id,created_at').order('created_at');
+  if(error&&['42703','PGRST204'].includes(error.code))({data,error}=await supabase.from('profiles').select('id,full_name,username,email,role,employee_record_id,manager_profile_id,created_at').order('created_at'));
   if(error) throw error;
-  DB.users=(data||[]).map(p=>({id:p.id,fullName:p.full_name,username:p.username,email:p.email,role:p.role,employeeRecordId:p.employee_record_id||'',managerProfileId:p.manager_profile_id||'',createdAt:p.created_at?.slice(0,10)||todayISO()}));
+  DB.users=(data||[]).map(p=>({id:p.id,fullName:p.full_name,username:p.username,email:p.email,role:p.role,canExport:p.can_export===true,employeeRecordId:p.employee_record_id||'',managerProfileId:p.manager_profile_id||'',createdAt:p.created_at?.slice(0,10)||todayISO()}));
 }
 
 async function persistStateAndProfiles(){ await saveDB(); await loadProfiles(); }
@@ -703,9 +705,10 @@ async function doRegister(ev){
 }
 async function bootAuthenticated(user){
   try{
-    const {data:ownProfile,error:profileError}=await supabase.from('profiles').select('id,full_name,username,email,role,employee_record_id,manager_profile_id,created_at').eq('id',user.id).maybeSingle();
+    let {data:ownProfile,error:profileError}=await supabase.from('profiles').select('id,full_name,username,email,role,can_export,employee_record_id,manager_profile_id,created_at').eq('id',user.id).maybeSingle();
+    if(profileError&&['42703','PGRST204'].includes(profileError.code))({data:ownProfile,error:profileError}=await supabase.from('profiles').select('id,full_name,username,email,role,employee_record_id,manager_profile_id,created_at').eq('id',user.id).maybeSingle());
     if(profileError) throw profileError;
-    SESSION=ownProfile?{id:ownProfile.id,fullName:ownProfile.full_name,username:ownProfile.username,email:ownProfile.email,role:ownProfile.role,employeeRecordId:ownProfile.employee_record_id||'',managerProfileId:ownProfile.manager_profile_id||'',createdAt:ownProfile.created_at?.slice(0,10)||todayISO()}:{id:user.id,fullName:user.user_metadata?.full_name||user.email,username:user.user_metadata?.username||'',email:user.email,role:'Employee',employeeRecordId:'',managerProfileId:''};
+    SESSION=ownProfile?{id:ownProfile.id,fullName:ownProfile.full_name,username:ownProfile.username,email:ownProfile.email,role:ownProfile.role,canExport:ownProfile.can_export===true,employeeRecordId:ownProfile.employee_record_id||'',managerProfileId:ownProfile.manager_profile_id||'',createdAt:ownProfile.created_at?.slice(0,10)||todayISO()}:{id:user.id,fullName:user.user_metadata?.full_name||user.email,username:user.user_metadata?.username||'',email:user.email,role:'Employee',canExport:false,employeeRecordId:'',managerProfileId:''};
     let state=await loadDB();
     // An empty database is a valid production state, including after an
     // administrator performs the user-preserving reset.
@@ -1783,6 +1786,12 @@ function logAudit(action){
 }
 function isHRRole(role=SESSION?.role){ return role==='Administrator'||role==='HR Staff'; }
 function canEdit(){ return !SESSION || isHRRole(); }
+function canExport(){ return roleCanExport(SESSION?.role,SESSION?.canExport); }
+function requireExportAccess(){
+  if(canExport())return true;
+  toast('Export is disabled for this account. Ask a System Administrator to enable export access.',true);
+  return false;
+}
 function canReviewServiceRequests(){ return isHRRole()||SESSION?.role==='Manager'; }
 function setTitle(t,sub){ document.getElementById('tb-title').textContent=t; document.getElementById('tb-sub').textContent=sub||''; }
 
@@ -1825,11 +1834,13 @@ function toCSV(rows, cols){
   return head+'\n'+body;
 }
 function downloadCSV(filename, csv){
+  if(!requireExportAccess())return false;
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href=url; a.download=filename;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
+  return true;
 }
 
 /* ---------------- modal helpers ---------------- */
@@ -2454,7 +2465,7 @@ async function renderModuleView(key){
       <button class="btn btn-primary btn-sm" onclick="queueSearchRender(document.getElementById('tbl-search'),'search',()=>renderModuleView('${key}'),0)">${iSearch(14)} Search</button>
       ${showClear?`<button class="btn btn-ghost btn-sm" onclick="STATE.search='';STATE.filter='';STATE.filterDept='';STATE.filterStatus='';STATE.tablePages={};renderModuleView('${key}')">Clear</button>`:''}
       <div class="toolbar-spacer"></div>
-      <button class="btn btn-ghost btn-sm" onclick="exportModuleCSV('${key}')">${iDownload(14)} Export</button>
+      ${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportModuleCSV('${key}')">${iDownload(14)} Export</button>`:''}
       ${cfg.extraToolbar?cfg.extraToolbar():''}
     </div>
     <div class="table-card">
@@ -2595,6 +2606,7 @@ async function deleteRecord(key,id){
   toast(cfg.singular+' deleted.');
 }
 function exportModuleCSV(key){
+  if(!requireExportAccess())return;
   const cfg = MODULES[key];
   const seen=new Set();
   const cols=[];
@@ -3153,7 +3165,7 @@ async function renderEmployees(){
           ${hasFilters?`<button class="btn btn-ghost btn-sm employee-reset" onclick="resetEmployeeDirectoryFilters()">Reset</button>`:''}
           <button class="btn btn-ghost btn-sm" onclick="openEmployeeColumnManager()" title="Customize visible employee columns">${iColumns(13)} <span>Columns</span></button>
           ${SESSION?.role==='Administrator'?`<button class="btn btn-ghost btn-sm" onclick="downloadEmployeeImportTemplate()" title="Download employee import template">${iDownload(13)} <span>Template</span></button><button class="btn btn-ghost btn-sm" onclick="openEmployeeImport()" title="Import employee records">${iUpload(13)} <span>Import</span></button>`:''}
-          <button class="btn btn-ghost btn-sm" onclick="exportEmployeesCSV()" title="Export complete employee records">${iDownload(13)} <span>Export</span></button>
+          ${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportEmployeesCSV()" title="Export complete employee records">${iDownload(13)} <span>Export</span></button>`:''}
           ${canEdit()? `<button class="btn btn-primary btn-sm" onclick="openEmployeeForm()">${iPlus(13)} <span>Add Employee</span></button>`:''}
         </div>
       </div>
@@ -3436,11 +3448,13 @@ function employeeImportSummary(preview){
   return {errors,warnings,valid,total:preview.rows.length};
 }
 function openEmployeeImport(){
+  if(SESSION?.role!=='Administrator'){toast('Only a System Administrator can import employee records.',true);return;}
   if(!requireEmployeeImportAdmin()||!employeeSpreadsheetReady()) return;
   EMPLOYEE_IMPORT_PREVIEW=null;
   openEmployeeWorkspaceModal(`<div class="modal-head"><div><h3>Import Employees</h3><div class="small">Validate a completed Excel template before adding records.</div></div><button type="button" onclick="closeModal()" aria-label="Close import">&times;</button></div><div class="modal-body employee-import-body"><div class="employee-import-drop"><span>${iUpload(22)}</span><div><b>Select an employee workbook</b><p>Accepted formats: .xlsx, .xls, and .csv. No records are saved until validation succeeds and you confirm the import.</p></div><label class="btn btn-primary btn-sm" for="employee-import-file">Choose File</label><input id="employee-import-file" type="file" accept=".xlsx,.xls,.csv" hidden onchange="handleEmployeeImportFile(this)"></div><div class="employee-import-rules"><b>Before importing</b><span>Use separate Last Name, First Name, and Middle Name columns. Required values, dates, contact details, government IDs, employee numbers, and allowed options are checked for every row. Similar names are highlighted for review.</span></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><div class="toolbar-spacer"></div><button class="btn btn-ghost" onclick="downloadEmployeeImportTemplate()">${iDownload(13)} Download Template</button></div>`);
 }
 async function handleEmployeeImportFile(input){
+  if(SESSION?.role!=='Administrator'){toast('Only a System Administrator can import employee records.',true);return;}
   if(!requireEmployeeImportAdmin()||!employeeSpreadsheetReady()) return;
   const file=input.files?.[0];if(!file)return;
   try{
@@ -3456,6 +3470,7 @@ function renderEmployeeImportPreview(){
   openEmployeeWorkspaceModal(`<div class="modal-head"><div><h3>Review Employee Import</h3><div class="small">${esc(EMPLOYEE_IMPORT_PREVIEW.fileName)} · ${summary.total} populated rows</div></div><button type="button" onclick="closeModal()" aria-label="Close import preview">&times;</button></div><div class="modal-body employee-import-body"><div class="employee-import-summary"><div><span>Ready</span><b>${summary.valid}</b></div><div class="${summary.errors?'has-error':''}"><span>Errors</span><b>${summary.errors}</b></div><div class="${summary.warnings?'has-warning':''}"><span>Warnings</span><b>${summary.warnings}</b></div></div>${issues.length?`<div class="employee-import-file-errors"><b>Workbook errors</b>${issues.map(issue=>`<span>${esc(issue)}</span>`).join('')}</div>`:''}<div class="tablewrap employee-import-preview"><table class="data-table"><thead><tr><th>Row</th><th>Employee No.</th><th>Employee</th><th>Department</th><th>Branch Reporting</th><th>Validation</th></tr></thead><tbody>${EMPLOYEE_IMPORT_PREVIEW.rows.map(row=>`<tr><td class="mono">${row.rowNumber}</td><td class="mono">${esc(row.values.employeeNo||'—')}</td><td><b>${esc(row.values.name||'Incomplete name')}</b><div class="small">${esc(row.values.position||'—')}</div></td><td>${esc(row.values.department||'—')}</td><td>${esc(row.values.branchReporting||'—')}</td><td>${row.errors.length?`<div class="import-issues error">${row.errors.map(issue=>`<span>${esc(issue)}</span>`).join('')}</div>`:row.warnings.length?`<div class="import-issues warning">${row.warnings.map(issue=>`<span>${esc(issue)}</span>`).join('')}</div>`:'<span class="badge b-green"><span class="dot"></span>Ready</span>'}</td></tr>`).join('')}</tbody></table></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="openEmployeeImport()">Choose Another File</button><div class="toolbar-spacer"></div><button class="btn btn-primary" ${summary.errors||!summary.valid?'disabled':''} onclick="commitEmployeeImport()">Import ${summary.valid} Employee${summary.valid===1?'':'s'}</button></div>`);
 }
 async function commitEmployeeImport(){
+  if(SESSION?.role!=='Administrator'){toast('Only a System Administrator can import employee records.',true);return;}
   if(!requireEmployeeImportAdmin()||!EMPLOYEE_IMPORT_PREVIEW)return;
   const summary=employeeImportSummary(EMPLOYEE_IMPORT_PREVIEW);
   if(summary.errors||!summary.valid){toast('Resolve every import error before continuing.',true);return;}
@@ -3476,6 +3491,7 @@ async function commitEmployeeImport(){
   EMPLOYEE_IMPORT_PREVIEW=null;await closeModal();renderNav();renderEmployees();toast(`Imported ${added.length} employee records.`);
 }
 function downloadEmployeeImportTemplate(){
+  if(SESSION?.role!=='Administrator'){toast('Only a System Administrator can download the employee import template.',true);return;}
   if(!requireEmployeeImportAdmin()||!employeeSpreadsheetReady())return;
   const columns=employeeImportColumns();
   const headers=columns.map(column=>column.header);
@@ -3893,6 +3909,7 @@ async function saveEmployeeStatus(id){
 }
 
 function exportEmployeesCSV(){
+  if(!requireExportAccess())return;
   const allowanceNames=uniqueSettingNames([...employeeAllowanceTypes(),...DB.employees.flatMap(employee=>Object.keys(employee.allowances||{}))]);
   const columns=[
     {header:'Employee No.',get:r=>r.employeeNo},{header:'PRF Number',get:r=>r.prfNumber},{header:'Last Name',get:r=>splitEmployeeName(r).lastName},{header:'First Name',get:r=>splitEmployeeName(r).firstName},{header:'Middle Name',get:r=>splitEmployeeName(r).middleName},{header:'Formatted Name',get:r=>employeeDisplayName(r)},
@@ -4060,7 +4077,7 @@ function renderLeaveRecords(){
         <option value="">All Status</option>${LEAVE_STATUS.map(s=>`<option ${STATE.filter===s?'selected':''}>${s}</option>`).join('')}
       </select>
       <div class="spacer"></div>
-      <button class="btn btn-ghost btn-sm" onclick="exportModuleCSV('leaves')">${iDownload(14)} Export CSV</button>
+      ${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportModuleCSV('leaves')">${iDownload(14)} Export CSV</button>`:''}
     </div>
     <div class="tablewrap"><table class="data-table">
       <thead><tr><th>Employee</th><th>Department</th><th>Type</th><th>Start</th><th>End</th><th>Days</th><th>Attachment</th><th>Status</th><th style="text-align:right;">Actions</th></tr></thead>
@@ -4166,7 +4183,7 @@ function renderDisciplinary(){
     <select onchange="STATE.disciplinaryFilter=this.value;STATE.tablePages={};renderDisciplinary()"><option value="">All Levels / Departments</option>${OFFENSE_LEVELS.map(v=>`<option value="${esc(v)}" ${STATE.disciplinaryFilter===v?'selected':''}>${esc(v)}</option>`).join('')}${employeeDepartmentNames().map(v=>`<option value="${esc(v)}" ${STATE.disciplinaryFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
     <button class="btn btn-ghost btn-sm" onclick="STATE.disciplinaryFilter='';STATE.search='';STATE.tablePages={};renderDisciplinary()">Clear</button>
     <div class="spacer"></div>
-    <button class="btn btn-ghost btn-sm" onclick="exportModuleCSV('disciplinary')">${iDownload(14)} Export CSV</button>
+    ${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportModuleCSV('disciplinary')">${iDownload(14)} Export CSV</button>`:''}
   </div>
   <div class="tablewrap"><table class="data-table">
     <thead><tr><th>Employee</th><th>Department</th><th>Violation</th><th>Offense Level</th><th>Date</th><th>Action Taken</th><th style="text-align:right;">Actions</th></tr></thead>
@@ -4229,7 +4246,7 @@ function renderCVR(){
     <select onchange="STATE.cvrFilter=this.value;STATE.tablePages={};renderCVR()"><option value="">All CVR Statuses</option>${CVR_STATUS.map(v=>`<option value="${esc(v)}" ${STATE.cvrFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
     <button class="btn btn-ghost btn-sm" onclick="STATE.cvrFilter='';STATE.search='';STATE.tablePages={};renderCVR()">Clear</button>
     <div class="spacer"></div>
-    <button class="btn btn-ghost btn-sm" onclick="exportCVRCSV()">${iDownload(14)} Export CSV</button>
+    ${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportCVRCSV()">${iDownload(14)} Export CSV</button>`:''}
   </div>
   <div class="tablewrap"><table class="data-table">
     <thead><tr><th>Employee</th><th>Department</th><th>Date</th><th>Offense(s) &amp; Level</th><th>Attachment</th><th>Status</th><th style="text-align:right;">Actions</th></tr></thead>
@@ -4306,6 +4323,7 @@ function deleteCVR(id){
   saveDB(); renderNav(); renderCVR(); toast('CVR deleted.');
 }
 function exportCVRCSV(){
+  if(!requireExportAccess())return;
   const csv = toCSV(DB.cvr, [
     {label:'Employee', get:r=>r.employeeName},{label:'Department', get:r=>r.department},
     {label:'Date', get:r=>r.dateOfCVR},
@@ -4350,7 +4368,7 @@ function renderIncidents(){
     <select onchange="STATE.incidentFilter=this.value;STATE.tablePages={};renderIncidents()"><option value="">All Severity / Status</option>${INCIDENT_SEVERITY.map(v=>`<option value="${esc(v)}" ${STATE.incidentFilter===v?'selected':''}>${esc(v)}</option>`).join('')}${INCIDENT_STATUS.map(v=>`<option value="${esc(v)}" ${STATE.incidentFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
     <button class="btn btn-ghost btn-sm" onclick="STATE.incidentFilter='';STATE.search='';STATE.tablePages={};renderIncidents()">Clear</button>
     <div class="spacer"></div>
-    <button class="btn btn-ghost btn-sm" onclick="exportIncidentsCSV()">${iDownload(14)} Export CSV</button>
+    ${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportIncidentsCSV()">${iDownload(14)} Export CSV</button>`:''}
   </div>
   <div class="tablewrap"><table class="data-table">
     <thead><tr><th>Employee</th><th>Department</th><th>Date</th><th>Incident Type(s)</th><th>Severity</th><th>Attachment</th><th>Status</th><th style="text-align:right;">Actions</th></tr></thead>
@@ -4432,6 +4450,7 @@ function deleteIncident(id){
   saveDB(); renderNav(); renderIncidents(); toast('Incident report deleted.');
 }
 function exportIncidentsCSV(){
+  if(!requireExportAccess())return;
   const csv = toCSV(DB.incidents, [
     {label:'Employee', get:r=>r.employeeName},{label:'Department', get:r=>r.department},
     {label:'Date', get:r=>r.dateOfIncident},
@@ -4502,7 +4521,7 @@ function renderWeeklyReport(){
       <button class="btn btn-ghost btn-sm" onclick="weeklyShiftWeek(-7)">&lsaquo; Prev Week</button>
       <button class="btn btn-ghost btn-sm" onclick="STATE.weekStart=mondayOf(todayISO()); renderWeeklyReport();">This Week</button>
       <button class="btn btn-ghost btn-sm" onclick="weeklyShiftWeek(7)">Next Week &rsaquo;</button>
-      <button class="btn btn-ghost btn-sm" onclick="exportWeeklyCSV()">${iDownload(14)} Export CSV</button>
+      ${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportWeeklyCSV()">${iDownload(14)} Export CSV</button>`:''}
     </div>
   </div>
 
@@ -4558,6 +4577,7 @@ function renderWeeklyReport(){
   document.getElementById('content').innerHTML = html;
 }
 function exportWeeklyCSV(){
+  if(!requireExportAccess())return;
   const start = STATE.weekStart || mondayOf(todayISO()), end = addDaysISO(start,6);
   const rows = [];
   DB.employees.forEach(e=>{
@@ -4622,7 +4642,7 @@ function renderATD(){
       <optgroup label="Status">${Object.keys(ATD_STATUS_MAP).map(s=>`<option value="${esc(s)}" ${STATE.filter===s?'selected':''}>${esc(s)}</option>`).join('')}</optgroup>
     </select>
     <div class="spacer"></div>
-    <button class="btn btn-ghost btn-sm" onclick="exportATDCSV()">${iDownload(14)} Export CSV</button>
+    ${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportATDCSV()">${iDownload(14)} Export CSV</button>`:''}
   </div>
   <div class="tablewrap"><table class="data-table">
     <thead><tr><th>Employee</th><th>Department</th><th>Category</th><th>Deduction</th><th>Total</th><th>Paid</th><th>Remaining</th><th>Status</th><th style="text-align:right;">Actions</th></tr></thead>
@@ -4826,6 +4846,7 @@ async function deleteATDPayment(atdId, paymentId){
 }
 
 function exportATDCSV(){
+  if(!requireExportAccess())return;
   const rows=[];
   DB.atd.forEach(r=>{
     if(!r.payments || !r.payments.length){ rows.push({employeeName:r.employeeName, department:r.department, category:r.category, deductionType:r.deductionType, totalAmount:r.totalAmount, month:'—', cutoff:'—', amountPaid:0, remaining:atdRemaining(r), status:atdComputeStatus(r)}); return; }
@@ -5823,6 +5844,7 @@ function analyticsDeptFilterRows(module,start,end,dept){
   });
 }
 async function exportAnalyticsSnapshot(){
+  if(!requireExportAccess())return;
   const start=STATE.analyticsStart||addDaysISO(todayISO(),-89), end=STATE.analyticsEnd||todayISO(), dept=STATE.analyticsDept||'';
   const employees=DB.employees.filter(e=>reportDeptMatch(e,dept));
   const cases=(REPORT_CACHE.cases||[]).filter(c=>!dept||(c.department||'Unassigned')===dept);
@@ -5912,7 +5934,7 @@ async function renderAnalytics(){
     const html=`
       <div class="sectionhead">
         <div><h2>Management Analytics</h2><p>${fmtDate(start)} – ${fmtDate(end)}${dept?' · '+esc(dept):' · All Departments'}</p></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-ghost btn-sm" onclick="exportAnalyticsSnapshot()">${iDownload(14)} Export Snapshot</button><button class="btn btn-brass btn-sm" onclick="go('reports')">Reports</button></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportAnalyticsSnapshot()">${iDownload(14)} Export Snapshot</button>`:''}<button class="btn btn-brass btn-sm" onclick="go('reports')">Reports</button></div>
       </div>
       <div class="analytics-toolbar">
         <div><div class="small" style="font-weight:800;color:var(--ink);margin-bottom:7px;">Reporting range</div><div class="range-buttons">${rangeButtons.map(([v,l])=>`<button class="range-btn ${STATE.analyticsRange===v?'active':''}" onclick="analyticsSetPreset('${v}')">${l}</button>`).join('')}<button class="range-btn ${STATE.analyticsRange==='custom'?'active':''}" onclick="STATE.analyticsRange='custom';document.getElementById('analytics-start')?.focus()">Custom</button></div></div>
@@ -6090,6 +6112,7 @@ function qualityScore(issues){
   return Math.max(0,Math.min(100,Math.round(100-(e*5)-(w*2)-(i))));
 }
 function exportDataQuality(){
+  if(!requireExportAccess())return;
   const rows=qualityFilteredIssues(QUALITY_CACHE.issues).map(x=>({severity:x.severity,module:x.module,title:x.title,detail:x.detail,metadata:(x.meta||[]).join(' | ')}));
   downloadCSV('hr_data_quality_report.csv',toCSV(rows,[{label:'Severity',get:r=>r.severity},{label:'Module',get:r=>r.module},{label:'Issue',get:r=>r.title},{label:'Detail',get:r=>r.detail},{label:'Metadata',get:r=>r.metadata}]));
   toast('Data quality report exported.');
@@ -6112,7 +6135,7 @@ async function renderDataQuality(){
     const html=`
       <div class="quality-hero">
         <div><h1>Data Quality &amp; Governance</h1><p>Review the integrity of HR master data and cross-module references before relying on automation or reporting.</p></div>
-        <div class="quality-actions"><button class="btn btn-ghost btn-sm" onclick="go('employees')">Employee Master</button><button class="btn btn-ghost btn-sm" onclick="exportDataQuality()">Export Findings</button><button class="btn btn-primary btn-sm" onclick="renderDataQuality()">Run Scan</button></div>
+        <div class="quality-actions"><button class="btn btn-ghost btn-sm" onclick="go('employees')">Employee Master</button>${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportDataQuality()">Export Findings</button>`:''}<button class="btn btn-primary btn-sm" onclick="renderDataQuality()">Run Scan</button></div>
       </div>
       <div class="quality-score-grid">
         <div class="quality-score main" style="--accent:${score>=90?'var(--forest)':score>=70?'var(--amber)':'var(--rust)'}">
@@ -6171,6 +6194,7 @@ function reportDepartments(){
   return [...set].sort((a,b)=>a.localeCompare(b));
 }
 function exportReportRows(filename,rows,cols){
+  if(!requireExportAccess())return;
   downloadCSV(filename,toCSV(rows,cols));
   toast('Report exported.');
 }
@@ -6251,7 +6275,7 @@ async function renderReports(){
     const html=`
       <div class="sectionhead">
         <div><h2>Management Reports</h2><p>${fmtDate(start)} – ${fmtDate(end)}${dept?' · '+esc(dept):' · All Departments'}</p></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-ghost btn-sm" onclick="exportReportActivity()">${iDownload(14)} Export Activity</button><button class="btn btn-brass btn-sm" onclick="exportReportCases()">${iDownload(14)} Export Cases</button></div>
+        ${canExport()?`<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-ghost btn-sm" onclick="exportReportActivity()">${iDownload(14)} Export Activity</button><button class="btn btn-brass btn-sm" onclick="exportReportCases()">${iDownload(14)} Export Cases</button></div>`:''}
       </div>
       <div class="panel" style="margin-bottom:16px;">
         <div class="report-filter-grid" style="display:grid;grid-template-columns:1fr 1fr 1.2fr auto;gap:10px;align-items:end;">
@@ -6273,12 +6297,12 @@ async function renderReports(){
         </div>
       </div>
       <div class="report-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
-        <div class="panel"><div class="dashboard-panel-head"><div><h3>Workforce Movement</h3><div class="desc">Hires and recorded movement in the selected period.</div></div><button class="btn btn-ghost btn-sm" onclick="exportReportEmployees()">${iDownload(14)} Employees</button></div>
+        <div class="panel"><div class="dashboard-panel-head"><div><h3>Workforce Movement</h3><div class="desc">Hires and recorded movement in the selected period.</div></div>${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportReportEmployees()">${iDownload(14)} Employees</button>`:''}</div>
           <div class="grid cols-2" style="gap:10px;margin-bottom:12px;"><div class="metric-card"><div class="k">Newly Hired</div><div class="v">${hired}</div></div><div class="metric-card"><div class="k">Transfers</div><div class="v">${transferred}</div></div></div>
           <div class="small">Resigned / AWOL / Separated records require a populated <b>statusDate</b> to appear in the movement count.</div>
           ${movement.length?`<div class="dashboard-list" style="margin-top:10px;">${movement.slice(0,6).map(e=>`<div class="dashboard-list-row"><div><div class="primary">${esc(employeeDisplayName(e))}</div><div class="secondary">${esc(e.department||'Unassigned')} · ${esc(e.status)}</div></div><div class="right">${fmtDate(e.statusDate)}</div></div>`).join('')}</div>`:''}
         </div>
-        <div class="panel"><div class="dashboard-panel-head"><div><h3>ATD Collection</h3><div class="desc">Selected-period ATD records and payment progress.</div></div><button class="btn btn-ghost btn-sm" onclick='exportReportATD()'>${iDownload(14)} Export ATD</button></div>
+        <div class="panel"><div class="dashboard-panel-head"><div><h3>ATD Collection</h3><div class="desc">Selected-period ATD records and payment progress.</div></div>${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportReportATD()">${iDownload(14)} Export ATD</button>`:''}</div>
           <div class="grid cols-3" style="gap:10px;"><div class="metric-card"><div class="k">ATD Records</div><div class="v">${atdRows.length}</div></div><div class="metric-card"><div class="k">Total Amount</div><div class="v" style="font-size:20px;">${peso(atdTotal)}</div></div><div class="metric-card"><div class="k">Paid</div><div class="v" style="font-size:20px;">${peso(atdPaid)}</div></div></div>
           <div style="margin-top:12px;"><div class="small" style="display:flex;justify-content:space-between;gap:8px;"><span>Collection progress</span><b>${atdTotal?Math.round(atdPaid/atdTotal*100):0}%</b></div><div class="chart-track" style="height:10px;margin-top:6px;"><div class="chart-fill alt" style="width:${atdTotal?Math.min(100,Math.round(atdPaid/atdTotal*100)):0}%"></div></div></div>
         </div>
@@ -6316,13 +6340,14 @@ function renderUsers(){
     </div>
     ${SESSION.role!=='Administrator'?informationNoteButton('userAdministration'):''}
     <div class="tablewrap"><table class="data-table">
-      <thead><tr><th>Full Name</th><th>Username</th><th>Email</th><th>Role</th><th>Employee Link</th><th>Manager</th><th>Created</th><th style="text-align:right;">Actions</th></tr></thead>
+      <thead><tr><th>Full Name</th><th>Username</th><th>Email</th><th>Role</th><th>Export Access</th><th>Employee Link</th><th>Manager</th><th>Created</th><th style="text-align:right;">Actions</th></tr></thead>
       <tbody>
       ${rows.map(u=>{const linked=DB.employees.find(employee=>String(employee.id)===String(u.employeeRecordId||''));const manager=DB.users.find(user=>user.id===u.managerProfileId);return `<tr>
         <td><b>${esc(u.fullName)}</b>${u.id===SESSION.id?' <span class="pill">You</span>':''}</td>
         <td class="mono">${esc(u.username||'—')}</td>
         <td>${esc(u.email||'—')}</td>
         <td>${statusBadge(u.role, {'Administrator':'b-blue','HR Staff':'b-green','Manager':'b-amber','Employee':'b-blue','Viewer':'b-grey'})}</td>
+        <td>${statusBadge(isHRRole(u.role)?'Included':u.canExport?'Enabled':'Disabled',{'Included':'b-green','Enabled':'b-blue','Disabled':'b-grey'})}</td>
         <td>${linked?`<b>${esc(linked.name)}</b><div class="small">${esc(linked.employeeNo||'—')}</div>`:'<span class="small">Not linked</span>'}</td>
         <td>${esc(manager?.fullName||'—')}</td>
         <td>${fmtDate(u.createdAt)}</td>
@@ -6344,7 +6369,7 @@ function openUserForm(id){
         <div class="field"><label>Full Name *</label><input id="u_fullName" value="${esc(existing.fullName||'')}"></div>
         <div class="field"><label>Username *</label><input id="u_username" value="${esc(existing.username||'')}"></div>
         <div class="field full"><label>Email</label><input value="${esc(existing.email||'')}" disabled style="background:var(--paper);"></div>
-        <div class="field"><label>Role</label><select id="u_role">
+        <div class="field"><label>Role</label><select id="u_role" onchange="syncUserExportControl()">
           <option ${existing.role==='Administrator'?'selected':''}>Administrator</option>
           <option ${existing.role==='HR Staff'?'selected':''}>HR Staff</option>
           <option ${existing.role==='Manager'?'selected':''}>Manager</option>
@@ -6353,25 +6378,32 @@ function openUserForm(id){
         </select></div>
         ${employeePickerHTML({id:'u_employee',label:'Linked Employee Record',selectedId:existing.employeeRecordId||'',full:true,placeholder:'Type to link an employee record',autofill:false})}
         <div class="field full"><label>Direct Manager</label><select id="u_manager"><option value="">No manager assigned</option>${managers.map(manager=>`<option value="${manager.id}" ${existing.managerProfileId===manager.id?'selected':''}>${esc(manager.fullName)}</option>`).join('')}</select></div>
+        <label class="checklist-complete-toggle full"><input id="u_canExport" type="checkbox" ${existing.canExport?'checked':''} ${isHRRole(existing.role)?'disabled':''}><span><b>Allow data export</b><small id="u_exportHelp">${isHRRole(existing.role)?'Export access is included with Administrator and HR Staff roles.':'This user can download employee, report, analytics, and operational exports.'}</small></span></label>
       </div>
       <div class="computed-note">Link Employee and Manager accounts to employee master records before enabling self-service. Passwords remain managed by Supabase Auth.</div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveUser('${id}')">Save User</button></div>
   `);
 }
+function syncUserExportControl(){
+  const input=document.getElementById('u_canExport');const help=document.getElementById('u_exportHelp');const builtIn=isHRRole(document.getElementById('u_role')?.value);
+  if(input)input.disabled=builtIn;
+  if(help)help.textContent=builtIn?'Export access is included with Administrator and HR Staff roles.':'This user can download employee, report, analytics, and operational exports.';
+}
 async function saveUser(id){
   if(SESSION.role!=='Administrator') return;
   const fullName=document.getElementById('u_fullName').value.trim();
   const username=document.getElementById('u_username').value.trim().toLowerCase();
   const role=document.getElementById('u_role').value;
+  const canExportValue=!isHRRole(role)&&document.getElementById('u_canExport')?.checked===true;
   const employeeRecordId=document.getElementById('u_employee').value||null;
   const managerProfileId=document.getElementById('u_manager').value||null;
   if(!fullName||!username){ toast('Please complete all required fields.'); return; }
-  const {error}=await supabase.from('profiles').update({full_name:fullName,username,role,employee_record_id:employeeRecordId,manager_profile_id:managerProfileId}).eq('id',id);
-  if(error){ toast('Could not update user: '+error.message,true); return; }
+  const {error}=await supabase.from('profiles').update({full_name:fullName,username,role,can_export:canExportValue,employee_record_id:employeeRecordId,manager_profile_id:managerProfileId}).eq('id',id);
+  if(error){ toast('Could not update user: '+(/can_export/i.test(error.message||'')?'Run the Phase 17 export-permissions migration first.':error.message),true); return; }
   await loadProfiles();
   const updated=DB.users.find(u=>u.id===SESSION.id); if(updated) SESSION=updated;
-  logAudit('Updated user profile: '+fullName); await saveDB();
+  logAudit(`Updated user profile: ${fullName} · export ${roleCanExport(role,canExportValue)?'enabled':'disabled'}`); await saveDB();
   closeModal(); renderUsers(); toast('User profile saved.');
 }
 
@@ -7188,7 +7220,7 @@ Object.assign(window, {
   renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, closeNavGroupPanel, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
-  saveEval, saveIncident, saveRecord, saveSettings, saveUser, saveDepartmentSetting, savePositionSetting, setTitle, shiftDate, statusBadge, storageSettingsChanged, testGoogleDriveConnection, switchAuthTab, switchSettingsTab, syncPositionSelect, toggleCatalogQuickAdd, catalogQuickAddKeydown, saveCatalogQuickAdd, openDepartmentSetting, openPositionSetting, toCSV,
+  saveEval, saveIncident, saveRecord, saveSettings, saveUser, saveDepartmentSetting, savePositionSetting, setTitle, shiftDate, statusBadge, storageSettingsChanged, testGoogleDriveConnection, switchAuthTab, switchSettingsTab, syncPositionSelect, syncUserExportControl, toggleCatalogQuickAdd, catalogQuickAddKeydown, saveCatalogQuickAdd, openDepartmentSetting, openPositionSetting, toCSV,
   toast, todayISO, togglePasswordVisibility, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, serverTablePageGo, serverTablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, openInformationNote, paginationMeta, paginationHTML, paginationReset, paginateRows,
   addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom
 });

@@ -27,7 +27,7 @@ Import the repository as a static site. No build command is required. `vercel.js
 
 The application uses the public Supabase publishable key. Do not replace it with a service-role or secret key in browser code.
 
-For a new deployment, apply the numbered SQL migrations in order. Existing deployments should continue through `supabase/phase16-server-record-pagination.sql`. Phase 15 adds restricted organization-structure management; Phase 16 adds the RLS-aware database query used by employee and shared HR record tables for server-side search, filters, sorting, and pagination. The application falls back to local pagination until Phase 16 is applied.
+For a new deployment, apply the numbered SQL migrations in order. Existing deployments should continue through `supabase/phase17-user-export-permissions.sql`. Phase 15 adds restricted organization-structure management; Phase 16 adds RLS-aware server-side record queries; Phase 17 makes export unavailable to Viewer, Manager, and Employee accounts unless an Administrator enables it for that specific profile.
 
 ## Important
 

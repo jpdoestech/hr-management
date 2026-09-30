@@ -9,6 +9,7 @@ create table if not exists public.profiles (
   username text not null unique,
   email text not null unique,
   role text not null default 'Employee' check (role in ('Administrator','HR Staff','Manager','Employee','Viewer')),
+  can_export boolean not null default false,
   employee_record_id text,
   manager_profile_id uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),

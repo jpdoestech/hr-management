@@ -24,6 +24,8 @@ Apply `supabase/phase15-organization-structure.sql` to let Administrator and HR 
 
 Apply `supabase/phase16-server-record-pagination.sql` to enable database-side search, filtering, sorting, and pagination for Employee Information and reusable HR record tables. The function respects the existing `hr_records` Row Level Security policies and adds indexes for the most common department, status, and branch filters. Deploying the frontend first is safe because it temporarily falls back to locally cached pagination when the function is unavailable.
 
+Apply `supabase/phase17-user-export-permissions.sql` before deploying the matching frontend. Viewer, Manager, and Employee profiles default to no export access. A System Administrator can enable export for a specific account from User Management; Administrator and HR Staff roles include export access automatically.
+
 ## Google Drive
 
 The System Administrator can choose Google Drive as the destination for all new HR uploads in Settings. Configure a Google Cloud OAuth 2.0 Web Client ID and add each deployed app origin, such as the Vercel production URL and local preview origin, to its authorized JavaScript origins. Enable the Google Drive API for that Google Cloud project.
