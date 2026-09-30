@@ -1512,47 +1512,51 @@ function navItemVisible(item){
   if(item.roles) return item.roles.includes(role);
   return !['Employee','Manager'].includes(role);
 }
-let NAV_OPEN_SECTION='';
-try{NAV_OPEN_SECTION=localStorage.getItem('slsc_nav_open_section')||'';}catch(e){NAV_OPEN_SECTION='';}
 function navSectionForView(view){return NAV.find(group=>group.items.some(item=>item.v===view&&navItemVisible(item)))?.sec||'';}
-function rememberNavSection(section){
-  NAV_OPEN_SECTION=section;
-  try{localStorage.setItem('slsc_nav_open_section',section);}catch(e){}
+let NAV_PANEL_SECTION='';
+function closeNavGroupPanel(){
+  document.getElementById('navgroup-popover')?.remove();
+  document.querySelectorAll('.navgroup-head[aria-expanded="true"]').forEach(button=>button.setAttribute('aria-expanded','false'));
+  document.querySelectorAll('.navgroup.panel-open').forEach(group=>group.classList.remove('panel-open'));
+  NAV_PANEL_SECTION='';
 }
-function toggleNavGroup(sec){
-  rememberNavSection(NAV_OPEN_SECTION===sec?'':sec);
-  renderNav();
+function positionNavGroupPanel(panel,trigger){
+  if(!panel||!trigger||window.matchMedia('(max-width:720px)').matches){panel?.style.removeProperty('left');panel?.style.removeProperty('top');return;}
+  const rect=trigger.getBoundingClientRect();
+  const width=Math.min(286,window.innerWidth-24);
+  const left=Math.min(rect.right+8,window.innerWidth-width-12);
+  const top=Math.max(12,Math.min(rect.top,window.innerHeight-panel.offsetHeight-12));
+  panel.style.left=`${left}px`;panel.style.top=`${top}px`;
+}
+function toggleNavGroup(sec,trigger){
+  if(NAV_PANEL_SECTION===sec){closeNavGroupPanel();return;}
+  closeNavGroupPanel();
+  const group=NAV.find(item=>item.sec===sec);if(!group)return;
+  const items=group.items.filter(navItemVisible);if(!items.length)return;
+  const panel=document.createElement('div');panel.id='navgroup-popover';panel.className='navgroup-popover';panel.setAttribute('role','menu');panel.setAttribute('aria-label',`${sec} transactions`);
+  panel.innerHTML=`<div class="navgroup-popover-head"><div><span>Record group</span><b>${esc(sec)}</b></div><button type="button" class="navgroup-popover-close" title="Close transactions" aria-label="Close transactions" onclick="closeNavGroupPanel()">&times;</button></div><div class="navgroup-popover-list">${items.map(item=>`<button type="button" role="menuitem" class="navgroup-popover-item${STATE.view===item.v?' active':''}" data-nav-view="${item.v}">${item.icon(16)}<span>${esc(item.label)}</span>${item.count?`<em>${item.count()}</em>`:''}</button>`).join('')}</div>`;
+  panel.querySelectorAll('[data-nav-view]').forEach(button=>button.addEventListener('click',()=>{const view=button.dataset.navView;closeNavGroupPanel();go(view);}));
+  document.body.appendChild(panel);NAV_PANEL_SECTION=sec;trigger.setAttribute('aria-expanded','true');trigger.closest('.navgroup')?.classList.add('panel-open');positionNavGroupPanel(panel,trigger);
+  requestAnimationFrame(()=>panel.querySelector('.navgroup-popover-item.active,.navgroup-popover-item')?.focus());
 }
 function renderNav(){
+  closeNavGroupPanel();
   const nav=document.getElementById('nav'); nav.innerHTML='';
-  const visibleSections=NAV.filter(group=>group.items.some(navItemVisible)).map(group=>group.sec);
-  if(NAV_OPEN_SECTION&&!visibleSections.includes(NAV_OPEN_SECTION))rememberNavSection('');
-  const fallbackSection=navSectionForView(STATE.view)||visibleSections[0]||'';
-  const openSection=NAV_OPEN_SECTION||fallbackSection;
   NAV.forEach(group=>{
     const items=group.items.filter(navItemVisible);
     if(!items.length) return;
     const active=items.some(it=>STATE.view===it.v);
-    const collapsed=openSection!==group.sec;
-    const sectionId=`navgroup-${group.sec.toLowerCase().replace(/[^a-z0-9]+/g,'-')}`;
     const sectionIcon=NAV_SECTION_ICONS[group.sec]||iGrid;
-    const g=document.createElement('section'); g.className='navgroup'+(collapsed?' collapsed':'')+(active?' has-active':'');
-    const head=document.createElement('button');head.type='button';head.className='navgroup-head';head.setAttribute('aria-expanded',collapsed?'false':'true');head.setAttribute('aria-controls',sectionId);head.innerHTML=`<span class="navgroup-head-main"><span class="navgroup-icon">${sectionIcon(15)}</span><span class="navgroup-title">${esc(group.sec)}</span><span class="navgroup-size">${items.length}</span></span><span class="navgroup-chevron">${iArrowLeft(13)}</span>`;head.onclick=()=>toggleNavGroup(group.sec);g.appendChild(head);
-    const body=document.createElement('div');body.className='navgroup-items';body.id=sectionId;body.setAttribute('aria-hidden',collapsed?'true':'false');
-    items.forEach(it=>{
-      const b=document.createElement('button');
-      b.className='navitem'+(STATE.view===it.v?' active':'');
-      b.onclick=()=>{rememberNavSection(group.sec);go(it.v);};
-      b.innerHTML = it.icon(16) + `<span>${esc(it.label)}</span>` + (it.count? `<span class="cnt">${it.count()}</span>`:'');
-      body.appendChild(b);
-    });
-    g.appendChild(body); nav.appendChild(g);
+    const g=document.createElement('section');g.className='navgroup'+(active?' has-active':'');
+    const head=document.createElement('button');head.type='button';head.className='navgroup-head';head.setAttribute('aria-expanded','false');head.setAttribute('aria-haspopup','menu');head.innerHTML=`<span class="navgroup-head-main"><span class="navgroup-icon">${sectionIcon(15)}</span><span class="navgroup-title">${esc(group.sec)}</span><span class="navgroup-size">${items.length}</span></span><span class="navgroup-chevron">${iArrowLeft(13)}</span>`;head.onclick=()=>toggleNavGroup(group.sec,head);g.appendChild(head);
+    nav.appendChild(g);
   });
 }
 function toggleSidebar(){
   const app=document.getElementById('app');
   if(!app) return;
   const open=app.classList.toggle('sidebar-open');
+  if(!open)closeNavGroupPanel();
   const btn=document.querySelector('.mobile-menu');
   if(btn) btn.setAttribute('aria-expanded',open?'true':'false');
 }
@@ -1560,6 +1564,7 @@ function closeSidebar(){
   const app=document.getElementById('app');
   if(!app) return;
   app.classList.remove('sidebar-open');
+  closeNavGroupPanel();
   const btn=document.querySelector('.mobile-menu');
   if(btn) btn.setAttribute('aria-expanded','false');
 }
@@ -1568,7 +1573,6 @@ async function go(view,{skipUnsaved=false}={}){
   if(navItem&&!navItemVisible(navItem)){toast('This workspace is not available for your role.',true);return;}
   if(!skipUnsaved && !(await requestPageNavigation(view))) return;
   STATE.view=view; STATE.search=''; STATE.filter=''; STATE.filterDept=''; STATE.filterStatus='';
-  const destinationSection=navSectionForView(view);if(destinationSection)rememberNavSection(destinationSection);
   const content=document.getElementById('content');
   content?.classList.toggle('employee-directory-content',view==='employees');
   content?.classList.toggle('data-focused-content',DATA_FOCUSED_VIEWS.has(view));
@@ -7060,6 +7064,8 @@ const RENDERERS = {
 document.addEventListener('click', e=>{
   const wrap=document.getElementById('notification-wrap');
   if(wrap && !wrap.contains(e.target)) closeNotificationPanel();
+  const navPanel=document.getElementById('navgroup-popover');
+  if(navPanel&&!navPanel.contains(e.target)&&!e.target.closest('.navgroup-head'))closeNavGroupPanel();
   document.querySelectorAll('.employee-picker').forEach(picker=>{
     if(!picker.contains(e.target)) employeePickerClose(picker.id.replace(/_picker$/,''));
   });
@@ -7067,7 +7073,13 @@ document.addEventListener('click', e=>{
 document.addEventListener('keydown', e=>{
   if(e.key!=='Escape') return;
   closeNotificationPanel();
+  closeNavGroupPanel();
   document.querySelectorAll('.employee-picker').forEach(picker=>employeePickerClose(picker.id.replace(/_picker$/,'')));
+});
+window.addEventListener('resize',()=>{
+  const panel=document.getElementById('navgroup-popover');
+  const trigger=document.querySelector('.navgroup-head[aria-expanded="true"]');
+  if(panel&&trigger)positionNavGroupPanel(panel,trigger);
 });
 document.getElementById('login-form').addEventListener('keydown', e=>{ if(document.getElementById('auth-error').style.display==='block') document.getElementById('auth-error').style.display='none'; });
 const ROW_ACTION_OBSERVER=new MutationObserver(()=>requestAnimationFrame(enhanceRowActionMenus));
@@ -7108,7 +7120,7 @@ Object.assign(window, {
   openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard,
   renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
-  renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
+  renderLeaveSummary, renderLeaves, renderModuleView, renderNav, closeNavGroupPanel, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, saveDepartmentSetting, savePositionSetting, setTitle, shiftDate, statusBadge, storageSettingsChanged, testGoogleDriveConnection, switchAuthTab, switchSettingsTab, syncPositionSelect, toggleCatalogQuickAdd, catalogQuickAddKeydown, saveCatalogQuickAdd, openDepartmentSetting, openPositionSetting, toCSV,
   toast, todayISO, togglePasswordVisibility, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, openInformationNote, paginationMeta, paginationHTML, paginationReset, paginateRows,

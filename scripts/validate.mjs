@@ -175,7 +175,7 @@ for(const feature of ['catalog-add-button','saveCatalogQuickAdd','persistOrganiz
     process.exit(1);
   }
 }
-for(const feature of ['NAV_OPEN_SECTION','navSectionForView','NAV_SECTION_ICONS','navgroup-head-main']){
+for(const feature of ['NAV_PANEL_SECTION','toggleNavGroup','positionNavGroupPanel','NAV_SECTION_ICONS','navgroup-head-main']){
   if(!app.includes(feature)){
     console.error(`Compact side navigation contract is missing: ${feature}`);
     process.exit(1);
@@ -287,7 +287,7 @@ if(/<select[^>]+id=["'`](?:u_employee|gd_employee|case_employee|lc_employee|f_em
   process.exit(1);
 }
 const professionalCss=fs.readFileSync(path.join(root,'css/professional.css'),'utf8');
-if(!professionalCss.includes('.navgroup-head-main')||!professionalCss.includes('.navgroup.collapsed .navgroup-items')){
+if(!professionalCss.includes('.navgroup-head-main')||!professionalCss.includes('.navgroup-popover')||!professionalCss.includes('@keyframes nav-sheet-in')){
   console.error('Compact side navigation styling is missing.');
   process.exit(1);
 }
