@@ -22,6 +22,8 @@ Apply `supabase/phase14-admin-storage-settings.sql` to restrict system-wide sett
 
 Apply `supabase/phase15-organization-structure.sql` to let Administrator and HR Staff accounts add or edit departments and positions. The migration exposes a restricted function that updates only Organization Structure; General, compensation, storage, and audit settings remain Administrator-only in the interface and under Row Level Security.
 
+Apply `supabase/phase16-server-record-pagination.sql` to enable database-side search, filtering, sorting, and pagination for Employee Information and reusable HR record tables. The function respects the existing `hr_records` Row Level Security policies and adds indexes for the most common department, status, and branch filters. Deploying the frontend first is safe because it temporarily falls back to locally cached pagination when the function is unavailable.
+
 ## Google Drive
 
 The System Administrator can choose Google Drive as the destination for all new HR uploads in Settings. Configure a Google Cloud OAuth 2.0 Web Client ID and add each deployed app origin, such as the Vercel production URL and local preview origin, to its authorized JavaScript origins. Enable the Google Drive API for that Google Cloud project.

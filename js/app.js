@@ -1,8 +1,9 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '../supabase-config.js';
 import { paginationMeta, paginationHTML, paginationReset, paginateRows } from './core/pagination.js?v=20260928-4';
-import { installTableEnhancer } from './core/table-enhancer.js?v=20260928-4';
+import { installTableEnhancer } from './core/table-enhancer.js?v=20260930-1';
 import { compactRedundantPageIntros } from './core/content-layout.js?v=20260928-4';
+import { buildRecordChanges, valuesEqual } from './core/record-diff.js?v=20260930-1';
 import { addressComponentHTML, addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom, initializeAddressComponents, readAddressComponent } from './address/address-component.js?v=20260929-1';
 import { formatPhilippineAddress, normalizeAddress } from './address/address-models.js?v=20260929-1';
 
@@ -178,21 +179,25 @@ async function saveDBInternal(state){
   if(serverResetAt&&serverResetAt!==clientResetAt){
     throw new Error('The HR database was reset in another session. Reload this page before making changes.');
   }
-  for(const module of RECORD_MODULES){
-    const rows=(state[module]||[]).map(r=>({module,record_id:String(r.id),data:{...r,_dataResetAt:clientResetAt},updated_at:now,updated_by:SESSION?.id||null}));
-    if(rows.length){
-      const {error}=await supabase.from('hr_records').upsert(rows,{onConflict:'module,record_id'});
-      if(error) throw error;
-    }
-    const previous=(DB_SNAPSHOT?.[module]||[]).map(r=>String(r.id));
-    const current=new Set((state[module]||[]).map(r=>String(r.id)));
-    const removed=previous.filter(id=>!current.has(id));
-    if(removed.length){
-      const {error}=await supabase.from('hr_records').delete().eq('module',module).in('record_id',removed);
+  const changes=buildRecordChanges(DB_SNAPSHOT||blankDB(),state,RECORD_MODULES);
+  const rows=changes.upserts.map(({module,recordId,record})=>({module,record_id:recordId,data:{...record,_dataResetAt:clientResetAt},updated_at:now,updated_by:SESSION?.id||null}));
+  for(let index=0;index<rows.length;index+=250){
+    const {error}=await supabase.from('hr_records').upsert(rows.slice(index,index+250),{onConflict:'module,record_id'});
+    if(error) throw error;
+  }
+  const deletesByModule=changes.deletes.reduce((map,change)=>{
+    if(!map.has(change.module))map.set(change.module,[]);
+    map.get(change.module).push(change);
+    return map;
+  },new Map());
+  for(const [module,deletes] of deletesByModule){
+    for(let index=0;index<deletes.length;index+=250){
+      const ids=deletes.slice(index,index+250).map(change=>change.recordId);
+      const {error}=await supabase.from('hr_records').delete().eq('module',module).in('record_id',ids);
       if(error) throw error;
     }
   }
-  if(SESSION?.role==='Administrator'){
+  if(SESSION?.role==='Administrator'&&!valuesEqual(DB_SNAPSHOT?.settings,state.settings)){
     const {error:settingsError}=await supabase.from('hr_settings').upsert({id:'singleton',data:state.settings||{orgName:'SCPA',probationDays:180},updated_at:now,updated_by:SESSION?.id||null},{onConflict:'id'});
     if(settingsError) throw settingsError;
   }
@@ -211,6 +216,49 @@ function saveDB(){
     }
   });
   return SAVE_QUEUE;
+}
+
+let SERVER_RECORD_QUERY_READY=true;
+function serverRecordQueryUnavailable(error){
+  return ['42883','PGRST202','PGRST205'].includes(error?.code)||/search_hr_records|schema cache|function.*not find/i.test(error?.message||'');
+}
+function requestedPageState(scope,defaultSize=10){
+  STATE.tablePages||={};STATE.tablePageSizes||={};
+  const allowed=[10,25,50,100];
+  const stored=STATE.tablePages[scope]||{};
+  const size=allowed.includes(Number(stored.size))?Number(stored.size):allowed.includes(Number(STATE.tablePageSizes[scope]))?Number(STATE.tablePageSizes[scope]):defaultSize;
+  return {page:Math.max(1,Number(stored.page)||1),size};
+}
+async function queryRecordPage({module,scope,search='',searchFields=[],filters={},classification='',sortKey='',defaultSize=10}){
+  if(!SERVER_RECORD_QUERY_READY)return null;
+  const requested=requestedPageState(scope,defaultSize);
+  const run=async page=>supabase.rpc('search_hr_records',{
+    p_module:module,p_search:String(search||'').trim(),p_search_fields:searchFields,
+    p_filters:Object.fromEntries(Object.entries(filters).filter(([key,value])=>key&&String(value||'')!=='')),
+    p_classification:classification||'',p_probation_days:Number(DB.settings?.probationDays)||180,
+    p_sort_key:sortKey||'',p_offset:(page-1)*requested.size,p_limit:requested.size
+  });
+  let page=requested.page;
+  let {data,error}=await run(page);
+  if(error){
+    if(serverRecordQueryUnavailable(error)){SERVER_RECORD_QUERY_READY=false;console.info('Server record pagination is unavailable; using local pagination until Phase 16 is applied.');return null;}
+    throw error;
+  }
+  let total=Number(data?.[0]?.total_count||0);
+  const pages=Math.max(1,Math.ceil(total/requested.size));
+  if(page>pages){page=pages;({data,error}=await run(page));if(error)throw error;total=Number(data?.[0]?.total_count||0);}
+  STATE.tablePageSizes[scope]=requested.size;
+  STATE.tablePages[scope]={page,size:requested.size,signature:'server'};
+  return {rows:(data||[]).map(row=>row.data),meta:{key:scope,total,size:requested.size,pages:Math.max(1,Math.ceil(total/requested.size)),page,start:total?(page-1)*requested.size+1:0,end:Math.min(total,page*requested.size)},server:true};
+}
+function serverTablePageGo(scope,page){
+  const current=requestedPageState(scope);STATE.tablePages[scope]={...current,page:Math.max(1,Number(page)||1),signature:'server'};
+  Promise.resolve(RENDERERS[STATE.view]?.()).catch(error=>toast('Could not load that page: '+error.message,true));
+}
+function serverTablePageSize(scope,size){
+  const next=[10,25,50,100].includes(Number(size))?Number(size):10;
+  STATE.tablePageSizes[scope]=next;STATE.tablePages[scope]={page:1,size:next,signature:'server'};
+  Promise.resolve(RENDERERS[STATE.view]?.()).catch(error=>toast('Could not change the page size: '+error.message,true));
 }
 
 async function loadProfiles(){
@@ -2364,7 +2412,7 @@ function donut(segs){
    ================================================================ */
 function moduleConfig(key){ return MODULES[key]; }
 
-function renderModuleView(key){
+async function renderModuleView(key){
   const cfg = MODULES[key];
   setTitle(cfg.title, cfg.subtitle);
   const data = DB[key] || [];
@@ -2373,14 +2421,22 @@ function renderModuleView(key){
   const hasStatus = data.some(r=>r && Object.prototype.hasOwnProperty.call(r,'status')) || (cfg.fields||[]).some(f=>f.key==='status');
   const deptOptions=[...new Set(data.map(r=>String(r.department||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   const autoStatusOptions=[...new Set(data.map(r=>String(r.status||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-  let rows = data.filter(r=>{
+  let filteredRows = data.filter(r=>{
     const searchOk=!q || (cfg.searchFields||[]).some(f=> String(r[f]??'').toLowerCase().includes(q));
     const deptOk=!STATE.filterDept || String(r.department||'')===STATE.filterDept;
     const statusOk=!STATE.filterStatus || String(r.status||'')===STATE.filterStatus;
     const legacyFilterOk=!STATE.filter || !cfg.filterField || r[cfg.filterField]===STATE.filter;
     return searchOk&&deptOk&&statusOk&&legacyFilterOk;
   });
-  rows = rows.slice().sort((a,b)=>String(b[cfg.sortKey]??'').localeCompare(String(a[cfg.sortKey]??'')));
+  filteredRows = filteredRows.slice().sort((a,b)=>String(b[cfg.sortKey]??'').localeCompare(String(a[cfg.sortKey]??'')));
+  const pageScope=`records:${key}`;
+  let pageResult;
+  try{
+    pageResult=await queryRecordPage({module:key,scope:pageScope,search:STATE.search,searchFields:cfg.searchFields||[],filters:{department:STATE.filterDept,status:STATE.filterStatus,[cfg.filterField||'']:STATE.filter},sortKey:cfg.sortKey||'',defaultSize:10});
+  }catch(error){toast('Server filtering failed; showing locally cached records: '+error.message,true);pageResult=null;}
+  if(!pageResult){const local=paginateRows(filteredRows,STATE,pageScope,10);pageResult={...local,server:false};}
+  const rows=pageResult.rows;
+  const total=pageResult.meta.total;
   const legacyOptions=cfg.filterOptions||[];
   const statusUsesLegacy=cfg.filterField==='status';
   const showClear=STATE.search||STATE.filter||STATE.filterDept||STATE.filterStatus;
@@ -2402,8 +2458,8 @@ function renderModuleView(key){
       ${cfg.extraToolbar?cfg.extraToolbar():''}
     </div>
     <div class="table-card">
-      <div class="table-card-head"><div class="table-meta"><b>${rows.length}</b> ${rows.length===1?'record':'records'} <span class="table-meta-muted">${rows.length!==data.length?`filtered from ${data.length}`:'in total'}</span></div></div>
-      <div class="tablewrap"><table class="data-table">
+      <div class="table-card-head"><div class="table-meta"><b>${total}</b> ${total===1?'record':'records'} <span class="table-meta-muted">${showClear?`filtered from ${data.length}`:'in total'}</span></div></div>
+      <div class="tablewrap"><table class="data-table" data-server-paginated="true">
         <thead><tr>${cfg.columns.map(c=>`<th>${c.label}</th>`).join('')}<th class="actions-head">Actions</th></tr></thead>
         <tbody>
           ${rows.length?rows.map(r=>`<tr>${cfg.columns.map(c=>`<td>${c.render?c.render(r):esc(r[c.key]??'—')}</td>`).join('')}
@@ -2411,6 +2467,7 @@ function renderModuleView(key){
           </tr>`).join(''):`<tr><td colspan="${cfg.columns.length+1}"><div class="empty"><b>No matching records</b><span>${showClear?'Try clearing the search/filter or changing the criteria.':`${esc(cfg.addLabel)} to get started.`}</span></div></td></tr>`}
         </tbody>
       </table></div>
+      ${total?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${pageResult.meta.start}–${pageResult.meta.end} <span>of ${total} records</span></div>${paginationHTML(pageResult.meta,pageScope,{go:'serverTablePageGo',size:'serverTablePageSize'})}</div>`:''}
     </div>`;
   document.getElementById('content').innerHTML=html;
   requestAnimationFrame(()=>enhanceDataTables());
@@ -3038,14 +3095,14 @@ async function resetEmployeeColumnPreferences(){
   renderEmployees();
   toast(synced?'Default employee columns restored.':'Default columns restored on this browser.');
 }
-function renderEmployees(){
+async function renderEmployees(){
   const q=(STATE.employeeSearch||'').trim().toLowerCase();
   const deptFilter = STATE.employeeDepartmentFilter||'';
   const branchFilter = STATE.employeeBranchFilter||'';
   const statusFilter = STATE.employeeStatusFilter||'';
   const classFilter = STATE.employeeClassFilter||'';
   const hasFilters=Boolean(q||deptFilter||branchFilter||statusFilter||classFilter);
-  let rows = DB.employees.filter(e=>{
+  let filteredRows = DB.employees.filter(e=>{
     const hay=[e.employeeNo,e.prfNumber,e.name,employeeDisplayName(e),e.position,e.department,e.branchReporting,e.mobileNumber,e.personalEmail,formatPhilippineAddress(e.homeAddress)||e.address,formatPhilippineAddress(e.presentAddress)||e.presentAddressText,e.remarks,...Object.keys(e.allowances||{})].map(v=>String(v||'').toLowerCase());
     const matches = !q || hay.some(v=>v.includes(q));
     const deptOk = !deptFilter || e.department===deptFilter;
@@ -3054,12 +3111,20 @@ function renderEmployees(){
     const classOk = !classFilter || classify(e)===classFilter;
     return matches && deptOk && branchOk && statusOk && classOk;
   });
+  const pageScope='records:employees';
+  let pageResult;
+  try{
+    pageResult=await queryRecordPage({module:'employees',scope:pageScope,search:STATE.employeeSearch,searchFields:['employeeNo','prfNumber','name','lastName','firstName','middleName','position','department','branchReporting','mobileNumber','personalEmail','address','presentAddressText','remarks','homeAddress','presentAddress','allowances'],filters:{department:deptFilter,branchReporting:branchFilter,status:statusFilter},classification:classFilter,sortKey:'employeeNo',defaultSize:10});
+  }catch(error){toast('Server employee search failed; showing locally cached records: '+error.message,true);pageResult=null;}
+  if(!pageResult){const local=paginateRows(filteredRows,STATE,pageScope,10);pageResult={...local,server:false};}
+  const rows=pageResult.rows;
+  const filteredTotal=pageResult.meta.total;
   const depts = [...new Set(DB.employees.map(e=>e.department).filter(Boolean))];
   const branches = uniqueSettingNames([...employeeBranchLocations(),...DB.employees.map(e=>e.branchReporting)]);
   const statusOptions=[...new Set(DB.employees.map(e=>e.status).filter(Boolean))];
   const columns=employeeVisibleColumns();
   const tableMinWidth=columns.reduce((sum,c)=>sum+c.width,0)+92;
-  setTitle('Employee Information', `${rows.length} of ${DB.employees.length} employees · ${depts.length} departments`);
+  setTitle('Employee Information', `${filteredTotal} of ${DB.employees.length} employees · ${depts.length} departments`);
   document.getElementById('content')?.classList.add('employee-directory-content');
 
   const html = `
@@ -3093,7 +3158,7 @@ function renderEmployees(){
         </div>
       </div>
       <div class="tablewrap employee-directory-tablewrap">
-        <table class="data-table employee-directory-table" style="min-width:${tableMinWidth}px!important">
+        <table class="data-table employee-directory-table" data-server-paginated="true" style="min-width:${tableMinWidth}px!important">
           <colgroup>${columns.map(c=>`<col style="width:${c.width}px">`).join('')}<col style="width:92px"></colgroup>
           <thead><tr>${columns.map(c=>`<th>${esc(c.label)}</th>`).join('')}<th class="actions-head">Actions</th></tr></thead>
           <tbody>
@@ -3110,6 +3175,7 @@ function renderEmployees(){
           </tbody>
         </table>
       </div>
+      ${filteredTotal?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${pageResult.meta.start}–${pageResult.meta.end} <span>of ${filteredTotal} employees</span></div>${paginationHTML(pageResult.meta,pageScope,{go:'serverTablePageGo',size:'serverTablePageSize'})}</div>`:''}
     </section>
   </div>`;
   document.getElementById('content').innerHTML = html;
@@ -7123,7 +7189,7 @@ Object.assign(window, {
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, closeNavGroupPanel, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, saveDepartmentSetting, savePositionSetting, setTitle, shiftDate, statusBadge, storageSettingsChanged, testGoogleDriveConnection, switchAuthTab, switchSettingsTab, syncPositionSelect, toggleCatalogQuickAdd, catalogQuickAddKeydown, saveCatalogQuickAdd, openDepartmentSetting, openPositionSetting, toCSV,
-  toast, todayISO, togglePasswordVisibility, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, openInformationNote, paginationMeta, paginationHTML, paginationReset, paginateRows,
+  toast, todayISO, togglePasswordVisibility, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, serverTablePageGo, serverTablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, openInformationNote, paginationMeta, paginationHTML, paginationReset, paginateRows,
   addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom
 });
 

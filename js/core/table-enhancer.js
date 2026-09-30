@@ -11,6 +11,7 @@ export function installTableEnhancer({getState, getContent}) {
   }
   function applyTablePagination(table,index){
     if(!table||!table.tBodies?.[0]) return;
+    if(table.dataset.serverPaginated==='true') return;
     if(table.closest('.notification-popover') || table.classList.contains('dashboard-mini-table')) return;
     const rows=Array.from(table.tBodies[0].rows);
     const visibleRows=rows.filter(r=>r.querySelector('.empty')===null);
