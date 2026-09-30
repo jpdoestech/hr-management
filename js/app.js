@@ -1598,6 +1598,7 @@ function navItemVisible(item){
   return !['Employee','Manager'].includes(role);
 }
 function navSectionForView(view){return NAV.find(group=>group.items.some(item=>item.v===view&&navItemVisible(item)))?.sec||'';}
+function navLabelForView(view){return NAV.flatMap(group=>group.items).find(item=>item.v===view&&navItemVisible(item))?.label||'';}
 let NAV_PANEL_SECTION='';
 function closeNavGroupPanel(){
   document.getElementById('navgroup-popover')?.remove();
@@ -1619,7 +1620,8 @@ function toggleNavGroup(sec,trigger){
   const group=NAV.find(item=>item.sec===sec);if(!group)return;
   const items=group.items.filter(navItemVisible);if(!items.length)return;
   const panel=document.createElement('div');panel.id='navgroup-popover';panel.className='navgroup-popover';panel.setAttribute('role','menu');panel.setAttribute('aria-label',`${sec} transactions`);
-  panel.innerHTML=`<div class="navgroup-popover-head"><div><span>Record group</span><b>${esc(sec)}</b></div><button type="button" class="navgroup-popover-close" title="Close transactions" aria-label="Close transactions" onclick="closeNavGroupPanel()">&times;</button></div><div class="navgroup-popover-list">${items.map(item=>`<button type="button" role="menuitem" class="navgroup-popover-item${STATE.view===item.v?' active':''}" data-nav-view="${item.v}">${item.icon(16)}<span>${esc(item.label)}</span>${item.count?`<em>${item.count()}</em>`:''}</button>`).join('')}</div>`;
+  const activeItem=items.find(item=>item.v===STATE.view);
+  panel.innerHTML=`<div class="navgroup-popover-head"><div class="navgroup-popover-heading"><div class="navgroup-popover-breadcrumb"><span>SLSC HR</span><i>›</i><b>${esc(sec)}</b></div><strong>${esc(activeItem?.label||'Select a workspace')}</strong><small>${items.length} available view${items.length===1?'':'s'}</small></div><button type="button" class="navgroup-popover-close" title="Close navigation" aria-label="Close navigation" onclick="closeNavGroupPanel()">&times;</button></div><div class="navgroup-popover-list">${items.map(item=>`<button type="button" role="menuitem" class="navgroup-popover-item${STATE.view===item.v?' active':''}" data-nav-view="${item.v}">${item.icon(16)}<span>${esc(item.label)}</span>${item.count?`<em>${item.count()}</em>`:''}</button>`).join('')}</div>`;
   panel.querySelectorAll('[data-nav-view]').forEach(button=>button.addEventListener('click',()=>{const view=button.dataset.navView;closeNavGroupPanel();go(view);}));
   document.body.appendChild(panel);NAV_PANEL_SECTION=sec;trigger.setAttribute('aria-expanded','true');trigger.closest('.navgroup')?.classList.add('panel-open');positionNavGroupPanel(panel,trigger);
   requestAnimationFrame(()=>panel.querySelector('.navgroup-popover-item.active,.navgroup-popover-item')?.focus());
@@ -1841,7 +1843,7 @@ const INFORMATION_NOTES={
 };
 function informationNoteButton(noteId){
   const note=INFORMATION_NOTES[noteId];if(!note)return '';
-  return `<div class="information-note"><button type="button" class="information-note-button" title="${esc(note.title)}" aria-label="Open information: ${esc(note.title)}" onclick="openInformationNote('${noteId}')">${iInfo(16)}</button></div>`;
+  return `<button type="button" class="btn btn-ghost information-note-button" title="${esc(note.title)}" aria-label="Open information: ${esc(note.title)}" onclick="openInformationNote('${noteId}')">${iInfo(16)}<span class="information-note-label">Info</span></button>`;
 }
 function openInformationNote(noteId){
   const note=INFORMATION_NOTES[noteId];if(!note)return;
@@ -1988,12 +1990,34 @@ async function requestCloseModal(trigger=null){
   }
   return false;
 }
+function enhanceModalHeader(modal){
+  const head=modal?.querySelector(':scope > .modal-head');
+  if(!head||head.classList.contains('employee-workspace-head')||head.querySelector('.employee-workspace-breadcrumb,.modal-context-breadcrumb')) return;
+  const title=head.querySelector('h3');
+  if(!title) return;
+  const section=navSectionForView(STATE.view)||'SLSC HR';
+  const page=navLabelForView(STATE.view)||document.getElementById('tb-title')?.textContent?.trim()||'Workspace';
+  const action=title.textContent.trim();
+  const closeButton=Array.from(head.children).find(child=>child.matches('button'));
+  const copy=document.createElement('div');
+  copy.className='modal-head-copy';
+  Array.from(head.children).filter(child=>child!==closeButton).forEach(child=>copy.appendChild(child));
+  const trail=[section,page];
+  if(action&&action.toLowerCase()!==page.toLowerCase()) trail.push(action);
+  const breadcrumb=document.createElement('div');
+  breadcrumb.className='modal-context-breadcrumb';
+  breadcrumb.setAttribute('aria-label','Current location');
+  breadcrumb.innerHTML=trail.map((label,index)=>`${index?'<span aria-hidden="true">›</span>':''}<${index===trail.length-1?'b':'span'}>${esc(label)}</${index===trail.length-1?'b':'span'}>`).join('');
+  copy.prepend(breadcrumb);
+  head.insertBefore(copy,closeButton||null);
+}
 function openModal(html){
   const overlay=document.getElementById('overlay');
   const modal=document.getElementById('modal');
   MODAL_TRIGGER=document.activeElement instanceof HTMLElement?document.activeElement:null;
   modal.classList.remove('case-modal','employee-workspace-modal');
   modal.innerHTML=html;
+  enhanceModalHeader(modal);
   overlay.classList.add('on');
   overlay.setAttribute('aria-hidden','false');
   document.body.classList.add('modal-open');
@@ -4096,9 +4120,8 @@ function renderLeaves(){
   const html = `
   <div class="sectionhead">
     <div><h2>Leave Tracker</h2><p>${DB.leaves.length} leave requests on record.</p></div>
-    ${canEdit()? `<button class="btn btn-brass" onclick="openRecordForm('leaves')">${iPlus(15)} Add Leave Record</button>`:''}
+    <div class="page-header-actions">${informationNoteButton('leaveUploads')}${canEdit()? `<button class="btn btn-brass" onclick="openRecordForm('leaves')">${iPlus(15)} Add Leave Record</button>`:''}</div>
   </div>
-  ${informationNoteButton('leaveUploads')}
   <div class="tabs">
     <button class="tabbtn ${tab==='records'?'active':''}" onclick="STATE.leaveTab='records'; renderLeaves()">Leave Records</button>
     <button class="tabbtn ${tab==='calendar'?'active':''}" onclick="STATE.leaveTab='calendar'; renderLeaves()">Leave Calendar</button>
@@ -4221,9 +4244,8 @@ function renderDisciplinary(){
   const html = `
   <div class="sectionhead">
     <div><h2>Disciplinary Action</h2><p>${DB.disciplinary.length} records across ${new Set(DB.disciplinary.map(d=>d.employeeName)).size} employees.</p></div>
-    ${canEdit()? `<button class="btn btn-brass" onclick="openRecordForm('disciplinary')">${iPlus(15)} Add Disciplinary Record</button>`:''}
+    <div class="page-header-actions">${informationNoteButton('disciplinaryLevels')}${canEdit()? `<button class="btn btn-brass" onclick="openRecordForm('disciplinary')">${iPlus(15)} Add Disciplinary Record</button>`:''}</div>
   </div>
-  ${informationNoteButton('disciplinaryLevels')}
   <div class="toolbar">
     <div class="search">${iSearch(15)}<input data-search-key="search" placeholder="Search by employee or violation…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderDisciplinary)"></div>
     <select onchange="STATE.disciplinaryFilter=this.value;STATE.tablePages={};renderDisciplinary()"><option value="">All Levels / Departments</option>${OFFENSE_LEVELS.map(v=>`<option value="${esc(v)}" ${STATE.disciplinaryFilter===v?'selected':''}>${esc(v)}</option>`).join('')}${employeeDepartmentNames().map(v=>`<option value="${esc(v)}" ${STATE.disciplinaryFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
@@ -4284,9 +4306,8 @@ function renderCVR(){
   const html = `
   <div class="sectionhead">
     <div><h2>CVR / Violation Reports</h2><p>${DB.cvr.length} CVRs on record across ${new Set(DB.cvr.map(c=>c.employeeName)).size} employees.</p></div>
-    ${canEdit()? `<button class="btn btn-brass" onclick="openCVRForm()">${iPlus(15)} Add CVR</button>`:''}
+    <div class="page-header-actions">${informationNoteButton('cvrOcr')}${canEdit()? `<button class="btn btn-brass" onclick="openCVRForm()">${iPlus(15)} Add CVR</button>`:''}</div>
   </div>
-  ${informationNoteButton('cvrOcr')}
   <div class="toolbar">
     <div class="search">${iSearch(15)}<input data-search-key="search" placeholder="Search by employee or offense…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderCVR)"></div>
     <select onchange="STATE.cvrFilter=this.value;STATE.tablePages={};renderCVR()"><option value="">All CVR Statuses</option>${CVR_STATUS.map(v=>`<option value="${esc(v)}" ${STATE.cvrFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
@@ -4406,9 +4427,8 @@ function renderIncidents(){
   const html = `
   <div class="sectionhead">
     <div><h2>Incident Reports</h2><p>${DB.incidents.length} incident reports on record across ${new Set(DB.incidents.map(i=>i.employeeName)).size} employees.</p></div>
-    ${canEdit()? `<button class="btn btn-brass" onclick="openIncidentForm()">${iPlus(15)} Add Incident Report</button>`:''}
+    <div class="page-header-actions">${informationNoteButton('incidentOcr')}${canEdit()? `<button class="btn btn-brass" onclick="openIncidentForm()">${iPlus(15)} Add Incident Report</button>`:''}</div>
   </div>
-  ${informationNoteButton('incidentOcr')}
   <div class="toolbar">
     <div class="search">${iSearch(15)}<input data-search-key="search" placeholder="Search by employee, type, or description…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderIncidents)"></div>
     <select onchange="STATE.incidentFilter=this.value;STATE.tablePages={};renderIncidents()"><option value="">All Severity / Status</option>${INCIDENT_SEVERITY.map(v=>`<option value="${esc(v)}" ${STATE.incidentFilter===v?'selected':''}>${esc(v)}</option>`).join('')}${INCIDENT_STATUS.map(v=>`<option value="${esc(v)}" ${STATE.incidentFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
@@ -4671,9 +4691,8 @@ function renderATD(){
   const html = `
   <div class="sectionhead">
     <div><h2>ATD Monitoring</h2><p>${totalRecords} record(s) — uniform/expense and charge deductions.</p></div>
-    ${canEdit()? `<button class="btn btn-brass" onclick="openATDForm()">${iPlus(15)} New ATD Record</button>`:''}
+    <div class="page-header-actions">${informationNoteButton('atdUploads')}${canEdit()? `<button class="btn btn-brass" onclick="openATDForm()">${iPlus(15)} New ATD Record</button>`:''}</div>
   </div>
-  ${informationNoteButton('atdUploads')}
   <div class="grid cols-4" style="margin-bottom:16px;">
     <div class="stat" style="--accent:var(--brass)"><div class="lbl">Total ATD Records</div><div class="val">${totalRecords}</div><div class="sub">${byCat['Uniforms/Expenses']} Uniforms/Expenses · ${byCat['Charges']} Charges</div></div>
     <div class="stat" style="--accent:var(--ink)"><div class="lbl">Total Amount Due</div><div class="val" style="font-size:20px;">${peso(totalOutstanding)}</div></div>
@@ -4930,8 +4949,8 @@ function renderEvaluations(){
   const html = `
   <div class="sectionhead">
     <div><h2>Probationary Evaluations</h2><p>${emps.length} employee(s) currently on probation.</p></div>
+    <div class="page-header-actions">${informationNoteButton('evaluations')}</div>
   </div>
-  ${informationNoteButton('evaluations')}
   <div class="toolbar"><div class="search">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search by employee or department…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderEvaluations)"></div><select onchange="STATE.evaluationFilter=this.value;STATE.tablePages={};renderEvaluations()"><option value="">All Evaluation Statuses</option><option value="Overdue" ${STATE.evaluationFilter==='Overdue'?'selected':''}>Overdue</option><option value="Due Soon" ${STATE.evaluationFilter==='Due Soon'?'selected':''}>Due Soon</option><option value="Upcoming" ${STATE.evaluationFilter==='Upcoming'?'selected':''}>Upcoming</option><option value="Completed" ${STATE.evaluationFilter==='Completed'?'selected':''}>Completed</option></select><button class="btn btn-ghost btn-sm" onclick="cancelSearchRender('search');STATE.evaluationFilter='';STATE.search='';STATE.tablePages={};renderEvaluations()">Clear</button></div>
   <div class="tablewrap"><table class="data-table">
     <thead><tr><th>Employee</th><th>Department</th><th>Date Hired</th><th>1st Month</th><th>3rd Month</th><th>6th Month</th></tr></thead>
@@ -4995,8 +5014,7 @@ function renderOffenseSummary(){
   let names = Object.keys(map).sort((a,b)=>a.localeCompare(b));
   if(q) names = names.filter(n=> n.toLowerCase().includes(q) || Object.keys(map[n].offenses).some(o=>o.toLowerCase().includes(q)));
   const html = `
-  <div class="sectionhead"><div><h2>Employee Offense Summary</h2><p>${names.length} employee(s) with recorded offenses.</p></div></div>
-  ${informationNoteButton('offenseSummary')}
+  <div class="sectionhead"><div><h2>Employee Offense Summary</h2><p>${names.length} employee(s) with recorded offenses.</p></div><div class="page-header-actions">${informationNoteButton('offenseSummary')}</div></div>
   <div class="toolbar"><div class="search">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search by employee or offense…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderOffenseSummary)"></div></div>
   ${names.length? names.map(n=>{
     const m = map[n];
@@ -6407,8 +6425,8 @@ function renderUsers(){
   document.getElementById('content').innerHTML = `
     <div class="sectionhead">
       <div><h2>User Management</h2><p>${rows.length} registered profile${rows.length===1?'':'s'}.</p></div>
+      ${SESSION.role!=='Administrator'?`<div class="page-header-actions">${informationNoteButton('userAdministration')}</div>`:''}
     </div>
-    ${SESSION.role!=='Administrator'?informationNoteButton('userAdministration'):''}
     <div class="tablewrap"><table class="data-table">
       <thead><tr><th>Full Name</th><th>Username</th><th>Email</th><th>Role</th><th>Export Access</th><th>Employee Link</th><th>Manager</th><th>Created</th><th style="text-align:right;">Actions</th></tr></thead>
       <tbody>
