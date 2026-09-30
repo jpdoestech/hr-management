@@ -1,7 +1,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '../supabase-config.js';
 import { paginationMeta, paginationHTML, paginationReset, paginateRows } from './core/pagination.js?v=20260928-4';
-import { installTableEnhancer } from './core/table-enhancer.js?v=20260930-1';
+import { installTableEnhancer } from './core/table-enhancer.js?v=20260930-2';
 import { compactRedundantPageIntros } from './core/content-layout.js?v=20260928-4';
 import { buildRecordChanges, valuesEqual } from './core/record-diff.js?v=20260930-1';
 import { roleCanExport } from './core/export-access.js?v=20260930-1';
@@ -24,7 +24,7 @@ const RECORD_MODULES = ['employees','onboardingCandidates','leaves','disciplinar
 let DB_SNAPSHOT = null;
 let SAVE_QUEUE = Promise.resolve();
 let SELF_SERVICE_READY = true;
-let USER_PREFERENCES = {employeeColumns:[]};
+let USER_PREFERENCES = {employeeColumns:[],tableLayouts:{}};
 let USER_PREFERENCES_SYNC_READY = true;
 const DEFAULT_DEPARTMENT_NAMES = ['LOGISTICS','WAREHOUSE','UTILITY','MAINTENANCE','PRODUCTION','ADMIN','SALES'];
 
@@ -3176,41 +3176,81 @@ function employeeColumnDefinitions(){
 function defaultEmployeeColumns(){ return employeeColumnDefinitions().filter(c=>c.default||c.locked).map(c=>c.key); }
 function sanitizeEmployeeColumns(keys){
   const definitions=employeeColumnDefinitions();
-  const selected=new Set(Array.isArray(keys)?keys:defaultEmployeeColumns());
-  definitions.filter(c=>c.locked).forEach(c=>selected.add(c.key));
-  return definitions.filter(c=>selected.has(c.key)).map(c=>c.key);
+  const valid=new Set(definitions.map(column=>column.key));
+  const selected=[];
+  (Array.isArray(keys)?keys:defaultEmployeeColumns()).forEach(key=>{if(valid.has(key)&&!selected.includes(key))selected.push(key);});
+  definitions.filter(column=>column.locked).reverse().forEach(column=>{if(!selected.includes(column.key))selected.unshift(column.key);});
+  return selected;
 }
 function employeeVisibleColumns(){
   const keys=sanitizeEmployeeColumns(USER_PREFERENCES.employeeColumns?.length?USER_PREFERENCES.employeeColumns:defaultEmployeeColumns());
-  return employeeColumnDefinitions().filter(c=>keys.includes(c.key));
+  const definitions=new Map(employeeColumnDefinitions().map(column=>[column.key,column]));
+  return keys.map(key=>definitions.get(key)).filter(Boolean);
 }
-function openEmployeeColumnManager(){
-  const definitions=employeeColumnDefinitions();
-  const selected=new Set(employeeVisibleColumns().map(c=>c.key));
+let TABLE_VIEW_DRAGGED='';
+function tableViewOrderedColumns(info){
+  const map=new Map(info.columns.filter(column=>!column.locked).map(column=>[column.key,column]));
+  return [...info.layout.order.map(key=>map.get(key)).filter(Boolean),...Array.from(map.values()).filter(column=>!info.layout.order.includes(column.key))];
+}
+function openTableViewSettings(key){
+  const info=TABLE_ENHANCER?.getTableInfo(key);
+  if(!info){toast('This table is still loading. Please try again.');return;}
+  const employeeTable=key==='employees';
+  const selected=new Set(employeeVisibleColumns().map(column=>column.key));
+  let columns=tableViewOrderedColumns(info);
+  if(employeeTable){
+    const definitions=employeeColumnDefinitions();
+    const byKey=new Map(definitions.map(column=>[column.key,column]));
+    const preferred=[...info.layout.order,...sanitizeEmployeeColumns(USER_PREFERENCES.employeeColumns),...definitions.map(column=>column.key)];
+    columns=[...new Set(preferred)].map(columnKey=>byKey.get(columnKey)).filter(Boolean);
+  }
+  const frozen=new Set(info.layout.frozen);
   openModal(`
-    <div class="modal-head"><div><h3>Customize employee columns</h3><div class="small">Choose the employee data shown in your directory.</div></div><button onclick="closeModal()">&times;</button></div>
-    <div class="modal-body column-manager-body">
-      <div class="column-manager-list">${definitions.map(c=>`<label class="column-manager-option ${c.locked?'locked':''}"><input type="checkbox" data-employee-column value="${esc(c.key)}" ${selected.has(c.key)?'checked':''} ${c.locked?'disabled':''}><span><b>${esc(c.label)}</b>${c.locked?'<small>Required column</small>':c.key.startsWith('allowance:')?'<small>Configured allowance</small>':'<small>Optional employee data</small>'}</span></label>`).join('')}</div>
-      <div class="computed-note">Your view is saved per user. Required identity columns always remain visible.</div>
+    <div class="modal-head"><div><h3>Table view</h3><div class="small">Arrange columns and keep important data visible while scrolling.</div></div><button onclick="closeModal()" aria-label="Close">&times;</button></div>
+    <div class="modal-body table-view-modal-body">
+      <div class="table-view-legend"><span>${iColumns(15)} Drag rows or use arrows to reorder</span><span>Freeze is active on desktop and tablet</span></div>
+      <div class="table-view-list" data-table-view-key="${esc(key)}">${columns.map((column,index)=>`
+        <div class="table-view-row" draggable="true" data-table-view-column="${esc(column.key)}" ondragstart="tableViewDragStart(event)" ondragover="tableViewDragOver(event)" ondrop="tableViewDrop(event)" ondragend="tableViewDragEnd(event)">
+          <span class="table-view-grip" aria-hidden="true">⋮⋮</span>
+          <span class="table-view-name"><b>${esc(column.label)}</b>${employeeTable&&column.locked?'<small>Required identity column</small>':''}</span>
+          ${employeeTable?`<label class="table-view-toggle"><input type="checkbox" data-table-view-visible ${selected.has(column.key)?'checked':''} ${column.locked?'disabled':''}><span>Show</span></label>`:''}
+          <label class="table-view-toggle"><input type="checkbox" data-table-view-frozen ${frozen.has(column.key)?'checked':''}><span>Freeze</span></label>
+          <span class="table-view-move"><button type="button" class="iconbtn" onclick="tableViewMove(this,-1)" title="Move up" aria-label="Move ${esc(column.label)} up">↑</button><button type="button" class="iconbtn" onclick="tableViewMove(this,1)" title="Move down" aria-label="Move ${esc(column.label)} down">↓</button></span>
+        </div>`).join('')}</div>
+      <div class="computed-note">Preferences are saved for your account. You can also drag a table header directly with a mouse.</div>
     </div>
-    <div class="modal-foot"><button class="btn btn-ghost" data-confirm-change="false" onclick="resetEmployeeColumnPreferences()">Reset default</button><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEmployeeColumnPreferences()">Save view</button></div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-confirm-change="false" onclick="resetTableViewPreferences('${esc(key)}')">Reset default</button><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveTableViewPreferences('${esc(key)}')">Save view</button></div>
   `);
 }
-async function saveEmployeeColumnPreferences(){
-  const checked=[...document.querySelectorAll('[data-employee-column]:checked')].map(el=>el.value);
-  USER_PREFERENCES.employeeColumns=sanitizeEmployeeColumns(checked);
-  const synced=await persistUserPreferences();
-  await closeModal();
-  renderEmployees();
-  toast(synced?'Column view saved to your account.':'Column view saved on this browser. Run the Phase 12 SQL migration to enable account sync.');
+function openEmployeeColumnManager(){openTableViewSettings('employees');}
+function tableViewDragStart(event){TABLE_VIEW_DRAGGED=event.currentTarget.dataset.tableViewColumn;event.currentTarget.classList.add('dragging');event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',TABLE_VIEW_DRAGGED);}
+function tableViewDragOver(event){event.preventDefault();event.currentTarget.classList.add('drop-target');}
+function tableViewDrop(event){event.preventDefault();const target=event.currentTarget;target.classList.remove('drop-target');const source=target.parentElement.querySelector(`[data-table-view-column="${CSS.escape(TABLE_VIEW_DRAGGED)}"]`);if(source&&source!==target)target.parentElement.insertBefore(source,target);}
+function tableViewDragEnd(event){TABLE_VIEW_DRAGGED='';event.currentTarget.closest('.table-view-list')?.querySelectorAll('.dragging,.drop-target').forEach(row=>row.classList.remove('dragging','drop-target'));}
+function tableViewMove(button,direction){const row=button.closest('.table-view-row');if(!row)return;const sibling=direction<0?row.previousElementSibling:row.nextElementSibling;if(!sibling)return;if(direction<0)row.parentElement.insertBefore(row,sibling);else row.parentElement.insertBefore(sibling,row);row.querySelector('button')?.focus();}
+async function saveTableViewPreferences(key){
+  const list=document.querySelector(`[data-table-view-key="${CSS.escape(key)}"]`);if(!list)return;
+  const rows=Array.from(list.querySelectorAll('.table-view-row'));
+  const visible=rows.filter(row=>!row.querySelector('[data-table-view-visible]')||row.querySelector('[data-table-view-visible]').checked).map(row=>row.dataset.tableViewColumn);
+  const frozen=rows.filter(row=>visible.includes(row.dataset.tableViewColumn)&&row.querySelector('[data-table-view-frozen]')?.checked).map(row=>row.dataset.tableViewColumn);
+  if(key==='employees'){
+    USER_PREFERENCES.employeeColumns=sanitizeEmployeeColumns(visible);
+    await renderEmployees();
+    TABLE_ENHANCER.enhanceDataTables();
+  }
+  TABLE_ENHANCER.setTableLayout(key,{order:visible,frozen});
+  const synced=await persistUserPreferences();await closeModal();
+  toast(synced?'Table view saved to your account.':'Table view saved on this browser.');
 }
-async function resetEmployeeColumnPreferences(){
-  USER_PREFERENCES.employeeColumns=defaultEmployeeColumns();
-  const synced=await persistUserPreferences();
-  await closeModal();
-  renderEmployees();
-  toast(synced?'Default employee columns restored.':'Default columns restored on this browser.');
+async function resetTableViewPreferences(key){
+  if(key==='employees')USER_PREFERENCES.employeeColumns=defaultEmployeeColumns();
+  TABLE_ENHANCER.resetTableLayout(key);
+  const synced=await persistUserPreferences();await closeModal();
+  if(key==='employees')await renderEmployees();
+  toast(synced?'Default table view restored.':'Default table view restored on this browser.');
 }
+const saveEmployeeColumnPreferences=()=>saveTableViewPreferences('employees');
+const resetEmployeeColumnPreferences=()=>resetTableViewPreferences('employees');
 async function renderEmployees(){
   const q=(STATE.employeeSearch||'').trim().toLowerCase();
   const deptFilter = STATE.employeeDepartmentFilter||'';
@@ -3258,20 +3298,25 @@ async function renderEmployees(){
         </div>
         <div class="employee-toolbar-actions">
           ${hasFilters?`<button class="btn btn-ghost btn-sm employee-reset" onclick="resetEmployeeDirectoryFilters()">Clear</button>`:''}
-          <button class="btn btn-ghost btn-sm employee-tool-btn" onclick="openEmployeeColumnManager()" title="Customize visible employee columns" aria-label="Customize visible employee columns">${iColumns(15)} <span>Columns</span></button>
-          ${SESSION?.role==='Administrator'?`<button class="btn btn-ghost btn-sm employee-tool-btn" onclick="downloadEmployeeImportTemplate()" title="Download employee import template" aria-label="Download employee import template">${iDownload(15)} <span>Template</span></button><button class="btn btn-ghost btn-sm employee-tool-btn" onclick="openEmployeeImport()" title="Import employee records" aria-label="Import employee records">${iUpload(15)} <span>Import</span></button>`:''}
-          ${canExport()?`<button class="btn btn-ghost btn-sm employee-tool-btn" onclick="exportEmployeesCSV()" title="Export complete employee records" aria-label="Export complete employee records">${iDownload(15)} <span>Export</span></button>`:''}
+          <details class="employee-more-menu">
+            <summary class="btn btn-ghost btn-sm employee-tool-btn" title="More employee table tools">${iMore(15)} <span>More</span></summary>
+            <div class="employee-more-popover" role="menu">
+              <button type="button" role="menuitem" onclick="this.closest('details').removeAttribute('open');openTableViewSettings('employees')">${iColumns(15)}<span><b>Table view</b><small>Show, arrange, and freeze columns</small></span></button>
+              ${SESSION?.role==='Administrator'?`<button type="button" role="menuitem" onclick="this.closest('details').removeAttribute('open');downloadEmployeeImportTemplate()">${iDownload(15)}<span><b>Import template</b><small>Download the validated Excel format</small></span></button><button type="button" role="menuitem" onclick="this.closest('details').removeAttribute('open');openEmployeeImport()">${iUpload(15)}<span><b>Import employees</b><small>Validate and add employee records</small></span></button>`:''}
+              ${canExport()?`<button type="button" role="menuitem" onclick="this.closest('details').removeAttribute('open');exportEmployeesCSV()">${iDownload(15)}<span><b>Export data</b><small>Download complete employee records</small></span></button>`:''}
+            </div>
+          </details>
           ${canEdit()? `<button class="btn btn-primary btn-sm employee-add-button" onclick="openEmployeeForm()">${iPlus(14)} <span>Add Employee</span></button>`:''}
         </div>
       </div>
       <div class="tablewrap employee-directory-tablewrap">
-        <table class="data-table employee-directory-table" data-server-paginated="true" style="min-width:${tableMinWidth}px!important">
-          <colgroup>${columns.map(c=>`<col style="width:${c.width}px">`).join('')}<col style="width:92px"></colgroup>
-          <thead><tr>${columns.map(c=>`<th>${esc(c.label)}</th>`).join('')}<th class="actions-head">Actions</th></tr></thead>
+        <table class="data-table employee-directory-table" data-table-key="employees" data-table-tools="external" data-server-paginated="true" style="min-width:${tableMinWidth}px!important">
+          <colgroup>${columns.map(c=>`<col data-column-key="${esc(c.key)}" style="width:${c.width}px">`).join('')}<col data-column-key="actions" style="width:92px"></colgroup>
+          <thead><tr>${columns.map(c=>`<th data-column-key="${esc(c.key)}">${esc(c.label)}</th>`).join('')}<th class="actions-head" data-column-key="actions">Actions</th></tr></thead>
           <tbody>
             ${rows.length? rows.map(e=>`<tr class="employee-directory-row ${String(STATE.employeeSelectedId||'')===String(e.id)?'selected':''}" data-employee-id="${esc(e.id)}" tabindex="0" aria-label="Open ${esc(employeeDisplayName(e))}" onclick="selectEmployeeDirectoryRow('${e.id}');openEmployeeProfile('${e.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectEmployeeDirectoryRow('${e.id}');openEmployeeProfile('${e.id}')}">
               ${columns.map(c=>`<td data-column="${esc(c.key)}">${c.cell(e)}</td>`).join('')}
-              <td onclick="event.stopPropagation()" onkeydown="event.stopPropagation()"><div class="rowactions">
+              <td data-column="actions" onclick="event.stopPropagation()" onkeydown="event.stopPropagation()"><div class="rowactions">
                 <button class="iconbtn" onclick="selectEmployeeDirectoryRow('${e.id}');openEmployeeProfile('${e.id}')" title="View employee profile">${iUser(14)}</button>
                 ${canEdit()? `<button class="iconbtn" onclick="selectEmployeeDirectoryRow('${e.id}');openEmployeeForm('${e.id}')" title="Edit">${iEdit(14)}</button>
                 <button class="iconbtn" onclick="selectEmployeeDirectoryRow('${e.id}');openTransferForEmployee('${e.id}')" title="Record Department Transfer">${iSwap(14)}</button>
@@ -7508,7 +7553,19 @@ async function deleteCase(id){
 /* ================================================================
    Professional data-table pagination + interaction layer
    ================================================================ */
-const TABLE_ENHANCER=installTableEnhancer({getState:()=>STATE,getContent:()=>document.getElementById('content')});
+const TABLE_ENHANCER=installTableEnhancer({
+  getState:()=>STATE,
+  getContent:()=>document.getElementById('content'),
+  getAdditionalRoots:()=>[document.getElementById('modal')],
+  getLayouts:()=>USER_PREFERENCES.tableLayouts||{},
+  onLayoutChange:(key,layout)=>{
+    USER_PREFERENCES.tableLayouts={...(USER_PREFERENCES.tableLayouts||{})};
+    if(layout)USER_PREFERENCES.tableLayouts[key]=layout;
+    else delete USER_PREFERENCES.tableLayouts[key];
+    void persistUserPreferences();
+  },
+  openSettings:key=>openTableViewSettings(key),
+});
 const {enhanceDataTables,tablePageGo,tablePageSize,resetAllTablePages}=TABLE_ENHANCER;
 
 /* ================================================================
@@ -7558,11 +7615,13 @@ document.addEventListener('click', e=>{
   document.querySelectorAll('.employee-picker').forEach(picker=>{
     if(!picker.contains(e.target)) employeePickerClose(picker.id.replace(/_picker$/,''));
   });
+  document.querySelectorAll('.employee-more-menu[open]').forEach(menu=>{if(!menu.contains(e.target))menu.removeAttribute('open');});
 });
 document.addEventListener('keydown', e=>{
   if(e.key!=='Escape') return;
   closeNotificationPanel();
   closeNavGroupPanel();
+  document.querySelectorAll('.employee-more-menu[open]').forEach(menu=>menu.removeAttribute('open'));
   document.querySelectorAll('.employee-picker').forEach(picker=>employeePickerClose(picker.id.replace(/_picker$/,'')));
 });
 window.addEventListener('resize',()=>{
@@ -7608,7 +7667,7 @@ Object.assign(window, {
   loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
   openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard, dashboardOpenEmployees, dashboardOpenCases,
-  renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, toggleEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
+  renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, toggleEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, openTableViewSettings, saveTableViewPreferences, resetTableViewPreferences, tableViewDragStart, tableViewDragOver, tableViewDrop, tableViewDragEnd, tableViewMove, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, closeNavGroupPanel, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts, actionCenterSetLevel, actionCenterResetFilters, actionCenterPageGo, actionCenterPageSize,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   renderManpowerFulfillment, manpowerSetView, manpowerResetFilters, openManpowerRequestForm, saveManpowerRequest, deleteManpowerRequest, openManpowerRequestDetails, openManpowerRequirementForm, saveManpowerRequirement, openManpowerSlotForm, saveManpowerSlot, manpowerSlotReplacementChanged, exportManpowerFulfillment,
