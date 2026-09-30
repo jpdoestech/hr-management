@@ -1070,3 +1070,24 @@ label.onboarding-check{cursor:pointer;}
   .information-note-button{width:100%;}
   .toolbar>select{flex-basis:100%;}
 }
+
+/* Manpower fulfillment: dense operational data without oversized controls. */
+.manpower-view-switch{display:inline-flex;gap:3px;margin-bottom:10px;padding:3px;border:1px solid var(--line);border-radius:7px;background:var(--panel,#fff);}
+.manpower-view-switch button{min-height:32px;padding:6px 11px;border:0;border-radius:5px;background:transparent;color:var(--muted);font:700 11px/1.2 inherit;cursor:pointer;}
+.manpower-view-switch button.active{background:var(--ink);color:#fff;}
+.manpower-view-switch span{display:inline-grid;min-width:18px;height:18px;margin-left:5px;padding:0 4px;place-items:center;border-radius:9px;background:rgba(255,255,255,.18);font-size:9px;}
+.manpower-kpis{display:grid;grid-template-columns:repeat(7,minmax(105px,1fr));gap:7px;margin-bottom:10px;}
+.manpower-kpis button{min-width:0;padding:10px 11px;text-align:left;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--text);cursor:pointer;}
+.manpower-kpis button:hover{border-color:var(--ink);box-shadow:0 3px 12px rgba(15,35,58,.07);}
+.manpower-kpis span,.manpower-detail-summary span,.manpower-request-meta span{display:block;color:var(--muted);font-size:9px;font-weight:800;line-height:1.25;text-transform:uppercase;}
+.manpower-kpis b{display:block;margin-top:4px;font-size:19px;line-height:1;}.manpower-kpis small{display:block;margin-top:5px;color:var(--muted);font-size:9px;line-height:1.25;}
+.manpower-toolbar{margin-bottom:10px;}.manpower-table .tablewrap{max-height:calc(100dvh - 310px);}.manpower-table table{min-width:1180px;}
+.fulfillment-cell{min-width:78px}.fulfillment-cell>b{font-size:11px}.fulfillment-cell>span{display:block;height:4px;margin-top:5px;overflow:hidden;border-radius:2px;background:var(--surface-2,#edf0f2)}.fulfillment-cell i{display:block;height:100%;background:var(--forest);}
+.manpower-legacy-note{display:flex;align-items:flex-start;gap:9px;margin-bottom:10px;padding:9px 11px;border-left:3px solid var(--brass);background:#fffaf0;color:var(--text);}.manpower-legacy-note svg{flex:none;margin-top:1px}.manpower-legacy-note b,.manpower-legacy-note small{display:block}.manpower-legacy-note small{margin-top:2px;color:var(--muted);line-height:1.35;}
+.manpower-detail-body{display:grid;gap:12px;}.manpower-detail-summary{display:grid;grid-template-columns:repeat(8,minmax(90px,1fr));gap:7px;}.manpower-detail-summary>div,.manpower-request-meta>div{min-width:0;padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--surface,#f8fafb)}.manpower-detail-summary b{display:block;margin-top:5px;font-size:16px;overflow-wrap:anywhere;}
+.manpower-request-meta{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:7px;}.manpower-request-meta b,.manpower-request-meta .badge{margin-top:5px;}
+.manpower-detail-toolbar,.manpower-requirement-head{display:flex;align-items:center;justify-content:space-between;gap:12px;}.manpower-detail-toolbar h4,.manpower-requirement h4{margin:0;font-size:14px}.manpower-detail-toolbar p,.manpower-requirement p{margin:3px 0 0;color:var(--muted);font-size:10px;line-height:1.4;}
+.manpower-requirement{padding-top:12px;border-top:1px solid var(--line);}.manpower-requirement-counts{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.manpower-requirement-counts>span{padding:6px 8px;border:1px solid var(--line);border-radius:5px;color:var(--muted);font-size:9px;white-space:nowrap}.manpower-requirement-counts b{color:var(--text);font-size:11px}.manpower-slot-table{min-width:1120px;margin-top:9px}.manpower-slot-table td{vertical-align:middle}.manpower-form{max-width:980px;margin:0 auto;}
+@media (max-width:1180px){.manpower-kpis{grid-template-columns:repeat(4,minmax(110px,1fr));}.manpower-detail-summary{grid-template-columns:repeat(4,minmax(100px,1fr));}.manpower-request-meta{grid-template-columns:repeat(3,minmax(120px,1fr));}}
+@media (max-width:720px){.manpower-view-switch{display:grid;grid-template-columns:1fr 1fr;width:100%;}.manpower-kpis{grid-template-columns:repeat(2,minmax(0,1fr));}.manpower-table .tablewrap{max-height:calc(100dvh - 390px);}.manpower-detail-summary,.manpower-request-meta{grid-template-columns:repeat(2,minmax(0,1fr));}.manpower-detail-toolbar,.manpower-requirement-head{align-items:flex-start;flex-direction:column}.manpower-requirement-counts{width:100%}.manpower-requirement-counts .iconbtn{margin-left:auto}.manpower-form{max-width:none;}}
+@media (max-width:420px){.manpower-kpis{grid-template-columns:1fr 1fr}.manpower-detail-summary,.manpower-request-meta{grid-template-columns:1fr}.manpower-kpis button:last-child{grid-column:1/-1}.manpower-legacy-note{font-size:10px}}

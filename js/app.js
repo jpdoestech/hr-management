@@ -5,6 +5,7 @@ import { installTableEnhancer } from './core/table-enhancer.js?v=20260930-1';
 import { compactRedundantPageIntros } from './core/content-layout.js?v=20260928-4';
 import { buildRecordChanges, valuesEqual } from './core/record-diff.js?v=20260930-1';
 import { roleCanExport } from './core/export-access.js?v=20260930-1';
+import { manpowerRequestSummary, manpowerRequestTotals, requirementSlotCounts, slotChronologyIssues, slotMetrics } from './core/manpower.js?v=20260930-1';
 import { addressComponentHTML, addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom, initializeAddressComponents, readAddressComponent } from './address/address-component.js?v=20260929-1';
 import { formatPhilippineAddress, normalizeAddress } from './address/address-models.js?v=20260929-1';
 
@@ -19,7 +20,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
    Phase 2: record-level Postgres persistence, Supabase Auth, and private Storage.
    ========================================================================= */
 
-const RECORD_MODULES = ['employees','onboardingCandidates','leaves','disciplinary','nte','memos','nod','oncall','transfers','offenseCatalog','cvr','incidents','prf','evaluations','atd','workflowTasks','automationRuns','documents','lifecycleChecklists'];
+const RECORD_MODULES = ['employees','onboardingCandidates','leaves','disciplinary','nte','memos','nod','oncall','transfers','offenseCatalog','cvr','incidents','prf','manpowerRequests','manpowerRequirements','manpowerSlots','evaluations','atd','workflowTasks','automationRuns','documents','lifecycleChecklists'];
 let DB_SNAPSHOT = null;
 let SAVE_QUEUE = Promise.resolve();
 let SELF_SERVICE_READY = true;
@@ -28,7 +29,7 @@ let USER_PREFERENCES_SYNC_READY = true;
 const DEFAULT_DEPARTMENT_NAMES = ['LOGISTICS','WAREHOUSE','UTILITY','MAINTENANCE','PRODUCTION','ADMIN','SALES'];
 
 function blankDB(){
-  return {employees:[],onboardingCandidates:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],lifecycleChecklists:[],serviceRequests:[],settings:{orgName:'SCPA',probationDays:180,fileStorageProvider:'supabase',googleDriveRootUrl:'',googleDriveClientId:'',branchLocations:['Main Office'],allowanceTypes:[],departments:DEFAULT_DEPARTMENT_NAMES.map(name=>({name,active:true})),positions:[]},audit:[],users:[]};
+  return {employees:[],onboardingCandidates:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],manpowerRequests:[],manpowerRequirements:[],manpowerSlots:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],lifecycleChecklists:[],serviceRequests:[],settings:{orgName:'SCPA',probationDays:180,fileStorageProvider:'supabase',googleDriveRootUrl:'',googleDriveClientId:'',branchLocations:['Main Office'],allowanceTypes:[],departments:DEFAULT_DEPARTMENT_NAMES.map(name=>({name,active:true})),positions:[]},audit:[],users:[]};
 }
 function uniqueSettingNames(values){
   const seen=new Set();
@@ -286,7 +287,7 @@ function googleDriveRef(fileId){ return `${GOOGLE_DRIVE_PREFIX}${fileId}`; }
 function googleDriveFileIdFromRef(ref){ return storageRefProvider(ref)==='google-drive'?String(ref).slice(GOOGLE_DRIVE_PREFIX.length):''; }
 function googleDriveFileUrl(ref){ const id=googleDriveFileIdFromRef(ref)||documentDriveFileId(ref); return id?`https://drive.google.com/file/d/${encodeURIComponent(id)}/view`:''; }
 function uploadModuleFolder(module){
-  const aliases={onboardingCandidates:'onboarding',leaves:'leave',memos:'memo',incidents:'incident',evaluations:'evaluation',employees:'employee',disciplinary:'disciplinary',nte:'nte',nod:'nod',oncall:'on-call',transfers:'transfer',cvr:'cvr',prf:'prf',atd:'atd',cases:'case',documents:'documents'};
+  const aliases={onboardingCandidates:'onboarding',leaves:'leave',memos:'memo',incidents:'incident',evaluations:'evaluation',employees:'employee',disciplinary:'disciplinary',nte:'nte',nod:'nod',oncall:'on-call',transfers:'transfer',cvr:'cvr',prf:'prf',manpowerRequests:'manpower',manpower:'manpower',atd:'atd',cases:'case',documents:'documents'};
   return aliases[module]||String(module||'documents').replace(/[^a-zA-Z0-9_-]/g,'-').toLowerCase();
 }
 function uploadFilenamePart(value,fallback='unknown'){
@@ -630,7 +631,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = blankDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeBranchFilter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', checklistSearch:'', checklistType:'', checklistStatus:'Active', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', actionSearch:'', actionLevel:'all', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', workflowPriority:'', workflowDepartment:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', tablePages:{}, tablePageSizes:{} };
+let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeBranchFilter:'', employeeStatusFilter:'', employeeClassFilter:'', lifecycleSearch:'', lifecycleFilter:'', checklistSearch:'', checklistType:'', checklistStatus:'Active', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', actionSearch:'', actionLevel:'all', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', workflowPriority:'', workflowDepartment:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', analyticsBranch:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', manpowerView:'requests', manpowerSearch:'', manpowerBranch:'', manpowerStatus:'', manpowerRisk:'', manpowerType:'', tablePages:{}, tablePageSizes:{} };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
@@ -713,7 +714,7 @@ async function bootAuthenticated(user){
     // An empty database is a valid production state, including after an
     // administrator performs the user-preserving reset.
     DB=state;
-    if(!DB.audit) DB.audit=[]; if(!DB.onboardingCandidates) DB.onboardingCandidates=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; DB.prf.forEach(p=>{if(!p.status)p.status='Draft';}); if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; if(!DB.workflowTasks) DB.workflowTasks=[]; if(!DB.automationRuns) DB.automationRuns=[]; if(!DB.documents) DB.documents=[]; if(!DB.lifecycleChecklists) DB.lifecycleChecklists=[]; if(!DB.serviceRequests) DB.serviceRequests=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];}); if(!DB.settings) DB.settings={orgName:'SCPA',probationDays:180}; DB.settings.branchLocations=uniqueSettingNames(DB.settings.branchLocations); if(!DB.settings.branchLocations.length)DB.settings.branchLocations=['Main Office']; DB.settings.allowanceTypes=uniqueSettingNames(DB.settings.allowanceTypes);
+    if(!DB.audit) DB.audit=[]; if(!DB.onboardingCandidates) DB.onboardingCandidates=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; DB.prf.forEach(p=>{if(!p.status)p.status='Draft';}); if(!DB.manpowerRequests) DB.manpowerRequests=[]; if(!DB.manpowerRequirements) DB.manpowerRequirements=[]; if(!DB.manpowerSlots) DB.manpowerSlots=[]; if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; if(!DB.workflowTasks) DB.workflowTasks=[]; if(!DB.automationRuns) DB.automationRuns=[]; if(!DB.documents) DB.documents=[]; if(!DB.lifecycleChecklists) DB.lifecycleChecklists=[]; if(!DB.serviceRequests) DB.serviceRequests=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];}); if(!DB.settings) DB.settings={orgName:'SCPA',probationDays:180}; DB.settings.branchLocations=uniqueSettingNames(DB.settings.branchLocations); if(!DB.settings.branchLocations.length)DB.settings.branchLocations=['Main Office']; DB.settings.allowanceTypes=uniqueSettingNames(DB.settings.allowanceTypes);
     const employeeMasterChanged=isHRRole()?normalizeEmployeeMasterData():false;
     DB_SNAPSHOT=JSON.parse(JSON.stringify(DB));
     if(employeeMasterChanged) await saveDB();
@@ -1562,7 +1563,7 @@ const NAV = [
     {v:'leaves',label:'Leave Tracker',icon:iCal},
     {v:'evaluations',label:'Probationary Evaluations',icon:iChart},
     {v:'transfers',label:'Department Transfers',icon:iSwap},
-    {v:'prf',label:'PRF',icon:iDoc},
+    {v:'prf',label:'Manpower Fulfillment',icon:iDoc},
     {v:'oncall',label:'On-Call / Replacement',icon:iSwap},
     {v:'atd',label:'ATD Monitoring',icon:iChart},
   ]},
@@ -1849,6 +1850,8 @@ const INFORMATION_NOTES={
   workflowRule:{title:'Workflow source records',body:'Source records remain the system of record. Approvals and task states coordinate HR work around those records and are retained in the audit trail.'},
   caseFiles:{title:'HR case files',body:'A case groups related HR records into one trackable matter. Priority and deadlines help HR staff focus follow-ups before opening the full case file.'},
   documentCenter:{title:'Document storage',body:"New uploads follow the System Administrator's storage setting. Existing Google Drive and Supabase attachments remain available from this document index."},
+  manpowerFulfillment:{title:'Manpower fulfillment definitions',body:'A PRF/request can contain multiple position requirements and individual fulfillment slots. Time to Onboard, Deployment Lead Time, Total Fulfillment Time, deployment variance, and replacement lead time are calculated separately from source dates. Legacy spreadsheet formulas are not reused.'},
+  workforceAnalytics:{title:'Workforce metric definitions',body:'Retention is the beginning-of-period employee population still active at period end divided by beginning headcount. Turnover is separations during the period divided by average headcount, where average headcount is beginning plus ending headcount divided by two. The default attrition scope includes Resigned, AWOL, and Separated statuses. Branch and department filters apply to the same population and activity records.'},
 };
 function informationNoteButton(noteId){
   const note=INFORMATION_NOTES[noteId];if(!note)return '';
@@ -3101,10 +3104,14 @@ async function convertOnboardingCandidate(id){
   if(Object.values(allowances).some(amount=>!Number.isFinite(amount)||amount<0)){toast('Allowance amounts must be non-negative numbers.',true);return;}
   const createdAt=new Date().toISOString();
   const createdByName=SESSION?.fullName||'System';
-  const employee={id:uid(),employeeNo:nextEmployeeNumber(DB.employees),prfNumber:candidate.prfNumber,lastName:candidate.lastName,firstName:candidate.firstName,middleName:candidate.middleName,name:formatEmployeeName(candidate),position:candidate.positionApplied,department:candidate.department,branchReporting,dailyRate:dailyRateRaw===''?'':Math.round(Number(dailyRateRaw)*100)/100,allowances,dateHired:candidate.proposedStartDate,birthDate:candidate.birthDate,gender:candidate.gender,civilStatus:candidate.civilStatus||'',status:'Newly Hired',statusDate:candidate.proposedStartDate,mobileNumber:candidate.mobileNumber||'',personalEmail:candidate.personalEmail||'',homeAddress:homeResult.address,presentAddress:presentResult.address,address:formatPhilippineAddress(homeResult.address),presentAddressText:formatPhilippineAddress(presentResult.address),tin:candidate.tin||'',sssNumber:candidate.sssNumber||'',philHealthNumber:candidate.philHealthNumber||'',pagIbigNumber:candidate.pagIbigNumber||'',emergencyContactName:'',emergencyContactRelationship:'',emergencyContactPhone:'',classOverride:'Auto',sourceCandidateId:candidate.id,createdAt,createdBy:SESSION?.id||null,createdByName,updatedAt:createdAt,updatedBy:SESSION?.id||null,updatedByName:createdByName,recordHistory:[{action:'Created',at:createdAt,by:createdByName,byId:SESSION?.id||null,detail:'Converted from Onboarding & Applicants'}],employmentHistory:[{type:'Employment Status',from:'Applicant',to:'Newly Hired',effectiveDate:candidate.proposedStartDate,remarks:'Converted from Onboarding & Applicants',changedAt:createdAt,changedBy:createdByName}]};
+  const linkedSlots=(DB.manpowerSlots||[]).filter(slot=>String(slot.candidateId||'')===String(candidate.id));
+  const linkedRequest=linkedSlots.length?manpowerRequestById(linkedSlots[0].requestId):null;
+  const employee={id:uid(),employeeNo:nextEmployeeNumber(DB.employees),prfNumber:candidate.prfNumber||linkedRequest?.prfNumber||'',lastName:candidate.lastName,firstName:candidate.firstName,middleName:candidate.middleName,name:formatEmployeeName(candidate),position:candidate.positionApplied,department:candidate.department,branchReporting,dailyRate:dailyRateRaw===''?'':Math.round(Number(dailyRateRaw)*100)/100,allowances,dateHired:candidate.proposedStartDate,birthDate:candidate.birthDate,gender:candidate.gender,civilStatus:candidate.civilStatus||'',status:'Newly Hired',statusDate:candidate.proposedStartDate,mobileNumber:candidate.mobileNumber||'',personalEmail:candidate.personalEmail||'',homeAddress:homeResult.address,presentAddress:presentResult.address,address:formatPhilippineAddress(homeResult.address),presentAddressText:formatPhilippineAddress(presentResult.address),tin:candidate.tin||'',sssNumber:candidate.sssNumber||'',philHealthNumber:candidate.philHealthNumber||'',pagIbigNumber:candidate.pagIbigNumber||'',emergencyContactName:'',emergencyContactRelationship:'',emergencyContactPhone:'',classOverride:'Auto',sourceCandidateId:candidate.id,createdAt,createdBy:SESSION?.id||null,createdByName,updatedAt:createdAt,updatedBy:SESSION?.id||null,updatedByName:createdByName,recordHistory:[{action:'Created',at:createdAt,by:createdByName,byId:SESSION?.id||null,detail:'Converted from Onboarding & Applicants'}],employmentHistory:[{type:'Employment Status',from:'Applicant',to:'Newly Hired',effectiveDate:candidate.proposedStartDate,remarks:'Converted from Onboarding & Applicants',changedAt:createdAt,changedBy:createdByName}]};
   const original=JSON.parse(JSON.stringify(candidate));
-  DB.employees.push(employee);Object.assign(candidate,{stage:'Hired',employeeRecordId:employee.id,hiredAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
-  if(!(await saveDB())){DB.employees=DB.employees.filter(row=>row!==employee);Object.keys(candidate).forEach(key=>delete candidate[key]);Object.assign(candidate,original);return;}
+  const originalSlots=linkedSlots.map(slot=>({slot,data:JSON.parse(JSON.stringify(slot))}));
+  DB.employees.push(employee);Object.assign(candidate,{stage:'Hired',employeeRecordId:employee.id,hiredAt:new Date().toISOString(),updatedAt:new Date().toISOString()});linkedSlots.forEach(slot=>{slot.employeeId=employee.id;if(['Open','Sourcing','Candidate Identified'].includes(slot.status))slot.status='For Onboarding';slot.updatedAt=createdAt;slot.updatedBy=SESSION?.id||null;});
+  if(!(await saveDB())){DB.employees=DB.employees.filter(row=>row!==employee);Object.keys(candidate).forEach(key=>delete candidate[key]);Object.assign(candidate,original);originalSlots.forEach(({slot,data})=>{Object.keys(slot).forEach(key=>delete slot[key]);Object.assign(slot,data);});return;}
+  if(linkedSlots.length)await workflowSyncTasks({silent:true});
   logAudit(`Converted applicant to employee: ${employeeDisplayName(employee)}`);await closeModal();renderNav();renderOnboarding();toast(`${employeeDisplayName(employee)} is now in Employee Information.`);
 }
 
@@ -5163,6 +5170,21 @@ async function workflowSyncTasks({silent=false}={}){
     });
   });
 
+  (DB.manpowerRequests||[]).forEach(request=>{
+    const summary=manpowerRequestSummary(request,DB.manpowerRequirements||[],DB.manpowerSlots||[],today);
+    const closed=['Fulfilled','Cancelled','Closed'].includes(summary.status);
+    const existing=workflowExistingTask('manpowerRequests',request.id);
+    if(!closed||existing){
+      const departments=uniqueSettingNames(manpowerRequestRequirements(request.id).map(row=>row.department));
+      ensureRecordTask('manpowerRequests',request,{
+        stepKey:'fulfillment',workflowType:'Task',title:`Fulfill manpower request — ${manpowerRequestLabel(request)}`,
+        description:`${request.clientName||'Client'} · ${summary.deployed}/${summary.requested} deployed · ${summary.remaining} remaining`,module:'manpowerRequests',recordId:request.id,
+        employeeName:request.clientName||'',department:departments.join(', '),priority:['At Risk','Overdue'].includes(summary.status)?'Urgent':request.priority||'Normal',dueDate:summary.target||'',assigneeId:request.ownerId||'',
+        actionType:closed?'none':'manpower_fulfillment',closed
+      });
+    }
+  });
+
   (DB.evaluations||[]).forEach(ev=>{
     const emp=DB.employees.find(e=>String(e.id)===String(ev.employeeId));
     if(!emp) return;
@@ -5234,6 +5256,7 @@ function workflowOpenSource(task){
   if(!task) return;
   if(task.module==='cases'){ closeModal(); openCaseDetails(task.recordId); return; }
   if(task.module==='lifecycleChecklists'){ closeModal(); openLifecycleChecklist(task.checklistId); return; }
+  if(task.module==='manpowerRequests'){ closeModal(); go('prf').then(()=>openManpowerRequestDetails(task.recordId)); return; }
   if(task.module==='evaluations'){
     const ev=DB.evaluations.find(x=>String(x.id)===String(task.recordId));
     if(ev) { closeModal(); openEvalForm(ev.employeeId,ev.milestone); }
@@ -5338,6 +5361,7 @@ async function workflowDecideTask(id,decision){
 function workflowSourceTitle(task){
   if(task.module==='cases') return `Case ${task.recordId||''}`;
   if(task.module==='prf') return 'PRF';
+  if(task.module==='manpowerRequests') return 'Manpower Request';
   if(task.module==='leaves') return 'Leave';
   if(task.module==='evaluations') return 'Evaluation';
   if(task.module==='nte') return 'NTE';
@@ -5873,6 +5897,220 @@ const MODULES = {
 };
 
 /* ================================================================
+   MANPOWER FULFILLMENT
+   Request -> requirement/headcount -> individual fulfillment slots.
+   Legacy PRF rows stay intact for reconciliation and later migration.
+   ================================================================ */
+const MANPOWER_REQUEST_PRIORITIES=['Low','Normal','High','Urgent'];
+const MANPOWER_REQUEST_STATES=['Draft','Open','Cancelled','Closed'];
+const MANPOWER_REQUIREMENT_TYPES=['Expansion','Replacement'];
+const MANPOWER_SLOT_STATES=['Open','Sourcing','Candidate Identified','For Onboarding','Onboarded / Ready for Deployment','Deployed','Cancelled','Closed / Not Filled'];
+const MANPOWER_STATUS_MAP={Draft:'b-grey',Open:'b-blue','In Progress':'b-blue','Partially Fulfilled':'b-amber',Fulfilled:'b-green','At Risk':'b-amber',Overdue:'b-red',Cancelled:'b-grey',Closed:'b-grey'};
+const MANPOWER_RISK_MAP={'No Target':'b-grey','On Track':'b-green',Monitor:'b-blue','At Risk':'b-amber','Due Today':'b-amber',Overdue:'b-red','Deployed On Time':'b-green','Deployed Late':'b-red'};
+const MANPOWER_SLOT_MAP={Open:'b-grey',Sourcing:'b-blue','Candidate Identified':'b-blue','For Onboarding':'b-amber','Onboarded / Ready for Deployment':'b-green',Deployed:'b-green',Cancelled:'b-grey','Closed / Not Filled':'b-grey'};
+
+function manpowerRequestById(id){return (DB.manpowerRequests||[]).find(row=>String(row.id)===String(id));}
+function manpowerRequirementById(id){return (DB.manpowerRequirements||[]).find(row=>String(row.id)===String(id));}
+function manpowerRequestRequirements(id){return (DB.manpowerRequirements||[]).filter(row=>String(row.requestId)===String(id));}
+function manpowerRequestSlots(id){return (DB.manpowerSlots||[]).filter(row=>String(row.requestId)===String(id));}
+function manpowerRequestLabel(request){return request?.prfNumber||request?.requestNumber||`Request ${String(request?.id||'').slice(0,8).toUpperCase()}`;}
+function manpowerDaysLabel(value){return Number.isFinite(value)?`${value} day${Math.abs(value)===1?'':'s'}`:'—';}
+function manpowerSlotEmployee(slot){return DB.employees.find(employee=>String(employee.id)===String(slot?.employeeId));}
+function manpowerSlotCandidate(slot){return DB.onboardingCandidates.find(candidate=>String(candidate.id)===String(slot?.candidateId));}
+function manpowerReplacementEmployee(slot){return DB.employees.find(employee=>String(employee.id)===String(slot?.replacementEmployeeId));}
+function manpowerSlotPersonName(slot){const employee=manpowerSlotEmployee(slot);if(employee)return employeeDisplayName(employee);const candidate=manpowerSlotCandidate(slot);return candidate?candidateDisplayName(candidate):'Unassigned';}
+function manpowerRequirementLabel(requirement){return `${requirement?.position||'Unspecified position'} · ${requirement?.department||'Unassigned'}`;}
+function manpowerRiskText(summary){
+  if(summary.risk==='Overdue')return `${Math.abs(summary.daysToTarget)}d overdue`;
+  if(['At Risk','Monitor','On Track'].includes(summary.risk))return `${summary.daysToTarget}d to target`;
+  if(summary.risk==='Due Today')return 'Due today';
+  return summary.risk;
+}
+function manpowerRefresh(){renderManpowerFulfillment();renderNav();}
+function manpowerSetView(view){STATE.manpowerView=view;STATE.tablePages={};renderManpowerFulfillment();}
+function manpowerResetFilters(){cancelSearchRender('manpowerSearch');STATE.manpowerSearch='';STATE.manpowerBranch='';STATE.manpowerStatus='';STATE.manpowerRisk='';STATE.manpowerType='';STATE.tablePages={};renderManpowerFulfillment();}
+
+function renderLegacyPrfWorkspace(){
+  const rows=DB.prf||[];
+  const q=String(STATE.manpowerSearch||'').trim().toLowerCase();
+  const filtered=rows.filter(row=>!q||[row.prfNumber,row.employeeName,row.department,row.employeeReplaced,row.reasonForRequest].some(value=>String(value||'').toLowerCase().includes(q)));
+  const page=paginateRows(filtered,STATE,'manpower:legacy',10);
+  return `<div class="manpower-legacy-note"><span>${iInfo(16)}</span><div><b>Legacy PRF records</b><small>These flat records are preserved for reconciliation. New manpower work should be recorded in Requests.</small></div></div>
+    <div class="data-toolbar record-directory-toolbar"><div class="searchbox">${iSearch(15)}<input data-search-key="manpowerSearch" type="search" autocomplete="off" placeholder="Search legacy PRF records…" value="${esc(STATE.manpowerSearch)}" oninput="queueSearchRender(this,'manpowerSearch',renderManpowerFulfillment)"></div>${q?`<button class="btn btn-ghost btn-sm" onclick="manpowerResetFilters()">Clear</button>`:''}<div class="toolbar-spacer"></div>${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportModuleCSV('prf')">${iDownload(14)} Export</button>`:''}</div>
+    <div class="table-card"><div class="table-card-head"><div class="table-meta"><b>${filtered.length}</b> legacy record${filtered.length===1?'':'s'}</div></div><div class="tablewrap"><table class="data-table"><thead><tr><th>PRF</th><th>Employee</th><th>Department</th><th>Classification</th><th>Replacing</th><th>Date</th><th>Status</th><th class="actions-head">Action</th></tr></thead><tbody>${page.rows.length?page.rows.map(row=>`<tr><td class="mono">${esc(row.prfNumber||'—')}</td><td><b>${esc(row.employeeName||'—')}</b></td><td>${esc(row.department||'—')}</td><td>${esc(row.classification||'—')}</td><td>${esc(row.employeeReplaced||'—')}</td><td>${fmtDate(row.dateOfRequest)}</td><td>${statusBadge(row.status||'Draft',PRF_STATUS_MAP)}</td><td><div class="rowactions">${canEdit()?`<button class="iconbtn" title="Edit legacy PRF" onclick="openRecordForm('prf','${row.id}')">${iEdit(14)}</button>`:'<span class="small">View only</span>'}</div></td></tr>`).join(''):`<tr><td colspan="8"><div class="empty"><b>No legacy PRF records</b><span>Existing flat PRF entries will remain available here.</span></div></td></tr>`}</tbody></table></div>${filtered.length?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${page.meta.start}–${page.meta.end} <span>of ${filtered.length}</span></div>${paginationHTML(page.meta,'manpower:legacy')}</div>`:''}</div>`;
+}
+
+function renderManpowerFulfillment(){
+  const requests=DB.manpowerRequests||[];
+  const requirements=DB.manpowerRequirements||[];
+  const slots=DB.manpowerSlots||[];
+  const branch=STATE.manpowerBranch||'';
+  const scopedRequests=requests.filter(request=>!branch||request.branchSite===branch);
+  const totals=manpowerRequestTotals(scopedRequests,requirements,slots,todayISO());
+  setTitle('Manpower Fulfillment',`${scopedRequests.length} request${scopedRequests.length===1?'':'s'} · ${branch||'All Branches'} · ${totals.remaining} remaining headcount`);
+  const activeView=STATE.manpowerView||'requests';
+  let body='';
+  if(activeView==='legacy') body=renderLegacyPrfWorkspace();
+  else{
+    const q=String(STATE.manpowerSearch||'').trim().toLowerCase();
+    const rows=scopedRequests.map(request=>{
+      const needs=manpowerRequestRequirements(request.id);
+      const summary=manpowerRequestSummary(request,requirements,slots,todayISO());
+      return {request,needs,summary};
+    }).filter(({request,needs,summary})=>{
+      const searchOk=!q||[request.prfNumber,request.requestNumber,request.clientName,request.branchSite,request.requestedBy,request.ownerName,...needs.flatMap(need=>[need.position,need.department,need.designation])].some(value=>String(value||'').toLowerCase().includes(q));
+      const statusOk=!STATE.manpowerStatus||summary.status===STATE.manpowerStatus;
+      const riskOk=!STATE.manpowerRisk||summary.risk===STATE.manpowerRisk;
+      const typeOk=!STATE.manpowerType||needs.some(need=>need.requestType===STATE.manpowerType);
+      return searchOk&&statusOk&&riskOk&&typeOk;
+    }).sort((a,b)=>String(b.request.dateRequested||'').localeCompare(String(a.request.dateRequested||'')));
+    const page=paginateRows(rows,STATE,'manpower:requests',10);
+    const hasFilters=q||branch||STATE.manpowerStatus||STATE.manpowerRisk||STATE.manpowerType;
+    const branches=uniqueSettingNames([...employeeBranchLocations(),...requests.map(request=>request.branchSite)]);
+    body=`<div class="manpower-kpis"><button type="button" onclick="STATE.manpowerStatus='';STATE.manpowerRisk='';renderManpowerFulfillment()"><span>Active Requests</span><b>${totals.active}</b><small>Open fulfillment work</small></button><button type="button" onclick="STATE.manpowerStatus='';STATE.manpowerRisk='';renderManpowerFulfillment()"><span>Requested HC</span><b>${totals.requested}</b><small>Total demand</small></button><button type="button" onclick="STATE.manpowerStatus='';STATE.manpowerRisk='';renderManpowerFulfillment()"><span>Onboarded HC</span><b>${totals.onboarded}</b><small>Ready or deployed</small></button><button type="button" onclick="STATE.manpowerStatus='';STATE.manpowerRisk='';renderManpowerFulfillment()"><span>Deployed HC</span><b>${totals.deployed}</b><small>Confirmed deployments</small></button><button type="button" onclick="STATE.manpowerStatus='';STATE.manpowerRisk='';renderManpowerFulfillment()"><span>Remaining HC</span><b>${totals.remaining}</b><small>Still to fulfill</small></button><button type="button" onclick="STATE.manpowerRisk='At Risk';STATE.tablePages={};renderManpowerFulfillment()"><span>At Risk</span><b>${totals.atRisk}</b><small>Due within 3 days</small></button><button type="button" onclick="STATE.manpowerRisk='Overdue';STATE.tablePages={};renderManpowerFulfillment()"><span>Overdue</span><b>${totals.overdue}</b><small>Past target date</small></button></div>
+      <div class="data-toolbar record-directory-toolbar manpower-toolbar"><div class="searchbox">${iSearch(15)}<input data-search-key="manpowerSearch" type="search" autocomplete="off" placeholder="Search PRF, client, branch, position, department…" value="${esc(STATE.manpowerSearch)}" oninput="queueSearchRender(this,'manpowerSearch',renderManpowerFulfillment)"></div><select aria-label="Filter reporting branch" onchange="STATE.manpowerBranch=this.value;STATE.tablePages={};renderManpowerFulfillment()"><option value="">All Branches</option>${branches.map(value=>`<option value="${esc(value)}" ${branch===value?'selected':''}>${esc(value)}</option>`).join('')}</select><select aria-label="Filter request status" onchange="STATE.manpowerStatus=this.value;STATE.tablePages={};renderManpowerFulfillment()"><option value="">All Statuses</option>${Object.keys(MANPOWER_STATUS_MAP).map(value=>`<option value="${value}" ${STATE.manpowerStatus===value?'selected':''}>${value}</option>`).join('')}</select><select aria-label="Filter SLA risk" onchange="STATE.manpowerRisk=this.value;STATE.tablePages={};renderManpowerFulfillment()"><option value="">All SLA States</option>${Object.keys(MANPOWER_RISK_MAP).map(value=>`<option value="${value}" ${STATE.manpowerRisk===value?'selected':''}>${value}</option>`).join('')}</select><select aria-label="Filter request type" onchange="STATE.manpowerType=this.value;STATE.tablePages={};renderManpowerFulfillment()"><option value="">All Types</option>${MANPOWER_REQUIREMENT_TYPES.map(value=>`<option value="${value}" ${STATE.manpowerType===value?'selected':''}>${value}</option>`).join('')}</select>${hasFilters?`<button class="btn btn-ghost btn-sm" onclick="manpowerResetFilters()">Clear</button>`:''}<div class="toolbar-spacer"></div>${informationNoteButton('manpowerFulfillment')}${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportManpowerFulfillment()">${iDownload(14)} Export</button>`:''}${canEdit()?`<button class="btn btn-primary btn-sm" onclick="openManpowerRequestForm()">${iPlus(14)} New Request</button>`:''}</div>
+      <div class="table-card manpower-table"><div class="table-card-head"><div class="table-meta"><b>${rows.length}</b> request${rows.length===1?'':'s'} <span class="table-meta-muted">${hasFilters?`filtered from ${requests.length}`:'in total'}</span></div></div><div class="tablewrap"><table class="data-table"><thead><tr><th>Request / PRF</th><th>Client / Site</th><th>Requirements</th><th>Requested</th><th>Deployed</th><th>Remaining</th><th>Target</th><th>Fulfillment</th><th>SLA / Risk</th><th>Status</th><th class="actions-head">Action</th></tr></thead><tbody>${page.rows.length?page.rows.map(({request,needs,summary})=>`<tr class="clickable-row" tabindex="0" onclick="openManpowerRequestDetails('${request.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openManpowerRequestDetails('${request.id}')}" aria-label="Open ${esc(manpowerRequestLabel(request))}"><td><b class="mono">${esc(manpowerRequestLabel(request))}</b><div class="cell-secondary">${fmtDate(request.dateRequested)} · ${esc(request.priority||'Normal')}</div></td><td><b>${esc(request.clientName||'—')}</b><div class="cell-secondary">${esc(request.branchSite||'No site')}</div></td><td>${needs.length}<div class="cell-secondary">${esc(needs.slice(0,2).map(need=>need.position).filter(Boolean).join(', ')||'No positions')}</div></td><td>${summary.requested}</td><td>${summary.deployed}</td><td><b>${summary.remaining}</b></td><td>${fmtDate(summary.target)}</td><td><div class="fulfillment-cell"><b>${summary.fulfillmentRate}%</b><span><i style="width:${Math.min(100,summary.fulfillmentRate)}%"></i></span></div></td><td>${statusBadge(manpowerRiskText(summary),{[manpowerRiskText(summary)]:MANPOWER_RISK_MAP[summary.risk]})}</td><td>${statusBadge(summary.status,MANPOWER_STATUS_MAP)}</td><td onclick="event.stopPropagation()"><button class="iconbtn" title="Open manpower request" onclick="openManpowerRequestDetails('${request.id}')">${iEdit(14)}</button></td></tr>`).join(''):`<tr><td colspan="11"><div class="empty"><b>No manpower requests found</b><span>${hasFilters?'Try clearing the search or filters.':'Create the first request, then add its position requirements and fulfillment slots.'}</span></div></td></tr>`}</tbody></table></div>${rows.length?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${page.meta.start}–${page.meta.end} <span>of ${rows.length} requests</span></div>${paginationHTML(page.meta,'manpower:requests')}</div>`:''}</div>`;
+  }
+  document.getElementById('content').innerHTML=`<div class="manpower-view-switch" role="tablist" aria-label="Manpower fulfillment views"><button type="button" role="tab" aria-selected="${activeView==='requests'}" class="${activeView==='requests'?'active':''}" onclick="manpowerSetView('requests')">Requests</button><button type="button" role="tab" aria-selected="${activeView==='legacy'}" class="${activeView==='legacy'?'active':''}" onclick="manpowerSetView('legacy')">Legacy PRF <span>${DB.prf.length}</span></button></div>${body}`;
+  requestAnimationFrame(()=>enhanceDataTables());
+}
+
+function openManpowerRequestForm(id=''){
+  const request=id?manpowerRequestById(id):null;
+  const record=request||{priority:'Normal',status:'Open',dateRequested:todayISO(),targetDeploymentDate:'',branchSite:'',clientName:'',requestedBy:'',ownerId:'',notes:''};
+  const owners=(DB.users||[]).filter(user=>['Administrator','HR Staff'].includes(user.role));
+  openEmployeeWorkspaceModal(`<div class="modal-head"><div><h3>${request?'Edit':'New'} Manpower Request</h3><div class="small">Request header, target date, ownership, and source PRF.</div></div><button onclick="requestCloseModal(this)" aria-label="Close">&times;</button></div><div class="modal-body"><div class="formgrid manpower-form"><div class="field"><label>PRF / Reference Number</label><input id="mp_prf" value="${esc(record.prfNumber||'')}" placeholder="Optional; may be shared"></div><div class="field"><label>Client / Account *</label><input id="mp_client" value="${esc(record.clientName||'')}" required></div><div class="field"><label>Branch / Site / Area *</label><select id="mp_branch"><option value="">Select branch or site</option>${uniqueSettingNames([...employeeBranchLocations(),record.branchSite]).map(value=>`<option value="${esc(value)}" ${value===record.branchSite?'selected':''}>${esc(value)}</option>`).join('')}</select></div><div class="field"><label>Requested By *</label><input id="mp_requested_by" value="${esc(record.requestedBy||'')}" required></div><div class="field"><label>Date Requested *</label><input id="mp_requested" type="date" value="${esc(record.dateRequested||'')}" required></div><div class="field"><label>PRF Date</label><input id="mp_prf_date" type="date" value="${esc(record.dateOfPrf||'')}"></div><div class="field"><label>Forwarded to Agency</label><input id="mp_forwarded" type="date" value="${esc(record.dateForwardedAgency||'')}"></div><div class="field"><label>Target Deployment Date *</label><input id="mp_target" type="date" value="${esc(record.targetDeploymentDate||'')}" required></div><div class="field"><label>Priority *</label><select id="mp_priority">${MANPOWER_REQUEST_PRIORITIES.map(value=>`<option value="${value}" ${value===record.priority?'selected':''}>${value}</option>`).join('')}</select></div><div class="field"><label>Request State *</label><select id="mp_state">${MANPOWER_REQUEST_STATES.map(value=>`<option value="${value}" ${value===record.status?'selected':''}>${value}</option>`).join('')}</select></div><div class="field full"><label>HR / Recruitment Owner</label><select id="mp_owner"><option value="">Unassigned</option>${owners.map(user=>`<option value="${user.id}" ${String(user.id)===String(record.ownerId||'')?'selected':''}>${esc(user.fullName)}</option>`).join('')}</select></div>${fieldHTML({key:'attachment',label:'Uploaded PRF / Request Document',type:'file',full:true,storagePrefix:'manpower'},record.attachment||'')}<div class="field full"><label>Notes</label><textarea id="mp_notes" rows="3">${esc(record.notes||'')}</textarea></div></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="requestCloseModal(this)">Cancel</button><div class="toolbar-spacer"></div>${request&&canEdit()?`<button class="btn btn-danger" data-confirm-change="true" data-confirm-label="Delete manpower request" onclick="deleteManpowerRequest('${request.id}')">Delete</button>`:''}<button class="btn btn-primary" onclick="saveManpowerRequest('${id}')">${request?'Save Request':'Create Request'}</button></div>`);
+}
+
+async function saveManpowerRequest(id=''){
+  const request=id?manpowerRequestById(id):null;
+  const values={prfNumber:document.getElementById('mp_prf').value.trim(),clientName:document.getElementById('mp_client').value.trim(),branchSite:document.getElementById('mp_branch').value,requestedBy:document.getElementById('mp_requested_by').value.trim(),dateRequested:document.getElementById('mp_requested').value,dateOfPrf:document.getElementById('mp_prf_date').value,dateForwardedAgency:document.getElementById('mp_forwarded').value,targetDeploymentDate:document.getElementById('mp_target').value,priority:document.getElementById('mp_priority').value,status:document.getElementById('mp_state').value,ownerId:document.getElementById('mp_owner').value,notes:document.getElementById('mp_notes').value.trim(),attachment:document.getElementById('f_attachment')?.value||'',attachmentData:document.getElementById('f_attachment_data')?.value||''};
+  if(!values.clientName||!values.branchSite||!values.requestedBy||!values.dateRequested||!values.targetDeploymentDate){toast('Complete Client / Account, Branch / Site, Requested By, Date Requested, and Target Deployment Date.',true);return;}
+  if(values.targetDeploymentDate<values.dateRequested){toast('Target Deployment Date cannot be earlier than Date Requested.',true);return;}
+  const owner=DB.users.find(user=>String(user.id)===String(values.ownerId));values.ownerName=owner?.fullName||'';
+  const oldPaths=recordStoragePaths(request);
+  const now=new Date().toISOString();
+  const saved=request||{id:uid(),createdAt:now,createdBy:SESSION?.id||null,createdByName:SESSION?.fullName||'System'};
+  Object.assign(saved,values,{updatedAt:now,updatedBy:SESSION?.id||null,updatedByName:SESSION?.fullName||'System'});
+  if(!request)DB.manpowerRequests.push(saved);
+  logAudit(`${request?'Updated':'Created'} manpower request ${manpowerRequestLabel(saved)}`);
+  await saveDB();await workflowSyncTasks({silent:true});rememberCommittedRecordFiles(saved);await deleteStorageObjects([...oldPaths].filter(path=>!recordStoragePaths(saved).has(path)));await closeModal([...recordStoragePaths(saved)]);manpowerRefresh();openManpowerRequestDetails(saved.id);toast(request?'Manpower request updated.':'Manpower request created. Add at least one position requirement.');
+}
+
+async function deleteManpowerRequest(id){
+  const request=manpowerRequestById(id);if(!request)return;
+  const requirementIds=new Set(manpowerRequestRequirements(id).map(row=>String(row.id)));
+  const deployed=manpowerRequestSlots(id).some(slot=>slot.dateDeployed||slot.status==='Deployed');
+  if(deployed){toast('A request with deployed employees cannot be deleted. Close it instead to preserve workforce history.',true);return;}
+  DB.manpowerRequests=DB.manpowerRequests.filter(row=>String(row.id)!==String(id));
+  DB.manpowerRequirements=DB.manpowerRequirements.filter(row=>!requirementIds.has(String(row.id)));
+  DB.manpowerSlots=DB.manpowerSlots.filter(row=>String(row.requestId)!==String(id));
+  DB.workflowTasks=(DB.workflowTasks||[]).filter(task=>!(task.module==='manpowerRequests'&&String(task.recordId)===String(id)));
+  logAudit(`Deleted manpower request ${manpowerRequestLabel(request)}`);await saveDB();await workflowSyncTasks({silent:true});await deleteStorageObjects(recordStoragePaths(request));await closeModal();manpowerRefresh();toast('Manpower request deleted.');
+}
+
+function openManpowerRequirementForm(requestId,id=''){
+  const request=manpowerRequestById(requestId);if(!request)return;
+  const requirement=id?manpowerRequirementById(id):null;
+  const record=requirement||{department:'',position:'',designation:'',requestedHeadcount:1,requestType:'Expansion',vacancyDetails:'',qualifications:'',employmentType:'',targetDeploymentDateOverride:'',status:'Active'};
+  const departmentField={key:'department',label:'Department',type:'select',options:employeeDepartmentNames(record.department),required:true,catalog:'department',catalogPositionId:'f_position',onchange:"syncPositionSelect('f_department','f_position')"};
+  const positionField={key:'position',label:'Position',type:'select',options:employeePositionNames(record.department,record.position),required:true,catalog:'position',catalogDepartmentId:'f_department'};
+  openEmployeeWorkspaceModal(`<div class="modal-head"><div><h3>${requirement?'Edit':'Add'} Position Requirement</h3><div class="small">${esc(manpowerRequestLabel(request))} · requested headcount creates individual slots.</div></div><button onclick="requestCloseModal(this)" aria-label="Close">&times;</button></div><div class="modal-body"><div class="formgrid manpower-form">${fieldHTML(departmentField,record.department)}${fieldHTML(positionField,record.position)}<div class="field"><label>Designation</label><input id="mpr_designation" value="${esc(record.designation||'')}"></div><div class="field"><label>Requested Headcount *</label><input id="mpr_headcount" type="number" min="1" max="500" step="1" value="${Number(record.requestedHeadcount)||1}"></div><div class="field"><label>Request Type *</label><select id="mpr_type">${MANPOWER_REQUIREMENT_TYPES.map(value=>`<option value="${value}" ${value===record.requestType?'selected':''}>${value}</option>`).join('')}</select></div><div class="field"><label>Target Date Override</label><input id="mpr_target" type="date" min="${esc(request.dateRequested)}" value="${esc(record.targetDeploymentDateOverride||'')}"></div><div class="field"><label>Employment / Contract Type</label><input id="mpr_employment" value="${esc(record.employmentType||'')}"></div><div class="field"><label>Requirement State</label><select id="mpr_status"><option value="Active" ${record.status!=='Cancelled'?'selected':''}>Active</option><option value="Cancelled" ${record.status==='Cancelled'?'selected':''}>Cancelled</option></select></div><div class="field full"><label>Vacancy / Assignment Details *</label><textarea id="mpr_vacancy" rows="3">${esc(record.vacancyDetails||'')}</textarea></div><div class="field full"><label>Required Skills / Qualifications</label><textarea id="mpr_qualifications" rows="3">${esc(record.qualifications||'')}</textarea></div></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="requestCloseModal(this)">Cancel</button><div class="toolbar-spacer"></div><button class="btn btn-primary" onclick="saveManpowerRequirement('${requestId}','${id}')">${requirement?'Save Requirement':'Add Requirement'}</button></div>`);
+}
+
+async function saveManpowerRequirement(requestId,id=''){
+  const request=manpowerRequestById(requestId),requirement=id?manpowerRequirementById(id):null;if(!request)return;
+  const original=requirement?JSON.parse(JSON.stringify(requirement)):null;
+  const requestedHeadcount=Math.floor(Number(document.getElementById('mpr_headcount').value));
+  const values={requestId,department:document.getElementById('f_department').value,position:document.getElementById('f_position').value,designation:document.getElementById('mpr_designation').value.trim(),requestedHeadcount,requestType:document.getElementById('mpr_type').value,targetDeploymentDateOverride:document.getElementById('mpr_target').value,employmentType:document.getElementById('mpr_employment').value.trim(),status:document.getElementById('mpr_status').value,vacancyDetails:document.getElementById('mpr_vacancy').value.trim(),qualifications:document.getElementById('mpr_qualifications').value.trim()};
+  if(!values.department||!values.position||!values.vacancyDetails||!Number.isInteger(requestedHeadcount)||requestedHeadcount<1){toast('Complete Department, Position, Requested Headcount, and Vacancy / Assignment Details.',true);return;}
+  if(values.targetDeploymentDateOverride&&values.targetDeploymentDateOverride<request.dateRequested){toast('The requirement target cannot be earlier than the request date.',true);return;}
+  const existingSlots=(DB.manpowerSlots||[]).filter(slot=>String(slot.requirementId)===String(id));
+  if(values.status==='Cancelled'&&existingSlots.some(slot=>slot.dateDeployed||slot.status==='Deployed')){toast('A requirement with deployed slots cannot be cancelled. Close the request or update the remaining slots instead.',true);return;}
+  const saved=requirement||{id:uid(),createdAt:new Date().toISOString(),createdBy:SESSION?.id||null};Object.assign(saved,values,{updatedAt:new Date().toISOString(),updatedBy:SESSION?.id||null});if(!requirement)DB.manpowerRequirements.push(saved);
+  const current=(DB.manpowerSlots||[]).filter(slot=>String(slot.requirementId)===String(saved.id)).sort((a,b)=>Number(a.slotNumber)-Number(b.slotNumber));
+  if(requestedHeadcount<current.length){
+    const removable=current.filter(slot=>!slot.employeeId&&!slot.candidateId&&!slot.dateSelected&&!slot.dateOnboarded&&!slot.dateDeployed&&['Open','Sourcing'].includes(slot.status));
+    const removeCount=current.length-requestedHeadcount;
+    if(removable.length<removeCount){if(requirement&&original)Object.assign(requirement,original);toast('Headcount cannot be reduced below assigned or progressed slots. Cancel those slots or keep the current headcount.',true);return;}
+    const removeIds=new Set(removable.slice().sort((a,b)=>Number(b.slotNumber)-Number(a.slotNumber)).slice(0,removeCount).map(slot=>slot.id));DB.manpowerSlots=DB.manpowerSlots.filter(slot=>!removeIds.has(slot.id));
+  }else if(requestedHeadcount>current.length){
+    for(let number=current.length+1;number<=requestedHeadcount;number++)DB.manpowerSlots.push({id:uid(),requestId,requirementId:saved.id,slotNumber:number,status:'Open',candidateId:'',employeeId:'',dateSelected:'',dateOnboarded:'',dateDeployed:'',deploymentSite:request.branchSite||'',replacementEmployeeId:'',replacementExitDate:'',replacementExitReason:'',notes:'',createdAt:new Date().toISOString(),createdBy:SESSION?.id||null});
+  }
+  if(values.requestType==='Expansion')DB.manpowerSlots.filter(slot=>String(slot.requirementId)===String(saved.id)).forEach(slot=>{slot.replacementEmployeeId='';slot.replacementExitDate='';slot.replacementExitReason='';slot.legacyReplacementName='';});
+  DB.manpowerSlots.filter(slot=>String(slot.requirementId)===String(saved.id)).forEach(slot=>{
+    if(values.status==='Cancelled'&&slot.status!=='Deployed'){
+      if(!slot.cancelledByRequirement)slot.statusBeforeRequirementCancellation=slot.status||'Open';
+      slot.status='Cancelled';slot.cancelledByRequirement=true;
+    }else if(values.status!=='Cancelled'&&slot.cancelledByRequirement){
+      slot.status=slot.statusBeforeRequirementCancellation||'Open';delete slot.cancelledByRequirement;delete slot.statusBeforeRequirementCancellation;
+    }
+  });
+  logAudit(`${requirement?'Updated':'Added'} ${manpowerRequirementLabel(saved)} under ${manpowerRequestLabel(request)}`);await saveDB();await workflowSyncTasks({silent:true});await closeModal();manpowerRefresh();openManpowerRequestDetails(requestId);toast(requirement?'Requirement updated.':'Requirement and fulfillment slots added.');
+}
+
+function manpowerReplacementDefaults(employee){
+  if(!employee)return {date:'',reason:''};
+  const histories=(employee.employmentHistory||[]).filter(item=>['Resignation','Separation','AWOL / Leave of Absence','Employment Status'].includes(item.type)).sort((a,b)=>String(b.effectiveDate||'').localeCompare(String(a.effectiveDate||'')));
+  return {date:employee.statusDate||histories[0]?.effectiveDate||'',reason:employee.status||histories[0]?.remarks||''};
+}
+function manpowerSlotReplacementChanged(){
+  const employee=employeePickerSelected('mps_replacement');if(!employee)return;
+  const defaults=manpowerReplacementDefaults(employee);const date=document.getElementById('mps_exit_date'),reason=document.getElementById('mps_exit_reason');if(date&&!date.value)date.value=defaults.date;if(reason&&!reason.value)reason.value=defaults.reason;
+}
+function openManpowerSlotForm(slotId){
+  const slot=(DB.manpowerSlots||[]).find(row=>String(row.id)===String(slotId));if(!slot)return;
+  const request=manpowerRequestById(slot.requestId),requirement=manpowerRequirementById(slot.requirementId);if(!request||!requirement)return;
+  const candidates=(DB.onboardingCandidates||[]).filter(candidate=>!['Rejected','Withdrawn'].includes(candidate.stage));
+  const replacement=requirement.requestType==='Replacement';
+  openEmployeeWorkspaceModal(`<div class="modal-head"><div><h3>Update Fulfillment Slot ${slot.slotNumber}</h3><div class="small">${esc(manpowerRequestLabel(request))} · ${esc(manpowerRequirementLabel(requirement))}</div></div><button onclick="requestCloseModal(this)" aria-label="Close">&times;</button></div><div class="modal-body"><div class="formgrid manpower-form"><div class="field"><label>Slot Status *</label><select id="mps_status">${MANPOWER_SLOT_STATES.map(value=>`<option value="${value}" ${value===slot.status?'selected':''}>${value}</option>`).join('')}</select></div><div class="field"><label>Onboarding Applicant</label><select id="mps_candidate"><option value="">Not linked</option>${candidates.map(candidate=>`<option value="${candidate.id}" ${String(candidate.id)===String(slot.candidateId||'')?'selected':''}>${esc(candidateDisplayName(candidate))} · ${esc(candidate.stage)}</option>`).join('')}</select></div>${employeePickerHTML({id:'mps_employee',label:'Employee Assigned / Deployed',selectedId:slot.employeeId||'',full:true,autofill:false})}<div class="field"><label>Date Selected</label><input id="mps_selected" type="date" value="${esc(slot.dateSelected||'')}"></div><div class="field"><label>Date Onboarded</label><input id="mps_onboarded" type="date" value="${esc(slot.dateOnboarded||'')}"></div><div class="field"><label>Date Deployed</label><input id="mps_deployed" type="date" value="${esc(slot.dateDeployed||'')}"></div><div class="field full"><label>Deployment Site / Assignment</label><input id="mps_site" value="${esc(slot.deploymentSite||request.branchSite||'')}"></div>${replacement?`${employeePickerHTML({id:'mps_replacement',label:'Employee Being Replaced',selectedId:slot.replacementEmployeeId||'',required:true,full:true,autofill:false,onSelect:'manpowerSlotReplacementChanged'})}<div class="field"><label>Previous Employee Exit Date *</label><input id="mps_exit_date" type="date" value="${esc(slot.replacementExitDate||'')}"></div><div class="field"><label>Exit Reason / Type *</label><input id="mps_exit_reason" value="${esc(slot.replacementExitReason||'')}"></div>`:''}<div class="field full"><label>Deployment Notes</label><textarea id="mps_notes" rows="3">${esc(slot.notes||'')}</textarea></div></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="requestCloseModal(this)">Cancel</button><div class="toolbar-spacer"></div><button class="btn btn-primary" onclick="saveManpowerSlot('${slot.id}')">Save Slot</button></div>`);
+}
+
+async function saveManpowerSlot(slotId){
+  const slot=(DB.manpowerSlots||[]).find(row=>String(row.id)===String(slotId));if(!slot)return;
+  const request=manpowerRequestById(slot.requestId),requirement=manpowerRequirementById(slot.requirementId);if(!request||!requirement)return;
+  const employee=employeePickerSelected('mps_employee');const replacement=employeePickerSelected('mps_replacement');
+  const typedEmployee=document.getElementById('mps_employee_search')?.value.trim();const typedReplacement=document.getElementById('mps_replacement_search')?.value.trim();
+  if(typedEmployee&&!employee){toast('Select the assigned employee from the employee search results.',true);return;}
+  if(requirement.requestType==='Replacement'&&typedReplacement&&!replacement){toast('Select the employee being replaced from the employee search results.',true);return;}
+  const values={status:document.getElementById('mps_status').value,candidateId:document.getElementById('mps_candidate').value,employeeId:employee?.id||'',dateSelected:document.getElementById('mps_selected').value,dateOnboarded:document.getElementById('mps_onboarded').value,dateDeployed:document.getElementById('mps_deployed').value,deploymentSite:document.getElementById('mps_site').value.trim(),replacementEmployeeId:replacement?.id||'',replacementExitDate:document.getElementById('mps_exit_date')?.value||'',replacementExitReason:document.getElementById('mps_exit_reason')?.value.trim()||'',notes:document.getElementById('mps_notes').value.trim()};
+  if(values.status==='Deployed'&&!values.dateDeployed){toast('Enter Date Deployed before marking this slot as Deployed.',true);return;}
+  if(values.dateDeployed)values.status='Deployed';else if(values.dateOnboarded&&['Open','Sourcing','Candidate Identified','For Onboarding'].includes(values.status))values.status='Onboarded / Ready for Deployment';
+  if(requirement.requestType==='Replacement'&&(!values.replacementEmployeeId||!values.replacementExitDate||!values.replacementExitReason)){toast('A replacement slot requires the employee being replaced, exit date, and exit reason.',true);return;}
+  const issues=slotChronologyIssues({...slot,...values},request,requirement);if(issues.length){toast(issues.join(' '),true);return;}
+  Object.assign(slot,values,{updatedAt:new Date().toISOString(),updatedBy:SESSION?.id||null});
+  if(values.dateDeployed&&employee){
+    employee.employmentHistory=Array.isArray(employee.employmentHistory)?employee.employmentHistory:[];
+    const event={type:'Deployment',from:'Manpower Request',to:`${requirement.position||employee.position}${values.deploymentSite?' · '+values.deploymentSite:''}`,effectiveDate:values.dateDeployed,remarks:`${manpowerRequestLabel(request)} · ${requirement.requestType}`,changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System',sourceManpowerRequestId:request.id,sourceManpowerSlotId:slot.id};
+    const index=employee.employmentHistory.findIndex(item=>String(item.sourceManpowerSlotId||'')===String(slot.id));if(index>=0)employee.employmentHistory[index]=event;else employee.employmentHistory.push(event);
+  }
+  logAudit(`Updated slot ${slot.slotNumber} for ${manpowerRequestLabel(request)}${employee?' · '+employeeDisplayName(employee):''}`);await saveDB();await workflowSyncTasks({silent:true});await closeModal();manpowerRefresh();openManpowerRequestDetails(request.id);toast('Fulfillment slot updated.');
+}
+
+function openManpowerRequestDetails(id){
+  const request=manpowerRequestById(id);if(!request)return;
+  const requirements=manpowerRequestRequirements(id),slots=manpowerRequestSlots(id),summary=manpowerRequestSummary(request,DB.manpowerRequirements,DB.manpowerSlots,todayISO());
+  const requirementSections=requirements.map(requirement=>{
+    const counts=requirementSlotCounts(requirement,slots);const rows=counts.slots.sort((a,b)=>Number(a.slotNumber)-Number(b.slotNumber));
+    return `<section class="manpower-requirement"><div class="manpower-requirement-head"><div><div class="eyebrow">${esc(requirement.requestType)} requirement</div><h4>${esc(requirement.position||'Unspecified position')}</h4><p>${esc(requirement.department||'Unassigned')}${requirement.designation?' · '+esc(requirement.designation):''}${requirement.vacancyDetails?' · '+esc(requirement.vacancyDetails):''}</p></div><div class="manpower-requirement-counts"><span><b>${counts.requested}</b> requested</span><span><b>${counts.deployed}</b> deployed</span><span><b>${counts.remaining}</b> remaining</span>${canEdit()?`<button class="iconbtn" title="Edit requirement" onclick="openManpowerRequirementForm('${id}','${requirement.id}')">${iEdit(14)}</button>`:''}</div></div><div class="tablewrap"><table class="data-table manpower-slot-table"><thead><tr><th>Slot</th><th>Candidate / Employee</th><th>Stage</th><th>Onboarded</th><th>Deployed</th><th>Time to Onboard</th><th>Time to Deploy</th><th>Variance</th>${requirement.requestType==='Replacement'?'<th>Replacing / Lead Time</th>':''}<th class="actions-head">Action</th></tr></thead><tbody>${rows.map(slot=>{const metrics=slotMetrics(slot,request,requirement);const replacement=manpowerReplacementEmployee(slot);return `<tr><td class="mono">${slot.slotNumber}</td><td><b>${esc(manpowerSlotPersonName(slot))}</b><div class="cell-secondary">${esc(manpowerSlotEmployee(slot)?.employeeNo||manpowerSlotCandidate(slot)?.applicantReference||'Unassigned')}</div></td><td>${statusBadge(slot.status||'Open',MANPOWER_SLOT_MAP)}</td><td>${fmtDate(slot.dateOnboarded)}</td><td>${fmtDate(slot.dateDeployed)}</td><td>${manpowerDaysLabel(metrics.timeToOnboard)}</td><td>${manpowerDaysLabel(metrics.totalFulfillmentTime)}</td><td>${Number.isFinite(metrics.deploymentVariance)?`${metrics.deploymentVariance>0?'+':''}${metrics.deploymentVariance}d`:'—'}</td>${requirement.requestType==='Replacement'?`<td>${esc(employeeDisplayName(replacement)||slot.legacyReplacementName||'Not linked')}<div class="cell-secondary">${manpowerDaysLabel(metrics.replacementLeadTime)}</div></td>`:''}<td><div class="rowactions">${canEdit()?`<button class="iconbtn" title="Update fulfillment slot" onclick="openManpowerSlotForm('${slot.id}')">${iEdit(14)}</button>`:'<span class="small">View only</span>'}</div></td></tr>`;}).join('')}</tbody></table></div></section>`;
+  }).join('');
+  openEmployeeWorkspaceModal(`<div class="modal-head"><div><h3>${esc(manpowerRequestLabel(request))}</h3><div class="small">${esc(request.clientName||'—')} · ${esc(request.branchSite||'No site')} · Requested ${fmtDate(request.dateRequested)}</div></div><button onclick="closeModal()" aria-label="Close">&times;</button></div><div class="modal-body manpower-detail-body"><div class="manpower-detail-summary"><div><span>Requested HC</span><b>${summary.requested}</b></div><div><span>Selected HC</span><b>${summary.selected}</b></div><div><span>Onboarded HC</span><b>${summary.onboarded}</b></div><div><span>Deployed HC</span><b>${summary.deployed}</b></div><div><span>Remaining HC</span><b>${summary.remaining}</b></div><div><span>Fulfillment</span><b>${summary.fulfillmentRate}%</b></div><div><span>Target</span><b>${fmtDate(summary.target)}</b></div><div><span>SLA</span>${statusBadge(manpowerRiskText(summary),{[manpowerRiskText(summary)]:MANPOWER_RISK_MAP[summary.risk]})}</div></div><div class="manpower-request-meta"><div><span>Requested by</span><b>${esc(request.requestedBy||'—')}</b></div><div><span>Owner</span><b>${esc(request.ownerName||'Unassigned')}</b></div><div><span>Priority</span><b>${esc(request.priority||'Normal')}</b></div><div><span>Status</span>${statusBadge(summary.status,MANPOWER_STATUS_MAP)}</div><div><span>Average time to onboard</span><b>${manpowerDaysLabel(summary.averageTimeToOnboard)}</b></div><div><span>Average time to deploy</span><b>${manpowerDaysLabel(summary.averageTimeToDeploy)}</b></div></div>${request.notes?`<div class="computed-note">${esc(request.notes)}</div>`:''}<div class="manpower-detail-toolbar"><div><h4>Requirements &amp; Fulfillment Slots</h4><p>Each requested headcount slot is tracked independently through onboarding and deployment.</p></div>${canEdit()?`<button class="btn btn-primary btn-sm" onclick="openManpowerRequirementForm('${id}')">${iPlus(14)} Add Requirement</button>`:''}</div>${requirementSections||'<div class="empty"><b>No position requirements yet</b><span>Add a requirement to define headcount and create individual fulfillment slots.</span></div>'}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button><div class="toolbar-spacer"></div>${request.attachment?`<button class="btn btn-ghost" onclick="downloadRecordAttachment('manpowerRequests','${request.id}','attachment')">Open PRF</button>`:''}${canEdit()?`<button class="btn btn-primary" onclick="openManpowerRequestForm('${id}')">${iEdit(14)} Edit Request</button>`:''}</div>`);
+}
+
+function exportManpowerFulfillment(){
+  if(!requireExportAccess())return;
+  const q=String(STATE.manpowerSearch||'').trim().toLowerCase();
+  const rows=[];(DB.manpowerRequests||[]).forEach(request=>{
+    const requirements=manpowerRequestRequirements(request.id);const summary=manpowerRequestSummary(request,DB.manpowerRequirements,DB.manpowerSlots,todayISO());
+    const matchesSearch=!q||[request.prfNumber,request.requestNumber,request.clientName,request.branchSite,request.requestedBy,request.ownerName,...requirements.flatMap(need=>[need.position,need.department,need.designation])].some(value=>String(value||'').toLowerCase().includes(q));
+    if(!matchesSearch||(STATE.manpowerBranch&&request.branchSite!==STATE.manpowerBranch)||(STATE.manpowerStatus&&summary.status!==STATE.manpowerStatus)||(STATE.manpowerRisk&&summary.risk!==STATE.manpowerRisk)||(STATE.manpowerType&&!requirements.some(need=>need.requestType===STATE.manpowerType)))return;
+    if(!requirements.length)rows.push({request:manpowerRequestLabel(request),prf:request.prfNumber,client:request.clientName,branch:request.branchSite,position:'',department:'',type:'',requestedHC:0,onboardedHC:0,deployedHC:0,remainingHC:0,dateRequested:request.dateRequested,target:request.targetDeploymentDate,fulfillment:summary.fulfillmentRate,risk:summary.risk,status:summary.status});
+    requirements.forEach(requirement=>{const counts=requirementSlotCounts(requirement,manpowerRequestSlots(request.id));rows.push({request:manpowerRequestLabel(request),prf:request.prfNumber,client:request.clientName,branch:request.branchSite,position:requirement.position,department:requirement.department,type:requirement.requestType,requestedHC:counts.requested,onboardedHC:counts.onboarded,deployedHC:counts.deployed,remainingHC:counts.remaining,dateRequested:request.dateRequested,target:requirement.targetDeploymentDateOverride||request.targetDeploymentDate,fulfillment:counts.requested?Math.round(counts.deployed/counts.requested*1000)/10:0,risk:summary.risk,status:summary.status});});
+  });
+  const columns=[['Request','request'],['PRF Number','prf'],['Client','client'],['Branch / Site','branch'],['Position','position'],['Department','department'],['Type','type'],['Requested HC','requestedHC'],['Onboarded HC','onboardedHC'],['Deployed HC','deployedHC'],['Remaining HC','remainingHC'],['Date Requested','dateRequested'],['Target Deployment','target'],['Fulfillment %','fulfillment'],['SLA / Risk','risk'],['Status','status']].map(([label,key])=>({label,key}));downloadCSV(`manpower-fulfillment-${todayISO()}.csv`,toCSV(rows,columns));
+}
+
+/* ================================================================
    MANAGEMENT ANALYTICS
    ================================================================ */
 function analyticsDateFor(module,rec){
@@ -5918,8 +6156,9 @@ function analyticsApplyFilters(){
   const start=document.getElementById('analytics-start')?.value||todayISO();
   const end=document.getElementById('analytics-end')?.value||todayISO();
   const dept=document.getElementById('analytics-dept')?.value||'';
+  const branch=document.getElementById('analytics-branch')?.value||'';
   if(end<start){toast('Analytics end date cannot be before the start date.',true);return;}
-  STATE.analyticsStart=start; STATE.analyticsEnd=end; STATE.analyticsDept=dept; STATE.analyticsRange='custom'; renderAnalytics();
+  STATE.analyticsStart=start; STATE.analyticsEnd=end; STATE.analyticsDept=dept; STATE.analyticsBranch=branch; STATE.analyticsRange='custom'; renderAnalytics();
 }
 function analyticsSetPreset(preset){
   const r=analyticsPresetRange(preset); STATE.analyticsRange=preset; STATE.analyticsStart=r.start; STATE.analyticsEnd=r.end;
@@ -5941,31 +6180,53 @@ function analyticsMonthRange(endISO,count=6){
 function analyticsStatusMap(rows,key){
   const o={}; (rows||[]).forEach(r=>{const v=r?.[key]||'Unspecified';o[v]=(o[v]||0)+1;}); return o;
 }
-function analyticsDeptFilterRows(module,start,end,dept){
+function analyticsRecordEmployee(record){
+  if(record?.employeeId){const employee=DB.employees.find(row=>String(row.id)===String(record.employeeId));if(employee)return employee;}
+  const name=normalizeEmployeeName(record?.employeeName||record?.name||'');
+  return name?DB.employees.find(row=>normalizeEmployeeName(row.name)===name):null;
+}
+function analyticsBranchMatch(record,branch){
+  if(!branch)return true;
+  const direct=record?.branchReporting||record?.branchSite||record?.deploymentSite||'';
+  return direct===branch||analyticsRecordEmployee(record)?.branchReporting===branch;
+}
+function analyticsEmployeeActiveOn(employee,date){
+  if(!employee?.dateHired||employee.dateHired>date)return false;
+  const separated=['Resigned','AWOL','Separated'].includes(employee.status);
+  return !separated||!employee.statusDate||employee.statusDate>date;
+}
+function analyticsDeptFilterRows(module,start,end,dept,branch=''){
   return (DB[module]||[]).filter(r=>{
     const d=reportDateFor(module,r); if(!reportInRange(d,start,end)) return false;
-    return reportDeptMatch(r,dept);
+    return reportDeptMatch(r,dept)&&analyticsBranchMatch(r,branch);
   });
 }
 async function exportAnalyticsSnapshot(){
   if(!requireExportAccess())return;
-  const start=STATE.analyticsStart||addDaysISO(todayISO(),-89), end=STATE.analyticsEnd||todayISO(), dept=STATE.analyticsDept||'';
-  const employees=DB.employees.filter(e=>reportDeptMatch(e,dept));
-  const cases=(REPORT_CACHE.cases||[]).filter(c=>!dept||(c.department||'Unassigned')===dept);
+  const start=STATE.analyticsStart||addDaysISO(todayISO(),-89), end=STATE.analyticsEnd||todayISO(), dept=STATE.analyticsDept||'', branch=STATE.analyticsBranch||'';
+  const employees=DB.employees.filter(e=>reportDeptMatch(e,dept)&&analyticsBranchMatch(e,branch));
+  const cases=(REPORT_CACHE.cases||[]).filter(c=>(!dept||(c.department||'Unassigned')===dept)&&analyticsBranchMatch({employeeName:c.employee_name,department:c.department},branch));
   const openCases=cases.filter(c=>!['Closed','Cancelled','Resolved'].includes(c.status));
+  const separations=employees.filter(e=>['Resigned','AWOL','Separated'].includes(e.status)&&reportInRange(e.statusDate,start,end));
+  const beginning=employees.filter(employee=>analyticsEmployeeActiveOn(employee,start));
+  const ending=employees.filter(employee=>analyticsEmployeeActiveOn(employee,end));
+  const retained=beginning.filter(employee=>analyticsEmployeeActiveOn(employee,end));
+  const averageHeadcount=(beginning.length+ending.length)/2;
   const rows=[
-    {section:'Scope',metric:'Start Date',value:start,detail:dept||'All Departments'},
-    {section:'Scope',metric:'End Date',value:end,detail:dept||'All Departments'},
+    {section:'Scope',metric:'Start Date',value:start,detail:`${branch||'All Branches'} · ${dept||'All Departments'}`},
+    {section:'Scope',metric:'End Date',value:end,detail:`${branch||'All Branches'} · ${dept||'All Departments'}`},
     {section:'Workforce',metric:'Current Headcount',value:employees.length,detail:'Current employee records'},
     {section:'Workforce',metric:'Probationary',value:employees.filter(e=>classify(e)==='Probationary').length,detail:'Current classification'},
     {section:'Workforce',metric:'New Hires in Period',value:employees.filter(e=>reportInRange(e.dateHired,start,end)).length,detail:'Date hired'},
-    {section:'Workforce',metric:'Separations in Period',value:employees.filter(e=>['Resigned','AWOL','Separated'].includes(e.status)&&reportInRange(e.statusDate,start,end)).length,detail:'Status date'},
+    {section:'Workforce',metric:'Separations in Period',value:separations.length,detail:'Resigned, AWOL, and Separated by status date'},
+    {section:'Workforce',metric:'Retention Rate',value:beginning.length?Math.round(retained.length/beginning.length*1000)/10:0,detail:'Beginning population active at period end / beginning headcount (%)'},
+    {section:'Workforce',metric:'Turnover Rate',value:averageHeadcount?Math.round(separations.length/averageHeadcount*1000)/10:0,detail:'Separations / average of beginning and ending headcount (%)'},
     {section:'Cases',metric:'Open Cases',value:openCases.length,detail:'Current open cases'},
     {section:'Cases',metric:'Cases in Period',value:cases.filter(c=>reportInRange(String(c.opened_at||c.updated_at||'').slice(0,10),start,end)).length,detail:'Opened/updated'},
     {section:'Cases',metric:'30+ Days Open',value:openCases.filter(c=>analyticsDaysOpen(c.opened_at)>=30).length,detail:'Current aging'},
-    {section:'Leave',metric:'Leave Records in Period',value:analyticsDeptFilterRows('leaves',start,end,dept).length,detail:'Selected period'},
-    {section:'Attendance',metric:'ATD Records in Period',value:analyticsDeptFilterRows('atd',start,end,dept).length,detail:'Selected period'},
-    {section:'Discipline',metric:'Disciplinary Records in Period',value:analyticsDeptFilterRows('disciplinary',start,end,dept).length,detail:'Selected period'},
+    {section:'Leave',metric:'Leave Records in Period',value:analyticsDeptFilterRows('leaves',start,end,dept,branch).length,detail:'Selected period'},
+    {section:'Attendance',metric:'ATD Records in Period',value:analyticsDeptFilterRows('atd',start,end,dept,branch).length,detail:'Selected period'},
+    {section:'Discipline',metric:'Disciplinary Records in Period',value:analyticsDeptFilterRows('disciplinary',start,end,dept,branch).length,detail:'Selected period'},
   ];
   exportReportRows(`hr_analytics_${start}_to_${end}.csv`,rows,[{label:'Section',get:r=>r.section},{label:'Metric',get:r=>r.metric},{label:'Value',get:r=>r.value},{label:'Detail',get:r=>r.detail}]);
 }
@@ -5973,12 +6234,12 @@ async function renderAnalytics(){
   setTitle('Management Analytics','A decision-support view of workforce, cases, HR activity, and trends across the selected reporting period.');
   document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Loading advanced analytics…</div></div>';
   try{
-    const start=STATE.analyticsStart||addDaysISO(todayISO(),-89), end=STATE.analyticsEnd||todayISO(), dept=STATE.analyticsDept||'';
+    const start=STATE.analyticsStart||addDaysISO(todayISO(),-89), end=STATE.analyticsEnd||todayISO(), dept=STATE.analyticsDept||'', branch=STATE.analyticsBranch||'';
     if(end<start){document.getElementById('content').innerHTML='<div class="panel"><div class="notice"><b>Invalid analytics period.</b> The end date must be on or after the start date.</div></div>';return;}
     const {data:cases,error:caseError}=await supabase.from('hr_cases').select('id,case_number,employee_name,department,status,priority,due_date,opened_at,closed_at,updated_at,assigned_to').order('updated_at',{ascending:false}).limit(1500);
     if(caseError) throw caseError;
     const allCases=cases||[]; REPORT_CACHE.cases=allCases;
-    const caseScope=allCases.filter(c=>!dept||(c.department||'Unassigned')===dept);
+    const caseScope=allCases.filter(c=>(!dept||(c.department||'Unassigned')===dept)&&analyticsBranchMatch({employeeName:c.employee_name,department:c.department},branch));
     const periodCases=caseScope.filter(c=>reportInRange(String(c.opened_at||c.updated_at||'').slice(0,10),start,end));
     const openCases=caseScope.filter(c=>!['Closed','Cancelled','Resolved'].includes(c.status));
     const overdueCases=openCases.filter(c=>c.due_date && c.due_date<todayISO());
@@ -5988,21 +6249,27 @@ async function renderAnalytics(){
       ['31–60 days',openCases.filter(c=>{const d=analyticsDaysOpen(c.opened_at);return d>=31&&d<=60;}).length],
       ['61+ days',openCases.filter(c=>analyticsDaysOpen(c.opened_at)>=61).length]
     ];
-    const employees=DB.employees.filter(e=>reportDeptMatch(e,dept));
+    const employees=DB.employees.filter(e=>reportDeptMatch(e,dept)&&analyticsBranchMatch(e,branch));
     const hired=employees.filter(e=>reportInRange(e.dateHired,start,end));
     const separated=employees.filter(e=>['Resigned','AWOL','Separated'].includes(e.status)&&reportInRange(e.statusDate,start,end));
     const activeEmployees=employees.filter(e=>e.status==='Active'||e.status==='Newly Hired');
+    const beginningEmployees=employees.filter(employee=>analyticsEmployeeActiveOn(employee,start));
+    const endingEmployees=employees.filter(employee=>analyticsEmployeeActiveOn(employee,end));
+    const retainedEmployees=beginningEmployees.filter(employee=>analyticsEmployeeActiveOn(employee,end));
+    const averageHeadcount=(beginningEmployees.length+endingEmployees.length)/2;
+    const retentionRate=beginningEmployees.length?Math.round(retainedEmployees.length/beginningEmployees.length*1000)/10:0;
+    const turnoverRate=averageHeadcount?Math.round(separated.length/averageHeadcount*1000)/10:0;
     const probationary=employees.filter(e=>classify(e)==='Probationary');
     const evalOverdue=probationary.reduce((sum,e)=>sum+EVAL_MILESTONES.filter(m=>evalStatusInfo(e,m).label==='Overdue').length,0);
-    const leaveRows=analyticsDeptFilterRows('leaves',start,end,dept);
-    const incidentRows=analyticsDeptFilterRows('incidents',start,end,dept);
-    const cvrRows=analyticsDeptFilterRows('cvr',start,end,dept);
-    const discRows=analyticsDeptFilterRows('disciplinary',start,end,dept);
-    const nteRows=analyticsDeptFilterRows('nte',start,end,dept);
-    const memoRows=analyticsDeptFilterRows('memos',start,end,dept);
-    const nodRows=analyticsDeptFilterRows('nod',start,end,dept);
-    const transferRows=analyticsDeptFilterRows('transfers',start,end,dept);
-    const atdRows=analyticsDeptFilterRows('atd',start,end,dept);
+    const leaveRows=analyticsDeptFilterRows('leaves',start,end,dept,branch);
+    const incidentRows=analyticsDeptFilterRows('incidents',start,end,dept,branch);
+    const cvrRows=analyticsDeptFilterRows('cvr',start,end,dept,branch);
+    const discRows=analyticsDeptFilterRows('disciplinary',start,end,dept,branch);
+    const nteRows=analyticsDeptFilterRows('nte',start,end,dept,branch);
+    const memoRows=analyticsDeptFilterRows('memos',start,end,dept,branch);
+    const nodRows=analyticsDeptFilterRows('nod',start,end,dept,branch);
+    const transferRows=analyticsDeptFilterRows('transfers',start,end,dept,branch);
+    const atdRows=analyticsDeptFilterRows('atd',start,end,dept,branch);
     const activityTotal=incidentRows.length+cvrRows.length+discRows.length+nteRows.length+memoRows.length+nodRows.length+leaveRows.length+transferRows.length+atdRows.length;
 
     const monthKeys=analyticsMonthRange(end,6);
@@ -6017,7 +6284,7 @@ async function renderAnalytics(){
     const maxTrend=Math.max(1,...monthly.flatMap(m=>[m.hires,m.separations,m.cases]));
     const statusCounts=analyticsStatusMap(employees,'status');
     const classCounts={}; employees.forEach(e=>{const c=classify(e);classCounts[c]=(classCounts[c]||0)+1;});
-    const deptCounts={}; employees.forEach(e=>{const d=e.department||'Unassigned';deptCounts[d]=(deptCounts[d]||0)+1;});
+    const deptCounts={}; employees.forEach(e=>{const d=branch?(e.department||'Unassigned'):(e.branchReporting||'Unassigned');deptCounts[d]=(deptCounts[d]||0)+1;});
     const topDepts=Object.entries(deptCounts).sort((a,b)=>b[1]-a[1]).slice(0,8);
     const maxDept=Math.max(1,...topDepts.map(x=>x[1]));
     const caseStatus=analyticsStatusMap(periodCases,'status');
@@ -6037,14 +6304,15 @@ async function renderAnalytics(){
     const rangeButtons=[['30d','30D'],['90d','90D'],['180d','180D'],['365d','1Y']];
     const html=`
       <div class="sectionhead">
-        <div><h2>Management Analytics</h2><p>${fmtDate(start)} – ${fmtDate(end)}${dept?' · '+esc(dept):' · All Departments'}</p></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportAnalyticsSnapshot()">${iDownload(14)} Export Snapshot</button>`:''}<button class="btn btn-brass btn-sm" onclick="go('reports')">Reports</button></div>
+        <div><h2>Management Analytics</h2><p>${fmtDate(start)} – ${fmtDate(end)} · ${branch?esc(branch):'All Branches'} · ${dept?esc(dept):'All Departments'}</p></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">${informationNoteButton('workforceAnalytics')}${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportAnalyticsSnapshot()">${iDownload(14)} Export Snapshot</button>`:''}<button class="btn btn-brass btn-sm" onclick="go('reports')">Reports</button></div>
       </div>
       <div class="analytics-toolbar">
         <div><div class="small" style="font-weight:800;color:var(--ink);margin-bottom:7px;">Reporting range</div><div class="range-buttons">${rangeButtons.map(([v,l])=>`<button class="range-btn ${STATE.analyticsRange===v?'active':''}" onclick="analyticsSetPreset('${v}')">${l}</button>`).join('')}<button class="range-btn ${STATE.analyticsRange==='custom'?'active':''}" onclick="STATE.analyticsRange='custom';document.getElementById('analytics-start')?.focus()">Custom</button></div></div>
         <div class="range-fields">
           <div class="field"><label>From</label><input id="analytics-start" type="date" value="${esc(start)}"></div>
           <div class="field"><label>To</label><input id="analytics-end" type="date" value="${esc(end)}"></div>
+          <div class="field"><label>Branch</label><select id="analytics-branch"><option value="">All Branches</option>${uniqueSettingNames([...employeeBranchLocations(),...DB.employees.map(employee=>employee.branchReporting)]).map(value=>`<option value="${esc(value)}" ${branch===value?'selected':''}>${esc(value)}</option>`).join('')}</select></div>
           <div class="field"><label>Department</label><select id="analytics-dept"><option value="">All Departments</option>${reportDepartments().map(d=>`<option value="${esc(d)}" ${dept===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
           <button class="btn btn-primary" onclick="analyticsApplyFilters()">Apply</button>
         </div>
@@ -6054,6 +6322,8 @@ async function renderAnalytics(){
         <div class="metric-card"><div class="k">Current Headcount</div><div class="v">${employees.length}</div><div class="s">${activeEmployees.length} active / newly hired</div></div>
         <div class="metric-card"><div class="k">New Hires</div><div class="v">${hired.length}</div><div class="s">Within selected period</div></div>
         <div class="metric-card"><div class="k">Separations</div><div class="v">${separated.length}</div><div class="s">Resigned / AWOL / separated</div></div>
+        <div class="metric-card"><div class="k">Retention Rate</div><div class="v">${retentionRate}%</div><div class="s">${retainedEmployees.length} of ${beginningEmployees.length} beginning employees</div></div>
+        <div class="metric-card"><div class="k">Turnover Rate</div><div class="v">${turnoverRate}%</div><div class="s">Separations / ${averageHeadcount.toFixed(1)} average HC</div></div>
         <div class="metric-card"><div class="k">Open Cases</div><div class="v">${openCases.length}</div><div class="s">${overdueCases.length} currently overdue</div></div>
         <div class="metric-card"><div class="k">HR Activity</div><div class="v">${activityTotal}</div><div class="s">Selected period across modules</div></div>
       </div>
@@ -6070,7 +6340,7 @@ async function renderAnalytics(){
       </div>
 
       <div class="analytics-grid equal">
-        <div class="panel"><div class="dashboard-panel-head"><div><h3>Workforce by Department</h3><div class="desc">Current employee distribution within the selected scope.</div></div></div>
+        <div class="panel"><div class="dashboard-panel-head"><div><h3>${branch?'Workforce by Department':'Workforce by Branch'}</h3><div class="desc">${branch?`Department distribution within ${esc(branch)}.`:'Organization-wide headcount by reporting branch.'}</div></div></div>
           <div class="chart-list">${topDepts.length?topDepts.map(([d,c],i)=>`<div class="chart-row"><div class="label" title="${esc(d)}">${esc(d)}</div><div class="chart-track"><div class="chart-fill ${i===0?'alt':''}" style="width:${Math.round(c/maxDept*100)}%"></div></div><div class="chart-count">${c}</div></div>`).join(''):'<div class="analytics-empty">No employee records match the selected scope.</div>'}</div>
         </div>
         <div class="panel"><div class="dashboard-panel-head"><div><h3>Employment Classification</h3><div class="desc">Current classification mix using the platform's lifecycle rules.</div></div></div>
@@ -6170,6 +6440,24 @@ function qualityIssues(caseRows=[]){
         add(`${module}:orphan:${r.id||i}`,'warning',module,'Record references an unknown employee',`${who} could not be matched to the Employee Master by employee ID or name.`,`go('${module}')`,[caseModuleLabel(module),'Reference']);
       }
     });
+  });
+
+  (DB.manpowerRequests||[]).forEach((request,index)=>{
+    if(request.dateRequested&&request.targetDeploymentDate&&request.targetDeploymentDate<request.dateRequested)add(`manpower:request-date:${request.id||index}`,'error','manpowerRequests','Target date precedes request date',`${manpowerRequestLabel(request)} has a target deployment date before its request date.`,`openManpowerRequestForm('${request.id}')`,['Manpower Fulfillment','Timeline']);
+    if(!manpowerRequestRequirements(request.id).length)add(`manpower:no-requirement:${request.id||index}`,'warning','manpowerRequests','Manpower request has no position requirement',`${manpowerRequestLabel(request)} cannot track requested headcount until a requirement is added.`,`openManpowerRequestDetails('${request.id}')`,['Manpower Fulfillment','Headcount']);
+  });
+  (DB.manpowerRequirements||[]).forEach((requirement,index)=>{
+    const request=manpowerRequestById(requirement.requestId);
+    if(!request)add(`manpower:orphan-requirement:${requirement.id||index}`,'error','manpowerRequirements','Requirement has no parent request',`${manpowerRequirementLabel(requirement)} references a manpower request that no longer exists.`,`go('prf')`,['Manpower Fulfillment','Relationship']);
+    const rows=(DB.manpowerSlots||[]).filter(slot=>String(slot.requirementId)===String(requirement.id));
+    if(rows.length!==Number(requirement.requestedHeadcount||0))add(`manpower:slot-count:${requirement.id||index}`,'error','manpowerRequirements','Fulfillment slot count does not match requested headcount',`${manpowerRequirementLabel(requirement)} requests ${requirement.requestedHeadcount||0} but has ${rows.length} slot record(s).`,`openManpowerRequestDetails('${requirement.requestId}')`,['Manpower Fulfillment','Headcount']);
+    const numbers=new Set();rows.forEach(slot=>{if(numbers.has(String(slot.slotNumber)))add(`manpower:duplicate-slot:${slot.id}`,'error','manpowerSlots','Duplicate fulfillment slot number',`${manpowerRequirementLabel(requirement)} contains more than one slot numbered ${slot.slotNumber}.`,`openManpowerRequestDetails('${requirement.requestId}')`,['Manpower Fulfillment','Duplicate']);numbers.add(String(slot.slotNumber));});
+  });
+  (DB.manpowerSlots||[]).forEach((slot,index)=>{
+    const request=manpowerRequestById(slot.requestId),requirement=manpowerRequirementById(slot.requirementId);
+    if(!request||!requirement){add(`manpower:orphan-slot:${slot.id||index}`,'error','manpowerSlots','Fulfillment slot has a broken relationship',`Slot ${slot.slotNumber||index+1} does not have a valid request and requirement.`,`go('prf')`,['Manpower Fulfillment','Relationship']);return;}
+    slotChronologyIssues(slot,request,requirement).forEach((detail,issueIndex)=>add(`manpower:slot:${slot.id||index}:${issueIndex}`,'error','manpowerSlots','Invalid fulfillment slot data',`${manpowerRequestLabel(request)} · Slot ${slot.slotNumber}: ${detail}`,`openManpowerSlotForm('${slot.id}')`,['Manpower Fulfillment','Validation']));
+    if(slot.employeeId&&!manpowerSlotEmployee(slot))add(`manpower:slot-employee:${slot.id||index}`,'error','manpowerSlots','Fulfillment slot references an unknown employee',`${manpowerRequestLabel(request)} · Slot ${slot.slotNumber} references an employee record that no longer exists.`,`openManpowerSlotForm('${slot.id}')`,['Manpower Fulfillment','Employee']);
   });
 
   (DB.leaves||[]).forEach((r,i)=>{
@@ -6691,7 +6979,7 @@ async function saveSettings(){
    visible for backward compatibility while Drive-linked documents use the
    documents record set below.
    ================================================================ */
-const DOCUMENT_MODULES = ['employees','leaves','disciplinary','nte','memos','nod','oncall','transfers','cvr','incidents','prf','evaluations','atd'];
+const DOCUMENT_MODULES = ['employees','leaves','disciplinary','nte','memos','nod','oncall','transfers','cvr','incidents','prf','manpowerRequests','evaluations','atd'];
 const DOCUMENT_CATEGORIES = ['Employment','Identity','Leave','Attendance','Incident','Disciplinary','Case','Evaluation','Transfer','Payroll / ATD','Other'];
 const DOCUMENT_STATUS = ['Active','Pending','Expired','Archived'];
 
@@ -6914,7 +7202,7 @@ const CASE_STATUS_MAP = {
 const CASE_MODULE_LABELS = {
   employees:'Employee', leaves:'Leave Record', disciplinary:'Disciplinary Action', nte:'Notice to Explain',
   memos:'Memorandum of Offense', nod:'Notice of Decision', oncall:'On-Call / Replacement', transfers:'Department Transfer',
-  cvr:'CVR / Violation Report', incidents:'Incident Report', prf:'PRF / Replacement', evaluations:'Probationary Evaluation', atd:'ATD Record'
+  cvr:'CVR / Violation Report', incidents:'Incident Report', prf:'Legacy PRF / Replacement', manpowerRequests:'Manpower Request', evaluations:'Probationary Evaluation', atd:'ATD Record'
 };
 function caseModuleLabel(module){ return CASE_MODULE_LABELS[module] || module; }
 function caseRecordLabel(module,r){
@@ -6931,6 +7219,7 @@ function caseRecordLabel(module,r){
     case 'cvr': return `${r.employeeName||'Employee'} — ${((r.offenses||[])[0]||r.otherOffense||'CVR / Violation Report')}`;
     case 'incidents': return `${r.employeeName||'Employee'} — ${((r.incidentTypes||[])[0]||r.otherType||'Incident Report')}`;
     case 'prf': return `${r.employeeName||'Employee'}${r.prfNumber?' — '+r.prfNumber:''}`;
+    case 'manpowerRequests': return `${manpowerRequestLabel(r)}${r.clientName?' — '+r.clientName:''}`;
     case 'evaluations': return `${r.milestone||'Probationary Evaluation'}`;
     case 'atd': return `${r.employeeName||'Employee'} — ${r.deductionType||'ATD Record'}`;
     default: return r.employeeName||r.name||r.title||r.subject||'Linked Record';
@@ -7252,7 +7541,7 @@ const RENDERERS = {
   incidents: renderIncidents,
   atd: renderATD,
   weeklyReport: renderWeeklyReport,
-  prf: ()=>renderModuleView('prf'),
+  prf: renderManpowerFulfillment,
   evaluations: renderEvaluations,
   offenseSummary: renderOffenseSummary,
   offenseCatalog: ()=>renderModuleView('offenseCatalog'),
@@ -7310,7 +7599,7 @@ Object.assign(window, {
   workflowSyncTasks, workflowPendingCount, workflowFindTask, workflowOpenSource, workflowSaveTaskNote, saveWorkflowTaskNote, workflowAssignTask, workflowSaveAssignment, workflowCompleteTask, workflowDecideTask, openWorkflowTask, openWorkflowCreateForm, saveWorkflowManualTask, renderWorkflowCenter, workflowActionButtons, workflowPriorityBadge, workflowDueText, workflowPageGo, workflowPageSize, workflowSetQuickFilter, workflowResetFilters, automationPageGo, automationPageSize,
   AUTOMATION_RULES, automationPendingCount, ensureAutomationSettings, automationRuleEnabled, runAutomationEngine, toggleAutomationRule, automationOpenTask, renderAutomationCenter,
   countStoredDocuments, renderDocuments, openStoredDocument, collectStoredDocuments, collectDocumentIndex, openDriveDocument, openDriveDocumentForm, saveDriveDocument, deleteDriveDocument, countDriveDocuments, documentExpiryInfo, openDriveWorkspace,
-  attachCellHTML, attachPreviewHTML, authErr, bootAuthenticated, calShift, canEdit, classify, clearFileField, closeModal,
+  attachCellHTML, attachPreviewHTML, authErr, bootAuthenticated, calShift, canEdit, classify, clearFileField, closeModal, requestCloseModal,
   consequenceFor, cvrOffenseLevel, cvrOffenseSummaryHTML, daysBetweenInclusive, defaultOffenseCatalog, deleteATDPayment,
   deleteATDRecord, deleteCVR, deleteEmployee, deleteIncident, deleteRecord, doLogin, doLogout, doRegister, donut,
   downloadATDPayslip, downloadAttachment, downloadCSV, downloadRecordAttachment, enterApp, esc, evalDueDate,
@@ -7323,6 +7612,7 @@ Object.assign(window, {
   renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, closeNavGroupPanel, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts, actionCenterSetLevel, actionCenterResetFilters, actionCenterPageGo, actionCenterPageSize,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
+  renderManpowerFulfillment, manpowerSetView, manpowerResetFilters, openManpowerRequestForm, saveManpowerRequest, deleteManpowerRequest, openManpowerRequestDetails, openManpowerRequirementForm, saveManpowerRequirement, openManpowerSlotForm, saveManpowerSlot, manpowerSlotReplacementChanged, exportManpowerFulfillment,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, saveDepartmentSetting, savePositionSetting, setTitle, shiftDate, statusBadge, storageSettingsChanged, testGoogleDriveConnection, switchAuthTab, switchSettingsTab, syncPositionSelect, syncUserExportControl, toggleCatalogQuickAdd, catalogQuickAddKeydown, saveCatalogQuickAdd, openDepartmentSetting, openPositionSetting, toCSV,
   toast, todayISO, togglePasswordVisibility, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, serverTablePageGo, serverTablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, openInformationNote, openModuleInformation, paginationMeta, paginationHTML, paginationReset, paginateRows,
   addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom
