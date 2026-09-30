@@ -1,7 +1,9 @@
+export const ALL_ROWS_SIZE=100000;
+
 export function paginationMeta(state,key,total,defaultSize=10){
   state.tablePages ||= {};
   state.tablePageSizes ||= {};
-  const allowed=[10,25,50,100];
+  const allowed=[10,25,50,100,ALL_ROWS_SIZE];
   const preferredSize=allowed.includes(Number(state.tablePageSizes[key]))?Number(state.tablePageSizes[key]):defaultSize;
   const current=state.tablePages[key]||{page:1,size:preferredSize,signature:''};
   const size=allowed.includes(Number(current.size))?Number(current.size):defaultSize;
@@ -34,5 +36,6 @@ export function paginationHTML(meta,scope,handlers={}){
   const key=String(scope).replace(/'/g,"\\'");
   const goFn=handlers.go||'tablePageGo';
   const sizeFn=handlers.size||'tablePageSize';
-  return `<div class="table-pagination"><label class="page-size">Rows per page <select aria-label="Rows per page" onchange="const next=this.value;requestAnimationFrame(()=>${sizeFn}('${key}',next))">${[10,25,50,100].map(n=>`<option value="${n}" ${meta.size===n?'selected':''}>${n}</option>`).join('')}</select></label><div class="page-buttons"><button class="page-btn" ${meta.page<=1?'disabled':''} onclick="requestAnimationFrame(()=>${goFn}('${key}',${meta.page-1}))" aria-label="Previous page">‹</button>${pageList(meta).map(p=>p==='…'?`<span class="page-ellipsis">…</span>`:`<button class="page-btn ${p===meta.page?'active':''}" onclick="requestAnimationFrame(()=>${goFn}('${key}',${p}))">${p}</button>`).join('')}<button class="page-btn" ${meta.page>=meta.pages?'disabled':''} onclick="requestAnimationFrame(()=>${goFn}('${key}',${meta.page+1}))" aria-label="Next page">›</button></div></div>`;
+  const sizes=[10,25,50,100,ALL_ROWS_SIZE];
+  return `<div class="table-pagination"><label class="page-size">Rows per page <select aria-label="Rows per page" onchange="const next=this.value;requestAnimationFrame(()=>${sizeFn}('${key}',next))">${sizes.map(n=>`<option value="${n}" ${meta.size===n?'selected':''}>${n===ALL_ROWS_SIZE?'All':n}</option>`).join('')}</select></label><div class="page-buttons"><button class="page-btn" ${meta.page<=1?'disabled':''} onclick="requestAnimationFrame(()=>${goFn}('${key}',${meta.page-1}))" aria-label="Previous page">‹</button>${pageList(meta).map(p=>p==='…'?`<span class="page-ellipsis">…</span>`:`<button class="page-btn ${p===meta.page?'active':''}" onclick="requestAnimationFrame(()=>${goFn}('${key}',${p}))">${p}</button>`).join('')}<button class="page-btn" ${meta.page>=meta.pages?'disabled':''} onclick="requestAnimationFrame(()=>${goFn}('${key}',${meta.page+1}))" aria-label="Next page">›</button></div></div>`;
 }

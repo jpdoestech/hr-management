@@ -1,7 +1,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '../supabase-config.js';
-import { paginationMeta, paginationHTML, paginationReset, paginateRows } from './core/pagination.js?v=20260928-4';
-import { installTableEnhancer } from './core/table-enhancer.js?v=20260930-2';
+import { ALL_ROWS_SIZE, paginationMeta, paginationHTML, paginationReset, paginateRows } from './core/pagination.js?v=20260930-5';
+import { installTableEnhancer } from './core/table-enhancer.js?v=20261001-3';
 import { compactRedundantPageIntros } from './core/content-layout.js?v=20260928-4';
 import { buildRecordChanges, valuesEqual } from './core/record-diff.js?v=20260930-1';
 import { roleCanExport } from './core/export-access.js?v=20260930-1';
@@ -226,7 +226,7 @@ function serverRecordQueryUnavailable(error){
 }
 function requestedPageState(scope,defaultSize=10){
   STATE.tablePages||={};STATE.tablePageSizes||={};
-  const allowed=[10,25,50,100];
+  const allowed=[10,25,50,100,ALL_ROWS_SIZE];
   const stored=STATE.tablePages[scope]||{};
   const size=allowed.includes(Number(stored.size))?Number(stored.size):allowed.includes(Number(STATE.tablePageSizes[scope]))?Number(STATE.tablePageSizes[scope]):defaultSize;
   return {page:Math.max(1,Number(stored.page)||1),size};
@@ -234,21 +234,31 @@ function requestedPageState(scope,defaultSize=10){
 async function queryRecordPage({module,scope,search='',searchFields=[],filters={},classification='',sortKey='',defaultSize=10}){
   if(!SERVER_RECORD_QUERY_READY)return null;
   const requested=requestedPageState(scope,defaultSize);
-  const run=async page=>supabase.rpc('search_hr_records',{
+  const run=async(offset,limit)=>supabase.rpc('search_hr_records',{
     p_module:module,p_search:String(search||'').trim(),p_search_fields:searchFields,
     p_filters:Object.fromEntries(Object.entries(filters).filter(([key,value])=>key&&String(value||'')!=='')),
     p_classification:classification||'',p_probation_days:Number(DB.settings?.probationDays)||180,
-    p_sort_key:sortKey||'',p_offset:(page-1)*requested.size,p_limit:requested.size
+    p_sort_key:sortKey||'',p_offset:offset,p_limit:limit
   });
   let page=requested.page;
-  let {data,error}=await run(page);
+  const batchSize=requested.size===ALL_ROWS_SIZE?100:requested.size;
+  let {data,error}=await run(requested.size===ALL_ROWS_SIZE?0:(page-1)*requested.size,batchSize);
   if(error){
     if(serverRecordQueryUnavailable(error)){SERVER_RECORD_QUERY_READY=false;console.info('Server record pagination is unavailable; using local pagination until Phase 16 is applied.');return null;}
     throw error;
   }
+  data=data||[];
   let total=Number(data?.[0]?.total_count||0);
+  if(requested.size===ALL_ROWS_SIZE&&data.length<total){
+    const batches=[];
+    for(let offset=data.length;offset<total;offset+=batchSize)batches.push(run(offset,batchSize));
+    const results=await Promise.all(batches);
+    const failed=results.find(result=>result.error);
+    if(failed?.error)throw failed.error;
+    data=[...data,...results.flatMap(result=>result.data||[])];
+  }
   const pages=Math.max(1,Math.ceil(total/requested.size));
-  if(page>pages){page=pages;({data,error}=await run(page));if(error)throw error;total=Number(data?.[0]?.total_count||0);}
+  if(page>pages){page=pages;({data,error}=await run((page-1)*requested.size,requested.size));if(error)throw error;total=Number(data?.[0]?.total_count||0);}
   STATE.tablePageSizes[scope]=requested.size;
   STATE.tablePages[scope]={page,size:requested.size,signature:'server'};
   return {rows:(data||[]).map(row=>row.data),meta:{key:scope,total,size:requested.size,pages:Math.max(1,Math.ceil(total/requested.size)),page,start:total?(page-1)*requested.size+1:0,end:Math.min(total,page*requested.size)},server:true};
@@ -258,7 +268,7 @@ function serverTablePageGo(scope,page){
   Promise.resolve(RENDERERS[STATE.view]?.()).catch(error=>toast('Could not load that page: '+error.message,true));
 }
 function serverTablePageSize(scope,size){
-  const next=[10,25,50,100].includes(Number(size))?Number(size):10;
+  const next=[10,25,50,100,ALL_ROWS_SIZE].includes(Number(size))?Number(size):10;
   STATE.tablePageSizes[scope]=next;STATE.tablePages[scope]={page:1,size:next,signature:'server'};
   Promise.resolve(RENDERERS[STATE.view]?.()).catch(error=>toast('Could not change the page size: '+error.message,true));
 }
@@ -2565,10 +2575,10 @@ async function renderModuleView(key){
     </div>
     <div class="table-card">
       <div class="table-card-head"><div class="table-meta"><b>${total}</b> ${total===1?'record':'records'} <span class="table-meta-muted">${showClear?`filtered from ${data.length}`:'in total'}</span></div></div>
-      <div class="tablewrap"><table class="data-table" data-server-paginated="true">
-        <thead><tr>${cfg.columns.map(c=>`<th>${c.label}</th>`).join('')}<th class="actions-head">Actions</th></tr></thead>
+      <div class="tablewrap"><table class="data-table" data-server-paginated="true" data-page-scope="${esc(pageScope)}" data-page-handler="serverTablePageSize" data-managed-columns="${[hasDepartment?'department':'',hasStatus?(cfg.filterField||'status'):''].filter(Boolean).join(',')}">
+        <thead><tr>${cfg.columns.map(c=>`<th data-column-key="${esc(c.key)}">${c.label}</th>`).join('')}<th class="actions-head">Actions</th></tr></thead>
         <tbody>
-          ${rows.length?rows.map(r=>`<tr>${cfg.columns.map(c=>`<td>${c.render?c.render(r):esc(r[c.key]??'—')}</td>`).join('')}
+          ${rows.length?rows.map(r=>`<tr>${cfg.columns.map(c=>`<td data-column="${esc(c.key)}" data-filter-value="${esc(r[c.key]??'')}">${c.render?c.render(r):esc(r[c.key]??'—')}</td>`).join('')}
             <td><div class="rowactions">${canEdit()?`<button class="iconbtn" title="Edit" onclick="openRecordForm('${key}','${r.id}')">${iEdit(14)}</button><button class="iconbtn" title="Delete" onclick="deleteRecord('${key}','${r.id}')">${iTrash(14)}</button>`:'<span class="small">View only</span>'}</div></td>
           </tr>`).join(''):`<tr><td colspan="${cfg.columns.length+1}"><div class="empty"><b>No matching records</b><span>${showClear?'Try clearing the search/filter or changing the criteria.':`${esc(cfg.addLabel)} to get started.`}</span></div></td></tr>`}
         </tbody>
@@ -3310,9 +3320,9 @@ async function renderEmployees(){
         </div>
       </div>
       <div class="tablewrap employee-directory-tablewrap">
-        <table class="data-table employee-directory-table" data-table-key="employees" data-table-tools="external" data-server-paginated="true" style="min-width:${tableMinWidth}px!important">
+        <table class="data-table employee-directory-table" data-table-key="employees" data-table-tools="external" data-server-paginated="true" data-page-scope="${pageScope}" data-page-handler="serverTablePageSize" data-managed-columns="department,branchReporting,status,classification" style="min-width:${tableMinWidth}px!important">
           <colgroup>${columns.map(c=>`<col data-column-key="${esc(c.key)}" style="width:${c.width}px">`).join('')}<col data-column-key="actions" style="width:92px"></colgroup>
-          <thead><tr>${columns.map(c=>`<th data-column-key="${esc(c.key)}">${esc(c.label)}</th>`).join('')}<th class="actions-head" data-column-key="actions">Actions</th></tr></thead>
+          <thead><tr>${columns.map(c=>`<th data-column-key="${esc(c.key)}" ${['department','branchReporting','status','classification'].includes(c.key)?'data-column-managed="true"':''}>${esc(c.label)}</th>`).join('')}<th class="actions-head" data-column-key="actions">Actions</th></tr></thead>
           <tbody>
             ${rows.length? rows.map(e=>`<tr class="employee-directory-row ${String(STATE.employeeSelectedId||'')===String(e.id)?'selected':''}" data-employee-id="${esc(e.id)}" tabindex="0" aria-label="Open ${esc(employeeDisplayName(e))}" onclick="selectEmployeeDirectoryRow('${e.id}');openEmployeeProfile('${e.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectEmployeeDirectoryRow('${e.id}');openEmployeeProfile('${e.id}')}">
               ${columns.map(c=>`<td data-column="${esc(c.key)}">${c.cell(e)}</td>`).join('')}
@@ -5510,7 +5520,7 @@ async function renderWorkflowCenter(){
       <button type="button" class="workflow-kpi workflow-kpi-link ${STATE.workflowFilter==='unassigned'?'active':''}" style="--accent:var(--forest)" onclick="workflowSetQuickFilter('unassigned')"><span class="k">Unassigned</span><span class="v">${unassigned.length}</span><span class="s">Needs an owner</span></button>
     </div>
     <div class="workflow-panel table-card workflow-table-card"><div class="workflow-toolbar data-toolbar"><label class="searchbox">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search task, employee, department…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderWorkflowCenter)"></label><select class="filter-select" aria-label="Workflow scope" onchange="STATE.workflowFilter=this.value;paginationReset(STATE,'workflow:list');renderWorkflowCenter()"><option value="queue" ${STATE.workflowFilter==='queue'?'selected':''}>Pending Queue</option><option value="mine" ${STATE.workflowFilter==='mine'?'selected':''}>My Work</option><option value="overdue" ${STATE.workflowFilter==='overdue'?'selected':''}>Overdue</option><option value="due7" ${STATE.workflowFilter==='due7'?'selected':''}>Due in 7 days</option><option value="unassigned" ${STATE.workflowFilter==='unassigned'?'selected':''}>Unassigned</option><option value="all" ${STATE.workflowFilter==='all'?'selected':''}>All Tasks</option></select><select class="filter-select" aria-label="Workflow status" onchange="STATE.workflowStatus=this.value;paginationReset(STATE,'workflow:list');renderWorkflowCenter()">${[...WORKFLOW_STATUS,'All'].map(value=>`<option value="${value}" ${STATE.workflowStatus===value?'selected':''}>${value==='All'?'All Statuses':value}</option>`).join('')}</select><select class="filter-select" aria-label="Workflow type" onchange="STATE.workflowType=this.value;paginationReset(STATE,'workflow:list');renderWorkflowCenter()"><option value="">All Types</option>${WORKFLOW_TYPES.map(t=>`<option value="${t}" ${STATE.workflowType===t?'selected':''}>${t}</option>`).join('')}</select><select class="filter-select" aria-label="Workflow priority" onchange="STATE.workflowPriority=this.value;paginationReset(STATE,'workflow:list');renderWorkflowCenter()"><option value="">All Priorities</option>${['Urgent','High','Normal','Low'].map(value=>`<option value="${value}" ${STATE.workflowPriority===value?'selected':''}>${value}</option>`).join('')}</select>${departments.length?`<select class="filter-select" aria-label="Workflow department" onchange="STATE.workflowDepartment=this.value;paginationReset(STATE,'workflow:list');renderWorkflowCenter()"><option value="">All Departments</option>${departments.map(value=>`<option value="${esc(value)}" ${STATE.workflowDepartment===value?'selected':''}>${esc(value)}</option>`).join('')}</select>`:''}${hasFilters?`<button class="btn btn-ghost btn-sm" onclick="workflowResetFilters()">Reset</button>`:''}<div class="toolbar-spacer"></div>${informationNoteButton('workflowRule')}<button class="btn btn-ghost btn-sm" onclick="go('actionCenter')">Action Center</button>${canEdit()?`<button class="btn btn-primary btn-sm" onclick="openWorkflowCreateForm()">${iPlus(15)} New HR Task</button>`:''}</div>
-    ${rows.length?`<div class="tablewrap workflow-table-scroll"><table class="data-table" data-server-paginated="true"><thead><tr><th>Task</th><th>Employee / Source</th><th>Department</th><th>Type</th><th>Priority</th><th>Due</th><th>Assignee</th><th>Status</th><th class="actions-head">Actions</th></tr></thead><tbody>${pageRows.map(t=>{const assignee=t.assigneeId?(DB.users.find(u=>String(u.id)===String(t.assigneeId))?.fullName||'Assigned'):'Unassigned';return `<tr><td><b>${esc(t.title)}</b>${t.description?`<div class="cell-secondary">${esc(t.description)}</div>`:''}</td><td>${esc(t.employeeName||workflowSourceTitle(t))}</td><td>${esc(t.department||'—')}</td><td>${esc(t.workflowType||'Task')}</td><td>${workflowPriorityBadge(t.priority)}</td><td><span class="workflow-due ${workflowTaskSeverity(t)}">${esc(workflowDueText(t))}</span></td><td>${esc(assignee)}</td><td>${statusBadge(t.status,workflowStatusMap)}</td><td><div class="rowactions">${workflowActionButtons(t)}</div></td></tr>`;}).join('')}</tbody></table></div><div class="table-pagination-wrap"><div class="table-pagination-meta">${page.meta.start?`${page.meta.start}–${page.meta.end}`:'0'} <span>of ${page.meta.total} workflow items</span></div>${paginationHTML(page.meta,'workflow:list',{go:'workflowPageGo',size:'workflowPageSize'})}</div>`:`<div class="workflow-empty"><b>No workflow items match this view.</b>Try another filter or create a manual HR task.</div>`}</div>
+    ${rows.length?`<div class="tablewrap workflow-table-scroll"><table class="data-table" data-server-paginated="true" data-page-scope="workflow:list" data-page-handler="workflowPageSize" data-managed-columns="department,status"><thead><tr><th>Task</th><th>Employee / Source</th><th data-column-key="department" data-column-managed="true">Department</th><th>Type</th><th>Priority</th><th>Due</th><th>Assignee</th><th data-column-key="status" data-column-managed="true">Status</th><th class="actions-head">Actions</th></tr></thead><tbody>${pageRows.map(t=>{const assignee=t.assigneeId?(DB.users.find(u=>String(u.id)===String(t.assigneeId))?.fullName||'Assigned'):'Unassigned';return `<tr><td><b>${esc(t.title)}</b>${t.description?`<div class="cell-secondary">${esc(t.description)}</div>`:''}</td><td>${esc(t.employeeName||workflowSourceTitle(t))}</td><td data-column="department">${esc(t.department||'—')}</td><td>${esc(t.workflowType||'Task')}</td><td>${workflowPriorityBadge(t.priority)}</td><td><span class="workflow-due ${workflowTaskSeverity(t)}">${esc(workflowDueText(t))}</span></td><td>${esc(assignee)}</td><td data-column="status">${statusBadge(t.status,workflowStatusMap)}</td><td><div class="rowactions">${workflowActionButtons(t)}</div></td></tr>`;}).join('')}</tbody></table></div><div class="table-pagination-wrap"><div class="table-pagination-meta">${page.meta.start?`${page.meta.start}–${page.meta.end}`:'0'} <span>of ${page.meta.total} workflow items</span></div>${paginationHTML(page.meta,'workflow:list',{go:'workflowPageGo',size:'workflowPageSize'})}</div>`:`<div class="workflow-empty"><b>No workflow items match this view.</b>Try another filter or create a manual HR task.</div>`}</div>
     `;
   document.getElementById('content').innerHTML=html;
 }
@@ -7565,6 +7575,15 @@ const TABLE_ENHANCER=installTableEnhancer({
     void persistUserPreferences();
   },
   openSettings:key=>openTableViewSettings(key),
+  onViewAll:(scope,handler,size)=>{
+    if(handler==='serverTablePageSize')serverTablePageSize(scope,size);
+    else if(handler==='workflowPageSize')workflowPageSize(scope,size);
+    else{
+      STATE.tablePageSizes||={};STATE.tablePages||={};
+      STATE.tablePageSizes[scope]=size;STATE.tablePages[scope]={page:1,size,signature:''};
+      Promise.resolve(RENDERERS[STATE.view]?.()).catch(error=>toast('Could not load all rows: '+error.message,true));
+    }
+  },
 });
 const {enhanceDataTables,tablePageGo,tablePageSize,resetAllTablePages}=TABLE_ENHANCER;
 
