@@ -20,6 +20,8 @@ Continue through `supabase/phase13-onboarding.sql` for the applicant onboarding 
 
 Apply `supabase/phase14-admin-storage-settings.sql` to restrict system-wide settings changes to Administrator accounts. The frontend skips the settings upsert for other roles so ordinary HR record saves continue to work under this policy.
 
+Apply `supabase/phase15-organization-structure.sql` to let Administrator and HR Staff accounts add or edit departments and positions. The migration exposes a restricted function that updates only Organization Structure; General, compensation, storage, and audit settings remain Administrator-only in the interface and under Row Level Security.
+
 ## Google Drive
 
 The System Administrator can choose Google Drive as the destination for all new HR uploads in Settings. Configure a Google Cloud OAuth 2.0 Web Client ID and add each deployed app origin, such as the Vercel production URL and local preview origin, to its authorized JavaScript origins. Enable the Google Drive API for that Google Cloud project.

@@ -1497,7 +1497,7 @@ const NAV = [
     {v:'dataQuality',label:'Data Quality & Governance',icon:iCheck},
     {v:'reports',label:'Reports',icon:iChart},
     {v:'users',label:'User Management',icon:iUsers},
-    {v:'settings',label:'Settings',icon:iGear},
+    {v:'settings',label:'Settings',icon:iGear,roles:['Administrator','HR Staff']},
   ]},
 ];
 function navItemVisible(item){
@@ -2107,10 +2107,14 @@ function fieldHTML(f, val){
   }
   if(f.type==='select'){
     const options=typeof f.options==='function'?f.options(v):(f.options||[]);
+    const selectId=`f_${f.key}`;
+    const catalogType=f.catalog;
+    const catalogButton=catalogType&&isHRRole()?`<button type="button" class="catalog-add-button" title="Add ${catalogType}" aria-label="Add ${catalogType}" onclick="toggleCatalogQuickAdd('${catalogType}','${selectId}','${f.catalogDepartmentId||''}','${f.catalogPositionId||''}')">${iPlus(15)}</button>`:'';
+    const quickAdd=catalogButton?`<div id="${selectId}_catalog_editor" class="catalog-quick-add" hidden data-catalog-type="${catalogType}" data-select-id="${selectId}" data-department-id="${f.catalogDepartmentId||''}" data-position-id="${f.catalogPositionId||''}"><input id="${selectId}_catalog_name" type="text" maxlength="${catalogType==='department'?60:80}" placeholder="New ${catalogType} name" onkeydown="catalogQuickAddKeydown(event,'${selectId}')"><button type="button" class="btn btn-primary btn-sm" data-confirm-change="false" onclick="saveCatalogQuickAdd('${selectId}')">Add</button><button type="button" class="btn btn-ghost btn-sm" onclick="toggleCatalogQuickAdd('${catalogType}','${selectId}')">Cancel</button></div>`:'';
     return `<div class="field ${f.full?'full':''}"><label>${f.label}${f.required?' *':''}</label>
-      <select id="f_${f.key}" ${f.required?'required':''} ${f.onchange?`onchange="${f.onchange}"`:''}>
+      <div class="catalog-select-row"><select id="${selectId}" ${f.required?'required':''} ${f.onchange?`onchange="${f.onchange}"`:''}>
         ${f.placeholder?`<option value="">${esc(f.placeholder)}</option>`:''}${options.map(o=>`<option value="${esc(o)}" ${o===v?'selected':''}>${esc(o)}</option>`).join('')}
-      </select></div>`;
+      </select>${catalogButton}</div>${quickAdd}</div>`;
   }
   if(f.type==='textarea'){
     return `<div class="field full"><label>${f.label}${f.required?' *':''}</label><textarea id="f_${f.key}" rows="3" ${f.required?'required':''} ${f.maxLength?`maxlength="${f.maxLength}"`:''}>${esc(v)}</textarea></div>`;
@@ -2746,8 +2750,8 @@ const ONBOARDING_IDENTITY_FIELDS=[
   {key:'address',label:'Home Address',type:'text',full:true},
 ];
 const ONBOARDING_APPLICATION_FIELDS=[
-  {key:'department',label:'Department',type:'select',options:employeeDepartmentNames,placeholder:'Select department',required:true,onchange:"syncPositionSelect('f_positionApplied',this.value)"},
-  {key:'positionApplied',label:'Position Applied For',type:'select',options:()=>employeePositionNames(),placeholder:'Select position',required:true},
+  {key:'department',label:'Department',type:'select',options:employeeDepartmentNames,placeholder:'Select department',required:true,onchange:"syncPositionSelect('f_positionApplied',this.value)",catalog:'department',catalogPositionId:'f_positionApplied'},
+  {key:'positionApplied',label:'Position Applied For',type:'select',options:()=>employeePositionNames(),placeholder:'Select position',required:true,catalog:'position',catalogDepartmentId:'f_department'},
   {key:'applicationDate',label:'Application Date',type:'date',required:true},
   {key:'source',label:'Application Source',type:'select',options:['Walk-in','Referral','Online Job Board','Social Media','Job Fair','Agency','Other']},
   {key:'stage',label:'Hiring Stage',type:'select',options:ONBOARDING_STAGES,required:true},
@@ -3128,8 +3132,8 @@ const EMP_FIELDS = [
   {key:'lastName', label:'Last Name', type:'text', required:true},
   {key:'firstName', label:'First Name', type:'text', required:true},
   {key:'middleName', label:'Middle Name', type:'text'},
-  {key:'department', label:'Department', type:'select', options:employeeDepartmentNames, placeholder:'Select department', required:true, onchange:"syncPositionSelect('f_position',this.value)"},
-  {key:'position', label:'Position', type:'select', options:()=>employeePositionNames(), placeholder:'Select position', required:true},
+  {key:'department', label:'Department', type:'select', options:employeeDepartmentNames, placeholder:'Select department', required:true, onchange:"syncPositionSelect('f_position',this.value)", catalog:'department', catalogPositionId:'f_position'},
+  {key:'position', label:'Position', type:'select', options:()=>employeePositionNames(), placeholder:'Select position', required:true, catalog:'position', catalogDepartmentId:'f_department'},
   {key:'branchReporting', label:'Branch Reporting', type:'select', options:[], required:true},
   {key:'dailyRate', label:'Daily Rate', type:'number', min:0, step:'0.01'},
   {key:'dateHired', label:'Date Hired', type:'date', required:true},
@@ -3438,6 +3442,68 @@ function syncPositionSelect(id,department){
   const options=employeePositionNames(department);
   select.innerHTML=`<option value="">Select position</option>${options.map(name=>`<option value="${esc(name)}" ${name===current?'selected':''}>${esc(name)}</option>`).join('')}`;
   if(!options.includes(current))select.value='';
+}
+async function persistOrganizationStructure(){
+  const departments=normalizeDepartmentCatalog(DB.settings?.departments);
+  const positions=normalizePositionCatalog(DB.settings?.positions);
+  const {data,error}=await supabase.rpc('save_organization_structure',{p_departments:departments,p_positions:positions});
+  if(error){
+    const setup=/save_organization_structure|schema cache|could not find/i.test(error.message||'');
+    toast(setup?'Organization Structure setup is not installed. Run phase15-organization-structure.sql in Supabase.':'Could not save Organization Structure: '+error.message,true);
+    return false;
+  }
+  if(data&&typeof data==='object')DB.settings={...DB.settings,...data};
+  return true;
+}
+function toggleCatalogQuickAdd(type,selectId,departmentId='',positionId=''){
+  if(!isHRRole())return;
+  const editor=document.getElementById(`${selectId}_catalog_editor`);if(!editor)return;
+  if(!editor.hidden){editor.hidden=true;return;}
+  if(type==='position'&&!document.getElementById(departmentId)?.value){toast('Select a department before adding a position.',true);return;}
+  document.querySelectorAll('.catalog-quick-add').forEach(item=>item.hidden=true);
+  editor.hidden=false;
+  if(departmentId)editor.dataset.departmentId=departmentId;
+  if(positionId)editor.dataset.positionId=positionId;
+  requestAnimationFrame(()=>document.getElementById(`${selectId}_catalog_name`)?.focus());
+}
+function catalogQuickAddKeydown(event,selectId){
+  if(event.key==='Enter'){event.preventDefault();saveCatalogQuickAdd(selectId);}
+  if(event.key==='Escape'){event.preventDefault();const editor=document.getElementById(`${selectId}_catalog_editor`);if(editor)editor.hidden=true;}
+}
+async function saveCatalogQuickAdd(selectId){
+  if(!isHRRole())return;
+  const editor=document.getElementById(`${selectId}_catalog_editor`);
+  const input=document.getElementById(`${selectId}_catalog_name`);
+  const type=editor?.dataset.catalogType;
+  let name=input?.value.trim()||'';
+  if(type==='department')name=name.toUpperCase();
+  if(!name){toast(`Enter a ${type||'catalog'} name.`,true);input?.focus();return;}
+  const department=type==='position'?document.getElementById(editor.dataset.departmentId)?.value||'':'';
+  if(type==='position'&&!department){toast('Select a department before adding a position.',true);return;}
+  const departments=departmentCatalog();
+  const positions=positionCatalog();
+  const duplicate=type==='department'
+    ?departments.some(item=>item.name.toLowerCase()===name.toLowerCase())
+    :positions.some(item=>item.department.toLowerCase()===department.toLowerCase()&&item.name.toLowerCase()===name.toLowerCase());
+  if(duplicate){toast(`That ${type} already exists${department?` in ${department}`:''}.`,true);return;}
+  if(!(await confirmDataChange({title:`Add ${type}`,message:`Add ${name}${department?` under ${department}`:''} to Organization Structure? It will become available across employee and applicant forms.`,confirmLabel:`Add ${type}`})))return;
+  const previous=JSON.parse(JSON.stringify(DB.settings));
+  if(type==='department')DB.settings.departments=[...departments,{name,active:true}];
+  else DB.settings.positions=[...positions,{name,department,active:true}];
+  if(!(await persistOrganizationStructure())){DB.settings=previous;return;}
+  const select=document.getElementById(selectId);
+  if(type==='department'){
+    const options=employeeDepartmentNames(name);
+    select.innerHTML=`<option value="">Select department</option>${options.map(value=>`<option value="${esc(value)}">${esc(value)}</option>`).join('')}`;
+    select.value=name;
+    if(editor.dataset.positionId)syncPositionSelect(editor.dataset.positionId,name);
+  }else{
+    syncPositionSelect(selectId,department);
+    select.value=name;
+  }
+  input.value='';editor.hidden=true;
+  logAudit(`Added ${type} from employee workflow: ${name}${department?` · ${department}`:''}`);
+  toast(`${type==='department'?'Department':'Position'} added and selected.`);
 }
 function employeeAllowanceFieldsHTML(record){
   const types=employeeAllowanceTypes();
@@ -6225,13 +6291,13 @@ async function saveUser(id){
    SETTINGS
    ================================================================ */
 function settingsCatalogStatus(active){return statusBadge(active?'Active':'Inactive',active?{'Active':'b-green'}:{'Inactive':'b-grey'});}
-function settingsOrganizationHTML(admin){
+function settingsOrganizationHTML(canManage){
   const departments=departmentCatalog();
   const positions=positionCatalog();
-  return `<div class="settings-section-head"><div><h3>Organization Structure</h3><p>Departments and their approved positions drive employee, applicant, transfer, import, and HR transaction forms.</p></div>${admin?`<div class="page-header-actions"><button class="btn btn-ghost btn-sm" onclick="openDepartmentSetting()">${iPlus(13)} Department</button><button class="btn btn-primary btn-sm" onclick="openPositionSetting()">${iPlus(13)} Position</button></div>`:''}</div>
+  return `<div class="settings-section-head"><div><h3>Organization Structure</h3><p>Departments and their approved positions drive employee, applicant, transfer, import, and HR transaction forms.</p></div>${canManage?`<div class="page-header-actions"><button class="btn btn-ghost btn-sm" onclick="openDepartmentSetting()">${iPlus(13)} Department</button><button class="btn btn-primary btn-sm" onclick="openPositionSetting()">${iPlus(13)} Position</button></div>`:''}</div>
     <div class="settings-master-grid">
-      <section class="settings-master-block"><div class="settings-master-title"><div><b>Departments</b><span>${departments.filter(item=>item.active).length} active of ${departments.length}</span></div></div><div class="tablewrap"><table class="data-table settings-table"><thead><tr><th>Department</th><th>Employees</th><th>Status</th>${admin?'<th class="actions-head">Action</th>':''}</tr></thead><tbody>${departments.map((item,index)=>`<tr><td><b>${esc(item.name)}</b></td><td>${DB.employees.filter(employee=>String(employee.department).toLowerCase()===item.name.toLowerCase()).length}</td><td>${settingsCatalogStatus(item.active)}</td>${admin?`<td class="actions-head"><button class="iconbtn" title="Edit department" onclick="openDepartmentSetting(${index})">${iEdit(14)}</button></td>`:''}</tr>`).join('')}</tbody></table></div></section>
-      <section class="settings-master-block"><div class="settings-master-title"><div><b>Positions</b><span>${positions.filter(item=>item.active).length} active of ${positions.length}</span></div></div><div class="tablewrap"><table class="data-table settings-table"><thead><tr><th>Position</th><th>Department</th><th>Employees</th><th>Status</th>${admin?'<th class="actions-head">Action</th>':''}</tr></thead><tbody>${positions.length?positions.map((item,index)=>`<tr><td><b>${esc(item.name)}</b></td><td>${esc(item.department||'Unassigned')}</td><td>${DB.employees.filter(employee=>String(employee.department).toLowerCase()===item.department.toLowerCase()&&String(employee.position).toLowerCase()===item.name.toLowerCase()).length}</td><td>${settingsCatalogStatus(item.active)}</td>${admin?`<td class="actions-head"><button class="iconbtn" title="Edit position" onclick="openPositionSetting(${index})">${iEdit(14)}</button></td>`:''}</tr>`).join(''):`<tr><td colspan="${admin?5:4}"><div class="empty"><b>No positions configured</b><span>Add approved positions before creating or importing employees.</span></div></td></tr>`}</tbody></table></div></section>
+      <section class="settings-master-block"><div class="settings-master-title"><div><b>Departments</b><span>${departments.filter(item=>item.active).length} active of ${departments.length}</span></div></div><div class="tablewrap"><table class="data-table settings-table"><thead><tr><th>Department</th><th>Employees</th><th>Status</th>${canManage?'<th class="actions-head">Action</th>':''}</tr></thead><tbody>${departments.map((item,index)=>`<tr><td><b>${esc(item.name)}</b></td><td>${DB.employees.filter(employee=>String(employee.department).toLowerCase()===item.name.toLowerCase()).length}</td><td>${settingsCatalogStatus(item.active)}</td>${canManage?`<td class="actions-head"><button class="iconbtn" title="Edit department" onclick="openDepartmentSetting(${index})">${iEdit(14)}</button></td>`:''}</tr>`).join('')}</tbody></table></div></section>
+      <section class="settings-master-block"><div class="settings-master-title"><div><b>Positions</b><span>${positions.filter(item=>item.active).length} active of ${positions.length}</span></div></div><div class="tablewrap"><table class="data-table settings-table"><thead><tr><th>Position</th><th>Department</th><th>Employees</th><th>Status</th>${canManage?'<th class="actions-head">Action</th>':''}</tr></thead><tbody>${positions.length?positions.map((item,index)=>`<tr><td><b>${esc(item.name)}</b></td><td>${esc(item.department||'Unassigned')}</td><td>${DB.employees.filter(employee=>String(employee.department).toLowerCase()===item.department.toLowerCase()&&String(employee.position).toLowerCase()===item.name.toLowerCase()).length}</td><td>${settingsCatalogStatus(item.active)}</td>${canManage?`<td class="actions-head"><button class="iconbtn" title="Edit position" onclick="openPositionSetting(${index})">${iEdit(14)}</button></td>`:''}</tr>`).join(''):`<tr><td colspan="${canManage?5:4}"><div class="empty"><b>No positions configured</b><span>Add approved positions before creating or importing employees.</span></div></td></tr>`}</tbody></table></div></section>
     </div>`;
 }
 function switchSettingsTab(tab){
@@ -6240,12 +6306,12 @@ function switchSettingsTab(tab){
   document.querySelectorAll('[data-settings-panel]').forEach(panel=>panel.hidden=panel.dataset.settingsPanel!==tab);
 }
 function openDepartmentSetting(index=-1){
-  if(SESSION?.role!=='Administrator')return;
+  if(!isHRRole())return;
   const item=index>=0?departmentCatalog()[index]:null;
   openModal(`<div class="modal-head"><div><h3>${item?'Edit Department':'Add Department'}</h3><div class="small">Organization Structure</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="formgrid"><div class="field full"><label>Department Name *</label><input id="os_department_name" value="${esc(item?.name||'')}" maxlength="60" placeholder="e.g. HUMAN RESOURCES"></div>${item?`<div class="field full"><label class="settings-check"><input id="os_department_active" type="checkbox" ${item.active?'checked':''}><span><b>Active department</b><small>Inactive departments remain on historical records but cannot be selected for new transactions.</small></span></label></div>`:''}</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" data-confirm-label="Save department and update linked records" onclick="saveDepartmentSetting(${index})">Save Department</button></div>`);
 }
 async function saveDepartmentSetting(index=-1){
-  if(SESSION?.role!=='Administrator')return;
+  if(!isHRRole())return;
   const name=document.getElementById('os_department_name')?.value.trim().toUpperCase()||'';
   const active=index<0||document.getElementById('os_department_active')?.checked;
   const catalog=departmentCatalog();const original=index>=0?catalog[index]:null;
@@ -6261,7 +6327,8 @@ async function saveDepartmentSetting(index=-1){
     }
   }else catalog.push({name,active:true});
   DB.settings.departments=catalog;
-  if(!(await saveDB())){DB=before;return;}
+  if(!(await persistOrganizationStructure())){DB=before;return;}
+  if(original&&original.name!==name&&!(await saveDB())){DB=before;return;}
   let relatedCaseWarning='';
   if(original&&original.name!==name){
     const {error:caseDepartmentError}=await supabase.from('hr_cases').update({department:name,updated_by:SESSION?.id||null}).ilike('department',original.name);
@@ -6270,13 +6337,13 @@ async function saveDepartmentSetting(index=-1){
   logAudit(`${original?'Updated':'Added'} department: ${name}`);await closeModal();renderSettings();toast(relatedCaseWarning||'Department saved.',!!relatedCaseWarning);
 }
 function openPositionSetting(index=-1){
-  if(SESSION?.role!=='Administrator')return;
+  if(!isHRRole())return;
   const item=index>=0?positionCatalog()[index]:null;
   const departments=employeeDepartmentNames(item?.department||'');
   openModal(`<div class="modal-head"><div><h3>${item?'Edit Position':'Add Position'}</h3><div class="small">Organization Structure</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="formgrid"><div class="field"><label>Position Title *</label><input id="os_position_name" value="${esc(item?.name||'')}" maxlength="80" placeholder="e.g. HR Officer"></div><div class="field"><label>Department *</label><select id="os_position_department"><option value="">Select department</option>${departments.map(name=>`<option value="${esc(name)}" ${name===item?.department?'selected':''}>${esc(name)}</option>`).join('')}</select></div>${item?`<div class="field full"><label class="settings-check"><input id="os_position_active" type="checkbox" ${item.active?'checked':''}><span><b>Active position</b><small>Inactive positions stay on existing employee records but are hidden from new employee and applicant forms.</small></span></label></div>`:''}</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" data-confirm-label="Save position and update linked records" onclick="savePositionSetting(${index})">Save Position</button></div>`);
 }
 async function savePositionSetting(index=-1){
-  if(SESSION?.role!=='Administrator')return;
+  if(!isHRRole())return;
   const name=document.getElementById('os_position_name')?.value.trim()||'';
   const department=document.getElementById('os_position_department')?.value||'';
   const active=index<0||document.getElementById('os_position_active')?.checked;
@@ -6295,26 +6362,29 @@ async function savePositionSetting(index=-1){
     }
   }else catalog.push({name,department,active:true});
   DB.settings.positions=catalog;
-  if(!(await saveDB())){DB=before;return;}
+  if(!(await persistOrganizationStructure())){DB=before;return;}
+  if(original&&(original.name!==name||original.department!==department)&&!(await saveDB())){DB=before;return;}
   logAudit(`${original?'Updated':'Added'} position: ${name} · ${department}`);await closeModal();renderSettings();toast('Position saved.');
 }
 function renderSettings(){
-  setTitle('Settings', 'Organization preferences and audit log.');
+  if(!isHRRole()){go('dashboard',{skipUnsaved:true});return;}
   const admin=SESSION?.role==='Administrator';
+  setTitle(admin?'Settings':'Organization Structure',admin?'Organization preferences and audit log.':'Manage approved departments and positions.');
   const provider=attachmentStorageProvider();
-  const activeTab=STATE.settingsTab||'general';
+  const activeTab=admin?(STATE.settingsTab||'general'):'organization';
+  STATE.settingsTab=activeTab;
   document.getElementById('content').innerHTML = `
-    ${!admin?'<div class="notice"><b>Read only:</b> Ask a System Administrator to change system configuration.</div>':''}
     <div class="settings-shell">
       <div class="settings-tabs" role="tablist" aria-label="Settings sections">
-        ${[['general','General'],['organization','Organization Structure'],['workforce','Branches & Compensation'],['storage','File Storage'],['audit','Audit Trail']].map(([key,label])=>`<button type="button" role="tab" data-settings-tab="${key}" class="${activeTab===key?'active':''}" aria-selected="${activeTab===key}" onclick="switchSettingsTab('${key}')">${label}</button>`).join('')}
+        ${(admin?[['general','General'],['organization','Organization Structure'],['workforce','Branches & Compensation'],['storage','File Storage'],['audit','Audit Trail']]:[['organization','Organization Structure']]).map(([key,label])=>`<button type="button" role="tab" data-settings-tab="${key}" class="${activeTab===key?'active':''}" aria-selected="${activeTab===key}" onclick="switchSettingsTab('${key}')">${label}</button>`).join('')}
       </div>
-      <section class="settings-panel" data-settings-panel="general" ${activeTab==='general'?'':'hidden'}>
+      ${admin?`<section class="settings-panel" data-settings-panel="general" ${activeTab==='general'?'':'hidden'}>
         <div class="settings-section-head"><div><h3>General</h3><p>Core organization identity and employment defaults.</p></div>${admin?'<button class="btn btn-primary btn-sm" onclick="saveSettings()">Save Changes</button>':''}</div>
         <div class="field"><label>Organization Name</label><input id="s_org" value="${esc(DB.settings.orgName)}" ${admin?'':'disabled'}></div>
         <div class="field"><label>Probation → Regularization Threshold (days)</label><input id="s_prob" type="number" value="${DB.settings.probationDays}" ${admin?'':'disabled'}><div class="computed-note">Employee classification recalculates automatically wherever it is displayed.</div></div>
-      </section>
-      <section class="settings-panel" data-settings-panel="organization" ${activeTab==='organization'?'':'hidden'}>${settingsOrganizationHTML(admin)}</section>
+      </section>`:''}
+      <section class="settings-panel" data-settings-panel="organization" ${activeTab==='organization'?'':'hidden'}>${settingsOrganizationHTML(true)}</section>
+      ${admin?`
       <section class="settings-panel" data-settings-panel="workforce" ${activeTab==='workforce'?'':'hidden'}>
         <div class="settings-section-head"><div><h3>Branches &amp; Compensation</h3><p>Reporting locations and configurable employee allowance fields.</p></div>${admin?'<button class="btn btn-primary btn-sm" onclick="saveSettings()">Save Changes</button>':''}</div>
         <div class="settings-form-grid"><div class="field"><label>Branch Locations (one per line)</label><textarea id="s_branches" rows="10" ${admin?'':'disabled'}>${esc(employeeBranchLocations().join('\n'))}</textarea><div class="computed-note">Every employee must be assigned to one configured reporting branch.</div></div><div class="field"><label>Allowance Types (one per line)</label><textarea id="s_allowances" rows="10" ${admin?'':'disabled'} placeholder="Meal Allowance&#10;Transportation Allowance">${esc(employeeAllowanceTypes().join('\n'))}</textarea><div class="computed-note">Each type becomes an employee amount field and an import-template column.</div></div></div>
@@ -6334,7 +6404,7 @@ function renderSettings(){
         <div class="settings-audit-list">
         ${DB.audit.length? DB.audit.map(a=>`<div class="cal-list-item"><span>${esc(a.action)}</span><span class="small">${esc(a.user)} · ${new Date(a.ts).toLocaleString()}</span></div>`).join('') : '<div class="small">No activity yet.</div>'}
         </div>
-      </section>
+      </section>`:''}
     </div>
   `;
 }
@@ -7022,7 +7092,7 @@ Object.assign(window, {
   renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
-  saveEval, saveIncident, saveRecord, saveSettings, saveUser, saveDepartmentSetting, savePositionSetting, setTitle, shiftDate, statusBadge, storageSettingsChanged, testGoogleDriveConnection, switchAuthTab, switchSettingsTab, syncPositionSelect, openDepartmentSetting, openPositionSetting, toCSV,
+  saveEval, saveIncident, saveRecord, saveSettings, saveUser, saveDepartmentSetting, savePositionSetting, setTitle, shiftDate, statusBadge, storageSettingsChanged, testGoogleDriveConnection, switchAuthTab, switchSettingsTab, syncPositionSelect, toggleCatalogQuickAdd, catalogQuickAddKeydown, saveCatalogQuickAdd, openDepartmentSetting, openPositionSetting, toCSV,
   toast, todayISO, togglePasswordVisibility, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, openInformationNote, paginationMeta, paginationHTML, paginationReset, paginateRows,
   addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom
 });

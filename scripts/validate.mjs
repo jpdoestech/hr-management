@@ -23,7 +23,8 @@ const required=[
   'database/migrations/phase11-lifecycle-checklists.sql','supabase/phase12-user-preferences.sql',
   'database/migrations/phase12-user-preferences.sql','supabase/phase13-onboarding.sql',
   'database/migrations/phase13-onboarding.sql','supabase/phase14-admin-storage-settings.sql',
-  'database/migrations/phase14-admin-storage-settings.sql'
+  'database/migrations/phase14-admin-storage-settings.sql','supabase/phase15-organization-structure.sql',
+  'database/migrations/phase15-organization-structure.sql'
 ];
 const missing=required.filter(f=>!fs.existsSync(path.join(root,f)));
 if(missing.length){
@@ -161,6 +162,18 @@ const storageSettingsMigrationCopy=fs.readFileSync(path.join(root,'database/migr
 if(storageSettingsMigration!==storageSettingsMigrationCopy || !storageSettingsMigration.includes("current_profile_role() = 'Administrator'")){
   console.error('Admin-only storage settings migration copies are missing or out of sync.');
   process.exit(1);
+}
+const organizationMigration=fs.readFileSync(path.join(root,'supabase/phase15-organization-structure.sql'),'utf8');
+const organizationMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase15-organization-structure.sql'),'utf8');
+if(organizationMigration!==organizationMigrationCopy || !organizationMigration.includes("current_profile_role() not in ('Administrator', 'HR Staff')") || !organizationMigration.includes("grant execute on function public.save_organization_structure")){
+  console.error('Delegated Organization Structure migration copies are missing, unsafe, or out of sync.');
+  process.exit(1);
+}
+for(const feature of ['catalog-add-button','saveCatalogQuickAdd','persistOrganizationStructure',"roles:['Administrator','HR Staff']"]){
+  if(!app.includes(feature)){
+    console.error(`Organization Structure access or inline catalog control is missing: ${feature}`);
+    process.exit(1);
+  }
 }
 for(const feature of ['fileStorageProvider','uploadGoogleDriveAttachment','googleDriveModuleFolder','requestGoogleDriveAccessToken','storageSettingsChanged','testGoogleDriveConnection','GOOGLE_DRIVE_PREFIX']){
   if(!app.includes(feature)){

@@ -840,6 +840,7 @@ body{background:var(--page);color:var(--text);}
 .employee-form-grid .field.full{grid-column:1/-1;}
 .employee-form-grid .field label{margin-bottom:5px;font-size:9.5px;font-weight:700;}
 .employee-form-grid .field input,.employee-form-grid .field select,.employee-form-grid .field textarea{min-width:0;height:38px;padding:7px 10px;border-radius:7px;font-size:11px;}
+.catalog-select-row{display:flex;align-items:stretch;gap:6px;min-width:0;}.catalog-select-row select{flex:1;min-width:0;}.catalog-add-button{display:grid;flex:0 0 38px;width:38px;height:38px;place-items:center;border:1px solid var(--border-strong);border-radius:7px;background:#fff;color:var(--nav-2);cursor:pointer;transition:border-color .16s ease,background .16s ease,color .16s ease;}.catalog-add-button:hover,.catalog-add-button:focus-visible{border-color:var(--accent);background:#F7F5FF;color:var(--accent);outline:0;}.catalog-quick-add{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;margin-top:7px;padding:8px;border:1px solid var(--border);border-radius:7px;background:#F8FAFC;}.catalog-quick-add[hidden]{display:none}.catalog-quick-add input{height:34px!important}.catalog-quick-add .btn{min-height:34px;white-space:nowrap}
 .employee-form-grid .field textarea{height:auto;min-height:64px;}
 .employee-form-grid .field input[readonly]{background:#F5F6F8;color:#536075;font-weight:700;}
 .money-input{display:flex;align-items:center;height:38px;overflow:hidden;border:1px solid var(--border);border-radius:7px;background:#fff;}
@@ -961,6 +962,7 @@ label.onboarding-check{cursor:pointer;}
   .employee-form-body{padding:10px 12px 14px;}
   .employee-form-grid{grid-template-columns:1fr;}
   .employee-form-grid .field.full{grid-column:auto;}
+  .catalog-quick-add{grid-template-columns:1fr 1fr;}.catalog-quick-add input{grid-column:1/-1;}.catalog-quick-add .btn{width:100%;}
   .employee-form-guidance{grid-template-columns:1fr;gap:3px;}
   .employee-record-history>div{grid-template-columns:58px minmax(0,1fr);}
   .employee-record-history time{grid-column:2;}

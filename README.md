@@ -27,7 +27,7 @@ Import the repository as a static site. No build command is required. `vercel.js
 
 The application uses the public Supabase publishable key. Do not replace it with a service-role or secret key in browser code.
 
-For a new deployment, apply the numbered SQL migrations in order. Existing deployments should continue through `supabase/phase13-onboarding.sql`; Phase 13 restricts applicant records to Administrator and HR Staff accounts.
+For a new deployment, apply the numbered SQL migrations in order. Existing deployments should continue through `supabase/phase15-organization-structure.sql`; Phase 15 lets Administrator and HR Staff accounts manage only the department and position catalogs without opening access to administrator-controlled storage settings.
 
 ## Important
 
