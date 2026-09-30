@@ -4,7 +4,7 @@ This directory contains the project's authoritative Philippine administrative-lo
 
 - `regions.json`, `provinces.json`, and `cities.json` contain the searchable hierarchy and PSGC-style codes.
 - `barangays/<city-code>.json` contains barangays loaded on demand for one city or municipality.
-- `barangay-search-index.json` is the original aggregate search artifact and is retained unchanged for traceability. The application does not load it at runtime because the per-city files are substantially smaller.
+- `barangay-search-index.json` is the original aggregate search artifact and is retained unchanged for traceability. The application loads it on demand only when a user searches for a barangay without first selecting a city; ordinary city-scoped searches continue using the smaller per-city files.
 
 Runtime indexing and validation live in `js/address/`. The original TypeScript service supplied with this dataset is preserved, unchanged, in `js/address/reference/addressService.ts`.
 

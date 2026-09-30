@@ -1,4 +1,4 @@
-import { addressHasValue, normalizeAddress } from './address-models.js';
+import { normalizeAddress } from './address-models.js';
 import { normalizeAddressSearch } from './address-index.js';
 
 function sameName(left,right){return normalizeAddressSearch(left)===normalizeAddressSearch(right);}
@@ -6,7 +6,8 @@ function sameName(left,right){return normalizeAddressSearch(left)===normalizeAdd
 export function validatePhilippineAddress(value,{index,barangays=[],required=false}={}){
   const address=normalizeAddress(value);
   const errors={};
-  if(!addressHasValue(address)){
+  const administrativeValue=['regionName','regionCode','provinceName','provinceCode','cityName','cityCode','barangayName','barangayCode'].some(key=>Boolean(address[key]));
+  if(!administrativeValue){
     if(required)errors.region='Address is required.';
     return {valid:!required,address,errors};
   }

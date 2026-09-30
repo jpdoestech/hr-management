@@ -21,3 +21,12 @@ test('employee self-service and onboarding conversion cannot bypass validation',
     assert.match(app,new RegExp(`readAddressComponent\\('${prefix}'`));
   }
 });
+
+test('address forms are optional and same-as-home remains a live disabled mirror',()=>{
+  assert.doesNotMatch(app,/readAddressComponent\('(emp|ss|hire)_(home|present)',\{required:true\}\)/);
+  const component=readFileSync(new URL('../../js/address/address-component.js',import.meta.url),'utf8');
+  assert.match(component,/copyFrom===sourcePrefix/);
+  assert.match(component,/input\.disabled=mirrored/);
+  assert.match(component,/loadBarangaySearchIndex/);
+  assert.match(component,/Selecting a result fills its parent locations automatically/);
+});

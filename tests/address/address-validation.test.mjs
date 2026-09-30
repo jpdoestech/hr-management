@@ -31,3 +31,14 @@ test('loads an existing structured or legacy address safely',()=>{
   assert.equal(legacy.addressLine,'Old saved address');
   assert.equal(legacy.legacy,true);
 });
+
+test('allows a completely blank or street-only optional address',()=>{
+  assert.equal(validatePhilippineAddress({}, {index,barangays,required:false}).valid,true);
+  assert.equal(validatePhilippineAddress({addressLine:'Temporary address to be completed later'}, {index,barangays,required:false}).valid,true);
+});
+
+test('requires valid hierarchy after an administrative location is typed',()=>{
+  const result=validatePhilippineAddress({barangayName:'Agdao'}, {index,barangays,required:false});
+  assert.equal(result.valid,false);
+  assert.match(result.errors.region,/valid region/i);
+});

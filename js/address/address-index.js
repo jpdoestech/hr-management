@@ -1,5 +1,6 @@
 const DATA_ROOT=new URL('../../assets/data/philippine-address/',import.meta.url);
 let catalogPromise=null;
+let barangaySearchPromise=null;
 const barangayCache=new Map();
 
 export function normalizeAddressSearch(value){
@@ -28,10 +29,11 @@ export function createAddressIndex({regions=[],provinces=[],cities=[]}={}){
   const api={
     regions:regionRows,provinces:provinceRows,cities:cityRows,regionByCode,provinceByCode,cityByCode,
     provincesForRegion:code=>provincesByRegion.get(String(code||''))||[],
+    citiesForRegion:code=>citiesByRegion.get(String(code||''))||[],
     citiesForProvince:(provinceCode,regionCode='')=>provinceCode?(citiesByProvince.get(String(provinceCode))||[]):(citiesByRegion.get(String(regionCode||''))||[]).filter(city=>!city.provinceCode),
     searchRegions:(query,limit)=>rankedSearch(regionRows,query,limit),
-    searchProvinces:(regionCode,query,limit)=>rankedSearch(api.provincesForRegion(regionCode),query,limit),
-    searchCities:(provinceCode,regionCode,query,limit)=>rankedSearch(api.citiesForProvince(provinceCode,regionCode),query,limit),
+    searchProvinces:(regionCode,query,limit)=>rankedSearch(regionCode?api.provincesForRegion(regionCode):provinceRows,query,limit),
+    searchCities:(provinceCode,regionCode,query,limit)=>rankedSearch(provinceCode?api.citiesForProvince(provinceCode):regionCode?api.citiesForRegion(regionCode):cityRows,query,limit),
     exact:(rows,name)=>rows.find(row=>normalizeAddressSearch(row.name)===normalizeAddressSearch(name))||null,
   };
   return api;
@@ -59,5 +61,10 @@ export async function loadBarangays(cityCode){
   return barangayCache.get(code);
 }
 
+export async function loadBarangaySearchIndex(){
+  if(!barangaySearchPromise)barangaySearchPromise=fetchJson(new URL('barangay-search-index.json',DATA_ROOT),'Unable to load the nationwide barangay search index.').then(rows=>sortByName(rows)).catch(error=>{barangaySearchPromise=null;throw error;});
+  return barangaySearchPromise;
+}
+
 export function searchAddressRows(rows,query,limit=50){return rankedSearch(rows,query,limit);}
-export function clearAddressDataCache(){catalogPromise=null;barangayCache.clear();}
+export function clearAddressDataCache(){catalogPromise=null;barangaySearchPromise=null;barangayCache.clear();}
