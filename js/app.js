@@ -1983,9 +1983,15 @@ async function requestPageNavigation(view){
   return false;
 }
 async function requestCloseModal(trigger=null){
+  const finishClose=async()=>{
+    const handler=trigger?.getAttribute?.('onclick')||'';
+    if(trigger && !handler.includes('requestCloseModal(')){
+      CONFIRMED_MODAL_CLOSE_TARGETS.add(trigger);
+      trigger.click();
+    }else await closeModal();
+  };
   if(!modalHasUnsavedChanges()){
-    if(trigger){CONFIRMED_MODAL_CLOSE_TARGETS.add(trigger);trigger.click();}
-    else await closeModal();
+    await finishClose();
     return true;
   }
   const choice=await confirmDataChange({
@@ -2004,8 +2010,7 @@ async function requestCloseModal(trigger=null){
     return false;
   }
   if(choice==='discard'){
-    if(trigger){CONFIRMED_MODAL_CLOSE_TARGETS.add(trigger);trigger.click();}
-    else await closeModal();
+    await finishClose();
     return true;
   }
   return false;
