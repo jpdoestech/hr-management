@@ -641,7 +641,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = blankDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeBranchFilter:'', employeeStatusFilter:'', employeeClassFilter:'', employeeFiltersExpanded:false, lifecycleSearch:'', lifecycleFilter:'', checklistSearch:'', checklistType:'', checklistStatus:'Active', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', actionSearch:'', actionLevel:'all', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', workflowPriority:'', workflowDepartment:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', analyticsBranch:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', manpowerView:'requests', manpowerSearch:'', manpowerBranch:'', manpowerStatus:'', manpowerRisk:'', manpowerType:'', tablePages:{}, tablePageSizes:{} };
+let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeBranchFilter:'', employeeStatusFilter:'', employeeClassFilter:'', employeeFiltersExpanded:false, lifecycleSearch:'', lifecycleFilter:'', checklistSearch:'', checklistType:'', checklistStatus:'Active', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', actionSearch:'', actionLevel:'all', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsTab:'employee', opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', workflowPriority:'', workflowDepartment:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', analyticsBranch:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', manpowerView:'requests', manpowerSearch:'', manpowerBranch:'', manpowerStatus:'', manpowerRisk:'', manpowerType:'', tablePages:{}, tablePageSizes:{} };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 
 /* ---------------- toast ---------------- */
@@ -1446,7 +1446,7 @@ function opsRecordForEmployee(module,employee){
     return (employeeRecordId&&employeeRecordId===id)||(!employeeRecordId&&recordName===name)||recordName===name;
   });
 }
-async function renderOperationsWorkspace(){
+async function renderOperationsWorkspaceLegacy(){
   setTitle('HR Operations','A focused, employee-centric workbench for daily HR processing, approvals, follow-through, and record navigation.');
   const allEmployees=DB.employees.slice().sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
   const q=String(STATE.opsEmployeeSearch||'').trim().toLowerCase();
@@ -1587,6 +1587,67 @@ async function renderOperationsWorkspace(){
     requestAnimationFrame(()=>enhanceDataTables());
   }catch(e){ document.getElementById('content').innerHTML=`<div class="panel"><h3>HR Operations</h3><div class="notice"><b>Could not load the workspace.</b> ${esc(e.message||e)}</div></div>`; }
 }
+
+function opsEmployeeContextHTML(employee){
+  if(!employee)return `<div class="ops-lite-empty"><span>${iUser(20)}</span><div><b>No employee selected</b><p>Type a name or employee number above, then choose a result to open employee-specific actions.</p></div></div>`;
+  const completion=employeeCompleteness(employee);
+  return `<div class="ops-lite-selected">
+    <div class="ops-lite-identity"><span class="avatar-lg">${esc(opsInitials(employeeDisplayName(employee)))}</span><div><span class="eyebrow">Selected employee</span><h2>${esc(employeeDisplayName(employee))}</h2><p>${esc(employee.employeeNo||'—')} · ${esc(employee.position||'No position')} · ${esc(employee.department||'Unassigned')}</p><div class="ops-lite-badges">${statusBadge(employee.status||'—',EMP_STATUS_MAP)} ${statusBadge(classify(employee),classify(employee)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div></div></div>
+    <dl class="ops-lite-facts"><div><dt>Reporting branch</dt><dd>${esc(employee.branchReporting||'Not assigned')}</dd></div><div><dt>Date hired</dt><dd>${employee.dateHired?fmtDate(employee.dateHired):'Not provided'}</dd></div><div><dt>Contact</dt><dd>${esc(employee.mobileNumber||employee.personalEmail||'Not provided')}</dd></div><div><dt>Profile completion</dt><dd>${completion}%</dd></div></dl>
+    <div class="ops-lite-controls">
+      <button class="btn btn-primary" type="button" onclick="openEmployeeProfile('${employee.id}')">${iUser(15)} View Profile</button>
+      ${canEdit()?`<button class="btn btn-ghost" type="button" onclick="openEmployeeForm('${employee.id}')">${iEdit(14)} Edit</button><label class="ops-transaction"><span>Transaction</span><select id="ops-transaction-select"><option value="">Choose an action…</option><optgroup label="Employee record"><option value="status">Update status</option><option value="lifecycle">Lifecycle event</option><option value="transfer">Department transfer</option><option value="documents">Documents</option></optgroup><optgroup label="People and workforce"><option value="leaves">Leave record</option><option value="evaluations">Evaluation</option><option value="atd">ATD record</option><option value="prf">PRF record</option><option value="oncall">On-call / replacement</option></optgroup><optgroup label="Employee relations"><option value="cases">HR case</option><option value="incidents">Incident report</option><option value="cvr">CVR</option><option value="nte">NTE</option><option value="memos">Memorandum</option><option value="nod">NOD</option><option value="disciplinary">Disciplinary action</option></optgroup></select></label><button class="btn btn-ghost" type="button" onclick="opsOpenSelectedTransaction()">Open Action</button>`:''}
+    </div>
+  </div>`;
+}
+
+function opsSelectEmployee(){
+  const employee=employeePickerSelected('ops_employee');
+  STATE.opsEmployeeId=employee?.id||'';
+  const target=document.getElementById('ops-employee-context');
+  if(target)target.innerHTML=opsEmployeeContextHTML(employee);
+}
+
+function opsOpenSelectedTransaction(){
+  const employee=DB.employees.find(row=>String(row.id)===String(STATE.opsEmployeeId||''));
+  const transaction=document.getElementById('ops-transaction-select')?.value||'';
+  if(!employee){toast('Select an employee first.',true);return;}
+  if(!transaction){toast('Choose a transaction to open.',true);return;}
+  openEmployeeOperation(transaction,employee.id);
+}
+
+function opsSetTab(tab){STATE.opsTab=tab==='queues'?'queues':'employee';renderOperationsWorkspace();}
+
+function renderOperationsWorkspace(){
+  setTitle('HR Operations','Search an employee, open a transaction, or jump to a current HR work queue.');
+  const selected=DB.employees.find(employee=>String(employee.id)===String(STATE.opsEmployeeId||''))||null;
+  const pendingLeaves=DB.leaves.filter(record=>record.status==='Pending').length;
+  const openNte=DB.nte.filter(record=>record.status!=='Resolved').length;
+  const overdueReviews=DB.employees.filter(employee=>classify(employee)==='Probationary'&&EVAL_MILESTONES.some(milestone=>evalStatusInfo(employee,milestone).label==='Overdue')).length;
+  const atdRecords=DB.atd.filter(record=>atdRemaining(record)>0).length;
+  const lifecycleDue=lifecycleChecklistPendingCount();
+  const workflowDue=workflowPendingCount();
+  const tab=STATE.opsTab==='queues'?'queues':'employee';
+  const employeePanel=`<section class="panel ops-lite-panel">
+    <div class="ops-lite-lookup"><div><h2>Find an employee</h2><p>Search once, then open the profile or transaction you need.</p></div><div class="ops-lite-picker">${employeePickerHTML({id:'ops_employee',label:'Employee',selectedId:selected?.id||'',onSelect:'opsSelectEmployee',autofill:false,placeholder:'Type employee name or number…'})}</div></div>
+    <div id="ops-employee-context">${opsEmployeeContextHTML(selected)}</div>
+  </section>`;
+  const queues=[
+    ['Action Center','All prioritized HR follow-ups',workflowDue+pendingLeaves+openNte,'actionCenter',iShield(18)],
+    ['Workflow & Approvals','Tasks waiting for review or decision',workflowDue,'workflow',iCheck(18)],
+    ['Pending Leave','Leave requests awaiting action',pendingLeaves,'leaves',iCal(18)],
+    ['Open NTE','Notices requiring follow-through',openNte,'nte',iDoc(18)],
+    ['Overdue Evaluations','Probationary reviews past due',overdueReviews,'evaluations',iChart(18)],
+    ['Outstanding ATD','Deduction records with a balance',atdRecords,'atd',iChart(18)],
+    ['Lifecycle Tasks','Onboarding and movement tasks due',lifecycleDue,'lifecycleChecklists',iCheck(18)],
+  ];
+  const queuePanel=`<section class="panel ops-lite-panel"><div class="ops-lite-section-head"><div><h2>Work queues</h2><p>Open the source module for review, filtering, and processing.</p></div><button class="btn btn-primary btn-sm" onclick="go('actionCenter')">Open Action Center</button></div><div class="ops-lite-queue-grid">${queues.map(([label,description,count,view,icon])=>`<button type="button" class="ops-lite-queue" onclick="go('${view}')"><span class="ops-lite-queue-icon">${icon}</span><span><b>${label}</b><small>${description}</small></span><strong>${count}</strong><i aria-hidden="true">›</i></button>`).join('')}</div></section>`;
+  document.getElementById('content').innerHTML=`<div class="ops-lite-shell">
+    <div class="ops-lite-toolbar"><div class="ops-lite-tabs" role="tablist" aria-label="HR Operations views"><button type="button" role="tab" aria-selected="${tab==='employee'}" class="${tab==='employee'?'active':''}" onclick="opsSetTab('employee')">${iUser(15)} Employee Actions</button><button type="button" role="tab" aria-selected="${tab==='queues'}" class="${tab==='queues'?'active':''}" onclick="opsSetTab('queues')">${iCheck(15)} Work Queues <span>${workflowDue+pendingLeaves+openNte}</span></button></div><div class="ops-lite-links"><button class="btn btn-ghost btn-sm" onclick="go('employees')">Employee Directory</button>${canEdit()?`<button class="btn btn-primary btn-sm" onclick="openEmployeeForm()">${iPlus(14)} Add Employee</button>`:''}</div></div>
+    ${tab==='employee'?employeePanel:queuePanel}
+  </div>`;
+}
+
 const NAV = [
   {sec:'My Workspace',items:[
     {v:'selfService',label:'My HR Portal',icon:iUser,roles:['Employee','Manager']},
@@ -1816,6 +1877,7 @@ function employeePickerChoose(id,employeeId){
 function employeePickerClear(id){
   const picker=document.getElementById(`${id}_picker`);const input=document.getElementById(`${id}_search`);const hidden=document.getElementById(id);if(!picker||!input||!hidden)return;
   picker.dataset.selectedId='';hidden.value='';input.value='';employeePickerRender(id,'');input.focus();
+  const callback=picker.dataset.onSelect;if(callback&&typeof window[callback]==='function')window[callback]();
 }
 function employeePickerSet(id,reference){
   const employee=employeePickerFind({id:String(reference||''),name:String(reference||'')});
@@ -7730,7 +7792,7 @@ Object.assign(window, {
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard, dashboardOpenEmployees, dashboardOpenCases,
   renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, toggleEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, openTableViewSettings, saveTableViewPreferences, resetTableViewPreferences, tableViewDragStart, tableViewDragOver, tableViewDrop, tableViewDragEnd, tableViewMove, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, closeNavGroupPanel, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts, actionCenterSetLevel, actionCenterResetFilters, actionCenterPageGo, actionCenterPageSize,
-  renderUsers, renderWeeklyReport, renderOperationsWorkspace, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
+  renderUsers, renderWeeklyReport, renderOperationsWorkspace, opsSetTab, opsSelectEmployee, opsOpenSelectedTransaction, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   renderManpowerFulfillment, manpowerSetView, manpowerResetFilters, openManpowerRequestForm, saveManpowerRequest, deleteManpowerRequest, openManpowerRequestDetails, openManpowerRequirementForm, saveManpowerRequirement, openManpowerSlotForm, saveManpowerSlot, manpowerSlotReplacementChanged, exportManpowerFulfillment,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, saveDepartmentSetting, savePositionSetting, setTitle, shiftDate, statusBadge, storageSettingsChanged, testGoogleDriveConnection, switchAuthTab, switchSettingsTab, syncPositionSelect, syncUserExportControl, toggleCatalogQuickAdd, catalogQuickAddKeydown, saveCatalogQuickAdd, openDepartmentSetting, openPositionSetting, toCSV,
   toast, todayISO, togglePasswordVisibility, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, serverTablePageGo, serverTablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, openInformationNote, openModuleInformation, paginationMeta, paginationHTML, paginationReset, paginateRows,
