@@ -45,3 +45,10 @@ test('session restoration prevents a login-screen flash',()=>{
   assert.match(source,/if\(data\.session\)await bootAuthenticated/);
   assert.match(source,/else revealSessionUI\(\)/);
 });
+
+test('sidebar brand uses the actual logo and opens Dashboard',()=>{
+  assert.match(index,/class="brand brand-home"/);
+  assert.match(index,/onclick="go\('dashboard'\);closeSidebar\(\)"/);
+  assert.match(index,/src="assets\/logo-transparent\.png"/);
+  assert.match(index,/aria-label="Open Dashboard"/);
+});

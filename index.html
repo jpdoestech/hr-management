@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
 <link rel="stylesheet" href="css/app.css?v=20260930-8">
-  <link rel="stylesheet" href="css/professional.css?v=20261001-23">
+  <link rel="stylesheet" href="css/professional.css?v=20261001-24">
 <meta name="theme-color" content="#062451">
 <link rel="icon" href="assets/slsc-mark.svg" type="image/svg+xml">
 </head>
@@ -77,10 +77,9 @@
 <!-- ============ APP SHELL ============ -->
 <div id="app">
   <aside id="sidebar">
-    <div class="brand">
-      <div class="badge">S</div>
-      <div class="brand-txt"><div class="t1">SLSC HR</div><div class="t2">Online Portal</div></div>
-    </div>
+    <button class="brand brand-home" type="button" onclick="go('dashboard');closeSidebar()" aria-label="Open Dashboard" title="Dashboard">
+      <img src="assets/logo-transparent.png" alt="Strellas Labor Service Cooperative">
+    </button>
     <nav id="nav"></nav>
     <button class="btn btn-ghost btn-block logout" onclick="doLogout()">Log Out</button>
   </aside>
