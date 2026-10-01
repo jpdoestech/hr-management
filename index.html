@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>SLSC HR Management — Professional HR Platform</title>
+<title>SLSC HR Management — Online Portal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -27,7 +27,7 @@
   <div class="auth-stage">
     <section class="auth-card" aria-labelledby="auth-title">
       <div class="auth-head">
-        <div class="auth-portal-label"><span aria-hidden="true">S</span><div><b>SLSC HRIS</b><small>People Operations Portal</small></div></div>
+        <div class="auth-portal-label"><span aria-hidden="true">S</span><div><b>SLSC HRIS</b><small>Online Portal</small></div></div>
         <h1 id="auth-title">Welcome back</h1>
         <p id="auth-subtitle">Sign in to continue to your HR workspace.</p>
       </div>
@@ -42,7 +42,7 @@
         <form id="login-form" role="tabpanel" aria-labelledby="tab-login" onsubmit="return doLogin(event)">
           <div class="field auth-field"><label for="li-user">Email or username</label><input id="li-user" type="text" placeholder="Enter your email or username" autocomplete="username" required></div>
           <div class="field auth-field"><label for="li-pass">Password</label><div class="auth-password"><input id="li-pass" type="password" placeholder="Enter your password" autocomplete="current-password" required><button type="button" onclick="togglePasswordVisibility('li-pass',this)" aria-label="Show password">Show</button></div></div>
-          <button type="submit" class="btn btn-primary btn-block auth-submit">Sign in securely</button>
+          <button type="submit" class="btn btn-primary btn-block auth-submit">Sign in</button>
         </form>
 
         <form id="register-form" role="tabpanel" aria-labelledby="tab-register" style="display:none;" onsubmit="return doRegister(event)">
@@ -53,7 +53,7 @@
             <div class="field auth-field"><label for="rg-pass">Password</label><div class="auth-password"><input id="rg-pass" type="password" placeholder="Create a password" autocomplete="new-password" required><button type="button" onclick="togglePasswordVisibility('rg-pass',this)" aria-label="Show password">Show</button></div></div>
             <div class="field auth-field"><label for="rg-pass2">Confirm password</label><div class="auth-password"><input id="rg-pass2" type="password" placeholder="Repeat your password" autocomplete="new-password" required><button type="button" onclick="togglePasswordVisibility('rg-pass2',this)" aria-label="Show password">Show</button></div></div>
           </div>
-          <button type="submit" class="btn btn-primary btn-block auth-submit">Create HR account</button>
+          <button type="submit" class="btn btn-primary btn-block auth-submit">Create account</button>
         </form>
 
         <div class="auth-hint"><span class="auth-hint-mark" aria-hidden="true">✓</span><span><b>Protected access.</b> New accounts begin with Employee access and must be linked to an employee record by an Administrator.</span></div>
@@ -74,7 +74,7 @@
   <aside id="sidebar">
     <div class="brand">
       <div class="badge">S</div>
-      <div class="brand-txt"><div class="t1">SLSC HR</div><div class="t2">Online System</div></div>
+      <div class="brand-txt"><div class="t1">SLSC HR</div><div class="t2">Online Portal</div></div>
     </div>
     <nav id="nav"></nav>
     <button class="btn btn-ghost btn-block logout" onclick="doLogout()">Log Out</button>
@@ -88,7 +88,7 @@
         </button>
         <div>
           <h2 id="tb-title">Dashboard</h2>
-          <div class="sub" id="tb-sub">Overview of all HR &amp; disciplinary records</div>
+          <div class="sub" id="tb-sub">Overview of all HR &amp; online records</div>
         </div>
       </div>
       <div class="topbar-right">
