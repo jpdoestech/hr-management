@@ -641,8 +641,10 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = blankDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeBranchFilter:'', employeeStatusFilter:'', employeeClassFilter:'', employeeFiltersExpanded:false, lifecycleSearch:'', lifecycleFilter:'', checklistSearch:'', checklistType:'', checklistStatus:'Active', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', actionSearch:'', actionLevel:'all', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, opsTab:'employee', opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', workflowPriority:'', workflowDepartment:'', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', analyticsBranch:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', manpowerView:'requests', manpowerSearch:'', manpowerBranch:'', manpowerStatus:'', manpowerRisk:'', manpowerType:'', tablePages:{}, tablePageSizes:{} };
+let STATE = { view:'dashboard', dashboardTab:'priorities', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeBranchFilter:'', employeeStatusFilter:'', employeeClassFilter:'', employeeFiltersExpanded:false, lifecycleSearch:'', lifecycleFilter:'', checklistSearch:'', checklistType:'', checklistStatus:'Active', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', actionSearch:'', actionLevel:'all', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, weeklyTab:'summary', opsTab:'employee', opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', workflowPriority:'', workflowDepartment:'', analyticsTab:'overview', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', analyticsBranch:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationTab:'overview', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', manpowerView:'requests', manpowerSearch:'', manpowerBranch:'', manpowerStatus:'', manpowerRisk:'', manpowerType:'', tablePages:{}, tablePageSizes:{} };
 let REPORT_CACHE = {cases:[], atdRows:[]};
+let DASHBOARD_CASE_CACHE = null;
+let ANALYTICS_CASE_CACHE = null;
 
 /* ---------------- toast ---------------- */
 let toastT;
@@ -737,7 +739,13 @@ async function bootAuthenticated(user){
       await workflowSyncTasks({silent:true});
     }
     enterApp();
-  }catch(e){ authErr('Could not load the HR database: '+e.message); await supabase.auth.signOut(); }
+  }catch(e){ authErr('Could not load the HR database: '+e.message); await supabase.auth.signOut(); revealSessionUI(); }
+}
+
+function revealSessionUI(){
+  document.body.classList.remove('session-pending');
+  const splash=document.getElementById('session-splash');
+  if(splash)splash.style.display='none';
 }
 
 async function doLogout(){
@@ -749,6 +757,7 @@ async function doLogout(){
   closeNotificationPanel();
   await supabase.auth.signOut();
   SESSION=null;
+  revealSessionUI();
   document.getElementById('app').classList.remove('on');
   document.getElementById('auth-screen').style.display='';
   document.getElementById('li-user').value=''; document.getElementById('li-pass').value='';
@@ -904,6 +913,7 @@ async function openNotification(id,view,recordId){
 }
 
 function enterApp(initialView='dashboard'){
+  revealSessionUI();
   document.getElementById('auth-screen').style.display='none';
   document.getElementById('app').classList.add('on');
   document.getElementById('tb-name').textContent = SESSION.fullName;
@@ -2462,14 +2472,21 @@ async function dashboardOpenCases(status=''){
   await go('cases');
   if(status){ STATE.filter=status; STATE.tablePages={}; await renderCases(); }
 }
-async function renderDashboard(){
+function dashboardSetTab(tab){
+  STATE.dashboardTab=['priorities','planning','records'].includes(tab)?tab:'priorities';
+  renderDashboard({skipFetch:true});
+}
+async function renderDashboard({skipFetch=false}={}){
   setTitle('Dashboard', `Overview of all HR & disciplinary records — ${DB.settings.orgName}`);
-  document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Loading dashboard…</div></div>';
+  if(!skipFetch)document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Loading dashboard…</div></div>';
   try{
-    const [{data:cases,error:caseError}]=await Promise.all([
-      supabase.from('hr_cases').select('id,case_number,employee_name,department,status,opened_at,closed_at,updated_at').order('updated_at',{ascending:false}).limit(250)
-    ]);
-    if(caseError) throw caseError;
+    let cases=DASHBOARD_CASE_CACHE;
+    if(!skipFetch||!Array.isArray(cases)){
+      const {data,error}=await supabase.from('hr_cases').select('id,case_number,employee_name,department,status,opened_at,closed_at,updated_at').order('updated_at',{ascending:false}).limit(250);
+      if(error) throw error;
+      cases=data||[];
+      DASHBOARD_CASE_CACHE=cases;
+    }
     if(STATE.view!=='dashboard') return;
 
     const today=todayISO();
@@ -2528,6 +2545,7 @@ async function renderDashboard(){
     const followUpCardMeta=openNTE+evalOverdue.length?'NTE and evaluation items requiring review':'No overdue HR follow-ups';
     const atdCardMeta=atdOpen?`${atdOpen} deduction record${atdOpen===1?'':'s'} need review`:'No outstanding deductions';
 
+    const dashboardTab=['priorities','planning','records'].includes(STATE.dashboardTab)?STATE.dashboardTab:'priorities';
     const html=`
       <div class="dashboard-hero">
         <div>
@@ -2549,7 +2567,9 @@ async function renderDashboard(){
         <button type="button" class="dashboard-kpi dashboard-kpi-link" style="--accent:var(--ink)" onclick="go('atd')"><span class="top"><span class="label">ATD Outstanding</span><span class="icon">₱</span></span><span class="value" style="font-size:22px;">${peso(atdOutstanding)}</span><span class="meta">${atdCardMeta}</span></button>
       </div>
 
-      <div class="dashboard-grid">
+      <div class="workspace-tabs dashboard-view-tabs" role="tablist" aria-label="Dashboard sections">${[['priorities',`Priorities (${attention.length})`],['planning',`Planning (${upcoming.length})`],['records','Records & Mix']].map(([value,label])=>`<button type="button" role="tab" aria-selected="${dashboardTab===value}" class="${dashboardTab===value?'active':''}" onclick="dashboardSetTab('${value}')">${label}</button>`).join('')}</div>
+
+      <div class="dashboard-grid ${dashboardTab==='priorities'?'':'workspace-section-hidden'}">
         <div class="panel">
           <div class="dashboard-panel-head"><div><h3>Attention Required</h3><div class="desc">Items that may need an HR follow-up today.</div></div><button class="btn btn-ghost btn-sm" onclick="go('analytics')">View All</button></div>
           <div class="alert-grid">
@@ -2564,7 +2584,7 @@ async function renderDashboard(){
         </div>
       </div>
 
-      <div class="dashboard-grid equal">
+      <div class="dashboard-grid equal ${dashboardTab==='planning'?'':'workspace-section-hidden'}">
         <div class="panel">
           <div class="dashboard-panel-head"><div><h3>Active Cases by Department</h3><div class="desc">Open workload grouped by current department.</div></div></div>
           <div class="chart-list">
@@ -2580,7 +2600,7 @@ async function renderDashboard(){
         </div>
       </div>
 
-      <div class="dashboard-grid equal">
+      <div class="dashboard-grid equal ${dashboardTab==='records'?'':'workspace-section-hidden'}">
         <div class="panel">
           <div class="dashboard-panel-head"><div><h3>Recent HR Cases</h3><div class="desc">Most recently updated case records.</div></div><button class="btn btn-ghost btn-sm" onclick="go('cases')">View All</button></div>
           <div class="tablewrap"><table class="dashboard-mini-table"><thead><tr><th>Case</th><th>Employee</th><th>Status</th><th>Age</th></tr></thead><tbody>
@@ -2601,7 +2621,7 @@ async function renderDashboard(){
         </div>
       </div>
 
-      <div class="panel">
+      <div class="panel dashboard-pulse ${dashboardTab==='records'?'':'workspace-section-hidden'}">
         <div class="dashboard-panel-head"><div><h3>HR Operations Pulse</h3><div class="desc">A compact view of the modules most often reviewed by management.</div></div><button class="btn btn-ghost btn-sm" onclick="go('weeklyReport')">Weekly Report</button></div>
         <div class="grid cols-4">
           <div class="metric-card"><div class="k">Incidents</div><div class="v">${DB.incidents.length}</div><div class="s">Recorded incident reports</div></div>
@@ -4729,8 +4749,13 @@ function weeklyShiftWeek(days){
   STATE.weekStart = addDaysISO(STATE.weekStart || mondayOf(todayISO()), days);
   renderWeeklyReport();
 }
+function weeklySetTab(tab){
+  STATE.weeklyTab=['summary','disciplinary','leave','oncall','atd'].includes(tab)?tab:'summary';
+  renderWeeklyReport();
+}
 function toggleWeeklyCat(cat){
   STATE.weeklyOpenCat = STATE.weeklyOpenCat===cat? null : cat;
+  STATE.weeklyTab='summary';
   renderWeeklyReport();
 }
 function renderWeeklyReport(){
@@ -4764,10 +4789,11 @@ function renderWeeklyReport(){
   const leaveWeek = DB.leaves.filter(l=>overlapsRange(l.startDate, l.endDate, start, end));
   const oncallWeek = DB.oncall.filter(o=>overlapsRange(o.startDate, o.endDate, start, end));
 
+  const tab=['summary','disciplinary','leave','oncall','atd'].includes(STATE.weeklyTab)?STATE.weeklyTab:'summary';
   const html = `
-  <div class="sectionhead">
+  <div class="sectionhead weekly-report-head">
     <div><h2>Weekly Report</h2><p>${fmtDate(start)} – ${fmtDate(end)}</p></div>
-    <div style="display:flex;gap:8px;align-items:center;">
+    <div class="weekly-period-actions">
       <button class="btn btn-ghost btn-sm" onclick="weeklyShiftWeek(-7)">&lsaquo; Prev Week</button>
       <button class="btn btn-ghost btn-sm" onclick="STATE.weekStart=mondayOf(todayISO()); renderWeeklyReport();">This Week</button>
       <button class="btn btn-ghost btn-sm" onclick="weeklyShiftWeek(7)">Next Week &rsaquo;</button>
@@ -4775,7 +4801,9 @@ function renderWeeklyReport(){
     </div>
   </div>
 
-  <div class="grid cols-5" style="gap:10px;">
+  <div class="workspace-tabs weekly-report-tabs" role="tablist" aria-label="Weekly report sections">${[['summary','Movements'],['disciplinary',`Disciplinary (${disciplinaryRows.length})`],['leave',`Leave (${leaveWeek.length})`],['oncall',`On-Call (${oncallWeek.length})`],['atd',`ATD (${DB.atd.length})`]].map(([value,label])=>`<button type="button" role="tab" aria-selected="${tab===value}" class="${tab===value?'active':''}" onclick="weeklySetTab('${value}')">${label}</button>`).join('')}</div>
+
+  <div class="weekly-summary ${tab==='summary'?'':'workspace-section-hidden'}"><div class="grid cols-5 weekly-movement-grid">
     ${cats.map(c=>`
       <div class="stat" style="--accent:var(--brass);cursor:pointer;${STATE.weeklyOpenCat===c.key?'outline:2px solid var(--brass);':''}" onclick="toggleWeeklyCat('${c.key}')">
         <div class="lbl">${c.label}</div><div class="val">${c.rows.length}</div><div class="sub">Click to view</div>
@@ -4786,9 +4814,9 @@ function renderWeeklyReport(){
     return `<div class="tablewrap" style="margin-top:14px;"><table class="data-table">
       <thead><tr><th>Employee</th><th>Department</th>${open.key==='transferred'?'<th>From</th><th>To</th><th>Date</th>':'<th>Status</th><th>Date</th>'}</tr></thead>
       <tbody>${open.rows.length? open.rows.map(r=> open.key==='transferred'? `<tr><td><b>${esc(r.employeeName)}</b></td><td>${esc(r.department||'—')}</td><td>${esc(r.fromDepartment)}</td><td>${esc(r.toDepartment)}</td><td>${fmtDate(r.toDate)}</td></tr>` : `<tr><td><b>${esc(r.name)}</b></td><td>${esc(r.department||'—')}</td><td>${statusBadge(r.status, EMP_STATUS_MAP)}</td><td>${fmtDate(r.statusDate||r.dateHired)}</td></tr>` ).join('') : `<tr><td colspan="5"><div class="empty"><b>None this week</b></div></td></tr>`}</tbody>
-    </table></div>`; })()}
+    </table></div>`; })()}</div>
 
-  <div class="panel" style="margin-top:18px;">
+  <div class="panel weekly-report-panel ${tab==='disciplinary'?'':'workspace-section-hidden'}">
     <h3>Weekly Disciplinary Activity</h3>
     <div class="desc">${disciplinaryRows.length} CVR / NTE / NOD record(s) dated this week.</div>
     ${disciplinaryRows.length? `<div class="tablewrap"><table class="data-table">
@@ -4797,7 +4825,7 @@ function renderWeeklyReport(){
     </table></div>` : '<div class="small">No disciplinary activity dated within this week.</div>'}
   </div>
 
-  <div class="panel" style="margin-top:14px;">
+  <div class="panel weekly-report-panel ${tab==='leave'?'':'workspace-section-hidden'}">
     <h3>Weekly Leave</h3>
     <div class="desc">${leaveWeek.length} leave record(s) overlapping this week.</div>
     ${leaveWeek.length? `<div class="tablewrap"><table class="data-table">
@@ -4806,7 +4834,7 @@ function renderWeeklyReport(){
     </table></div>` : '<div class="small">No leave overlapping this week.</div>'}
   </div>
 
-  <div class="panel" style="margin-top:14px;">
+  <div class="panel weekly-report-panel ${tab==='oncall'?'':'workspace-section-hidden'}">
     <h3>Weekly On-Call</h3>
     <div class="desc">${oncallWeek.length} on-call / replacement personnel active during this week.</div>
     ${oncallWeek.length? `<div class="tablewrap"><table class="data-table">
@@ -4815,7 +4843,7 @@ function renderWeeklyReport(){
     </table></div>` : '<div class="small">No on-call assignments active during this week.</div>'}
   </div>
 
-  <div class="panel" style="margin-top:14px;">
+  <div class="panel weekly-report-panel ${tab==='atd'?'':'workspace-section-hidden'}">
     <h3>ATD Monitoring</h3>
     <div class="desc">All ${DB.atd.length} Authority to Deduct record(s) — deductions completed or still outstanding. <a href="#" onclick="go('atd'); return false;" style="color:var(--brass);">Open full ATD module →</a></div>
     ${DB.atd.length? `<div class="tablewrap"><table class="data-table">
@@ -5574,8 +5602,8 @@ function workflowResetFilters(){
   paginationReset(STATE,'workflow:list');
   renderWorkflowCenter();
 }
-function automationPageGo(_scope,page){ STATE.tablePages ||= {}; const cur=STATE.tablePages['automation:tasks']||{page:1,size:10,signature:''}; STATE.tablePages['automation:tasks']={...cur,page:Math.max(1,Number(page)||1)}; renderAutomationCenter(); }
-function automationPageSize(_scope,size){ STATE.tablePages ||= {}; STATE.tablePageSizes ||= {}; const nextSize=Number(size)||10; const cur=STATE.tablePages['automation:tasks']||{page:1,size:nextSize,signature:''}; STATE.tablePageSizes['automation:tasks']=nextSize; STATE.tablePages['automation:tasks']={...cur,page:1,size:nextSize,signature:''}; renderAutomationCenter(); }
+function automationPageGo(_scope,page){ STATE.tablePages ||= {}; const cur=STATE.tablePages['automation:tasks']||{page:1,size:10,signature:''}; STATE.tablePages['automation:tasks']={...cur,page:Math.max(1,Number(page)||1)}; renderAutomationCenter({skipEngine:true}); }
+function automationPageSize(_scope,size){ STATE.tablePages ||= {}; STATE.tablePageSizes ||= {}; const nextSize=Number(size)||10; const cur=STATE.tablePages['automation:tasks']||{page:1,size:nextSize,signature:''}; STATE.tablePageSizes['automation:tasks']=nextSize; STATE.tablePages['automation:tasks']={...cur,page:1,size:nextSize,signature:''}; renderAutomationCenter({skipEngine:true}); }
 
 async function renderWorkflowCenter(){
   setTitle('Workflow & Approvals','A unified work queue for approvals, reviews, deadlines, and HR tasks.');
@@ -5804,7 +5832,7 @@ async function toggleAutomationRule(id,enabled){
   logAudit(`${enabled?'Enabled':'Disabled'} automation rule: ${AUTOMATION_RULES.find(r=>r.id===id)?.label||id}`);
   toast(`Automation rule ${enabled?'enabled':'disabled'}.`);
   await runAutomationEngine({manual:false,silent:true});
-  renderAutomationCenter();
+  renderAutomationCenter({skipEngine:true});
 }
 function automationRunSummary(run){
   if(!run) return 'No automation runs yet.';
@@ -5813,10 +5841,16 @@ function automationRunSummary(run){
 }
 function automationLastRun(){ return (DB.automationRuns||[]).slice().sort((a,b)=>String(b.runAt||'').localeCompare(String(a.runAt||'')))[0]||null; }
 function automationOpenTask(id){ openWorkflowTask(id); }
-async function renderAutomationCenter(){
+function automationSetTab(tab){
+  STATE.automationTab=['overview','rules','work','history'].includes(tab)?tab:'overview';
+  renderAutomationCenter({skipEngine:true});
+}
+async function renderAutomationCenter({skipEngine=false}={}){
   setTitle('Automation Center','Automatic HR task generation, deadline escalation, lifecycle preparation, and governance follow-up.');
-  document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Running current HR automation rules…</div></div>';
-  await runAutomationEngine({silent:true});
+  if(!skipEngine){
+    document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Running current HR automation rules…</div></div>';
+    await runAutomationEngine({silent:true});
+  }
   ensureAutomationSettings();
   const tasks=(DB.workflowTasks||[]).filter(t=>t.automationGenerated);
   const pending=tasks.filter(t=>t.status==='Pending');
@@ -5828,19 +5862,18 @@ async function renderAutomationCenter(){
   const taskPage=paginateRows(visibleTasks,STATE,'automation:tasks',10);
   const runs=(DB.automationRuns||[]).slice().sort((a,b)=>String(b.runAt||'').localeCompare(String(a.runAt||''))).slice(0,8);
   const byRule={}; pending.forEach(t=>byRule[t.automationRuleId]=(byRule[t.automationRuleId]||0)+1);
-  const html=`<div class="automation-hero"><div><h1>Automation Center</h1><p>Rules continuously inspect existing HR records and coordinate work through the Workflow &amp; Approvals engine. Automation does not make personnel decisions or overwrite source HR records.</p></div><div class="automation-actions">${canEdit()?`<button class="btn btn-brass" onclick="runAutomationEngine({manual:true}).then(()=>renderAutomationCenter())">${iCheck(15)} Run Now</button>`:''}<button class="btn btn-ghost" onclick="go('workflow')">Open Workflow</button><button class="btn btn-ghost" onclick="go('dataQuality')">Data Quality</button></div></div>
-    <div class="automation-kpis">
+  const tab=['overview','rules','work','history'].includes(STATE.automationTab)?STATE.automationTab:'overview';
+  const kpis=`<div class="automation-kpis">
       <div class="automation-kpi" style="--accent:var(--ink)"><div class="k">Enabled Rules</div><div class="v">${enabled}</div><div class="s">${AUTOMATION_RULES.length} configured rule${AUTOMATION_RULES.length===1?'':'s'}</div></div>
       <div class="automation-kpi" style="--accent:${pending.length?'var(--amber)':'var(--forest)'}"><div class="k">Automation Tasks</div><div class="v">${pending.length}</div><div class="s">Pending generated work</div></div>
       <div class="automation-kpi" style="--accent:${overdue.length?'var(--rust)':'var(--forest)'}"><div class="k">Overdue</div><div class="v">${overdue.length}</div><div class="s">Generated tasks past due</div></div>
       <div class="automation-kpi" style="--accent:var(--brass)"><div class="k">Last Run</div><div class="v" style="font-size:16px;line-height:1.2;">${last?fmtDate(String(last.runAt).slice(0,10)):'—'}</div><div class="s">${last?automationRunSummary(last):'Automation has not run yet'}</div></div>
-    </div>
-    <div class="automation-grid">
-      <div class="automation-panel"><div class="automation-panel-head"><div><h3>Automation Rules</h3><div class="desc">Built-in HR rules that create or update operational work.</div></div></div><div class="automation-rule-list">${AUTOMATION_RULES.map(r=>`<div class="automation-rule ${automationRuleEnabled(r.id)?'':'disabled'}"><div><div class="title">${esc(r.label)}</div><div class="desc">${esc(r.description)}</div><div class="meta"><span class="tag">${esc(r.category)}</span><span class="tag">${byRule[r.id]||0} pending</span></div></div><label class="automation-switch"><input type="checkbox" ${automationRuleEnabled(r.id)?'checked':''} ${canEdit()?'':'disabled'} onchange="toggleAutomationRule('${esc(r.id)}',this.checked)"> Enabled</label><button class="btn btn-ghost btn-sm" onclick="go('workflow')">View Work</button></div>`).join('')}</div><div class="automation-rule-note"><b>Execution model:</b> the current browser deployment runs automation when the application opens and on a periodic timer while it remains open. It is designed so a secure server-side scheduler can later call the same rule contracts without exposing service credentials in the frontend.</div></div>
-      <div class="automation-panel"><div class="automation-panel-head"><div><h3>Automation Health</h3><div class="desc">Current generated workload and latest run status.</div></div></div><div style="padding:9px;">${Object.entries(byRule).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([id,n])=>{const r=AUTOMATION_RULES.find(x=>x.id===id);return `<div class="automation-insight"><div class="k">${esc(r?.category||id)}</div><div class="v">${n}</div><div class="s">${esc(r?.label||id)} currently has pending generated work.</div></div>`;}).join('')||'<div class="automation-empty"><b>No generated work</b>Current automation rules have no pending tasks.</div>'}${last?`<div class="automation-insight"><div class="k">Latest Run</div><div class="v" style="font-size:16px;">${esc(last.mode||'Automatic')}</div><div class="s">${fmtDate(String(last.runAt||'').slice(0,10))} · ${esc(automationRunSummary(last))}</div></div>`:''}</div></div>
-    </div>
-    <div class="automation-panel" style="margin-bottom:16px;"><div class="automation-panel-head"><div><h3>Generated Work</h3><div class="desc">Automation-created tasks appear in the same Workflow &amp; Approvals queue used by HR staff.</div></div></div><div class="automation-rule-note" style="margin:9px 9px 0;"><b>Search:</b> <input class="field" data-search-key="automationSearch" type="search" autocomplete="off" style="margin:0;padding:8px 10px;width:100%;border:1px solid var(--line-2);border-radius:7px;" placeholder="Search generated tasks, employees, departments…" value="${esc(STATE.automationSearch||'')}" oninput="queueSearchRender(this,'automationSearch',renderAutomationCenter)"></div><div class="automation-run-list">${taskPage.rows.map(t=>`<div class="automation-run-row ${t.status==='Pending'&&t.dueDate&&t.dueDate<todayISO()?'failed':''}"><span class="dot"></span><div><div class="title">${esc(t.title)}</div><div class="meta">${esc(t.description||'')}${t.employeeName?' · '+esc(t.employeeName):''}${t.dueDate?' · Due '+esc(fmtDate(t.dueDate)):''}</div></div><div class="right"><button class="btn btn-ghost btn-sm" onclick="automationOpenTask('${esc(t.id)}')">Open</button></div></div>`).join('')||'<div class="automation-empty"><b>No pending generated tasks</b>Automation is currently caught up.</div>'}</div>${taskPage.meta.total?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${taskPage.meta.start}–${taskPage.meta.end} <span>of ${taskPage.meta.total} generated tasks</span></div>${paginationHTML(taskPage.meta,'automation:tasks',{go:'automationPageGo',size:'automationPageSize'})}</div>`:''}</div>
-    <div class="automation-panel"><div class="automation-panel-head"><div><h3>Recent Automation Runs</h3><div class="desc">Durable run history retained in the HR record store.</div></div></div><div class="automation-run-list">${runs.length?runs.map(run=>`<div class="automation-run-row ${run.errors?'failed':''}"><span class="dot"></span><div><div class="title">${esc(run.mode||'Automatic')} automation run</div><div class="meta">${fmtDate(String(run.runAt||'').slice(0,10))} · ${esc(automationRunSummary(run))}</div></div><div class="right small">${run.completedAt?esc(String(run.completedAt).slice(11,16)):''}</div></div>`).join(''):'<div class="automation-empty"><b>No runs recorded</b>The automation engine will create a run entry after its first execution.</div>'}</div></div>`;
+    </div>`;
+  const rulesPanel=`<div class="automation-panel"><div class="automation-panel-head"><div><h3>Automation Rules</h3><div class="desc">Built-in rules that create or update operational work.</div></div></div><div class="automation-rule-list">${AUTOMATION_RULES.map(r=>`<div class="automation-rule ${automationRuleEnabled(r.id)?'':'disabled'}"><div><div class="title">${esc(r.label)}</div><div class="desc">${esc(r.description)}</div><div class="meta"><span class="tag">${esc(r.category)}</span><span class="tag">${byRule[r.id]||0} pending</span></div></div><label class="automation-switch"><input type="checkbox" ${automationRuleEnabled(r.id)?'checked':''} ${canEdit()?'':'disabled'} onchange="toggleAutomationRule('${esc(r.id)}',this.checked)"> Enabled</label><button class="btn btn-ghost btn-sm" onclick="go('workflow')">View Work</button></div>`).join('')}</div><div class="automation-rule-note"><b>Execution model:</b> rules run when the application opens and periodically while it remains open. Personnel decisions and source HR records are never changed automatically.</div></div>`;
+  const healthPanel=`<div class="automation-panel"><div class="automation-panel-head"><div><h3>Automation Health</h3><div class="desc">Current generated workload and latest run status.</div></div></div><div class="automation-health-list">${Object.entries(byRule).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([id,n])=>{const r=AUTOMATION_RULES.find(x=>x.id===id);return `<div class="automation-insight"><div class="k">${esc(r?.category||id)}</div><div class="v">${n}</div><div class="s">${esc(r?.label||id)} has pending generated work.</div></div>`;}).join('')||'<div class="automation-empty"><b>No generated work</b>Current automation rules have no pending tasks.</div>'}${last?`<div class="automation-insight"><div class="k">Latest Run</div><div class="v automation-run-mode">${esc(last.mode||'Automatic')}</div><div class="s">${fmtDate(String(last.runAt||'').slice(0,10))} · ${esc(automationRunSummary(last))}</div></div>`:''}</div></div>`;
+  const workPanel=`<div class="automation-panel"><div class="automation-panel-head automation-work-head"><div><h3>Generated Work</h3><div class="desc">Automation-created tasks use the same Workflow &amp; Approvals queue.</div></div><div class="searchbox automation-task-search">${iSearch(14)}<input data-search-key="automationSearch" type="search" autocomplete="off" placeholder="Search tasks, employees, departments…" value="${esc(STATE.automationSearch||'')}" oninput="queueSearchRender(this,'automationSearch',()=>renderAutomationCenter({skipEngine:true}))"></div></div><div class="automation-run-list">${taskPage.rows.map(t=>`<div class="automation-run-row ${t.status==='Pending'&&t.dueDate&&t.dueDate<todayISO()?'failed':''}"><span class="dot"></span><div><div class="title">${esc(t.title)}</div><div class="meta">${esc(t.description||'')}${t.employeeName?' · '+esc(t.employeeName):''}${t.dueDate?' · Due '+esc(fmtDate(t.dueDate)):''}</div></div><div class="right"><button class="btn btn-ghost btn-sm" onclick="automationOpenTask('${esc(t.id)}')">Open</button></div></div>`).join('')||'<div class="automation-empty"><b>No pending generated tasks</b>Automation is currently caught up.</div>'}</div>${taskPage.meta.total?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${taskPage.meta.start}–${taskPage.meta.end} <span>of ${taskPage.meta.total} generated tasks</span></div>${paginationHTML(taskPage.meta,'automation:tasks',{go:'automationPageGo',size:'automationPageSize'})}</div>`:''}</div>`;
+  const historyPanel=`<div class="automation-panel"><div class="automation-panel-head"><div><h3>Recent Automation Runs</h3><div class="desc">Durable run history retained in the HR record store.</div></div></div><div class="automation-run-list">${runs.length?runs.map(run=>`<div class="automation-run-row ${run.errors?'failed':''}"><span class="dot"></span><div><div class="title">${esc(run.mode||'Automatic')} automation run</div><div class="meta">${fmtDate(String(run.runAt||'').slice(0,10))} · ${esc(automationRunSummary(run))}</div></div><div class="right small">${run.completedAt?esc(String(run.completedAt).slice(11,16)):''}</div></div>`).join(''):'<div class="automation-empty"><b>No runs recorded</b>The automation engine will create a run entry after its first execution.</div>'}</div></div>`;
+  const html=`<div class="workspace-commandbar"><div class="workspace-tabs" role="tablist" aria-label="Automation Center views">${[['overview','Overview'],['rules','Rules'],['work',`Generated Work (${pending.length})`],['history','Run History']].map(([value,label])=>`<button type="button" role="tab" aria-selected="${tab===value}" class="${tab===value?'active':''}" onclick="automationSetTab('${value}')">${label}</button>`).join('')}</div><div class="automation-actions">${canEdit()?`<button class="btn btn-primary btn-sm" onclick="runAutomationEngine({manual:true}).then(()=>renderAutomationCenter({skipEngine:true}))">${iCheck(14)} Run Now</button>`:''}<button class="btn btn-ghost btn-sm" onclick="go('workflow')">Open Workflow</button><button class="btn btn-ghost btn-sm" onclick="go('dataQuality')">Data Quality</button></div></div>${tab==='overview'?`${kpis}<div class="automation-grid">${healthPanel}${workPanel}</div>`:tab==='rules'?rulesPanel:tab==='work'?workPanel:historyPanel}`;
   document.getElementById('content').innerHTML=html;
 }
 
@@ -6325,6 +6358,10 @@ function analyticsSetPreset(preset){
   const r=analyticsPresetRange(preset); STATE.analyticsRange=preset; STATE.analyticsStart=r.start; STATE.analyticsEnd=r.end;
   renderAnalytics();
 }
+function analyticsSetTab(tab){
+  STATE.analyticsTab=['overview','workforce','activity','followup'].includes(tab)?tab:'overview';
+  renderAnalytics({skipFetch:true});
+}
 function analyticsMonthKey(date){
   const s=String(date||'').slice(0,7); return /^\d{4}-\d{2}$/.test(s)?s:'';
 }
@@ -6391,14 +6428,19 @@ async function exportAnalyticsSnapshot(){
   ];
   exportReportRows(`hr_analytics_${start}_to_${end}.csv`,rows,[{label:'Section',get:r=>r.section},{label:'Metric',get:r=>r.metric},{label:'Value',get:r=>r.value},{label:'Detail',get:r=>r.detail}]);
 }
-async function renderAnalytics(){
+async function renderAnalytics({skipFetch=false}={}){
   setTitle('Management Analytics','A decision-support view of workforce, cases, HR activity, and trends across the selected reporting period.');
-  document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Loading advanced analytics…</div></div>';
+  if(!skipFetch)document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Loading advanced analytics…</div></div>';
   try{
     const start=STATE.analyticsStart||addDaysISO(todayISO(),-89), end=STATE.analyticsEnd||todayISO(), dept=STATE.analyticsDept||'', branch=STATE.analyticsBranch||'';
     if(end<start){document.getElementById('content').innerHTML='<div class="panel"><div class="notice"><b>Invalid analytics period.</b> The end date must be on or after the start date.</div></div>';return;}
-    const {data:cases,error:caseError}=await supabase.from('hr_cases').select('id,case_number,employee_name,department,status,priority,due_date,opened_at,closed_at,updated_at,assigned_to').order('updated_at',{ascending:false}).limit(1500);
-    if(caseError) throw caseError;
+    let cases=ANALYTICS_CASE_CACHE;
+    if(!skipFetch||!Array.isArray(cases)){
+      const {data,error}=await supabase.from('hr_cases').select('id,case_number,employee_name,department,status,priority,due_date,opened_at,closed_at,updated_at,assigned_to').order('updated_at',{ascending:false}).limit(1500);
+      if(error) throw error;
+      cases=data||[];
+      ANALYTICS_CASE_CACHE=cases;
+    }
     const allCases=cases||[]; REPORT_CACHE.cases=allCases;
     const caseScope=allCases.filter(c=>(!dept||(c.department||'Unassigned')===dept)&&analyticsBranchMatch({employeeName:c.employee_name,department:c.department},branch));
     const periodCases=caseScope.filter(c=>reportInRange(String(c.opened_at||c.updated_at||'').slice(0,10),start,end));
@@ -6463,6 +6505,7 @@ async function renderAnalytics(){
     if(atdOutstanding>0) attention.push({title:`${peso(atdOutstanding)} ATD balance remaining`,meta:'Review current ATD collection records.',action:"go('atd')"});
 
     const rangeButtons=[['30d','30D'],['90d','90D'],['180d','180D'],['365d','1Y']];
+    const tab=['overview','workforce','activity','followup'].includes(STATE.analyticsTab)?STATE.analyticsTab:'overview';
     const html=`
       <div class="analytics-commandbar" aria-label="Analytics filters and actions">
         <div class="analytics-range-control"><span class="analytics-control-label">Range</span><div class="range-buttons">${rangeButtons.map(([v,l])=>`<button class="range-btn ${STATE.analyticsRange===v?'active':''}" onclick="analyticsSetPreset('${v}')">${l}</button>`).join('')}<button class="range-btn ${STATE.analyticsRange==='custom'?'active':''}" onclick="STATE.analyticsRange='custom';document.getElementById('analytics-start')?.focus()">Custom</button></div></div>
@@ -6476,6 +6519,8 @@ async function renderAnalytics(){
         <div class="analytics-command-actions">${informationNoteButton('workforceAnalytics')}${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportAnalyticsSnapshot()">${iDownload(14)} Export</button>`:''}<button class="btn btn-brass btn-sm" onclick="go('reports')">Reports</button></div>
       </div>
 
+      <div class="workspace-tabs analytics-view-tabs" role="tablist" aria-label="Management analytics sections">${[['overview','Overview'],['workforce','Workforce'],['activity','HR Activity'],['followup',`Follow-Up (${attention.length})`]].map(([value,label])=>`<button type="button" role="tab" aria-selected="${tab===value}" class="${tab===value?'active':''}" onclick="analyticsSetTab('${value}')">${label}</button>`).join('')}</div>
+
       <div class="analytics-kpis">
         <div class="metric-card"><div class="k">Current Headcount</div><div class="v">${employees.length}</div><div class="s">${activeEmployees.length} active / newly hired</div></div>
         <div class="metric-card"><div class="k">New Hires</div><div class="v">${hired.length}</div><div class="s">Within selected period</div></div>
@@ -6486,7 +6531,7 @@ async function renderAnalytics(){
         <div class="metric-card"><div class="k">HR Activity</div><div class="v">${activityTotal}</div><div class="s">Selected period across modules</div></div>
       </div>
 
-      <div class="analytics-grid equal">
+      <div class="analytics-grid equal ${tab==='overview'?'':'workspace-section-hidden'}">
         <div class="panel"><div class="dashboard-panel-head"><div><h3>Six-Month Workforce & Case Trend</h3><div class="desc">Monthly new hires, separations, and cases based on available record dates.</div></div></div>
           <div class="analytics-trend">${monthly.map(m=>`<div class="month"><div class="month-total">${m.hires+m.separations+m.cases}</div><div class="bars"><div class="bar" title="${m.hires} hires" style="height:${Math.max(2,Math.round(m.hires/maxTrend*125))}px"></div><div class="bar secondary" title="${m.separations} separations" style="height:${Math.max(2,Math.round(m.separations/maxTrend*125))}px"></div><div class="bar tertiary" title="${m.cases} cases" style="height:${Math.max(2,Math.round(m.cases/maxTrend*125))}px"></div></div><div class="month-label">${esc(analyticsMonthLabelFromKey(m.k))}</div></div>`).join('')}</div>
           <div class="analytics-legend"><span><i></i>New hires</span><span><i class="secondary"></i>Separations</span><span><i class="tertiary"></i>Cases</span></div>
@@ -6497,7 +6542,7 @@ async function renderAnalytics(){
         </div>
       </div>
 
-      <div class="analytics-grid equal">
+      <div class="analytics-grid equal ${tab==='workforce'?'':'workspace-section-hidden'}">
         <div class="panel"><div class="dashboard-panel-head"><div><h3>${branch?'Workforce by Department':'Workforce by Branch'}</h3><div class="desc">${branch?`Department distribution within ${esc(branch)}.`:'Organization-wide headcount by reporting branch.'}</div></div></div>
           <div class="chart-list">${topDepts.length?topDepts.map(([d,c],i)=>`<div class="chart-row"><div class="label" title="${esc(d)}">${esc(d)}</div><div class="chart-track"><div class="chart-fill ${i===0?'alt':''}" style="width:${Math.round(c/maxDept*100)}%"></div></div><div class="chart-count">${c}</div></div>`).join(''):'<div class="analytics-empty">No employee records match the selected scope.</div>'}</div>
         </div>
@@ -6507,7 +6552,7 @@ async function renderAnalytics(){
         </div>
       </div>
 
-      <div class="analytics-grid equal">
+      <div class="analytics-grid equal ${tab==='activity'?'':'workspace-section-hidden'}">
         <div class="panel"><div class="dashboard-panel-head"><div><h3>Case Status in Period</h3><div class="desc">Cases opened or updated during the selected period.</div></div></div>
           <div class="chart-list">${Object.keys(CASE_STATUS_MAP).map((status,i)=>{const c=caseStatus[status]||0;return `<div class="chart-row"><div class="label">${esc(status)}</div><div class="chart-track"><div class="chart-fill ${status==='Cancelled'?'danger':status==='Resolved'||status==='Closed'?'alt':'warn'}" style="width:${Math.round(c/maxCaseStatus*100)}%"></div></div><div class="chart-count">${c}</div></div>`;}).join('')}</div>
         </div>
@@ -6516,7 +6561,7 @@ async function renderAnalytics(){
         </div>
       </div>
 
-      <div class="analytics-grid equal">
+      <div class="analytics-grid equal ${tab==='followup'?'':'workspace-section-hidden'}">
         <div class="panel"><div class="dashboard-panel-head"><div><h3>Priority & Follow-Up Signals</h3><div class="desc">Current work requiring operational review.</div></div></div>
           <div class="analytics-rank-list">
             <div class="analytics-rank"><div class="num">01</div><div><div class="name">Overdue cases</div><div class="meta">Open cases past their recorded due date</div></div><div class="count">${overdueCases.length}</div></div>
@@ -6530,7 +6575,7 @@ async function renderAnalytics(){
         </div>
       </div>
 
-      <div class="panel"><div class="dashboard-panel-head"><div><h3>Operational Attention</h3><div class="desc">Signals generated from current HR records for follow-up.</div></div><button class="btn btn-ghost btn-sm" onclick="go('actionCenter')">Open Action Center</button></div>
+      <div class="panel analytics-attention-panel ${tab==='followup'?'':'workspace-section-hidden'}"><div class="dashboard-panel-head"><div><h3>Operational Attention</h3><div class="desc">Signals generated from current HR records for follow-up.</div></div><button class="btn btn-ghost btn-sm" onclick="go('actionCenter')">Open Action Center</button></div>
         <div class="attention-list">${attention.length?attention.slice(0,10).map(a=>`<div class="attention-item ${a.danger?'danger':''}" ${a.action?`onclick="${a.action}" style="cursor:pointer;"`:''}><span class="mark"></span><div class="body"><div class="title">${analyticsEsc(a.title)}</div><div class="meta">${analyticsEsc(a.meta)}</div></div></div>`).join(''):'<div class="analytics-empty">No attention items detected for the current scope.</div>'}</div>
         <div class="analytics-note">Analytics are descriptive summaries of records currently stored in the system. Metrics such as case age and overdue status are operational indicators and do not independently determine legal, disciplinary, or compliance outcomes.</div>
       </div>
@@ -7775,7 +7820,7 @@ Object.assign(window, {
   STATE,
   addDaysISO, atdComputeStatus, atdFillEmployee, atdPayslipCellHTML, atdRemaining, atdToggleCategory, atdTotalPaid,
   addCaseActivity, addCaseNote, caseActivityIcon, caseActivityLabel, caseDeadlineInfo, casePriorityBadge, caseWorkflowSteps, caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, setCaseWorkflowStatus, buildNotificationItems, closeNotificationPanel, markAllNotificationsRead, openNotification, goFromNotifications, refreshNotificationBadge, renderNotificationPanel, toggleNotificationPanel, analyticsApplyFilters, analyticsSetPreset, exportAnalyticsSnapshot,
-  renderSelfService, renderTeamApprovals, openProfileChangeRequest, saveProfileChangeRequest, openLeaveRequest, saveLeaveRequest, cancelSelfServiceRequest, openServiceRequestReview, reviewServiceRequest,
+  renderSelfService, renderTeamApprovals, openProfileChangeRequest, saveProfileChangeRequest, openLeaveRequest, saveLeaveRequest, cancelSelfServiceRequest, openServiceRequestReview, reviewServiceRequest, dashboardSetTab, weeklySetTab, automationSetTab, analyticsSetTab,
   renderLifecycleChecklists, openLifecycleChecklistForm, saveLifecycleChecklist, openLifecycleChecklist, openLifecycleChecklistItem, returnToLifecycleChecklist, saveLifecycleChecklistItem, cancelLifecycleChecklist, lifecycleTemplateChanged,
   workflowSyncTasks, workflowPendingCount, workflowFindTask, workflowOpenSource, workflowSaveTaskNote, saveWorkflowTaskNote, workflowAssignTask, workflowSaveAssignment, workflowCompleteTask, workflowDecideTask, openWorkflowTask, openWorkflowCreateForm, saveWorkflowManualTask, renderWorkflowCenter, workflowActionButtons, workflowPriorityBadge, workflowDueText, workflowPageGo, workflowPageSize, workflowSetQuickFilter, workflowResetFilters, automationPageGo, automationPageSize,
   AUTOMATION_RULES, automationPendingCount, ensureAutomationSettings, automationRuleEnabled, runAutomationEngine, toggleAutomationRule, automationOpenTask, renderAutomationCenter,
@@ -7800,6 +7845,13 @@ Object.assign(window, {
 });
 
 (async function initSupabase(){
-  const {data}=await supabase.auth.getSession();
-  if(data.session) await bootAuthenticated(data.session.user);
+  try{
+    const {data,error}=await supabase.auth.getSession();
+    if(error)throw error;
+    if(data.session)await bootAuthenticated(data.session.user);
+    else revealSessionUI();
+  }catch(error){
+    authErr('Could not restore your session. Please sign in again.');
+    revealSessionUI();
+  }
 })();

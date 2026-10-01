@@ -9,11 +9,16 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
 <link rel="stylesheet" href="css/app.css?v=20260930-8">
-  <link rel="stylesheet" href="css/professional.css?v=20261001-22">
+  <link rel="stylesheet" href="css/professional.css?v=20261001-23">
 <meta name="theme-color" content="#062451">
 <link rel="icon" href="assets/slsc-mark.svg" type="image/svg+xml">
 </head>
-<body>
+<body class="session-pending">
+
+<div id="session-splash" role="status" aria-live="polite">
+  <img src="assets/logo-transparent.png" alt="Strellas Labor Service Cooperative" width="300" height="100">
+  <span>Restoring your secure workspace…</span>
+</div>
 
 <!-- ============ AUTH SCREEN ============ -->
 <div id="auth-screen">
@@ -136,6 +141,6 @@
 <div class="toast" id="toast"></div>
 
 <script src="js/vendor/xlsx.full.min.js?v=0.20.3"></script>
-  <script type="module" src="js/app.js?v=20261001-43"></script>
+  <script type="module" src="js/app.js?v=20261001-44"></script>
 </body>
 </html>

@@ -1450,3 +1450,89 @@ label.onboarding-check{cursor:pointer;}
   .ops-lite-facts>div:first-child{border-top:0;}
   .ops-lite-controls .btn{width:100%;}
 }
+
+/* Shared focused-workspace navigation. */
+.workspace-section-hidden{display:none!important;}
+.workspace-tabs{display:flex;align-items:center;gap:2px;min-width:0;margin:0 0 12px;padding:0 2px;border-bottom:1px solid var(--border);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;}
+.workspace-tabs button{height:39px;display:inline-flex;align-items:center;justify-content:center;flex:none;padding:0 12px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font:750 10.5px/1 'Plus Jakarta Sans',sans-serif;white-space:nowrap;}
+.workspace-tabs button:hover{color:var(--text);background:#FAFAFC;}
+.workspace-tabs button.active{border-bottom-color:var(--accent);color:var(--accent);}
+.workspace-commandbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:12px;}
+.workspace-commandbar .workspace-tabs{flex:1;margin-bottom:0;}
+.workspace-commandbar .automation-actions{flex:none;}
+.ops-transaction select,.weekly-period-actions .btn,.automation-task-search input{font-family:'Plus Jakarta Sans',sans-serif;}
+
+/* Automation Center: one operational context at a time. */
+.automation-panel{border-radius:8px;box-shadow:none;}
+.automation-panel-head{padding:12px 14px;background:#FCFCFD;}
+.automation-kpis{gap:8px;margin-bottom:12px;}
+.automation-kpi{min-height:96px;padding:12px 13px;border-radius:8px;box-shadow:none;}
+.automation-kpi::after{height:2px;}
+.automation-grid{grid-template-columns:minmax(270px,.75fr) minmax(0,1.25fr);gap:10px;margin-bottom:0;}
+.automation-health-list{padding:9px;}
+.automation-insight{margin-bottom:7px;padding:11px 12px;border-radius:7px;}
+.automation-run-mode{font-size:15px!important;}
+.automation-work-head{align-items:center;}
+.automation-task-search{width:min(380px,45vw);min-width:240px;margin-left:auto;}
+.automation-task-search input{font-size:10.5px;}
+.automation-rule-list,.automation-run-list{gap:6px;}
+.automation-rule,.automation-run-row{border-radius:7px;}
+
+/* Weekly report: compact period controls and scroll-contained tables. */
+.weekly-report-head{align-items:center;margin-bottom:10px;}
+.weekly-period-actions{display:flex;align-items:center;justify-content:flex-end;gap:5px;flex-wrap:wrap;}
+.weekly-report-tabs{margin-bottom:12px;}
+.weekly-movement-grid{gap:8px!important;}
+.weekly-movement-grid .stat{min-height:92px;padding:12px 13px;}
+.weekly-report-panel{margin:0;}
+.weekly-report-panel>h3{margin:0 0 3px;font-size:15px;}
+.weekly-report-panel>.desc{margin-bottom:11px;font-size:10.5px;}
+.weekly-report-panel>.tablewrap,.weekly-summary>.tablewrap{max-height:calc(100dvh - 285px);min-height:180px;overflow:auto;}
+.weekly-report-panel .tablewrap thead th,.weekly-summary .tablewrap thead th{position:sticky;top:0;z-index:3;}
+
+/* Management Analytics and Dashboard: keep filters visible, details focused. */
+.analytics-view-tabs,.dashboard-view-tabs{margin-bottom:12px;}
+.analytics-attention-panel{margin-top:0;}
+.dashboard-view-tabs{margin-top:-3px;}
+.dashboard-pulse{margin-top:0;}
+.dashboard-hero{margin-bottom:13px;}
+.dashboard-kpis{gap:8px;margin-bottom:12px;}
+.dashboard-kpi{min-height:100px;padding:12px 13px;}
+.dashboard-kpi .value{max-width:100%;line-height:1.15;overflow-wrap:anywhere;}
+.dashboard-kpi .meta{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.35;overflow-wrap:anywhere;}
+@media (min-width:721px) and (max-width:900px){
+  .analytics-commandbar .range-fields{grid-template-columns:repeat(4,minmax(0,1fr));}
+  .analytics-commandbar .analytics-apply{grid-column:auto;align-self:end;}
+}
+@media (max-width:1100px){
+  .automation-grid{grid-template-columns:1fr;}
+  .workspace-commandbar{align-items:flex-start;flex-direction:column;}
+  .workspace-commandbar .workspace-tabs{width:100%;}
+  .workspace-commandbar .automation-actions{width:100%;justify-content:flex-end;}
+}
+@media (max-width:720px){
+  .workspace-tabs{width:100%;padding-bottom:1px;}
+  .workspace-tabs button{height:37px;padding:0 10px;font-size:10px;}
+  .workspace-commandbar .automation-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));}
+  .workspace-commandbar .automation-actions .btn{width:100%;padding-right:6px;padding-left:6px;font-size:9.5px;}
+  .automation-work-head{align-items:stretch;flex-direction:column;}
+  .automation-task-search{width:100%;min-width:0;margin-left:0;}
+  .weekly-report-head{align-items:flex-start;}
+  .weekly-period-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;}
+  .weekly-period-actions .btn{width:100%;padding-right:6px;padding-left:6px;font-size:9.5px;}
+  .weekly-period-actions .btn:last-child{grid-column:1/-1;}
+  .weekly-movement-grid{grid-template-columns:1fr 1fr!important;}
+  .weekly-report-panel{padding:13px;}
+  .weekly-report-panel>.tablewrap,.weekly-summary>.tablewrap{max-height:calc(100dvh - 270px);}
+}
+@media (max-width:400px){
+  .workspace-commandbar .automation-actions{grid-template-columns:1fr 1fr;}
+  .workspace-commandbar .automation-actions .btn:first-child{grid-column:1/-1;}
+  .weekly-movement-grid{grid-template-columns:1fr!important;}
+}
+
+/* Prevent the sign-in screen from flashing while Supabase restores a session. */
+#session-splash{position:fixed;inset:0;z-index:1000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:13px;padding:24px;background:#F7F8FB;color:var(--muted);font:650 10.5px/1.4 'Plus Jakarta Sans',sans-serif;text-align:center;}
+#session-splash img{width:min(270px,72vw);height:auto;object-fit:contain;filter:drop-shadow(0 8px 18px rgba(11,46,99,.14));}
+body.session-pending #session-splash{display:flex;}
+body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
