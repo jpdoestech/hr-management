@@ -24,6 +24,8 @@ Apply `supabase/phase15-organization-structure.sql` to let Administrator and HR 
 
 Apply `supabase/phase16-server-record-pagination.sql` to enable database-side search, filtering, sorting, and pagination for Employee Information and reusable HR record tables. The function respects the existing `hr_records` Row Level Security policies and adds indexes for the most common department, status, and branch filters. Deploying the frontend first is safe because it temporarily falls back to locally cached pagination when the function is unavailable.
 
+Apply `supabase/phase18-employee-directory-performance.sql` after Phase 17 to enable the optimized Employee Information data path. It adds a trigram search index, partial employee filter/order indexes, and an RLS-aware projected directory function. The frontend requests only the columns needed by the user's active table view and automatically falls back to the Phase 16 query until Phase 18 is installed. Run the complete Phase 18 file once in **Supabase Dashboard > SQL Editor**; it is additive and does not rewrite or delete employee records.
+
 Apply `supabase/phase17-user-export-permissions.sql` before deploying the matching frontend. Viewer, Manager, and Employee profiles default to no export access. A System Administrator can enable export for a specific account from User Management; Administrator and HR Staff roles include export access automatically.
 
 ## Google Drive

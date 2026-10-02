@@ -275,6 +275,40 @@ async function queryRecordPage({module,scope,search='',searchFields=[],filters={
   STATE.tablePages[scope]={page,size:requested.size,signature:'server'};
   return {rows:(data||[]).map(row=>row.data),meta:{key:scope,total,size:requested.size,pages:Math.max(1,Math.ceil(total/requested.size)),page,start:total?(page-1)*requested.size+1:0,end:Math.min(total,page*requested.size)},server:true};
 }
+let EMPLOYEE_DIRECTORY_QUERY_READY=true;
+function employeeDirectoryQueryUnavailable(error){
+  return ['42883','PGRST202','PGRST205'].includes(error?.code)||/search_employee_directory|schema cache|function.*not find/i.test(error?.message||'');
+}
+async function queryEmployeeDirectoryPage({scope,search='',department='',branch='',status='',classification='',fields=[],defaultSize=10}){
+  if(!EMPLOYEE_DIRECTORY_QUERY_READY)return null;
+  const requested=requestedPageState(scope,defaultSize);
+  const run=async(offset,limit)=>supabase.rpc('search_employee_directory',{
+    p_search:String(search||'').trim(),p_department:department||'',p_branch:branch||'',p_status:status||'',p_classification:classification||'',
+    p_probation_days:Number(DB.settings?.probationDays)||180,p_fields:[...new Set(fields.filter(Boolean))],p_offset:offset,p_limit:limit,
+  });
+  let page=requested.page;
+  const batchSize=requested.size===ALL_ROWS_SIZE?100:requested.size;
+  let {data,error}=await run(requested.size===ALL_ROWS_SIZE?0:(page-1)*requested.size,batchSize);
+  if(error){
+    if(employeeDirectoryQueryUnavailable(error)){EMPLOYEE_DIRECTORY_QUERY_READY=false;console.info('Indexed employee directory query is unavailable; using the Phase 16 record query until Phase 18 is applied.');return null;}
+    throw error;
+  }
+  data=data||[];
+  let total=Number(data?.[0]?.total_count||0);
+  if(requested.size===ALL_ROWS_SIZE&&data.length<total){
+    const batches=[];
+    for(let offset=data.length;offset<total;offset+=batchSize)batches.push(run(offset,batchSize));
+    const results=await Promise.all(batches);
+    const failed=results.find(result=>result.error);
+    if(failed?.error)throw failed.error;
+    data=[...data,...results.flatMap(result=>result.data||[])];
+  }
+  const pages=Math.max(1,Math.ceil(total/requested.size));
+  if(page>pages){page=pages;({data,error}=await run((page-1)*requested.size,requested.size));if(error)throw error;total=Number(data?.[0]?.total_count||0);}
+  STATE.tablePageSizes[scope]=requested.size;
+  STATE.tablePages[scope]={page,size:requested.size,signature:'employee-directory'};
+  return {rows:(data||[]).map(row=>row.data),meta:{key:scope,total,size:requested.size,pages:Math.max(1,Math.ceil(total/requested.size)),page,start:total?(page-1)*requested.size+1:0,end:Math.min(total,page*requested.size)},server:true,projected:true};
+}
 function serverTablePageGo(scope,page){
   const current=requestedPageState(scope);STATE.tablePages[scope]={...current,page:Math.max(1,Number(page)||1),signature:'server'};
   Promise.resolve(RENDERERS[STATE.view]?.()).catch(error=>toast('Could not load that page: '+error.message,true));
@@ -3416,11 +3450,23 @@ function employeeDirectoryMetadata(){
   EMPLOYEE_DIRECTORY_METADATA_CACHE={revision:EMPLOYEE_DIRECTORY_REVISION,metadata};
   return metadata;
 }
+function employeeDirectoryRequestedFields(columns){
+  const fields=new Set(['id','employeeNo','prfNumber','name','lastName','firstName','middleName','dateHired','classOverride']);
+  columns.forEach(column=>{
+    if(column.key==='classification'){fields.add('dateHired');fields.add('classOverride');return;}
+    if(column.key==='address'){fields.add('homeAddress');fields.add('address');return;}
+    if(column.key==='presentAddress'){fields.add('presentAddress');fields.add('presentAddressText');return;}
+    if(column.key==='allowances'||column.key.startsWith('allowance:')){fields.add('allowances');return;}
+    fields.add(column.key);
+  });
+  return [...fields];
+}
 function employeeDirectoryQueryState(){
   const pageScope='records:employees';
   const page=requestedPageState(pageScope,10);
+  const columns=employeeVisibleColumns();
   return {
-    pageScope,page,
+    pageScope,page,columns,fields:employeeDirectoryRequestedFields(columns),
     search:STATE.employeeSearch||'',
     department:STATE.employeeDepartmentFilter||'',
     branch:STATE.employeeBranchFilter||'',
@@ -3429,7 +3475,7 @@ function employeeDirectoryQueryState(){
   };
 }
 function employeeDirectorySignature(query=employeeDirectoryQueryState()){
-  return JSON.stringify([EMPLOYEE_DIRECTORY_REVISION,query.search.trim(),query.department,query.branch,query.status,query.classification,query.page.page,query.page.size]);
+  return JSON.stringify([EMPLOYEE_DIRECTORY_REVISION,query.search.trim(),query.department,query.branch,query.status,query.classification,query.page.page,query.page.size,query.fields]);
 }
 function localEmployeeDirectoryRows(query){
   const search=query.search.trim().toLowerCase();
@@ -3478,9 +3524,10 @@ function applyEmployeeDirectoryPage(pageResult,signature){
   setTitle('Employee Information',`${pageResult.meta.total} of ${DB.employees.length} employees · ${metadata.departments.length} departments`);
 }
 function refreshEmployeeDirectoryPage(query,signature){
-  if(!SERVER_RECORD_QUERY_READY||EMPLOYEE_DIRECTORY_PENDING.has(signature))return;
+  if((!EMPLOYEE_DIRECTORY_QUERY_READY&&!SERVER_RECORD_QUERY_READY)||EMPLOYEE_DIRECTORY_PENDING.has(signature))return;
   const token=++EMPLOYEE_DIRECTORY_REQUEST_TOKEN;
-  const request=queryRecordPage({module:'employees',scope:query.pageScope,search:query.search,searchFields:EMPLOYEE_DIRECTORY_SEARCH_FIELDS,filters:{department:query.department,branchReporting:query.branch,status:query.status},classification:query.classification,sortKey:'employeeNo',defaultSize:10})
+  const request=queryEmployeeDirectoryPage({scope:query.pageScope,search:query.search,department:query.department,branch:query.branch,status:query.status,classification:query.classification,fields:query.fields,defaultSize:10})
+    .then(pageResult=>pageResult||queryRecordPage({module:'employees',scope:query.pageScope,search:query.search,searchFields:EMPLOYEE_DIRECTORY_SEARCH_FIELDS,filters:{department:query.department,branchReporting:query.branch,status:query.status},classification:query.classification,sortKey:'employeeNo',defaultSize:10}))
     .then(pageResult=>{
       if(!pageResult)return;
       EMPLOYEE_DIRECTORY_PAGE_CACHE.set(signature,{pageResult,storedAt:Date.now()});
@@ -3510,7 +3557,7 @@ function renderEmployees(){
   const rows=pageResult.rows;
   const filteredTotal=pageResult.meta.total;
   const {departments:depts,branches,statuses:statusOptions}=employeeDirectoryMetadata();
-  const columns=employeeVisibleColumns();
+  const columns=query.columns;
   const tableMinWidth=columns.reduce((sum,c)=>sum+c.width,0)+92;
   setTitle('Employee Information', `${filteredTotal} of ${DB.employees.length} employees · ${depts.length} departments`);
   document.getElementById('content')?.classList.add('employee-directory-content');
