@@ -1,4 +1,4 @@
--- SLSC HRIS operational data reset
+-- SLSC HRIS operational data reset (default SLSC tenant only)
 -- DESTRUCTIVE: removes employee/applicant/HR records, cases, requests, and audit history.
 -- PRESERVED: auth.users, public.profiles, public.hr_settings, and public.hr_user_preferences.
 --
@@ -32,7 +32,8 @@ begin
   select data ->> 'dataResetAt'
   into server_reset_at
   from public.hr_settings
-  where id = 'singleton';
+  where id = 'singleton'
+    and tenant_id = new.tenant_id;
 
   if coalesce(server_reset_at, '') = '' then
     return new;
@@ -59,6 +60,7 @@ declare
   remaining bigint;
   storage_files bigint := 0;
   reset_at text := clock_timestamp()::text;
+  target_tenant uuid := '00000000-0000-0000-0000-000000000001'::uuid;
 begin
   -- Preserve login/profile rows while removing links to deleted employee records.
   if to_regclass('public.profiles') is not null
@@ -71,15 +73,16 @@ begin
     update public.profiles
     set employee_record_id = null,
         updated_at = now()
-    where employee_record_id is not null;
+    where employee_record_id is not null
+      and tenant_id = target_tenant;
   end if;
 
   -- Stamp the preserved settings row. The app compares this marker before every
   -- write so an already-open page cannot silently restore the deleted records.
   if to_regclass('public.hr_settings') is not null then
-    insert into public.hr_settings (id, data, updated_at, updated_by)
-    values ('singleton', jsonb_build_object('dataResetAt', reset_at), now(), null)
-    on conflict (id) do update
+    insert into public.hr_settings (tenant_id, id, data, updated_at, updated_by)
+    values (target_tenant, 'singleton', jsonb_build_object('dataResetAt', reset_at), now(), null)
+    on conflict (tenant_id,id) do update
     set data = jsonb_set(coalesce(public.hr_settings.data, '{}'::jsonb), '{dataResetAt}', to_jsonb(reset_at), true),
         updated_at = now(),
         updated_by = null;
@@ -97,9 +100,9 @@ begin
     'hr_audit_logs'
   ] loop
     if to_regclass('public.' || target_table) is not null then
-      execute format('delete from public.%I', target_table);
+      execute format('delete from public.%I where tenant_id=$1', target_table) using target_tenant;
       get diagnostics affected = row_count;
-      execute format('select count(*) from public.%I', target_table) into remaining;
+      execute format('select count(*) from public.%I where tenant_id=$1', target_table) into remaining using target_tenant;
       if remaining <> 0 then
         raise exception 'Reset failed: public.% still contains % row(s)', target_table, remaining;
       end if;
@@ -112,7 +115,15 @@ begin
   if to_regclass('storage.objects') is not null then
     select count(*) into storage_files
     from storage.objects
-    where bucket_id = 'hr-documents';
+    where bucket_id = 'hr-documents'
+      and (
+        (storage.foldername(name))[1] = target_tenant::text
+        or exists (
+          select 1 from public.profiles profile
+          where profile.tenant_id=target_tenant
+            and profile.id::text=(storage.foldername(name))[1]
+        )
+      );
   end if;
 
   raise notice 'RESET MARKER: %', reset_at;
@@ -126,8 +137,8 @@ commit;
 -- table count raises an exception above and rolls the entire reset back.
 select
   'HR operational data reset completed' as result,
-  (select count(*) from public.profiles) as preserved_profiles,
-  (select count(*) from public.hr_records) as remaining_hr_records,
-  (select count(*) from public.hr_app_state) as remaining_legacy_states,
-  (select data ->> 'dataResetAt' from public.hr_settings where id = 'singleton') as reset_marker;
+  (select count(*) from public.profiles where tenant_id='00000000-0000-0000-0000-000000000001'::uuid) as preserved_profiles,
+  (select count(*) from public.hr_records where tenant_id='00000000-0000-0000-0000-000000000001'::uuid) as remaining_hr_records,
+  (select count(*) from public.hr_app_state where tenant_id='00000000-0000-0000-0000-000000000001'::uuid) as remaining_legacy_states,
+  (select data ->> 'dataResetAt' from public.hr_settings where id = 'singleton' and tenant_id='00000000-0000-0000-0000-000000000001'::uuid) as reset_marker;
 

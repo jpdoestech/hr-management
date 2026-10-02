@@ -26,6 +26,8 @@ Apply `supabase/phase16-server-record-pagination.sql` to enable database-side se
 
 Apply `supabase/phase18-employee-directory-performance.sql` after Phase 17 to enable the optimized Employee Information data path. It adds a trigram search index, partial employee filter/order indexes, and an RLS-aware projected directory function. The frontend requests only the columns needed by the user's active table view and automatically falls back to the Phase 16 query until Phase 18 is installed. Run the complete Phase 18 file once in **Supabase Dashboard > SQL Editor**; it is additive and does not rewrite or delete employee records.
 
+Apply `supabase/phase19-tenant-scale-foundation.sql` after deploying the matching frontend. Phase 19 backfills existing rows into the default SLSC tenant, changes HR settings to a tenant-scoped singleton key, adds restrictive tenant RLS to every available operational table, and scopes new Supabase Storage objects by tenant. Existing files remain supported through the migration's legacy-path policy. Run the complete file once in **Supabase Dashboard > SQL Editor** and then reload the application. Do not create a second tenant until its profiles, settings, Google Drive root, and administrator provisioning process have been configured.
+
 Apply `supabase/phase17-user-export-permissions.sql` before deploying the matching frontend. Viewer, Manager, and Employee profiles default to no export access. A System Administrator can enable export for a specific account from User Management; Administrator and HR Staff roles include export access automatically.
 
 ## Google Drive

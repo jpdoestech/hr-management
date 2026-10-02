@@ -6,6 +6,7 @@ import { compactRedundantPageIntros } from './core/content-layout.js?v=20260928-
 import { buildRecordChanges, valuesEqual } from './core/record-diff.js?v=20260930-1';
 import { roleCanExport } from './core/export-access.js?v=20260930-1';
 import { manpowerRequestSummary, manpowerRequestTotals, requirementSlotCounts, slotChronologyIssues, slotMetrics } from './core/manpower.js?v=20260930-1';
+import { measureAsync, recordPerformance, performanceSnapshot } from './core/performance.js?v=20261002-1';
 import { addressComponentHTML, addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom, addressDetailInput, initializeAddressComponents, readAddressComponent } from './address/address-component.js?v=20260930-2';
 import { formatPhilippineAddress, normalizeAddress } from './address/address-models.js?v=20260930-2';
 
@@ -21,6 +22,11 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
    ========================================================================= */
 
 const RECORD_MODULES = ['employees','onboardingCandidates','leaves','disciplinary','nte','memos','nod','oncall','transfers','offenseCatalog','cvr','incidents','prf','manpowerRequests','manpowerRequirements','manpowerSlots','evaluations','atd','workflowTasks','automationRuns','documents','lifecycleChecklists'];
+const BOOTSTRAP_RECORD_MODULES = ['employees','onboardingCandidates','leaves','nte','oncall','incidents','evaluations','atd','workflowTasks','lifecycleChecklists'];
+const DEFAULT_TENANT_ID='00000000-0000-0000-0000-000000000001';
+let TENANT_SCHEMA_READY=false;
+const LOADED_RECORD_MODULES = new Set();
+let MODULE_LOAD_QUEUE = Promise.resolve();
 let DB_SNAPSHOT = null;
 let SAVE_QUEUE = Promise.resolve();
 let SELF_SERVICE_READY = true;
@@ -136,8 +142,9 @@ async function loadServiceRequests(target=DB){
 
 async function loadDB(){
   const empty = blankDB();
-  const {data:rows,error} = await supabase.from('hr_records').select('module,record_id,data,updated_at').order('updated_at',{ascending:true});
+  const {data:rows,error} = await supabase.from('hr_records').select('module,record_id,data,updated_at').in('module',BOOTSTRAP_RECORD_MODULES).order('updated_at',{ascending:true});
   if(error) throw error;
+  BOOTSTRAP_RECORD_MODULES.forEach(module=>LOADED_RECORD_MODULES.add(module));
   (rows||[]).forEach(r=>{
     if(!RECORD_MODULES.includes(r.module))return;
     const record={...(r.data||{})};
@@ -156,7 +163,12 @@ async function loadDB(){
   }
   await loadServiceRequests(empty);
 
-  const hasRecords = (rows||[]).length>0;
+  let hasRecords = (rows||[]).length>0;
+  if(!hasRecords&&isHRRole()){
+    const {count,error:countError}=await supabase.from('hr_records').select('record_id',{count:'exact',head:true});
+    if(countError)throw countError;
+    hasRecords=Number(count||0)>0;
+  }
   if(!hasRecords&&isHRRole()){
     // Phase 1 migration: if the old singleton exists, import it once.
     const {data:legacy,error:legacyError}=await supabase.from('hr_app_state').select('data').eq('id','singleton').maybeSingle();
@@ -164,7 +176,8 @@ async function loadDB(){
     if(legacy?.data){
       const migrated={...empty,...legacy.data};
       delete migrated.users;
-      await saveDBInternal(migrated);
+      RECORD_MODULES.forEach(module=>LOADED_RECORD_MODULES.add(module));
+      await saveDBInternal(migrated,RECORD_MODULES);
       return migrated;
     }
   }
@@ -172,7 +185,33 @@ async function loadDB(){
   return empty;
 }
 
-async function saveDBInternal(state){
+function recordFromRow(row){
+  const record={...(row.data||{})};
+  delete record._dataResetAt;
+  return record;
+}
+function unloadedRecordModules(modules){
+  return [...new Set(modules)].filter(module=>RECORD_MODULES.includes(module)&&!LOADED_RECORD_MODULES.has(module));
+}
+function ensureRecordModules(modules){
+  MODULE_LOAD_QUEUE=MODULE_LOAD_QUEUE.catch(()=>{}).then(async()=>{
+    const missing=unloadedRecordModules(modules);
+    if(!missing.length)return [];
+    const {data:rows,error}=await measureAsync('records.lazy-load',()=>supabase.from('hr_records').select('module,record_id,data,updated_at').in('module',missing).order('updated_at',{ascending:true}),{moduleCount:missing.length});
+    if(error)throw error;
+    missing.forEach(module=>{DB[module]=[];});
+    (rows||[]).forEach(row=>{if(missing.includes(row.module))DB[row.module].push(recordFromRow(row));});
+    if(!DB_SNAPSHOT)DB_SNAPSHOT=blankDB();
+    missing.forEach(module=>{
+      LOADED_RECORD_MODULES.add(module);
+      DB_SNAPSHOT[module]=JSON.parse(JSON.stringify(DB[module]));
+    });
+    return missing;
+  });
+  return MODULE_LOAD_QUEUE;
+}
+
+async function saveDBInternal(state,modules=[...LOADED_RECORD_MODULES]){
   const now=new Date().toISOString();
   const {data:serverSettings,error:resetCheckError}=await supabase.from('hr_settings').select('data').eq('id','singleton').maybeSingle();
   if(resetCheckError) throw resetCheckError;
@@ -181,7 +220,7 @@ async function saveDBInternal(state){
   if(serverResetAt&&serverResetAt!==clientResetAt){
     throw new Error('The HR database was reset in another session. Reload this page before making changes.');
   }
-  const changes=buildRecordChanges(DB_SNAPSHOT||blankDB(),state,RECORD_MODULES);
+  const changes=buildRecordChanges(DB_SNAPSHOT||blankDB(),state,modules);
   const rows=changes.upserts.map(({module,recordId,record})=>({module,record_id:recordId,data:{...record,_dataResetAt:clientResetAt},updated_at:now,updated_by:SESSION?.id||null}));
   for(let index=0;index<rows.length;index+=250){
     const {error}=await supabase.from('hr_records').upsert(rows.slice(index,index+250),{onConflict:'module,record_id'});
@@ -200,18 +239,24 @@ async function saveDBInternal(state){
     }
   }
   if(SESSION?.role==='Administrator'&&!valuesEqual(DB_SNAPSHOT?.settings,state.settings)){
-    const {error:settingsError}=await supabase.from('hr_settings').upsert({id:'singleton',data:state.settings||{orgName:'SCPA',probationDays:180},updated_at:now,updated_by:SESSION?.id||null},{onConflict:'id'});
+    const settingsRow={id:'singleton',data:state.settings||{orgName:'SCPA',probationDays:180},updated_at:now,updated_by:SESSION?.id||null};
+    if(TENANT_SCHEMA_READY)settingsRow.tenant_id=SESSION?.tenantId||DEFAULT_TENANT_ID;
+    const {error:settingsError}=await supabase.from('hr_settings').upsert(settingsRow,{onConflict:TENANT_SCHEMA_READY?'tenant_id,id':'id'});
     if(settingsError) throw settingsError;
   }
   const employeeDirectoryChanged=changes.upserts.some(change=>change.module==='employees')||changes.deletes.some(change=>change.module==='employees')||!valuesEqual(DB_SNAPSHOT?.settings,state.settings);
-  DB_SNAPSHOT=JSON.parse(JSON.stringify(state));
+  const nextSnapshot=DB_SNAPSHOT?JSON.parse(JSON.stringify(DB_SNAPSHOT)):blankDB();
+  modules.forEach(module=>{nextSnapshot[module]=JSON.parse(JSON.stringify(state[module]||[]));});
+  nextSnapshot.settings=JSON.parse(JSON.stringify(state.settings||{}));
+  DB_SNAPSHOT=nextSnapshot;
   if(employeeDirectoryChanged)invalidateEmployeeDirectoryCache();
 }
 
 function saveDB(){
   const snapshot=JSON.parse(JSON.stringify(DB));
+  const loadedModules=[...LOADED_RECORD_MODULES];
   SAVE_QUEUE=SAVE_QUEUE.then(async()=>{
-    try{ await saveDBInternal(snapshot); return true; }
+    try{ await saveDBInternal(snapshot,loadedModules); return true; }
     catch(error){
       const resetConflict=/reset|stale HRIS session/i.test(error.message||'');
       toast(resetConflict?'The database was reset. Reloading this stale session…':'Database save failed: '+error.message,true);
@@ -282,10 +327,10 @@ function employeeDirectoryQueryUnavailable(error){
 async function queryEmployeeDirectoryPage({scope,search='',department='',branch='',status='',classification='',fields=[],defaultSize=10}){
   if(!EMPLOYEE_DIRECTORY_QUERY_READY)return null;
   const requested=requestedPageState(scope,defaultSize);
-  const run=async(offset,limit)=>supabase.rpc('search_employee_directory',{
+  const run=async(offset,limit)=>measureAsync('employee-directory.query',()=>supabase.rpc('search_employee_directory',{
     p_search:String(search||'').trim(),p_department:department||'',p_branch:branch||'',p_status:status||'',p_classification:classification||'',
     p_probation_days:Number(DB.settings?.probationDays)||180,p_fields:[...new Set(fields.filter(Boolean))],p_offset:offset,p_limit:limit,
-  });
+  }),{limit});
   let page=requested.page;
   const batchSize=requested.size===ALL_ROWS_SIZE?100:requested.size;
   let {data,error}=await run(requested.size===ALL_ROWS_SIZE?0:(page-1)*requested.size,batchSize);
@@ -320,10 +365,13 @@ function serverTablePageSize(scope,size){
 }
 
 async function loadProfiles(){
-  let {data,error}=await supabase.from('profiles').select('id,full_name,username,email,role,can_export,employee_record_id,manager_profile_id,created_at').order('created_at');
-  if(error&&['42703','PGRST204'].includes(error.code))({data,error}=await supabase.from('profiles').select('id,full_name,username,email,role,employee_record_id,manager_profile_id,created_at').order('created_at'));
+  let {data,error}=await supabase.from('profiles').select('id,tenant_id,full_name,username,email,role,can_export,employee_record_id,manager_profile_id,created_at').order('created_at');
+  if(error&&['42703','PGRST204'].includes(error.code)){
+    ({data,error}=await supabase.from('profiles').select('id,full_name,username,email,role,can_export,employee_record_id,manager_profile_id,created_at').order('created_at'));
+    if(error&&['42703','PGRST204'].includes(error.code))({data,error}=await supabase.from('profiles').select('id,full_name,username,email,role,employee_record_id,manager_profile_id,created_at').order('created_at'));
+  }
   if(error) throw error;
-  DB.users=(data||[]).map(p=>({id:p.id,fullName:p.full_name,username:p.username,email:p.email,role:p.role,canExport:p.can_export===true,employeeRecordId:p.employee_record_id||'',managerProfileId:p.manager_profile_id||'',createdAt:p.created_at?.slice(0,10)||todayISO()}));
+  DB.users=(data||[]).map(p=>({id:p.id,tenantId:p.tenant_id||DEFAULT_TENANT_ID,fullName:p.full_name,username:p.username,email:p.email,role:p.role,canExport:p.can_export===true,employeeRecordId:p.employee_record_id||'',managerProfileId:p.manager_profile_id||'',createdAt:p.created_at?.slice(0,10)||todayISO()}));
 }
 
 async function persistStateAndProfiles(){ await saveDB(); await loadProfiles(); }
@@ -490,7 +538,8 @@ async function uploadAttachment(file,module='documents',managedName=file?.name||
     return uploaded;
   }
   const safe = managedName.replace(/[^a-zA-Z0-9., _-]/g,'_');
-  const path = `${SESSION.id}/${uploadModuleFolder(module)}/${Date.now()}-${uid()}-${safe}`;
+  const ownerPath=`${SESSION.id}/${uploadModuleFolder(module)}/${Date.now()}-${uid()}-${safe}`;
+  const path = TENANT_SCHEMA_READY?`${SESSION.tenantId||DEFAULT_TENANT_ID}/${ownerPath}`:ownerPath;
   const {error}=await supabase.storage.from(STORAGE_BUCKET).upload(path,file,{upsert:false,contentType:file.type||'application/octet-stream'});
   if(error){ toast('Upload failed: '+error.message,true); throw error; }
   PENDING_UPLOADS.add(path);
@@ -764,11 +813,18 @@ async function doRegister(ev){
 }
 async function bootAuthenticated(user){
   try{
-    let {data:ownProfile,error:profileError}=await supabase.from('profiles').select('id,full_name,username,email,role,can_export,employee_record_id,manager_profile_id,created_at').eq('id',user.id).maybeSingle();
-    if(profileError&&['42703','PGRST204'].includes(profileError.code))({data:ownProfile,error:profileError}=await supabase.from('profiles').select('id,full_name,username,email,role,employee_record_id,manager_profile_id,created_at').eq('id',user.id).maybeSingle());
+    let {data:ownProfile,error:profileError}=await supabase.from('profiles').select('id,tenant_id,full_name,username,email,role,can_export,employee_record_id,manager_profile_id,created_at').eq('id',user.id).maybeSingle();
+    if(profileError&&['42703','PGRST204'].includes(profileError.code)){
+      TENANT_SCHEMA_READY=false;
+      ({data:ownProfile,error:profileError}=await supabase.from('profiles').select('id,full_name,username,email,role,can_export,employee_record_id,manager_profile_id,created_at').eq('id',user.id).maybeSingle());
+      if(profileError&&['42703','PGRST204'].includes(profileError.code))({data:ownProfile,error:profileError}=await supabase.from('profiles').select('id,full_name,username,email,role,employee_record_id,manager_profile_id,created_at').eq('id',user.id).maybeSingle());
+    }else if(!profileError)TENANT_SCHEMA_READY=true;
     if(profileError) throw profileError;
-    SESSION=ownProfile?{id:ownProfile.id,fullName:ownProfile.full_name,username:ownProfile.username,email:ownProfile.email,role:ownProfile.role,canExport:ownProfile.can_export===true,employeeRecordId:ownProfile.employee_record_id||'',managerProfileId:ownProfile.manager_profile_id||'',createdAt:ownProfile.created_at?.slice(0,10)||todayISO()}:{id:user.id,fullName:user.user_metadata?.full_name||user.email,username:user.user_metadata?.username||'',email:user.email,role:'Employee',canExport:false,employeeRecordId:'',managerProfileId:''};
-    let state=await loadDB();
+    SESSION=ownProfile?{id:ownProfile.id,tenantId:ownProfile.tenant_id||DEFAULT_TENANT_ID,fullName:ownProfile.full_name,username:ownProfile.username,email:ownProfile.email,role:ownProfile.role,canExport:ownProfile.can_export===true,employeeRecordId:ownProfile.employee_record_id||'',managerProfileId:ownProfile.manager_profile_id||'',createdAt:ownProfile.created_at?.slice(0,10)||todayISO()}:{id:user.id,tenantId:DEFAULT_TENANT_ID,fullName:user.user_metadata?.full_name||user.email,username:user.user_metadata?.username||'',email:user.email,role:'Employee',canExport:false,employeeRecordId:'',managerProfileId:''};
+    LOADED_RECORD_MODULES.clear();
+    MODULE_LOAD_QUEUE=Promise.resolve();
+    invalidateEmployeeDirectoryCache();
+    let state=await measureAsync('app.bootstrap-data',()=>loadDB());
     // An empty database is a valid production state, including after an
     // administrator performs the user-preserving reset.
     DB=state;
@@ -782,7 +838,6 @@ async function bootAuthenticated(user){
     await loadUserPreferences();
     if(isHRRole()){
       ensureAutomationSettings();
-      await workflowSyncTasks({silent:true});
     }
     enterApp();
   }catch(e){ authErr('Could not load the HR database: '+e.message); await supabase.auth.signOut(); revealSessionUI(); }
@@ -803,6 +858,8 @@ async function doLogout(){
   closeNotificationPanel();
   await supabase.auth.signOut();
   SESSION=null;
+  LOADED_RECORD_MODULES.clear();
+  MODULE_LOAD_QUEUE=Promise.resolve();
   revealSessionUI();
   document.getElementById('app').classList.remove('on');
   document.getElementById('auth-screen').style.display='';
@@ -977,8 +1034,10 @@ function enterApp(initialView='dashboard'){
   NOTIFICATION_TIMER=(isHRRole()||SESSION?.role==='Viewer')?setInterval(()=>refreshNotificationBadge(),60000):null;
   if(AUTOMATION_TIMER) clearInterval(AUTOMATION_TIMER);
   if(isHRRole()){
-    runAutomationEngine({silent:true});
-    AUTOMATION_TIMER=setInterval(()=>runAutomationEngine({silent:true}),300000);
+    AUTOMATION_TIMER=setInterval(async()=>{
+      try{await ensureRecordModules(RECORD_MODULES);await runAutomationEngine({silent:true});}
+      catch(error){console.warn('Scheduled automation data load failed',error);}
+    },300000);
   } else AUTOMATION_TIMER=null;
 }
 
@@ -1455,9 +1514,10 @@ function opsPrefill(module,emp){
   employeePickerSet('cv_employeeName',emp.id); setVal('cv_department',emp.department||'');
   employeePickerSet('case_employee',emp.id);
 }
-function openEmployeeOperation(module,employeeId){
+async function openEmployeeOperation(module,employeeId){
   if(SESSION?.role==='Viewer'){ toast('Viewer accounts have read-only access.',true); return; }
   const emp=DB.employees.find(e=>e.id===employeeId); if(!emp) return;
+  await ensureRecordModules(recordModulesForView(module));
   closeModal();
   if(module==='profile'){ openEmployeeProfile(employeeId); return; }
   if(module==='status'){ openEmployeeStatusForm(employeeId); return; }
@@ -1819,7 +1879,33 @@ function closeSidebar(){
   const btn=document.querySelector('.mobile-menu');
   if(btn) btn.setAttribute('aria-expanded','false');
 }
+const VIEW_RECORD_MODULES={
+  dashboard:BOOTSTRAP_RECORD_MODULES,
+  actionCenter:['employees','leaves','nte','incidents','evaluations','atd','workflowTasks','lifecycleChecklists'],
+  operations:['employees','leaves','nte','evaluations','atd','workflowTasks','lifecycleChecklists'],
+  employees:['employees'],onboarding:['employees','onboardingCandidates','manpowerRequests','manpowerRequirements','manpowerSlots'],employeeLifecycle:['employees','transfers'],
+  leaves:['employees','leaves'],evaluations:['employees','evaluations'],transfers:['employees','transfers'],prf:['employees','onboardingCandidates','prf','manpowerRequests','manpowerRequirements','manpowerSlots'],oncall:['employees','oncall'],atd:['employees','atd'],
+  incidents:['employees','incidents'],cvr:['employees','cvr','offenseCatalog'],nte:['employees','nte'],memos:['employees','memos'],nod:['employees','nod'],disciplinary:['employees','disciplinary','offenseCatalog'],offenseCatalog:['offenseCatalog'],offenseSummary:['employees','disciplinary','cvr','offenseCatalog'],
+  documents:['employees','documents'],lifecycleChecklists:['employees','lifecycleChecklists'],teamApprovals:['employees'],selfService:['employees'],
+  workflow:RECORD_MODULES,automation:RECORD_MODULES,analytics:RECORD_MODULES,weeklyReport:RECORD_MODULES,reports:RECORD_MODULES,dataQuality:RECORD_MODULES,settings:RECORD_MODULES,
+  users:['employees'],cases:['employees','incidents','cvr','nte','memos','nod','disciplinary','documents'],
+};
+const OPERATION_RECORD_MODULES={transfer:['employees','transfers'],lifecycle:['employees'],status:['employees'],profile:RECORD_MODULES};
+function recordModulesForView(view){
+  if(OPERATION_RECORD_MODULES[view])return OPERATION_RECORD_MODULES[view];
+  if(RECORD_MODULES.includes(view))return [view,...(view==='employees'?[]:['employees'])];
+  return VIEW_RECORD_MODULES[view]||[];
+}
+async function ensureViewRecordModules(view){
+  const modules=recordModulesForView(view);
+  const missing=unloadedRecordModules(modules);
+  if(!missing.length)return [];
+  const content=document.getElementById('content');
+  if(content)content.innerHTML='<div class="panel"><div class="desc">Loading workspace data…</div></div>';
+  return ensureRecordModules(missing);
+}
 async function go(view,{skipUnsaved=false}={}){
+  const navigationStarted=performance.now();
   const navItem=NAV.flatMap(group=>group.items).find(item=>item.v===view);
   if(navItem&&!navItemVisible(navItem)){toast('This workspace is not available for your role.',true);return;}
   if(!skipUnsaved && !(await requestPageNavigation(view))) return;
@@ -1830,9 +1916,11 @@ async function go(view,{skipUnsaved=false}={}){
   STATE.tablePages={};
   closeSidebar();
   renderNav();
+  try{await ensureViewRecordModules(view);}catch(error){toast('Could not load workspace data: '+error.message,true);return;}
   const renderer=RENDERERS[view];
   if(typeof renderer==='function') await Promise.resolve(renderer());
   if(STATE.view!==view) return;
+  recordPerformance('workspace.navigation',performance.now()-navigationStarted,{view});
   requestAnimationFrame(()=>{
     enhanceDataTables();
     capturePageEditState();
@@ -2758,7 +2846,8 @@ async function renderModuleView(key){
   document.getElementById('content').innerHTML=html;
   requestAnimationFrame(()=>enhanceDataTables());
 }
-function openRecordForm(key, id){
+async function openRecordForm(key, id){
+  await ensureRecordModules(recordModulesForView(key));
   const cfg = MODULES[key];
   const existing = id? DB[key].find(r=>r.id===id) : null;
   const fields = cfg.fields.map(f=>{
@@ -4208,7 +4297,8 @@ async function deleteEmployee(id){
   logAudit('Deleted employee record: '+emp.name);
   await deleteStorageObjects(storagePaths); renderNav(); renderEmployees(); toast('Employee deleted.');
 }
-function openTransferForEmployee(id){
+async function openTransferForEmployee(id){
+  await ensureRecordModules(['employees','transfers']);
   const emp = DB.employees.find(e=>e.id===id);
   if(!emp) return;
   selectEmployeeDirectoryRow(emp.id);
@@ -4316,8 +4406,9 @@ async function saveEmployeeStatus(id){
   toast('Employment status updated.');
 }
 
-function exportEmployeesCSV(){
+async function exportEmployeesCSV(){
   if(!requireExportAccess())return;
+  await ensureRecordModules(RECORD_MODULES);
   const allowanceNames=uniqueSettingNames([...employeeAllowanceTypes(),...DB.employees.flatMap(employee=>Object.keys(employee.allowances||{}))]);
   const columns=[
     {header:'Employee No.',get:r=>r.employeeNo},{header:'PRF Number',get:r=>r.prfNumber},{header:'Last Name',get:r=>splitEmployeeName(r).lastName},{header:'First Name',get:r=>splitEmployeeName(r).firstName},{header:'Middle Name',get:r=>splitEmployeeName(r).middleName},{header:'Formatted Name',get:r=>employeeDisplayName(r)},
@@ -4354,6 +4445,7 @@ function exportEmployeesCSV(){
 async function openEmployeeProfile(id){
   const emp=DB.employees.find(e=>e.id===id);
   if(!emp){ toast('Employee record could not be found.',true); return; }
+  await ensureRecordModules(['leaves','disciplinary','cvr','incidents','nte','memos','nod','atd','transfers','evaluations']);
   selectEmployeeDirectoryRow(emp.id);
   const nameKey=normalizeEmployeeName(emp.name);
   const sameName=(rows)=>rows.filter(r=>normalizeEmployeeName(r.employeeName||r.name)===nameKey);
@@ -7952,6 +8044,7 @@ PAGE_INTRO_OBSERVER.observe(document.getElementById('content'),{childList:true,s
 // can execute those handlers normally.
 Object.assign(window, {
   STATE,
+  performanceSnapshot,
   addDaysISO, atdComputeStatus, atdFillEmployee, atdPayslipCellHTML, atdRemaining, atdToggleCategory, atdTotalPaid,
   addCaseActivity, addCaseNote, caseActivityIcon, caseActivityLabel, caseDeadlineInfo, casePriorityBadge, caseWorkflowSteps, caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, setCaseWorkflowStatus, buildNotificationItems, closeNotificationPanel, markAllNotificationsRead, openNotification, goFromNotifications, refreshNotificationBadge, renderNotificationPanel, toggleNotificationPanel, analyticsApplyFilters, analyticsSetPreset, exportAnalyticsSnapshot,
   renderSelfService, renderTeamApprovals, openProfileChangeRequest, saveProfileChangeRequest, openLeaveRequest, saveLeaveRequest, cancelSelfServiceRequest, openServiceRequestReview, reviewServiceRequest, dashboardSetTab, weeklySetTab, automationSetTab, analyticsSetTab,

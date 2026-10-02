@@ -8,12 +8,17 @@ The frontend remains a no-build static application suitable for GitHub Pages and
 - `css/` contains the visual system.
 - `js/app.js` contains the current application integration layer.
 - `js/core/pagination.js` provides shared table pagination.
+- `js/core/performance.js` records bounded, in-memory timings without employee data or search text.
 
 The current application is heavily interdependent, so the first structural refactor intentionally separates the runtime from HTML/CSS without forcing unsafe module-by-module rewrites. Future feature modules can be extracted from `js/app.js` incrementally.
 
 ## Data
 
-Supabase PostgreSQL remains the record source of truth. The frontend continues using the existing record persistence model and current publishable key.
+Supabase PostgreSQL remains the record source of truth. Authentication loads only the modules required by the landing workspace; additional record modules are fetched through an explicit workspace dependency map. Saves diff only modules that were loaded when the edit began, preventing an unloaded module from being treated as an empty deleted collection.
+
+Phase 19 assigns every operational row to a tenant and adds restrictive tenant policies on top of existing role and ownership policies. Existing deployments are backfilled into the default SLSC tenant. New Supabase Storage uploads use `tenant/user/module/file` paths; legacy `user/module/file` objects remain readable only for users in the default tenant.
+
+Employee Information uses a cache-first list/detail boundary: cached records paint immediately, the projected directory RPC returns only visible columns, and complete employee data remains the source for authorized profile operations.
 
 Google Drive is treated as document storage for future secure server-side upload/link flows; the browser must not contain Google client secrets.
 

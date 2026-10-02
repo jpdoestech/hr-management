@@ -48,6 +48,8 @@ SQL cannot remove files from Google Drive.
 4. Create a new query.
 5. Open `supabase/reset-hr-data-preserve-users.sql`.
 6. Copy the complete script into the SQL Editor.
+
+The current reset script requires `supabase/phase19-tenant-scale-foundation.sql` and resets only the default SLSC tenant. Profiles, users, settings, preferences, and any future tenant's records remain untouched.
 7. Review the preserved and deleted tables listed at the top of the script.
 8. Click **Run** and accept the destructive-operation warning.
 
