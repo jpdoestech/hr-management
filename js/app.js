@@ -203,7 +203,9 @@ async function saveDBInternal(state){
     const {error:settingsError}=await supabase.from('hr_settings').upsert({id:'singleton',data:state.settings||{orgName:'SCPA',probationDays:180},updated_at:now,updated_by:SESSION?.id||null},{onConflict:'id'});
     if(settingsError) throw settingsError;
   }
+  const employeeDirectoryChanged=changes.upserts.some(change=>change.module==='employees')||changes.deletes.some(change=>change.module==='employees')||!valuesEqual(DB_SNAPSHOT?.settings,state.settings);
   DB_SNAPSHOT=JSON.parse(JSON.stringify(state));
+  if(employeeDirectoryChanged)invalidateEmployeeDirectoryCache();
 }
 
 function saveDB(){
@@ -221,6 +223,16 @@ function saveDB(){
 }
 
 let SERVER_RECORD_QUERY_READY=true;
+const EMPLOYEE_DIRECTORY_PAGE_CACHE=new Map();
+const EMPLOYEE_DIRECTORY_PENDING=new Map();
+let EMPLOYEE_DIRECTORY_REQUEST_TOKEN=0;
+let EMPLOYEE_DIRECTORY_REVISION=0;
+function invalidateEmployeeDirectoryCache(){
+  EMPLOYEE_DIRECTORY_REVISION+=1;
+  EMPLOYEE_DIRECTORY_PAGE_CACHE.clear();
+  EMPLOYEE_DIRECTORY_PENDING.clear();
+  EMPLOYEE_DIRECTORY_REQUEST_TOKEN+=1;
+}
 function serverRecordQueryUnavailable(error){
   return ['42883','PGRST202','PGRST205'].includes(error?.code)||/search_hr_records|schema cache|function.*not find/i.test(error?.message||'');
 }
@@ -3257,7 +3269,7 @@ async function convertOnboardingCandidate(id){
 
 function employeeSearchInput(value){
   const input=document.getElementById('employee-directory-search');
-  if(input) queueSearchRender(input,'employeeSearch',renderEmployees);
+  if(input) queueSearchRender(input,'employeeSearch',renderEmployees,280);
   else STATE.employeeSearch=value;
 }
 function resetEmployeeDirectoryFilters(){
@@ -3273,7 +3285,10 @@ function resetEmployeeDirectoryFilters(){
 }
 function toggleEmployeeDirectoryFilters(){
   STATE.employeeFiltersExpanded=!STATE.employeeFiltersExpanded;
-  renderEmployees();
+  const panel=document.getElementById('employee-filter-set');
+  const button=document.querySelector('.employee-filter-toggle');
+  panel?.classList.toggle('expanded',STATE.employeeFiltersExpanded);
+  button?.setAttribute('aria-expanded',String(Boolean(STATE.employeeFiltersExpanded)));
 }
 const EMPLOYEE_COLUMN_DEFS = [
   {key:'employeeNo',label:'Employee No.',locked:true,default:true,width:104,cell:e=>`<span class="mono">${esc(e.employeeNo||'—')}</span>`},
@@ -3303,9 +3318,13 @@ const EMPLOYEE_COLUMN_DEFS = [
   {key:'emergencyContactRelationship',label:'Relationship',default:false,width:124,cell:e=>esc(e.emergencyContactRelationship||'—')},
   {key:'emergencyContactPhone',label:'Emergency Phone',default:false,width:142,cell:e=>esc(e.emergencyContactPhone||'—')},
 ];
+let EMPLOYEE_COLUMN_CACHE={revision:-1,definitions:[]};
 function employeeColumnDefinitions(){
+  if(EMPLOYEE_COLUMN_CACHE.revision===EMPLOYEE_DIRECTORY_REVISION)return EMPLOYEE_COLUMN_CACHE.definitions;
   const allowanceNames=uniqueSettingNames([...employeeAllowanceTypes(),...DB.employees.flatMap(employee=>Object.keys(employee.allowances||{}))]);
-  return [...EMPLOYEE_COLUMN_DEFS,...allowanceNames.map(name=>({key:employeeAllowanceFieldKey(name),label:name,default:false,width:144,cell:employee=>employee.allowances?.[name]!==''&&employee.allowances?.[name]!=null?peso(employee.allowances[name]):'—'}))];
+  const definitions=[...EMPLOYEE_COLUMN_DEFS,...allowanceNames.map(name=>({key:employeeAllowanceFieldKey(name),label:name,default:false,width:144,cell:employee=>employee.allowances?.[name]!==''&&employee.allowances?.[name]!=null?peso(employee.allowances[name]):'—'}))];
+  EMPLOYEE_COLUMN_CACHE={revision:EMPLOYEE_DIRECTORY_REVISION,definitions};
+  return definitions;
 }
 function defaultEmployeeColumns(){ return employeeColumnDefinitions().filter(c=>c.default||c.locked).map(c=>c.key); }
 function sanitizeEmployeeColumns(keys){
@@ -3385,7 +3404,98 @@ async function resetTableViewPreferences(key){
 }
 const saveEmployeeColumnPreferences=()=>saveTableViewPreferences('employees');
 const resetEmployeeColumnPreferences=()=>resetTableViewPreferences('employees');
-async function renderEmployees(){
+const EMPLOYEE_DIRECTORY_SEARCH_FIELDS=['employeeNo','prfNumber','name','lastName','firstName','middleName','position','department','branchReporting','mobileNumber','personalEmail','address','presentAddressText','remarks','homeAddress','presentAddress','allowances'];
+let EMPLOYEE_DIRECTORY_METADATA_CACHE={revision:-1,metadata:null};
+function employeeDirectoryMetadata(){
+  if(EMPLOYEE_DIRECTORY_METADATA_CACHE.revision===EMPLOYEE_DIRECTORY_REVISION)return EMPLOYEE_DIRECTORY_METADATA_CACHE.metadata;
+  const metadata={
+    departments:[...new Set(DB.employees.map(employee=>employee.department).filter(Boolean))],
+    branches:uniqueSettingNames([...employeeBranchLocations(),...DB.employees.map(employee=>employee.branchReporting)]),
+    statuses:[...new Set(DB.employees.map(employee=>employee.status).filter(Boolean))],
+  };
+  EMPLOYEE_DIRECTORY_METADATA_CACHE={revision:EMPLOYEE_DIRECTORY_REVISION,metadata};
+  return metadata;
+}
+function employeeDirectoryQueryState(){
+  const pageScope='records:employees';
+  const page=requestedPageState(pageScope,10);
+  return {
+    pageScope,page,
+    search:STATE.employeeSearch||'',
+    department:STATE.employeeDepartmentFilter||'',
+    branch:STATE.employeeBranchFilter||'',
+    status:STATE.employeeStatusFilter||'',
+    classification:STATE.employeeClassFilter||'',
+  };
+}
+function employeeDirectorySignature(query=employeeDirectoryQueryState()){
+  return JSON.stringify([EMPLOYEE_DIRECTORY_REVISION,query.search.trim(),query.department,query.branch,query.status,query.classification,query.page.page,query.page.size]);
+}
+function localEmployeeDirectoryRows(query){
+  const search=query.search.trim().toLowerCase();
+  return DB.employees.filter(employee=>{
+    const haystack=[employee.employeeNo,employee.prfNumber,employee.name,employeeDisplayName(employee),employee.position,employee.department,employee.branchReporting,employee.mobileNumber,employee.personalEmail,formatPhilippineAddress(employee.homeAddress)||employee.address,formatPhilippineAddress(employee.presentAddress)||employee.presentAddressText,employee.remarks,...Object.keys(employee.allowances||{})].map(value=>String(value||'').toLowerCase());
+    return (!search||haystack.some(value=>value.includes(search)))
+      &&(!query.department||employee.department===query.department)
+      &&(!query.branch||employee.branchReporting===query.branch)
+      &&(!query.status||employee.status===query.status)
+      &&(!query.classification||classify(employee)===query.classification);
+  }).sort((left,right)=>String(right.employeeNo||'').localeCompare(String(left.employeeNo||''),undefined,{numeric:true,sensitivity:'base'}));
+}
+function employeeDirectoryRowsHTML(rows,columns){
+  if(!rows.length)return `<tr><td colspan="${columns.length+1}"><div class="empty"><b>No employees found</b><span>${employeeDirectoryHasFilters()?'Try adjusting the search or filters.':'Add an employee to begin building the directory.'}</span>${employeeDirectoryHasFilters()?`<button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="resetEmployeeDirectoryFilters()">Reset search and filters</button>`:''}</div></td></tr>`;
+  return rows.map(employee=>`<tr class="employee-directory-row ${String(STATE.employeeSelectedId||'')===String(employee.id)?'selected':''}" data-employee-id="${esc(employee.id)}" tabindex="0" aria-label="Open ${esc(employeeDisplayName(employee))}" onclick="selectEmployeeDirectoryRow('${employee.id}');openEmployeeProfile('${employee.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectEmployeeDirectoryRow('${employee.id}');openEmployeeProfile('${employee.id}')}">
+    ${columns.map(column=>`<td data-column="${esc(column.key)}">${column.cell(employee)}</td>`).join('')}
+    <td data-column="actions" onclick="event.stopPropagation()" onkeydown="event.stopPropagation()"><div class="rowactions">
+      <button class="iconbtn" onclick="selectEmployeeDirectoryRow('${employee.id}');openEmployeeProfile('${employee.id}')" title="View employee profile">${iUser(14)}</button>
+      ${canEdit()?`<button class="iconbtn" onclick="selectEmployeeDirectoryRow('${employee.id}');openEmployeeForm('${employee.id}')" title="Edit">${iEdit(14)}</button>
+      <button class="iconbtn" onclick="selectEmployeeDirectoryRow('${employee.id}');openTransferForEmployee('${employee.id}')" title="Record Department Transfer">${iSwap(14)}</button>
+      <button class="iconbtn" onclick="selectEmployeeDirectoryRow('${employee.id}');openEmployeeStatusForm('${employee.id}')" title="Update Employment Status">${iShield(14)}</button>
+      <button class="iconbtn" onclick="deleteEmployee('${employee.id}')" title="Delete">${iTrash(14)}</button>`:''}
+    </div></td>
+  </tr>`).join('');
+}
+function employeeDirectoryHasFilters(){
+  return Boolean((STATE.employeeSearch||'').trim()||STATE.employeeDepartmentFilter||STATE.employeeBranchFilter||STATE.employeeStatusFilter||STATE.employeeClassFilter);
+}
+function employeeDirectoryPaginationHTML(pageResult,pageScope){
+  return pageResult.meta.total?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${pageResult.meta.start}–${pageResult.meta.end} <span>of ${pageResult.meta.total} employees</span></div>${paginationHTML(pageResult.meta,pageScope,{go:'serverTablePageGo',size:'serverTablePageSize'})}</div>`:'';
+}
+function applyEmployeeDirectoryPage(pageResult,signature){
+  if(STATE.view!=='employees'||employeeDirectorySignature()!==signature)return;
+  const table=document.querySelector('.employee-directory-table');
+  const body=table?.tBodies?.[0];
+  if(!table||!body)return;
+  const columns=employeeVisibleColumns();
+  body.innerHTML=employeeDirectoryRowsHTML(pageResult.rows,columns);
+  const surface=table.closest('.employee-directory-surface');
+  const currentFooter=surface?.querySelector(':scope > .table-pagination-wrap');
+  const footerHTML=employeeDirectoryPaginationHTML(pageResult,'records:employees');
+  if(currentFooter&&footerHTML)currentFooter.outerHTML=footerHTML;
+  else if(currentFooter)currentFooter.remove();
+  else if(footerHTML)surface.insertAdjacentHTML('beforeend',footerHTML);
+  const metadata=employeeDirectoryMetadata();
+  setTitle('Employee Information',`${pageResult.meta.total} of ${DB.employees.length} employees · ${metadata.departments.length} departments`);
+}
+function refreshEmployeeDirectoryPage(query,signature){
+  if(!SERVER_RECORD_QUERY_READY||EMPLOYEE_DIRECTORY_PENDING.has(signature))return;
+  const token=++EMPLOYEE_DIRECTORY_REQUEST_TOKEN;
+  const request=queryRecordPage({module:'employees',scope:query.pageScope,search:query.search,searchFields:EMPLOYEE_DIRECTORY_SEARCH_FIELDS,filters:{department:query.department,branchReporting:query.branch,status:query.status},classification:query.classification,sortKey:'employeeNo',defaultSize:10})
+    .then(pageResult=>{
+      if(!pageResult)return;
+      EMPLOYEE_DIRECTORY_PAGE_CACHE.set(signature,{pageResult,storedAt:Date.now()});
+      while(EMPLOYEE_DIRECTORY_PAGE_CACHE.size>24)EMPLOYEE_DIRECTORY_PAGE_CACHE.delete(EMPLOYEE_DIRECTORY_PAGE_CACHE.keys().next().value);
+      if(token===EMPLOYEE_DIRECTORY_REQUEST_TOKEN)applyEmployeeDirectoryPage(pageResult,signature);
+    })
+    .catch(error=>{
+      if(token===EMPLOYEE_DIRECTORY_REQUEST_TOKEN){console.warn('Server employee search failed; using locally cached records.',error);toast('Server employee search failed; showing locally cached records.',true);}
+    })
+    .finally(()=>{if(EMPLOYEE_DIRECTORY_PENDING.get(signature)===request)EMPLOYEE_DIRECTORY_PENDING.delete(signature);});
+  EMPLOYEE_DIRECTORY_PENDING.set(signature,request);
+}
+function renderEmployees(){
+  const query=employeeDirectoryQueryState();
+  const signature=employeeDirectorySignature(query);
   const q=(STATE.employeeSearch||'').trim().toLowerCase();
   const deptFilter = STATE.employeeDepartmentFilter||'';
   const branchFilter = STATE.employeeBranchFilter||'';
@@ -3393,26 +3503,13 @@ async function renderEmployees(){
   const classFilter = STATE.employeeClassFilter||'';
   const hasFilters=Boolean(q||deptFilter||branchFilter||statusFilter||classFilter);
   const activeFilterCount=[deptFilter,branchFilter,statusFilter,classFilter].filter(Boolean).length;
-  let filteredRows = DB.employees.filter(e=>{
-    const hay=[e.employeeNo,e.prfNumber,e.name,employeeDisplayName(e),e.position,e.department,e.branchReporting,e.mobileNumber,e.personalEmail,formatPhilippineAddress(e.homeAddress)||e.address,formatPhilippineAddress(e.presentAddress)||e.presentAddressText,e.remarks,...Object.keys(e.allowances||{})].map(v=>String(v||'').toLowerCase());
-    const matches = !q || hay.some(v=>v.includes(q));
-    const deptOk = !deptFilter || e.department===deptFilter;
-    const branchOk = !branchFilter || e.branchReporting===branchFilter;
-    const statusOk = !statusFilter || e.status===statusFilter;
-    const classOk = !classFilter || classify(e)===classFilter;
-    return matches && deptOk && branchOk && statusOk && classOk;
-  });
-  const pageScope='records:employees';
-  let pageResult;
-  try{
-    pageResult=await queryRecordPage({module:'employees',scope:pageScope,search:STATE.employeeSearch,searchFields:['employeeNo','prfNumber','name','lastName','firstName','middleName','position','department','branchReporting','mobileNumber','personalEmail','address','presentAddressText','remarks','homeAddress','presentAddress','allowances'],filters:{department:deptFilter,branchReporting:branchFilter,status:statusFilter},classification:classFilter,sortKey:'employeeNo',defaultSize:10});
-  }catch(error){toast('Server employee search failed; showing locally cached records: '+error.message,true);pageResult=null;}
-  if(!pageResult){const local=paginateRows(filteredRows,STATE,pageScope,10);pageResult={...local,server:false};}
+  const pageScope=query.pageScope;
+  const cached=EMPLOYEE_DIRECTORY_PAGE_CACHE.get(signature);
+  const local=cached?null:paginateRows(localEmployeeDirectoryRows(query),STATE,pageScope,10);
+  const pageResult=cached?.pageResult||{...local,server:false};
   const rows=pageResult.rows;
   const filteredTotal=pageResult.meta.total;
-  const depts = [...new Set(DB.employees.map(e=>e.department).filter(Boolean))];
-  const branches = uniqueSettingNames([...employeeBranchLocations(),...DB.employees.map(e=>e.branchReporting)]);
-  const statusOptions=[...new Set(DB.employees.map(e=>e.status).filter(Boolean))];
+  const {departments:depts,branches,statuses:statusOptions}=employeeDirectoryMetadata();
   const columns=employeeVisibleColumns();
   const tableMinWidth=columns.reduce((sum,c)=>sum+c.width,0)+92;
   setTitle('Employee Information', `${filteredTotal} of ${DB.employees.length} employees · ${depts.length} departments`);
@@ -3447,24 +3544,14 @@ async function renderEmployees(){
         <table class="data-table employee-directory-table" data-table-key="employees" data-table-tools="external" data-server-paginated="true" data-page-scope="${pageScope}" data-page-handler="serverTablePageSize" data-managed-columns="department,branchReporting,status,classification" style="min-width:${tableMinWidth}px!important">
           <colgroup>${columns.map(c=>`<col data-column-key="${esc(c.key)}" style="width:${c.width}px">`).join('')}<col data-column-key="actions" style="width:92px"></colgroup>
           <thead><tr>${columns.map(c=>`<th data-column-key="${esc(c.key)}" ${['department','branchReporting','status','classification'].includes(c.key)?'data-column-managed="true"':''}>${esc(c.label)}</th>`).join('')}<th class="actions-head" data-column-key="actions">Actions</th></tr></thead>
-          <tbody>
-            ${rows.length? rows.map(e=>`<tr class="employee-directory-row ${String(STATE.employeeSelectedId||'')===String(e.id)?'selected':''}" data-employee-id="${esc(e.id)}" tabindex="0" aria-label="Open ${esc(employeeDisplayName(e))}" onclick="selectEmployeeDirectoryRow('${e.id}');openEmployeeProfile('${e.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectEmployeeDirectoryRow('${e.id}');openEmployeeProfile('${e.id}')}">
-              ${columns.map(c=>`<td data-column="${esc(c.key)}">${c.cell(e)}</td>`).join('')}
-              <td data-column="actions" onclick="event.stopPropagation()" onkeydown="event.stopPropagation()"><div class="rowactions">
-                <button class="iconbtn" onclick="selectEmployeeDirectoryRow('${e.id}');openEmployeeProfile('${e.id}')" title="View employee profile">${iUser(14)}</button>
-                ${canEdit()? `<button class="iconbtn" onclick="selectEmployeeDirectoryRow('${e.id}');openEmployeeForm('${e.id}')" title="Edit">${iEdit(14)}</button>
-                <button class="iconbtn" onclick="selectEmployeeDirectoryRow('${e.id}');openTransferForEmployee('${e.id}')" title="Record Department Transfer">${iSwap(14)}</button>
-                <button class="iconbtn" onclick="selectEmployeeDirectoryRow('${e.id}');openEmployeeStatusForm('${e.id}')" title="Update Employment Status">${iShield(14)}</button>
-                <button class="iconbtn" onclick="deleteEmployee('${e.id}')" title="Delete">${iTrash(14)}</button>`:''}
-              </div></td>
-            </tr>`).join('') : `<tr><td colspan="${columns.length+1}"><div class="empty"><b>No employees found</b><span>${hasFilters?'Try adjusting the search or filters.':'Add an employee to begin building the directory.'}</span>${hasFilters?`<button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="resetEmployeeDirectoryFilters()">Reset search and filters</button>`:''}</div></td></tr>`}
-          </tbody>
+          <tbody>${employeeDirectoryRowsHTML(rows,columns)}</tbody>
         </table>
       </div>
-      ${filteredTotal?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${pageResult.meta.start}–${pageResult.meta.end} <span>of ${filteredTotal} employees</span></div>${paginationHTML(pageResult.meta,pageScope,{go:'serverTablePageGo',size:'serverTablePageSize'})}</div>`:''}
+      ${employeeDirectoryPaginationHTML(pageResult,pageScope)}
     </section>
   </div>`;
   document.getElementById('content').innerHTML = html;
+  refreshEmployeeDirectoryPage(query,signature);
 }
 function openEmployeeWorkspaceModal(html){
   openModal(html);
