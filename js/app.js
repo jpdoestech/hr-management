@@ -2332,6 +2332,7 @@ function downloadCSV(filename, csv){
 let MODAL_TRIGGER=null;
 let MODAL_EDIT_STATE=null;
 let EMPLOYEE_TRANSACTION_RETURN=null;
+let MODAL_TRANSITIONING=false;
 let PAGE_EDIT_STATE=null;
 let PENDING_PAGE_NAVIGATION=null;
 const CONFIRMED_MODAL_CLOSE_TARGETS=new WeakSet();
@@ -2474,6 +2475,7 @@ function openModal(html){
   const overlay=document.getElementById('overlay');
   const modal=document.getElementById('modal');
   MODAL_TRIGGER=document.activeElement instanceof HTMLElement?document.activeElement:null;
+  modal.removeAttribute('aria-busy');
   modal.classList.remove('case-modal','employee-workspace-modal','entry-modal','relations-modal');
   modal.innerHTML=html;
   const employeeRelationsView=navSectionForView(STATE.view)==='Employee Relations'||Boolean(modal.querySelector('[data-employee-relations-modal]'));
@@ -2496,6 +2498,22 @@ function openModal(html){
     Promise.resolve(initializeAddressComponents(modal)).finally(()=>captureModalEditState());
     (modal.querySelector('.modal-head button')||modal).focus();
   });
+}
+async function transitionModal(openTarget){
+  if(MODAL_TRANSITIONING||typeof openTarget!=='function')return false;
+  MODAL_TRANSITIONING=true;
+  const originalTrigger=MODAL_TRIGGER;
+  const modal=document.getElementById('modal');
+  modal?.setAttribute('aria-busy','true');
+  MODAL_EDIT_STATE=null;
+  try{
+    await openTarget();
+    MODAL_TRIGGER=originalTrigger;
+    return true;
+  }finally{
+    MODAL_TRANSITIONING=false;
+    document.getElementById('modal')?.removeAttribute('aria-busy');
+  }
 }
 async function closeModal(keepUploads=[]){
   const keep=new Set(Array.isArray(keepUploads)?keepUploads:[keepUploads]);
@@ -3899,10 +3917,14 @@ async function returnFromEmployeeTransaction(keepUploads=[]){
   MODAL_EDIT_STATE=null;
   const modal=document.getElementById('modal');
   modal?.setAttribute('aria-busy','true');
-  selectEmployeeDirectoryRow(employee.id);
-  await openEmployeeProfile(employee.id);
-  await deleteStorageObjects(pending);
-  return true;
+  try{
+    selectEmployeeDirectoryRow(employee.id);
+    await openEmployeeProfile(employee.id);
+    await deleteStorageObjects(pending);
+    return true;
+  }finally{
+    document.getElementById('modal')?.removeAttribute('aria-busy');
+  }
 }
 async function finishEmployeeTransaction(keepUploads=[]){
   return EMPLOYEE_TRANSACTION_RETURN?returnFromEmployeeTransaction(keepUploads):false;
@@ -6129,18 +6151,23 @@ async function workflowSyncTasks({silent=false}={}){
 }
 function taskStatusPreserved(task){ return !!task && ['Completed','Rejected','Cancelled'].includes(task.status); }
 function workflowFindTask(id){ return (DB.workflowTasks||[]).find(t=>String(t.id)===String(id)); }
-function workflowOpenSource(task){
+async function workflowOpenSource(task){
   if(!task) return;
-  if(task.module==='cases'){ closeModal(); openCaseDetails(task.recordId); return; }
-  if(task.module==='lifecycleChecklists'){ closeModal(); openLifecycleChecklist(task.checklistId); return; }
-  if(task.module==='manpowerRequests'){ closeModal(); go('prf').then(()=>openManpowerRequestDetails(task.recordId)); return; }
+  if(task.module==='cases'){ await transitionModal(()=>openCaseDetails(task.recordId)); return; }
+  if(task.module==='lifecycleChecklists'){ await transitionModal(()=>openLifecycleChecklist(task.checklistId)); return; }
+  if(task.module==='manpowerRequests'){
+    await closeModal();
+    await go('prf');
+    openManpowerRequestDetails(task.recordId);
+    return;
+  }
   if(task.module==='evaluations'){
     const ev=DB.evaluations.find(x=>String(x.id)===String(task.recordId));
-    if(ev) { closeModal(); openEvalForm(ev.employeeId,ev.milestone); }
+    if(ev) await transitionModal(()=>openEvalForm(ev.employeeId,ev.milestone));
     return;
   }
   const route=task.module;
-  if(RENDERERS[route]){ closeModal(); go(route); }
+  if(RENDERERS[route]){ await closeModal(); await go(route); }
 }
 function openWorkflowTask(id){
   const task=workflowFindTask(id); if(!task) return;
@@ -6939,7 +6966,7 @@ async function saveManpowerRequirement(requestId,id=''){
       slot.status=slot.statusBeforeRequirementCancellation||'Open';delete slot.cancelledByRequirement;delete slot.statusBeforeRequirementCancellation;
     }
   });
-  logAudit(`${requirement?'Updated':'Added'} ${manpowerRequirementLabel(saved)} under ${manpowerRequestLabel(request)}`);await saveDB();await workflowSyncTasks({silent:true});await closeModal();manpowerRefresh();openManpowerRequestDetails(requestId);toast(requirement?'Requirement updated.':'Requirement and fulfillment slots added.');
+  logAudit(`${requirement?'Updated':'Added'} ${manpowerRequirementLabel(saved)} under ${manpowerRequestLabel(request)}`);await saveDB();await workflowSyncTasks({silent:true});manpowerRefresh();await transitionModal(()=>openManpowerRequestDetails(requestId));toast(requirement?'Requirement updated.':'Requirement and fulfillment slots added.');
 }
 
 function manpowerReplacementDefaults(employee){
@@ -6977,7 +7004,7 @@ async function saveManpowerSlot(slotId){
     const event={type:'Deployment',from:'Manpower Request',to:`${requirement.position||employee.position}${values.deploymentSite?' · '+values.deploymentSite:''}`,effectiveDate:values.dateDeployed,remarks:`${manpowerRequestLabel(request)} · ${requirement.requestType}`,changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System',sourceManpowerRequestId:request.id,sourceManpowerSlotId:slot.id};
     const index=employee.employmentHistory.findIndex(item=>String(item.sourceManpowerSlotId||'')===String(slot.id));if(index>=0)employee.employmentHistory[index]=event;else employee.employmentHistory.push(event);
   }
-  logAudit(`Updated slot ${slot.slotNumber} for ${manpowerRequestLabel(request)}${employee?' · '+employeeDisplayName(employee):''}`);await saveDB();await workflowSyncTasks({silent:true});await closeModal();manpowerRefresh();openManpowerRequestDetails(request.id);toast('Fulfillment slot updated.');
+  logAudit(`Updated slot ${slot.slotNumber} for ${manpowerRequestLabel(request)}${employee?' · '+employeeDisplayName(employee):''}`);await saveDB();await workflowSyncTasks({silent:true});manpowerRefresh();await transitionModal(()=>openManpowerRequestDetails(request.id));toast('Fulfillment slot updated.');
 }
 
 function openManpowerRequestDetails(id){

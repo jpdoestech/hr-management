@@ -29,6 +29,8 @@ test('employee transactions return to the selected overview on cancel or save',(
   assert.match(source,/let EMPLOYEE_TRANSACTION_RETURN=null/);
   assert.match(source,/EMPLOYEE_TRANSACTION_RETURN=returnToEmployee\?\{employeeId:emp\.id,module,returnTarget:'overview'\}:null/);
   assert.match(source,/async function returnFromEmployeeTransaction\(keepUploads=\[\]\)/);
+  const returnFlow=source.slice(source.indexOf('async function returnFromEmployeeTransaction'),source.indexOf('async function finishEmployeeTransaction'));
+  assert.match(returnFlow,/finally\{[\s\S]*removeAttribute\('aria-busy'\)/);
   assert.match(source,/if\(EMPLOYEE_TRANSACTION_RETURN\)[\s\S]*returnFromEmployeeTransaction\(\)/);
   for(const saver of ['saveRecord','saveCVR','saveIncident','saveATDRecord','saveEval','saveCase']){
     const start=source.indexOf(`function ${saver}(`)>=0?source.indexOf(`function ${saver}(`):source.indexOf(`function ${saver}`);
