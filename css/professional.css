@@ -924,6 +924,8 @@ body,input,select,textarea,button,table{font-family:'Plus Jakarta Sans',sans-ser
 .employee-workspace-nav button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:6px 10px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:10px;font-weight:700;cursor:pointer;}
 .employee-workspace-nav button:hover:not(:disabled){background:#F3F1FA;color:var(--accent);}
 .employee-workspace-nav button.active{background:#fff;color:var(--accent);box-shadow:0 0 0 1px #DDD7F5;cursor:default;}
+.modal.employee-workspace-modal[aria-busy="true"] .employee-workspace-nav button{pointer-events:none;}
+.modal.employee-workspace-modal[aria-busy="true"] .employee-workspace-nav::after{content:"Loading";align-self:center;margin-left:auto;padding:0 5px;color:var(--muted);font-size:8px;font-weight:750;text-transform:uppercase;}
 .employee-workspace-foot{align-items:center;min-height:58px;}
 .employee-workspace-foot>.small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .employee-form-body{padding:14px 18px 18px;}

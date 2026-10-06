@@ -3890,7 +3890,48 @@ async function renderEmployeeOrigin(){
 }
 function employeeWorkspaceHeader(emp,section='Overview'){
   const isOverview=section==='Overview';
-  return `<div class="modal-head employee-workspace-head"><div class="employee-workspace-heading">${!isOverview?`<button type="button" class="employee-workspace-back" title="Back to employee" aria-label="Back to ${esc(employeeDisplayName(emp))}" onclick="closeModal();openEmployeeProfile('${emp.id}')">${iArrowLeft(17)}</button>`:''}<div><div class="employee-workspace-breadcrumb"><span>Employee Information</span><span>›</span><span>${esc(employeeDisplayName(emp))}</span>${!isOverview?`<span>›</span><b>${esc(section)}</b>`:''}</div><h3>${esc(section==='Overview'?employeeDisplayName(emp):section)}</h3><div class="small">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div></div></div><button type="button" onclick="closeModal()" aria-label="Close employee workspace">&times;</button></div>`;
+  return `<div class="modal-head employee-workspace-head"><div class="employee-workspace-heading">${!isOverview?`<button type="button" class="employee-workspace-back" title="Back to employee" aria-label="Back to ${esc(employeeDisplayName(emp))}" onclick="employeeWorkspaceNavigate('${emp.id}','overview')">${iArrowLeft(17)}</button>`:''}<div><div class="employee-workspace-breadcrumb"><span>Employee Information</span><span>›</span><span>${esc(employeeDisplayName(emp))}</span>${!isOverview?`<span>›</span><b>${esc(section)}</b>`:''}</div><h3>${esc(section==='Overview'?employeeDisplayName(emp):section)}</h3><div class="small">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div></div></div><button type="button" onclick="closeModal()" aria-label="Close employee workspace">&times;</button></div>`;
+}
+let EMPLOYEE_WORKSPACE_NAVIGATING=false;
+async function employeeWorkspaceNavigate(employeeId,target='overview'){
+  if(EMPLOYEE_WORKSPACE_NAVIGATING)return false;
+  const employee=DB.employees.find(row=>String(row.id)===String(employeeId));
+  if(!employee){toast('Employee record could not be found.',true);return false;}
+  if(modalHasUnsavedChanges()){
+    const choice=await confirmDataChange({
+      title:'Unsaved employee changes',
+      message:'You changed information in this employee workspace. Save before moving to another section?',
+      confirmLabel:'Save changes',
+      secondaryLabel:'Discard changes',
+      cancelLabel:'Keep editing',
+    });
+    if(choice==='confirm'){
+      const saveButton=MODAL_EDIT_STATE?.saveButton;
+      if(saveButton?.isConnected){CONFIRMED_CHANGE_TARGETS.add(saveButton);saveButton.click();}
+      return false;
+    }
+    if(choice!=='discard')return false;
+    MODAL_EDIT_STATE=null;
+  }
+  const destinations={
+    overview:()=>openEmployeeProfile(employee.id),
+    edit:()=>openEmployeeForm(employee.id),
+    status:()=>openEmployeeStatusForm(employee.id),
+    lifecycle:()=>openEmployeeLifecycleEventForm(employee.id),
+    transfer:()=>openTransferForEmployee(employee.id),
+  };
+  const destination=destinations[target]||destinations.overview;
+  EMPLOYEE_WORKSPACE_NAVIGATING=true;
+  const modal=document.getElementById('modal');
+  modal?.setAttribute('aria-busy','true');
+  try{
+    selectEmployeeDirectoryRow(employee.id);
+    await destination();
+    return true;
+  }finally{
+    EMPLOYEE_WORKSPACE_NAVIGATING=false;
+    document.getElementById('modal')?.removeAttribute('aria-busy');
+  }
 }
 function employeeWorkspaceNav(emp,active='overview'){
   if(!canEdit()) return '';
@@ -3901,10 +3942,10 @@ function employeeWorkspaceNav(emp,active='overview'){
     ['lifecycle','Lifecycle',iPlus(14),`openEmployeeLifecycleEventForm('${emp.id}')`],
     ['transfer','Transfer',iSwap(14),`openTransferForEmployee('${emp.id}')`],
   ];
-  return `<nav class="employee-workspace-nav" aria-label="Employee transactions">${actions.map(([key,label,icon,handler])=>`<button type="button" class="${key===active?'active':''}" ${key===active?'disabled aria-current="page"':`onclick="closeModal();${handler}"`}>${icon}<span>${label}</span></button>`).join('')}</nav>`;
+  return `<nav class="employee-workspace-nav" aria-label="Employee transactions">${actions.map(([key,label,icon])=>`<button type="button" class="${key===active?'active':''}" ${key===active?'disabled aria-current="page"':`onclick="employeeWorkspaceNavigate('${emp.id}','${key}')"`}>${icon}<span>${label}</span></button>`).join('')}</nav>`;
 }
 function employeeWorkspaceFooter(emp,saveLabel,saveHandler){
-  return `<div class="modal-foot employee-workspace-foot"><button class="btn btn-ghost" onclick="closeModal();openEmployeeProfile('${emp.id}')">Back to Employee</button><div class="toolbar-spacer"></div><button class="btn btn-primary" onclick="${saveHandler}">${esc(saveLabel)}</button></div>`;
+  return `<div class="modal-foot employee-workspace-foot"><button class="btn btn-ghost" onclick="employeeWorkspaceNavigate('${emp.id}','overview')">Back to Employee</button><div class="toolbar-spacer"></div><button class="btn btn-primary" onclick="${saveHandler}">${esc(saveLabel)}</button></div>`;
 }
 
 const EMP_FIELDS = [
