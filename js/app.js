@@ -7,6 +7,7 @@ import { buildRecordChanges, valuesEqual } from './core/record-diff.js?v=2026093
 import { roleCanExport } from './core/export-access.js?v=20260930-1';
 import { manpowerRequestSummary, manpowerRequestTotals, requirementSlotCounts, slotChronologyIssues, slotMetrics } from './core/manpower.js?v=20260930-1';
 import { measureAsync, recordPerformance, performanceSnapshot } from './core/performance.js?v=20261002-1';
+import { ACCESS_ACTIONS, ACCESS_MODULES, ACCESS_PERMISSION_KEYS, evaluateEffectiveAccess, hasEffectivePermission, legacyPermissions, permissionLabel } from './core/access-control.js?v=20261006-1';
 import { addressComponentHTML, addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom, addressDetailInput, initializeAddressComponents, readAddressComponent } from './address/address-component.js?v=20260930-2';
 import { formatPhilippineAddress, normalizeAddress } from './address/address-models.js?v=20260930-2';
 
@@ -32,6 +33,8 @@ let SAVE_QUEUE = Promise.resolve();
 let SELF_SERVICE_READY = true;
 let USER_PREFERENCES = {employeeColumns:[],tableLayouts:{}};
 let USER_PREFERENCES_SYNC_READY = true;
+let ACCESS_CONTROL_READY = true;
+let ACCESS_STORE = {roles:[],rolePermissions:[],userRoles:[],overrides:[],scopes:[],assignments:[]};
 const DEFAULT_DEPARTMENT_NAMES = ['LOGISTICS','WAREHOUSE','UTILITY','MAINTENANCE','PRODUCTION','ADMIN','SALES'];
 
 function blankDB(){
@@ -365,13 +368,32 @@ function serverTablePageSize(scope,size){
 }
 
 async function loadProfiles(){
-  let {data,error}=await supabase.from('profiles').select('id,tenant_id,full_name,username,email,role,can_export,employee_record_id,manager_profile_id,created_at').order('created_at');
+  let {data,error}=await supabase.from('profiles').select('id,tenant_id,full_name,username,email,role,can_export,is_super_admin,allow_password_self_service,employee_record_id,manager_profile_id,created_at').order('created_at');
   if(error&&['42703','PGRST204'].includes(error.code)){
-    ({data,error}=await supabase.from('profiles').select('id,full_name,username,email,role,can_export,employee_record_id,manager_profile_id,created_at').order('created_at'));
-    if(error&&['42703','PGRST204'].includes(error.code))({data,error}=await supabase.from('profiles').select('id,full_name,username,email,role,employee_record_id,manager_profile_id,created_at').order('created_at'));
+    ACCESS_CONTROL_READY=false;
+    ({data,error}=await supabase.from('profiles').select('id,tenant_id,full_name,username,email,role,can_export,employee_record_id,manager_profile_id,created_at').order('created_at'));
+    if(error&&['42703','PGRST204'].includes(error.code)){
+      ({data,error}=await supabase.from('profiles').select('id,full_name,username,email,role,can_export,employee_record_id,manager_profile_id,created_at').order('created_at'));
+      if(error&&['42703','PGRST204'].includes(error.code))({data,error}=await supabase.from('profiles').select('id,full_name,username,email,role,employee_record_id,manager_profile_id,created_at').order('created_at'));
+    }
   }
   if(error) throw error;
-  DB.users=(data||[]).map(p=>({id:p.id,tenantId:p.tenant_id||DEFAULT_TENANT_ID,fullName:p.full_name,username:p.username,email:p.email,role:p.role,canExport:p.can_export===true,employeeRecordId:p.employee_record_id||'',managerProfileId:p.manager_profile_id||'',createdAt:p.created_at?.slice(0,10)||todayISO()}));
+  DB.users=(data||[]).map(p=>({id:p.id,tenantId:p.tenant_id||DEFAULT_TENANT_ID,fullName:p.full_name,username:p.username,email:p.email,role:p.role,canExport:p.can_export===true,isSuperAdmin:p.is_super_admin===true,allowPasswordSelfService:p.allow_password_self_service!==false,employeeRecordId:p.employee_record_id||'',managerProfileId:p.manager_profile_id||'',createdAt:p.created_at?.slice(0,10)||todayISO()}));
+}
+
+async function loadOwnEffectiveAccess(){
+  if(!SESSION)return;
+  try{
+    const {data,error}=await supabase.rpc('get_effective_access',{p_user_id:SESSION.id});
+    if(error)throw error;
+    SESSION.effectiveAccess=data?.permissions||{};
+    SESSION.accessDetails=data||{};
+    ACCESS_CONTROL_READY=true;
+  }catch(error){
+    if(['42883','PGRST202','42P01'].includes(error.code)||/get_effective_access|access_/i.test(error.message||''))ACCESS_CONTROL_READY=false;
+    const inherited=legacyPermissions(SESSION.role,SESSION.canExport);
+    SESSION.effectiveAccess=evaluateEffectiveAccess({superAdmin:SESSION.role==='Administrator',rolePermissions:inherited});
+  }
 }
 
 async function persistStateAndProfiles(){ await saveDB(); await loadProfiles(); }
@@ -736,7 +758,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = blankDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', dashboardTab:'priorities', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeBranchFilter:'', employeeStatusFilter:'', employeeClassFilter:'', employeeFiltersExpanded:false, lifecycleSearch:'', lifecycleFilter:'', checklistSearch:'', checklistType:'', checklistStatus:'Active', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', actionSearch:'', actionLevel:'all', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, weeklyTab:'summary', opsTab:'employee', opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', workflowPriority:'', workflowDepartment:'', analyticsTab:'overview', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', analyticsBranch:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationTab:'overview', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', manpowerView:'requests', manpowerSearch:'', manpowerBranch:'', manpowerStatus:'', manpowerRisk:'', manpowerType:'', tablePages:{}, tablePageSizes:{} };
+let STATE = { view:'dashboard', dashboardTab:'priorities', accessTab:'users', accessSearch:'', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeBranchFilter:'', employeeStatusFilter:'', employeeClassFilter:'', employeeFiltersExpanded:false, lifecycleSearch:'', lifecycleFilter:'', checklistSearch:'', checklistType:'', checklistStatus:'Active', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', actionSearch:'', actionLevel:'all', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, weeklyTab:'summary', opsTab:'employee', opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', workflowPriority:'', workflowDepartment:'', analyticsTab:'overview', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', analyticsBranch:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationTab:'overview', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', manpowerView:'requests', manpowerSearch:'', manpowerBranch:'', manpowerStatus:'', manpowerRisk:'', manpowerType:'', tablePages:{}, tablePageSizes:{} };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 let DASHBOARD_CASE_CACHE = null;
 let ANALYTICS_CASE_CACHE = null;
@@ -760,10 +782,79 @@ function switchAuthTab(tab){
   registerTab.setAttribute('aria-selected',String(!isLogin));
   document.getElementById('login-form').style.display = tab==='login'?'block':'none';
   document.getElementById('register-form').style.display = tab==='register'?'block':'none';
+  document.getElementById('recovery-form').style.display='none';
+  document.getElementById('new-password-form').style.display='none';
   document.querySelector('#auth-screen .auth-card')?.classList.toggle('registering',!isLogin);
   document.getElementById('auth-title').textContent=isLogin?'Welcome back':'Create your account';
   document.getElementById('auth-subtitle').textContent=isLogin?'Sign in to continue to your HR workspace.':'Register for secure access to SLSC people operations.';
   document.getElementById('auth-error').style.display='none';
+}
+let AUTH_RECOVERY_ACTIVE=false;
+function openPasswordRecovery(){
+  const email=document.getElementById('li-user')?.value||'';
+  document.getElementById('login-form').style.display='none';
+  document.getElementById('register-form').style.display='none';
+  document.getElementById('new-password-form').style.display='none';
+  document.getElementById('recovery-form').style.display='block';
+  document.querySelector('#auth-screen .auth-card')?.classList.remove('registering');
+  document.getElementById('auth-title').textContent='Reset your password';
+  document.getElementById('auth-subtitle').textContent='We will email a secure reset link to the address on your account.';
+  document.getElementById('recovery-email').value=email.includes('@')?email:'';
+  document.getElementById('auth-error').style.display='none';
+  document.getElementById('recovery-email').focus();
+}
+function showNewPasswordForm(){
+  AUTH_RECOVERY_ACTIVE=true;
+  revealSessionUI();
+  document.getElementById('app').classList.remove('on');
+  document.getElementById('auth-screen').style.display='';
+  ['login-form','register-form','recovery-form'].forEach(id=>document.getElementById(id).style.display='none');
+  document.getElementById('new-password-form').style.display='block';
+  document.getElementById('auth-title').textContent='Choose a new password';
+  document.getElementById('auth-subtitle').textContent='This secure link verifies your account. Use at least 8 characters.';
+  document.getElementById('auth-error').style.display='none';
+}
+async function resolveAccountEmail(login){
+  if(login.includes('@')) return login.toLowerCase();
+  const {data,error}=await supabase.rpc('get_login_email_by_username',{p_username:login.toLowerCase()});
+  if(error) throw error;
+  return data||'';
+}
+async function requestPasswordRecovery(ev,emailOverride=''){
+  ev?.preventDefault?.();
+  const entered=String(emailOverride||document.getElementById('recovery-email')?.value||'').trim();
+  if(!entered){authErr('Enter the email address on your account.');return false;}
+  try{
+    const email=await resolveAccountEmail(entered);
+    if(!email)throw new Error('Account not found.');
+    const {data:allowed,error:policyError}=await supabase.rpc('password_self_service_allowed',{p_email:email});
+    if(policyError&&!['42883','PGRST202'].includes(policyError.code))throw policyError;
+    if(allowed===false){
+      authErr('Password self-service is disabled for this employee account. Contact the System Administrator.');
+      return false;
+    }
+    const redirectTo=`${location.origin}${location.pathname}`;
+    const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo});
+    if(error)throw error;
+    authErr('Password reset email sent. Open the secure link in that email to continue.');
+    document.getElementById('auth-error').classList.add('success');
+  }catch(error){authErr(error.message||'Could not send the password reset email.');}
+  return false;
+}
+async function completePasswordRecovery(ev){
+  ev.preventDefault();
+  const password=document.getElementById('recovery-password').value;
+  const confirmation=document.getElementById('recovery-password-confirm').value;
+  if(password.length<8){authErr('Use a password with at least 8 characters.');return false;}
+  if(password!==confirmation){authErr('Passwords do not match.');return false;}
+  const {error}=await supabase.auth.updateUser({password});
+  if(error){authErr(error.message);return false;}
+  AUTH_RECOVERY_ACTIVE=false;
+  await supabase.auth.signOut();
+  switchAuthTab('login');
+  authErr('Password updated. Sign in with your new password.');
+  document.getElementById('auth-error').classList.add('success');
+  return false;
 }
 function togglePasswordVisibility(inputId,button){
   const input=document.getElementById(inputId);
@@ -774,7 +865,7 @@ function togglePasswordVisibility(inputId,button){
   button.setAttribute('aria-label',reveal?'Hide password':'Show password');
   input.focus();
 }
-function authErr(msg){ const e=document.getElementById('auth-error'); e.textContent=msg; e.style.display='block'; }
+function authErr(msg){ const e=document.getElementById('auth-error'); e.classList.remove('success'); e.textContent=msg; e.style.display='block'; }
 
 async function doLogin(ev){
   ev.preventDefault();
@@ -813,14 +904,18 @@ async function doRegister(ev){
 }
 async function bootAuthenticated(user){
   try{
-    let {data:ownProfile,error:profileError}=await supabase.from('profiles').select('id,tenant_id,full_name,username,email,role,can_export,employee_record_id,manager_profile_id,created_at').eq('id',user.id).maybeSingle();
+    let {data:ownProfile,error:profileError}=await supabase.from('profiles').select('id,tenant_id,full_name,username,email,role,can_export,is_super_admin,allow_password_self_service,employee_record_id,manager_profile_id,created_at').eq('id',user.id).maybeSingle();
     if(profileError&&['42703','PGRST204'].includes(profileError.code)){
-      TENANT_SCHEMA_READY=false;
-      ({data:ownProfile,error:profileError}=await supabase.from('profiles').select('id,full_name,username,email,role,can_export,employee_record_id,manager_profile_id,created_at').eq('id',user.id).maybeSingle());
-      if(profileError&&['42703','PGRST204'].includes(profileError.code))({data:ownProfile,error:profileError}=await supabase.from('profiles').select('id,full_name,username,email,role,employee_record_id,manager_profile_id,created_at').eq('id',user.id).maybeSingle());
+      ACCESS_CONTROL_READY=false;
+      ({data:ownProfile,error:profileError}=await supabase.from('profiles').select('id,tenant_id,full_name,username,email,role,can_export,employee_record_id,manager_profile_id,created_at').eq('id',user.id).maybeSingle());
+      if(profileError&&['42703','PGRST204'].includes(profileError.code)){
+        TENANT_SCHEMA_READY=false;
+        ({data:ownProfile,error:profileError}=await supabase.from('profiles').select('id,full_name,username,email,role,can_export,employee_record_id,manager_profile_id,created_at').eq('id',user.id).maybeSingle());
+        if(profileError&&['42703','PGRST204'].includes(profileError.code))({data:ownProfile,error:profileError}=await supabase.from('profiles').select('id,full_name,username,email,role,employee_record_id,manager_profile_id,created_at').eq('id',user.id).maybeSingle());
+      }else TENANT_SCHEMA_READY=true;
     }else if(!profileError)TENANT_SCHEMA_READY=true;
     if(profileError) throw profileError;
-    SESSION=ownProfile?{id:ownProfile.id,tenantId:ownProfile.tenant_id||DEFAULT_TENANT_ID,fullName:ownProfile.full_name,username:ownProfile.username,email:ownProfile.email,role:ownProfile.role,canExport:ownProfile.can_export===true,employeeRecordId:ownProfile.employee_record_id||'',managerProfileId:ownProfile.manager_profile_id||'',createdAt:ownProfile.created_at?.slice(0,10)||todayISO()}:{id:user.id,tenantId:DEFAULT_TENANT_ID,fullName:user.user_metadata?.full_name||user.email,username:user.user_metadata?.username||'',email:user.email,role:'Employee',canExport:false,employeeRecordId:'',managerProfileId:''};
+    SESSION=ownProfile?{id:ownProfile.id,tenantId:ownProfile.tenant_id||DEFAULT_TENANT_ID,fullName:ownProfile.full_name,username:ownProfile.username,email:ownProfile.email,role:ownProfile.role,canExport:ownProfile.can_export===true,isSuperAdmin:ownProfile.is_super_admin===true,allowPasswordSelfService:ownProfile.allow_password_self_service!==false,employeeRecordId:ownProfile.employee_record_id||'',managerProfileId:ownProfile.manager_profile_id||'',createdAt:ownProfile.created_at?.slice(0,10)||todayISO()}:{id:user.id,tenantId:DEFAULT_TENANT_ID,fullName:user.user_metadata?.full_name||user.email,username:user.user_metadata?.username||'',email:user.email,role:'Employee',canExport:false,isSuperAdmin:false,allowPasswordSelfService:true,employeeRecordId:'',managerProfileId:''};
     LOADED_RECORD_MODULES.clear();
     MODULE_LOAD_QUEUE=Promise.resolve();
     invalidateEmployeeDirectoryCache();
@@ -835,6 +930,7 @@ async function bootAuthenticated(user){
     await loadProfiles();
     const profile=DB.users.find(x=>x.id===user.id);
     if(profile) SESSION=profile;
+    await loadOwnEffectiveAccess();
     await loadUserPreferences();
     if(isHRRole()){
       ensureAutomationSettings();
@@ -864,6 +960,35 @@ async function doLogout(){
   document.getElementById('app').classList.remove('on');
   document.getElementById('auth-screen').style.display='';
   document.getElementById('li-user').value=''; document.getElementById('li-pass').value='';
+}
+function openAccountSecurity(){
+  if(!SESSION)return;
+  const passwordAllowed=SESSION.role!=='Employee'||SESSION.allowPasswordSelfService!==false;
+  openModal(`<div class="modal-head"><div><h3>Account Security</h3><div class="small">${esc(SESSION.fullName)} · ${esc(SESSION.role)}</div></div><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body account-security-panel">
+      <section><div class="account-security-icon">@</div><div><h4>Change email address</h4><p>Supabase sends confirmation messages to verify the email change. Your profile updates only after confirmation.</p></div></section>
+      <div class="field"><label>New email address</label><input id="account-new-email" type="email" value="${esc(SESSION.email||'')}" autocomplete="email"></div>
+      <button class="btn btn-ghost" type="button" onclick="requestOwnEmailChange()">Send email verification</button>
+      <section><div class="account-security-icon">*</div><div><h4>Reset password by email</h4><p>${passwordAllowed?'A secure link will be sent to your account email. Administrators never see or set your password.':'Password self-service is disabled for this employee account. Contact the System Administrator.'}</p></div></section>
+      <button class="btn btn-primary" type="button" onclick="requestOwnPasswordReset()" ${passwordAllowed?'':'disabled'}>Email password reset link</button>
+    </div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>`,'modal-md');
+}
+async function requestOwnEmailChange(){
+  const email=document.getElementById('account-new-email')?.value.trim().toLowerCase();
+  if(!email||!email.includes('@')){toast('Enter a valid email address.',true);return;}
+  if(email===String(SESSION.email||'').toLowerCase()){toast('Enter a different email address.',true);return;}
+  const {error}=await supabase.auth.updateUser({email},{emailRedirectTo:`${location.origin}${location.pathname}`});
+  if(error){toast('Could not start email change: '+error.message,true);return;}
+  closeModal();toast('Verification email sent. Confirm the change from your email inbox.');
+}
+async function requestOwnPasswordReset(){
+  if(SESSION.role==='Employee'&&SESSION.allowPasswordSelfService===false){toast('Password self-service is disabled for this account.',true);return;}
+  const email=SESSION.email;
+  closeModal();
+  const redirectTo=`${location.origin}${location.pathname}`;
+  const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo});
+  if(error){toast('Could not send password reset email: '+error.message,true);return;}
+  toast('Password reset email sent.');
 }
 let NOTIFICATION_TIMER=null;
 let NOTIFICATION_ITEMS=[];
@@ -1805,7 +1930,7 @@ const NAV = [
     {v:'documents',label:'Document Center',icon:iDoc},
     {v:'dataQuality',label:'Data Quality & Governance',icon:iCheck},
     {v:'reports',label:'Reports',icon:iChart},
-    {v:'users',label:'User Management',icon:iUsers},
+    {v:'users',label:'Access Control',icon:iShield},
     {v:'settings',label:'Settings',icon:iGear,roles:['Administrator','HR Staff']},
   ]},
 ];
@@ -1818,8 +1943,10 @@ const NAV_SECTION_ICONS={
 };
 function navItemVisible(item){
   const role=SESSION?.role||'HR Staff';
+  const permission=viewPermission(item.v,'view');
+  if(permission&&hasPermission(permission))return true;
   if(item.roles) return item.roles.includes(role);
-  return !['Employee','Manager'].includes(role);
+  return !permission&&!['Employee','Manager'].includes(role);
 }
 function navSectionForView(view){return NAV.find(group=>group.items.some(item=>item.v===view&&navItemVisible(item)))?.sec||'';}
 function navLabelForView(view){return NAV.flatMap(group=>group.items).find(item=>item.v===view&&navItemVisible(item))?.label||'';}
@@ -2075,14 +2202,33 @@ function logAudit(action){
   supabase.from('hr_audit_logs').insert({user_id:SESSION?.id||null,user_name:entry.user,action:entry.action}).then(({error})=>{ if(error) console.warn('Audit log failed',error); });
 }
 function isHRRole(role=SESSION?.role){ return role==='Administrator'||role==='HR Staff'; }
-function canEdit(){ return !SESSION || isHRRole(); }
-function canExport(){ return roleCanExport(SESSION?.role,SESSION?.canExport); }
+const VIEW_PERMISSION_MODULE={dashboard:'dashboard',actionCenter:'workflow',workflow:'workflow',automation:'automation',operations:'employees',analytics:'analytics',weeklyReport:'analytics',reports:'analytics',employees:'employees',onboarding:'onboarding',employeeLifecycle:'lifecycle',lifecycleChecklists:'lifecycle',leaves:'leave',evaluations:'lifecycle',transfers:'lifecycle',prf:'manpower',oncall:'manpower',atd:'employee_relations',cases:'employee_relations',incidents:'employee_relations',cvr:'employee_relations',nte:'employee_relations',memos:'employee_relations',nod:'employee_relations',disciplinary:'employee_relations',offenseCatalog:'employee_relations',offenseSummary:'employee_relations',documents:'documents',dataQuality:'employees',users:'access_control',settings:'settings',selfService:'self_service',teamApprovals:'workflow'};
+function hasPermission(key){
+  if(!SESSION)return true;
+  if(SESSION.isSuperAdmin)return true;
+  if(SESSION.effectiveAccess)return hasEffectivePermission(SESSION.effectiveAccess,key);
+  return legacyPermissions(SESSION.role,SESSION.canExport).includes(key);
+}
+function viewPermission(view=STATE.view,action='view'){
+  const module=VIEW_PERMISSION_MODULE[view];
+  return module?`${module}.${action}`:'';
+}
+function canEdit(){
+  if(!SESSION)return true;
+  if(STATE.view==='dashboard')return ['employees.create','employee_relations.create','workflow.manage'].some(hasPermission);
+  const module=VIEW_PERMISSION_MODULE[STATE.view];
+  return module?['manage','update','create'].some(action=>hasPermission(`${module}.${action}`)):isHRRole();
+}
+function canExport(){
+  const permission=viewPermission(STATE.view,'export');
+  return permission?hasPermission(permission):roleCanExport(SESSION?.role,SESSION?.canExport);
+}
 function requireExportAccess(){
   if(canExport())return true;
   toast('Export is disabled for this account. Ask a System Administrator to enable export access.',true);
   return false;
 }
-function canReviewServiceRequests(){ return isHRRole()||SESSION?.role==='Manager'; }
+function canReviewServiceRequests(){ return hasPermission('workflow.approve'); }
 function setTitle(t,sub){
   const title=document.getElementById('tb-title');
   const section=navSectionForView(STATE.view);
@@ -7152,81 +7298,130 @@ function applyReportFilters(){
 /* ================================================================
    USER MANAGEMENT
    ================================================================ */
-function renderUsers(){
-  setTitle('User Management', 'Manage dashboard profiles and access roles.');
-  const rows = DB.users;
-  document.getElementById('content').innerHTML = `
-    <div class="sectionhead">
-      <div><h2>User Management</h2><p>${rows.length} registered profile${rows.length===1?'':'s'}.</p></div>
-      ${SESSION.role!=='Administrator'?`<div class="page-header-actions">${informationNoteButton('userAdministration')}</div>`:''}
-    </div>
-    <div class="tablewrap"><table class="data-table">
-      <thead><tr><th>Full Name</th><th>Username</th><th>Email</th><th>Role</th><th>Export Access</th><th>Employee Link</th><th>Manager</th><th>Created</th><th style="text-align:right;">Actions</th></tr></thead>
-      <tbody>
-      ${rows.map(u=>{const linked=DB.employees.find(employee=>String(employee.id)===String(u.employeeRecordId||''));const manager=DB.users.find(user=>user.id===u.managerProfileId);return `<tr>
-        <td><b>${esc(u.fullName)}</b>${u.id===SESSION.id?' <span class="pill">You</span>':''}</td>
-        <td class="mono">${esc(u.username||'—')}</td>
-        <td>${esc(u.email||'—')}</td>
-        <td>${statusBadge(u.role, {'Administrator':'b-blue','HR Staff':'b-green','Manager':'b-amber','Employee':'b-blue','Viewer':'b-grey'})}</td>
-        <td>${statusBadge(isHRRole(u.role)?'Included':u.canExport?'Enabled':'Disabled',{'Included':'b-green','Enabled':'b-blue','Disabled':'b-grey'})}</td>
-        <td>${linked?`<b>${esc(linked.name)}</b><div class="small">${esc(linked.employeeNo||'—')}</div>`:'<span class="small">Not linked</span>'}</td>
-        <td>${esc(manager?.fullName||'—')}</td>
-        <td>${fmtDate(u.createdAt)}</td>
-        <td><div class="rowactions">
-          ${SESSION.role==='Administrator'? `<button class="iconbtn" onclick="openUserForm('${u.id}')" title="Edit profile">${iEdit(14)}</button>`:'<span class="small">—</span>'}
-        </div></td>
-      </tr>`;}).join('')}
-      </tbody></table></div>`;
+async function loadAccessControlData(){
+  if(!ACCESS_CONTROL_READY)return false;
+  const queries=await Promise.all([
+    supabase.from('access_roles').select('id,name,description,system_key,active,created_at').order('name'),
+    supabase.from('access_role_permissions').select('role_id,permission_key'),
+    supabase.from('access_user_roles').select('user_id,role_id'),
+    supabase.from('access_user_overrides').select('user_id,permission_key,effect'),
+    supabase.from('access_user_scopes').select('id,user_id,scope_type,scope_value'),
+    supabase.from('access_resource_assignments').select('id,user_id,resource_type,resource_id,access_level')
+  ]);
+  const failed=queries.find(result=>result.error);
+  if(failed){ACCESS_CONTROL_READY=false;console.warn('Access Control schema is unavailable',failed.error);return false;}
+  [ACCESS_STORE.roles,ACCESS_STORE.rolePermissions,ACCESS_STORE.userRoles,ACCESS_STORE.overrides,ACCESS_STORE.scopes,ACCESS_STORE.assignments]=queries.map(result=>result.data||[]);
+  return true;
+}
+function accessRoleNames(userId){
+  const ids=ACCESS_STORE.userRoles.filter(item=>item.user_id===userId).map(item=>item.role_id);
+  return ACCESS_STORE.roles.filter(role=>ids.includes(role.id)).map(role=>role.name);
+}
+function accessTabButton(key,label,count=''){
+  return `<button type="button" role="tab" class="${STATE.accessTab===key?'active':''}" aria-selected="${STATE.accessTab===key}" onclick="switchAccessTab('${key}')">${esc(label)}${count!==''?` <span>${count}</span>`:''}</button>`;
+}
+function switchAccessTab(tab){STATE.accessTab=tab;renderUsers();}
+async function renderUsers(){
+  setTitle('Access Control','Users, roles, permissions, scopes, and secure account policies.');
+  await loadAccessControlData();
+  const content=document.getElementById('content');
+  if(!ACCESS_CONTROL_READY){
+    content.innerHTML=`<div class="access-shell"><div class="notice warning"><b>Access Control setup required.</b> Run <span class="mono">supabase/phase20-access-control.sql</span> in the Supabase SQL Editor, then reload. Existing User Management remains protected until setup is complete.</div></div>`;
+    return;
+  }
+  const canManage=hasPermission('access_control.manage');
+  const tabs=`<div class="access-tabs" role="tablist">${accessTabButton('users','Users',DB.users.length)}${accessTabButton('roles','Roles',ACCESS_STORE.roles.length)}${accessTabButton('matrix','Permission Matrix')}</div>`;
+  content.innerHTML=`<div class="access-shell">${tabs}<div class="access-panel">${STATE.accessTab==='roles'?accessRolesHTML(canManage):STATE.accessTab==='matrix'?accessMatrixHTML(canManage):accessUsersHTML(canManage)}</div></div>`;
+  requestAnimationFrame(()=>enhanceDataTables());
+}
+function accessUsersHTML(canManage){
+  const q=String(STATE.accessSearch||'').trim().toLowerCase();
+  const rows=DB.users.filter(user=>!q||[user.fullName,user.username,user.email,user.role,...accessRoleNames(user.id)].some(value=>String(value||'').toLowerCase().includes(q)));
+  return `<div class="access-toolbar"><div class="searchbox">${iSearch(15)}<input data-search-key="accessSearch" type="search" value="${esc(STATE.accessSearch||'')}" placeholder="Search users, email, username, or role…" oninput="queueSearchRender(this,'accessSearch',renderUsers)"></div><div class="spacer"></div><button class="btn btn-ghost btn-sm" onclick="openAccountSecurity()">My Account Security</button></div>
+    <div class="table-card"><div class="tablewrap"><table class="data-table access-users-table"><thead><tr><th>User</th><th>Roles</th><th>Employee / Manager</th><th>Scopes</th><th>Password Self-Service</th><th class="actions-head">Actions</th></tr></thead><tbody>${rows.map(user=>{
+      const linked=DB.employees.find(employee=>String(employee.id)===String(user.employeeRecordId||''));const manager=DB.users.find(item=>item.id===user.managerProfileId);const roles=accessRoleNames(user.id);
+      const scopeCount=ACCESS_STORE.scopes.filter(item=>item.user_id===user.id).length;return `<tr><td><div class="access-user"><span>${esc(opsInitials(user.fullName))}</span><div><b>${esc(user.fullName)}</b>${user.id===SESSION.id?' <em>You</em>':''}${user.isSuperAdmin?' <em class="super">Superadmin</em>':''}<small>${esc(user.email||'—')} · @${esc(user.username||'—')}</small></div></div></td><td><div class="access-role-chips">${(roles.length?roles:[user.role]).map(role=>`<span>${esc(role)}</span>`).join('')}</div></td><td>${linked?`<b>${esc(employeeDisplayName(linked))}</b><small>${esc(linked.employeeNo||'—')}</small>`:'<span class="muted">Not linked</span>'}${manager?`<small>Manager: ${esc(manager.fullName)}</small>`:''}</td><td>${scopeCount?`${scopeCount} assigned`:'Global / role default'}</td><td>${user.role!=='Employee'?statusBadge('Included',{'Included':'b-green'}):statusBadge(user.allowPasswordSelfService?'Enabled':'Disabled',{'Enabled':'b-green','Disabled':'b-red'})}</td><td><div class="rowactions"><button class="iconbtn" title="View effective access" onclick="openEffectiveAccess('${user.id}')">${iShield(14)}</button>${canManage?`<button class="iconbtn" title="Edit user access" onclick="openUserForm('${user.id}')">${iEdit(14)}</button>`:''}</div></td></tr>`;
+    }).join('')||`<tr><td colspan="6"><div class="empty"><b>No users found</b><span>Try another search.</span></div></td></tr>`}</tbody></table></div></div>`;
+}
+function accessRolesHTML(canManage){
+  return `<div class="access-toolbar"><div><h3>Roles</h3><p>Reusable permission sets. System roles retain compatibility with existing workflows.</p></div><div class="spacer"></div>${canManage?`<button class="btn btn-primary btn-sm" onclick="openRoleForm()">${iPlus(14)} New Role</button>`:''}</div><div class="access-role-grid">${ACCESS_STORE.roles.map(role=>{const permissions=ACCESS_STORE.rolePermissions.filter(item=>item.role_id===role.id);const users=ACCESS_STORE.userRoles.filter(item=>item.role_id===role.id).length;return `<article class="access-role-card ${role.active?'':'inactive'}"><div class="access-role-card-head"><span class="access-role-icon">${iShield(16)}</span><div><h3>${esc(role.name)}</h3><p>${esc(role.description||'No description')}</p></div>${role.system_key?'<em>System</em>':''}</div><div class="access-role-metrics"><span><b>${permissions.length}</b> permissions</span><span><b>${users}</b> users</span><span>${statusBadge(role.active?'Active':'Inactive',role.active?{'Active':'b-green'}:{'Inactive':'b-grey'})}</span></div>${canManage?`<div class="access-role-actions"><button class="btn btn-ghost btn-sm" onclick="openRoleForm('${role.id}')">Edit</button><button class="btn btn-ghost btn-sm" onclick="openRoleForm('', '${role.id}')">Clone</button></div>`:''}</article>`;}).join('')}</div>`;
+}
+function permissionMatrixRows(selected=new Set(),interactive=false,prefix='role_permission'){
+  return ACCESS_MODULES.map(module=>`<tr><th>${esc(module.label)}</th>${ACCESS_ACTIONS.map(action=>{const applicable=module.actions.includes(action);const key=`${module.key}.${action}`;return `<td>${applicable?(interactive?`<input type="checkbox" id="${prefix}_${key.replace('.','_')}" data-permission-key="${key}" ${selected.has(key)?'checked':''} aria-label="${esc(permissionLabel(key))}">`:(selected.has(key)?'<span class="matrix-yes">✓</span>':'<span class="matrix-no">—</span>')):'<span class="matrix-na">N/A</span>'}</td>`;}).join('')}</tr>`).join('');
+}
+function accessMatrixHTML(canManage){
+  const role=ACCESS_STORE.roles.find(item=>item.id===(STATE.accessMatrixRoleId||''))||ACCESS_STORE.roles[0];
+  if(role)STATE.accessMatrixRoleId=role.id;
+  const selected=new Set(ACCESS_STORE.rolePermissions.filter(item=>item.role_id===role?.id).map(item=>item.permission_key));
+  return `<div class="access-toolbar"><div><h3>Permission Matrix</h3><p>Only actions relevant to each module are available.</p></div><div class="spacer"></div><label class="access-role-select"><span>Role</span><select onchange="STATE.accessMatrixRoleId=this.value;renderUsers()">${ACCESS_STORE.roles.map(item=>`<option value="${item.id}" ${item.id===role?.id?'selected':''}>${esc(item.name)}</option>`).join('')}</select></label>${canManage&&role?`<button class="btn btn-primary btn-sm" onclick="saveRoleMatrix('${role.id}')">Save Matrix</button>`:''}</div><div class="tablewrap"><table class="permission-matrix"><thead><tr><th>Module</th>${ACCESS_ACTIONS.map(action=>`<th>${action.charAt(0).toUpperCase()+action.slice(1)}</th>`).join('')}</tr></thead><tbody>${permissionMatrixRows(selected,canManage,'matrix')}</tbody></table></div>`;
+}
+function syncUserPasswordPolicy(){
+  const field=document.getElementById('u_password_policy');if(!field)return;
+  field.hidden=document.getElementById('u_role')?.value!=='Employee';
 }
 function openUserForm(id){
-  if(SESSION.role!=='Administrator') return;
-  const existing = id? DB.users.find(u=>u.id===id): null;
-  if(!existing) return;
+  if(!hasPermission('access_control.manage'))return;
+  const existing=DB.users.find(user=>user.id===id);if(!existing)return;
   const managers=DB.users.filter(user=>['Administrator','HR Staff','Manager'].includes(user.role)&&user.id!==id);
-  openModal(`
-    <div class="modal-head"><h3>Edit User Profile</h3><button onclick="closeModal()">&times;</button></div>
-    <div class="modal-body">
-      <div class="formgrid">
-        <div class="field"><label>Full Name *</label><input id="u_fullName" value="${esc(existing.fullName||'')}"></div>
-        <div class="field"><label>Username *</label><input id="u_username" value="${esc(existing.username||'')}"></div>
-        <div class="field full"><label>Email</label><input value="${esc(existing.email||'')}" disabled style="background:var(--paper);"></div>
-        <div class="field"><label>Role</label><select id="u_role" onchange="syncUserExportControl()">
-          <option ${existing.role==='Administrator'?'selected':''}>Administrator</option>
-          <option ${existing.role==='HR Staff'?'selected':''}>HR Staff</option>
-          <option ${existing.role==='Manager'?'selected':''}>Manager</option>
-          <option ${existing.role==='Employee'?'selected':''}>Employee</option>
-          <option ${existing.role==='Viewer'?'selected':''}>Viewer</option>
-        </select></div>
-        ${employeePickerHTML({id:'u_employee',label:'Linked Employee Record',selectedId:existing.employeeRecordId||'',full:true,placeholder:'Type to link an employee record',autofill:false})}
-        <div class="field full"><label>Direct Manager</label><select id="u_manager"><option value="">No manager assigned</option>${managers.map(manager=>`<option value="${manager.id}" ${existing.managerProfileId===manager.id?'selected':''}>${esc(manager.fullName)}</option>`).join('')}</select></div>
-        <label class="checklist-complete-toggle full"><input id="u_canExport" type="checkbox" ${existing.canExport?'checked':''} ${isHRRole(existing.role)?'disabled':''}><span><b>Allow data export</b><small id="u_exportHelp">${isHRRole(existing.role)?'Export access is included with Administrator and HR Staff roles.':'This user can download employee, report, analytics, and operational exports.'}</small></span></label>
-      </div>
-      <div class="computed-note">Link Employee and Manager accounts to employee master records before enabling self-service. Passwords remain managed by Supabase Auth.</div>
-    </div>
-    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveUser('${id}')">Save User</button></div>
-  `);
+  const selectedRoles=new Set(ACCESS_STORE.userRoles.filter(item=>item.user_id===id).map(item=>item.role_id));
+  const overrideMap=new Map(ACCESS_STORE.overrides.filter(item=>item.user_id===id).map(item=>[item.permission_key,item.effect]));
+  const scopes=ACCESS_STORE.scopes.filter(item=>item.user_id===id).map(item=>`${item.scope_type}${item.scope_value?` | ${item.scope_value}`:''}`).join('\n');
+  const assignments=ACCESS_STORE.assignments.filter(item=>item.user_id===id).map(item=>`${item.resource_type} | ${item.resource_id} | ${item.access_level}`).join('\n');
+  openModal(`<div class="modal-head"><div><div class="modal-breadcrumb">Access Control › ${esc(existing.fullName)} › Edit Access</div><h3>Edit User Access</h3></div><button onclick="closeModal()">&times;</button></div><div class="modal-body access-user-editor">
+    <section class="access-editor-section"><div class="access-editor-heading"><h4>Identity & Relationships</h4><p>The email is owned by the user and can only be changed through email verification.</p></div><div class="formgrid"><div class="field"><label>Full Name *</label><input id="u_fullName" value="${esc(existing.fullName||'')}"></div><div class="field"><label>Username *</label><input id="u_username" value="${esc(existing.username||'')}"></div><div class="field full"><label>Email</label><input value="${esc(existing.email||'')}" disabled></div><div class="field"><label>Primary Compatibility Role</label><select id="u_role" onchange="syncUserPasswordPolicy()">${['Administrator','HR Staff','Manager','Employee','Viewer'].map(role=>`<option ${existing.role===role?'selected':''}>${role}</option>`).join('')}</select></div><div class="field"><label>Direct Manager</label><select id="u_manager"><option value="">No manager assigned</option>${managers.map(manager=>`<option value="${manager.id}" ${existing.managerProfileId===manager.id?'selected':''}>${esc(manager.fullName)}</option>`).join('')}</select></div>${employeePickerHTML({id:'u_employee',label:'Linked Employee Record',selectedId:existing.employeeRecordId||'',full:true,placeholder:'Type employee name or number',autofill:false})}</div></section>
+    <section class="access-editor-section"><div class="access-editor-heading"><h4>Roles</h4><p>Users can hold multiple active roles. The primary role remains synchronized for legacy workflows.</p></div><div class="access-checkbox-grid">${ACCESS_STORE.roles.map(role=>`<label><input type="checkbox" data-access-role value="${role.id}" ${selectedRoles.has(role.id)?'checked':''} ${role.active?'':'disabled'}><span><b>${esc(role.name)}</b><small>${esc(role.description||'')}</small></span></label>`).join('')}</div></section>
+    <section class="access-editor-section" id="u_password_policy" ${existing.role==='Employee'?'':'hidden'}><div class="access-editor-heading"><h4>Employee Password Policy</h4><p>The System Administrator controls whether this employee can use password setup and recovery.</p></div><label class="settings-check"><input id="u_allow_password" type="checkbox" ${existing.allowPasswordSelfService?'checked':''}><span><b>Allow this employee to create or reset their own password</b><small>All password changes use a secure email link. Administrators cannot view or type the employee's password.</small></span></label></section>
+    <section class="access-editor-section"><div class="access-editor-heading"><h4>Direct Permission Overrides</h4><p>Direct deny takes precedence over direct grant and role permissions.</p></div><div class="tablewrap"><table class="permission-overrides"><thead><tr><th>Module</th><th>Action</th><th>Override</th></tr></thead><tbody>${ACCESS_MODULES.flatMap(module=>module.actions.map(action=>{const key=`${module.key}.${action}`;const value=overrideMap.get(key)||'';return `<tr><td>${esc(module.label)}</td><td>${esc(action.charAt(0).toUpperCase()+action.slice(1))}</td><td><select data-override-key="${key}"><option value="" ${!value?'selected':''}>Inherited</option><option value="grant" ${value==='grant'?'selected':''}>Direct grant</option><option value="deny" ${value==='deny'?'selected':''}>Direct deny</option></select></td></tr>`;})).join('')}</tbody></table></div></section>
+    <section class="access-editor-section"><div class="access-editor-heading"><h4>Scopes & Resource Assignments</h4><p>Enter one item per line using the documented format. Scopes constrain where granted actions apply.</p></div><div class="formgrid"><div class="field"><label>Scopes <small>type | value</small></label><textarea id="u_scopes" rows="5" placeholder="branch | Davao\ndepartment | Production\nself">${esc(scopes)}</textarea></div><div class="field"><label>Resources <small>type | id | level</small></label><textarea id="u_assignments" rows="5" placeholder="branch | davao | manage\ncase | CASE-001 | approve">${esc(assignments)}</textarea></div></div></section>
+  </div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" data-confirm-label="Save user access" onclick="saveUser('${id}')">Save Access</button></div>`);
 }
-function syncUserExportControl(){
-  const input=document.getElementById('u_canExport');const help=document.getElementById('u_exportHelp');const builtIn=isHRRole(document.getElementById('u_role')?.value);
-  if(input)input.disabled=builtIn;
-  if(help)help.textContent=builtIn?'Export access is included with Administrator and HR Staff roles.':'This user can download employee, report, analytics, and operational exports.';
+function parseAccessLines(value,type){
+  return String(value||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean).map(line=>line.split('|').map(part=>part.trim())).map(parts=>type==='scope'?{scope_type:parts[0],scope_value:parts[1]||''}:{resource_type:parts[0],resource_id:parts[1]||'',access_level:parts[2]||'view'});
 }
 async function saveUser(id){
-  if(SESSION.role!=='Administrator') return;
-  const fullName=document.getElementById('u_fullName').value.trim();
-  const username=document.getElementById('u_username').value.trim().toLowerCase();
-  const role=document.getElementById('u_role').value;
-  const canExportValue=!isHRRole(role)&&document.getElementById('u_canExport')?.checked===true;
-  const employeeRecordId=document.getElementById('u_employee').value||null;
-  const managerProfileId=document.getElementById('u_manager').value||null;
-  if(!fullName||!username){ toast('Please complete all required fields.'); return; }
-  const {error}=await supabase.from('profiles').update({full_name:fullName,username,role,can_export:canExportValue,employee_record_id:employeeRecordId,manager_profile_id:managerProfileId}).eq('id',id);
-  if(error){ toast('Could not update user: '+(/can_export/i.test(error.message||'')?'Run the Phase 17 export-permissions migration first.':error.message),true); return; }
-  await loadProfiles();
-  const updated=DB.users.find(u=>u.id===SESSION.id); if(updated) SESSION=updated;
-  logAudit(`Updated user profile: ${fullName} · export ${roleCanExport(role,canExportValue)?'enabled':'disabled'}`); await saveDB();
-  closeModal(); renderUsers(); toast('User profile saved.');
+  if(!hasPermission('access_control.manage'))return;
+  const fullName=document.getElementById('u_fullName').value.trim(),username=document.getElementById('u_username').value.trim().toLowerCase(),role=document.getElementById('u_role').value;
+  if(!fullName||!username){toast('Full name and username are required.',true);return;}
+  const roleIds=[...document.querySelectorAll('[data-access-role]:checked')].map(input=>input.value);
+  const overrides=[...document.querySelectorAll('[data-override-key]')].map(select=>({permission_key:select.dataset.overrideKey,effect:select.value})).filter(item=>item.effect);
+  const scopes=parseAccessLines(document.getElementById('u_scopes').value,'scope');
+  const assignments=parseAccessLines(document.getElementById('u_assignments').value,'assignment');
+  const validScopes=['global','branch','department','self','team','resource'];
+  if(scopes.some(item=>!validScopes.includes(item.scope_type))){toast('Scope types must be global, branch, department, self, team, or resource.',true);return;}
+  if(assignments.some(item=>!item.resource_type||!item.resource_id||!['view','edit','manage','approve'].includes(item.access_level))){toast('Resource lines must use: type | id | view/edit/manage/approve.',true);return;}
+  const {error}=await supabase.rpc('save_user_access',{p_user_id:id,p_full_name:fullName,p_username:username,p_primary_role:role,p_role_ids:roleIds,p_employee_record_id:document.getElementById('u_employee').value||null,p_manager_profile_id:document.getElementById('u_manager').value||null,p_allow_password_self_service:document.getElementById('u_allow_password')?.checked!==false,p_overrides:overrides,p_scopes:scopes,p_assignments:assignments});
+  if(error){toast('Could not save user access: '+error.message,true);return;}
+  await loadProfiles();await loadAccessControlData();if(id===SESSION.id){Object.assign(SESSION,DB.users.find(user=>user.id===id));await loadOwnEffectiveAccess();}
+  logAudit(`Updated access for ${fullName}`);closeModal();await renderUsers();toast('User access saved.');
 }
+function openRoleForm(id='',cloneFrom=''){
+  if(!hasPermission('access_control.manage'))return;
+  const source=ACCESS_STORE.roles.find(role=>role.id===(id||cloneFrom));
+  const selected=new Set(ACCESS_STORE.rolePermissions.filter(item=>item.role_id===source?.id).map(item=>item.permission_key));
+  const cloning=!id&&Boolean(cloneFrom);
+  openModal(`<div class="modal-head"><div><div class="modal-breadcrumb">Access Control › Roles › ${source?(cloning?'Clone':'Edit'):'Create'}</div><h3>${source?(cloning?`Clone ${esc(source.name)}`:`Edit ${esc(source.name)}`):'Create Role'}</h3></div><button onclick="closeModal()">&times;</button></div><div class="modal-body access-role-editor"><div class="formgrid"><div class="field"><label>Role Name *</label><input id="role_name" value="${esc(cloning?`${source.name} Copy`:source?.name||'')}" ${source?.system_key&&!cloning?'disabled':''}></div><div class="field"><label>Status</label><select id="role_active" ${source?.system_key==='Administrator'&&!cloning?'disabled':''}><option value="true" ${source?.active!==false?'selected':''}>Active</option><option value="false" ${source?.active===false?'selected':''}>Inactive</option></select></div><div class="field full"><label>Description</label><textarea id="role_description" rows="2">${esc(source?.description||'')}</textarea></div></div><div class="tablewrap"><table class="permission-matrix"><thead><tr><th>Module</th>${ACCESS_ACTIONS.map(action=>`<th>${action.charAt(0).toUpperCase()+action.slice(1)}</th>`).join('')}</tr></thead><tbody>${permissionMatrixRows(selected,true,'role')}</tbody></table></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" data-confirm-label="Save role and permission assignments" onclick="saveAccessRole('${id}')">${cloning?'Create Clone':'Save Role'}</button></div>`);
+}
+function selectedRolePermissions(){return [...document.querySelectorAll('[data-permission-key]:checked')].map(input=>input.dataset.permissionKey);}
+async function saveAccessRole(id=''){
+  const name=document.getElementById('role_name').value.trim();if(!name){toast('Role name is required.',true);return;}
+  const {error}=await supabase.rpc('save_access_role',{p_role_id:id||null,p_name:name,p_description:document.getElementById('role_description').value.trim(),p_active:document.getElementById('role_active').value==='true',p_permission_keys:selectedRolePermissions()});
+  if(error){toast('Could not save role: '+error.message,true);return;}
+  await loadAccessControlData();closeModal();await renderUsers();toast('Role saved.');
+}
+async function saveRoleMatrix(id){
+  const role=ACCESS_STORE.roles.find(item=>item.id===id);if(!role)return;
+  const {error}=await supabase.rpc('save_access_role',{p_role_id:id,p_name:role.name,p_description:role.description,p_active:role.active,p_permission_keys:selectedRolePermissions()});
+  if(error){toast('Could not save permission matrix: '+error.message,true);return;}
+  await loadAccessControlData();await loadOwnEffectiveAccess();await renderUsers();toast('Permission matrix saved.');
+}
+async function openEffectiveAccess(userId){
+  const user=DB.users.find(item=>item.id===userId);if(!user)return;
+  const {data,error}=await supabase.rpc('get_effective_access',{p_user_id:userId});if(error){toast('Could not load effective access: '+error.message,true);return;}
+  const permissions=data.permissions||{};const roles=data.roles||[],scopes=data.scopes||[],assignments=data.assignments||[];
+  const sourceLabels={superadmin:'Superadmin',role:'Role','direct-grant':'Direct grant','direct-deny':'Direct deny','not-granted':'Not granted'};
+  openModal(`<div class="modal-head"><div><div class="modal-breadcrumb">Access Control › ${esc(user.fullName)} › Effective Access</div><h3>View Effective Access</h3></div><button onclick="closeModal()">&times;</button></div><div class="modal-body effective-access"><div class="effective-summary"><div><span>Roles</span><b>${roles.map(role=>esc(role.name)).join(', ')||'None'}</b></div><div><span>Direct grants</span><b>${(data.direct_grants||[]).length}</b></div><div><span>Direct denies</span><b>${(data.direct_denies||[]).length}</b></div><div><span>Scopes</span><b>${scopes.length}</b></div></div><div class="tablewrap"><table class="data-table"><thead><tr><th>Permission</th><th>Final Access</th><th>Why</th></tr></thead><tbody>${ACCESS_MODULES.flatMap(module=>module.actions.map(action=>{const key=`${module.key}.${action}`,decision=permissions[key]||{allowed:false,source:'not-granted'};return `<tr><td><b>${esc(module.label)}</b><small>${esc(action.charAt(0).toUpperCase()+action.slice(1))}</small></td><td>${statusBadge(decision.allowed?'Allowed':'Denied',decision.allowed?{'Allowed':'b-green'}:{'Denied':'b-red'})}</td><td><span class="access-source ${esc(decision.source)}">${esc(sourceLabels[decision.source]||decision.source)}</span></td></tr>`;})).join('')}</tbody></table></div><div class="effective-context"><section><h4>Scopes</h4>${scopes.length?scopes.map(scope=>`<p><b>${esc(scope.type)}</b>${scope.value?` · ${esc(scope.value)}`:''}</p>`).join(''):'<p class="muted">No explicit scopes.</p>'}</section><section><h4>Resource Assignments</h4>${assignments.length?assignments.map(item=>`<p><b>${esc(item.type)}</b> · ${esc(item.id)} · ${esc(item.level)}</p>`).join(''):'<p class="muted">No resource assignments.</p>'}</section></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>`);
+}
+function syncUserExportControl(){syncUserPasswordPolicy();}
 
 /* ================================================================
    SETTINGS
@@ -7247,12 +7442,12 @@ function switchSettingsTab(tab){
   document.querySelectorAll('[data-settings-panel]').forEach(panel=>panel.hidden=panel.dataset.settingsPanel!==tab);
 }
 function openDepartmentSetting(index=-1){
-  if(!isHRRole())return;
+  if(!hasPermission('organization.manage'))return;
   const item=index>=0?departmentCatalog()[index]:null;
   openModal(`<div class="modal-head"><div><h3>${item?'Edit Department':'Add Department'}</h3><div class="small">Organization Structure</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="formgrid"><div class="field full"><label>Department Name *</label><input id="os_department_name" value="${esc(item?.name||'')}" maxlength="60" placeholder="e.g. HUMAN RESOURCES"></div>${item?`<div class="field full"><label class="settings-check"><input id="os_department_active" type="checkbox" ${item.active?'checked':''}><span><b>Active department</b><small>Inactive departments remain on historical records but cannot be selected for new transactions.</small></span></label></div>`:''}</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" data-confirm-label="Save department and update linked records" onclick="saveDepartmentSetting(${index})">Save Department</button></div>`);
 }
 async function saveDepartmentSetting(index=-1){
-  if(!isHRRole())return;
+  if(!hasPermission('organization.manage'))return;
   const name=document.getElementById('os_department_name')?.value.trim().toUpperCase()||'';
   const active=index<0||document.getElementById('os_department_active')?.checked;
   const catalog=departmentCatalog();const original=index>=0?catalog[index]:null;
@@ -7278,13 +7473,13 @@ async function saveDepartmentSetting(index=-1){
   logAudit(`${original?'Updated':'Added'} department: ${name}`);await closeModal();renderSettings();toast(relatedCaseWarning||'Department saved.',!!relatedCaseWarning);
 }
 function openPositionSetting(index=-1){
-  if(!isHRRole())return;
+  if(!hasPermission('organization.manage'))return;
   const item=index>=0?positionCatalog()[index]:null;
   const departments=employeeDepartmentNames(item?.department||'');
   openModal(`<div class="modal-head"><div><h3>${item?'Edit Position':'Add Position'}</h3><div class="small">Organization Structure</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="formgrid"><div class="field"><label>Position Title *</label><input id="os_position_name" value="${esc(item?.name||'')}" maxlength="80" placeholder="e.g. HR Officer"></div><div class="field"><label>Department *</label><select id="os_position_department"><option value="">Select department</option>${departments.map(name=>`<option value="${esc(name)}" ${name===item?.department?'selected':''}>${esc(name)}</option>`).join('')}</select></div>${item?`<div class="field full"><label class="settings-check"><input id="os_position_active" type="checkbox" ${item.active?'checked':''}><span><b>Active position</b><small>Inactive positions stay on existing employee records but are hidden from new employee and applicant forms.</small></span></label></div>`:''}</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" data-confirm-label="Save position and update linked records" onclick="savePositionSetting(${index})">Save Position</button></div>`);
 }
 async function savePositionSetting(index=-1){
-  if(!isHRRole())return;
+  if(!hasPermission('organization.manage'))return;
   const name=document.getElementById('os_position_name')?.value.trim()||'';
   const department=document.getElementById('os_position_department')?.value||'';
   const active=index<0||document.getElementById('os_position_active')?.checked;
@@ -7308,8 +7503,9 @@ async function savePositionSetting(index=-1){
   logAudit(`${original?'Updated':'Added'} position: ${name} · ${department}`);await closeModal();renderSettings();toast('Position saved.');
 }
 function renderSettings(){
-  if(!isHRRole()){go('dashboard',{skipUnsaved:true});return;}
-  const admin=SESSION?.role==='Administrator';
+  if(!hasPermission('settings.view')&&!hasPermission('organization.view')){go('dashboard',{skipUnsaved:true});return;}
+  const admin=hasPermission('settings.manage');
+  const canManageOrganization=hasPermission('organization.manage');
   setTitle(admin?'Settings':'Organization Structure',admin?'Organization preferences and audit log.':'Manage approved departments and positions.');
   const provider=attachmentStorageProvider();
   const activeTab=admin?(STATE.settingsTab||'general'):'organization';
@@ -7324,7 +7520,7 @@ function renderSettings(){
         <div class="field"><label>Organization Name</label><input id="s_org" value="${esc(DB.settings.orgName)}" ${admin?'':'disabled'}></div>
         <div class="field"><label>Probation → Regularization Threshold (days)</label><input id="s_prob" type="number" value="${DB.settings.probationDays}" ${admin?'':'disabled'}><div class="computed-note">Employee classification recalculates automatically wherever it is displayed.</div></div>
       </section>`:''}
-      <section class="settings-panel" data-settings-panel="organization" ${activeTab==='organization'?'':'hidden'}>${settingsOrganizationHTML(true)}</section>
+      <section class="settings-panel" data-settings-panel="organization" ${activeTab==='organization'?'':'hidden'}>${settingsOrganizationHTML(canManageOrganization)}</section>
       ${admin?`
       <section class="settings-panel" data-settings-panel="workforce" ${activeTab==='workforce'?'':'hidden'}>
         <div class="settings-section-head"><div><h3>Branches &amp; Compensation</h3><p>Reporting locations and configurable employee allowance fields.</p></div>${admin?'<button class="btn btn-primary btn-sm" onclick="saveSettings()">Save Changes</button>':''}</div>
@@ -7354,7 +7550,7 @@ function storageSettingsChanged(){
   if(group) group.style.display=document.getElementById('s_file_storage')?.value==='google-drive'?'grid':'none';
 }
 async function testGoogleDriveConnection(){
-  if(SESSION?.role!=='Administrator') return;
+  if(!hasPermission('settings.manage')) return;
   const rootUrl=document.getElementById('s_drive_root')?.value.trim()||'';
   const clientId=document.getElementById('s_drive_client')?.value.trim()||'';
   const rootId=documentDriveFileId(rootUrl);
@@ -7371,7 +7567,7 @@ async function testGoogleDriveConnection(){
   finally{DB.settings.googleDriveRootUrl=previous.root;DB.settings.googleDriveClientId=previous.client;}
 }
 async function saveSettings(){
-  if(SESSION?.role!=='Administrator'){toast('Only the System Administrator can change settings.',true);return;}
+  if(!hasPermission('settings.manage')){toast('Your account cannot change system settings.',true);return;}
   const provider=document.getElementById('s_file_storage')?.value||'supabase';
   const driveRoot=document.getElementById('s_drive_root')?.value.trim()||'';
   const driveClient=document.getElementById('s_drive_client')?.value.trim()||'';
@@ -8067,15 +8263,33 @@ Object.assign(window, {
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, opsSetTab, opsSelectEmployee, opsOpenSelectedTransaction, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   renderManpowerFulfillment, manpowerSetView, manpowerResetFilters, openManpowerRequestForm, saveManpowerRequest, deleteManpowerRequest, openManpowerRequestDetails, openManpowerRequirementForm, saveManpowerRequirement, openManpowerSlotForm, saveManpowerSlot, manpowerSlotReplacementChanged, exportManpowerFulfillment,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, saveDepartmentSetting, savePositionSetting, setTitle, shiftDate, statusBadge, storageSettingsChanged, testGoogleDriveConnection, switchAuthTab, switchSettingsTab, syncPositionSelect, syncUserExportControl, toggleCatalogQuickAdd, catalogQuickAddKeydown, saveCatalogQuickAdd, openDepartmentSetting, openPositionSetting, toCSV,
+  openPasswordRecovery, requestPasswordRecovery, completePasswordRecovery, openAccountSecurity, requestOwnEmailChange, requestOwnPasswordReset, switchAccessTab, openEffectiveAccess, openRoleForm, saveAccessRole, saveRoleMatrix, syncUserPasswordPolicy,
   toast, todayISO, togglePasswordVisibility, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, serverTablePageGo, serverTablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, openInformationNote, openModuleInformation, paginationMeta, paginationHTML, paginationReset, paginateRows,
   addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom, addressDetailInput
+});
+
+supabase.auth.onAuthStateChange((event,session)=>{
+  if(event==='PASSWORD_RECOVERY'){
+    setTimeout(async()=>{
+      try{
+        const {data}=await supabase.from('profiles').select('role,allow_password_self_service').eq('id',session?.user?.id).maybeSingle();
+        if(data?.role==='Employee'&&data.allow_password_self_service===false){
+          await supabase.auth.signOut();
+          switchAuthTab('login');authErr('Password self-service is disabled for this employee account. Contact the System Administrator.');return;
+        }
+      }catch(error){console.warn('Password recovery policy check failed',error);}
+      showNewPasswordForm();
+    },0);
+  }
 });
 
 (async function initSupabase(){
   try{
     const {data,error}=await supabase.auth.getSession();
     if(error)throw error;
-    if(data.session)await bootAuthenticated(data.session.user);
+    const recoveryHint=/type=recovery/i.test(location.hash+location.search);
+    if(recoveryHint&&data.session)showNewPasswordForm();
+    else if(data.session&&!AUTH_RECOVERY_ACTIVE)await bootAuthenticated(data.session.user);
     else revealSessionUI();
   }catch(error){
     authErr('Could not restore your session. Please sign in again.');

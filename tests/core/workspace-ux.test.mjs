@@ -42,7 +42,8 @@ test('session restoration prevents a login-screen flash',()=>{
   assert.match(index,/id="session-splash"/);
   assert.match(styles,/body\.session-pending #auth-screen,body\.session-pending #app\{visibility:hidden;\}/);
   assert.match(source,/function revealSessionUI\(\)/);
-  assert.match(source,/if\(data\.session\)await bootAuthenticated/);
+  assert.match(source,/else if\(data\.session&&!AUTH_RECOVERY_ACTIVE\)await bootAuthenticated/);
+  assert.match(source,/if\(recoveryHint&&data\.session\)showNewPasswordForm/);
   assert.match(source,/else revealSessionUI\(\)/);
 });
 

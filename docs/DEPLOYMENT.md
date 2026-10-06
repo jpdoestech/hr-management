@@ -28,6 +28,8 @@ Apply `supabase/phase18-employee-directory-performance.sql` after Phase 17 to en
 
 Apply `supabase/phase19-tenant-scale-foundation.sql` after deploying the matching frontend. Phase 19 backfills existing rows into the default SLSC tenant, changes HR settings to a tenant-scoped singleton key, adds restrictive tenant RLS to every available operational table, and scopes new Supabase Storage objects by tenant. Existing files remain supported through the migration's legacy-path policy. Run the complete file once in **Supabase Dashboard > SQL Editor** and then reload the application. Do not create a second tenant until its profiles, settings, Google Drive root, and administrator provisioning process have been configured.
 
+Apply `supabase/phase20-access-control.sql` after Phase 19. Phase 20 upgrades User Management into tenant-aware RBAC with multiple roles, applicable-action permission matrices, direct grants and denies, scopes, resource assignments, effective-access explanations, and employee password self-service policy. Follow [Access Control and Account Recovery Setup](ACCESS-CONTROL-SETUP.md) to configure redirects, SMTP, seeded roles, and recovery testing.
+
 Apply `supabase/phase17-user-export-permissions.sql` before deploying the matching frontend. Viewer, Manager, and Employee profiles default to no export access. A System Administrator can enable export for a specific account from User Management; Administrator and HR Staff roles include export access automatically.
 
 ## Google Drive

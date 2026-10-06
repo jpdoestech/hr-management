@@ -48,6 +48,19 @@
           <div class="field auth-field"><label for="li-user">Email or username</label><input id="li-user" type="text" placeholder="Enter your email or username" autocomplete="username" required></div>
           <div class="field auth-field"><label for="li-pass">Password</label><div class="auth-password"><input id="li-pass" type="password" placeholder="Enter your password" autocomplete="current-password" required><button type="button" onclick="togglePasswordVisibility('li-pass',this)" aria-label="Show password">Show</button></div></div>
           <button type="submit" class="btn btn-primary btn-block auth-submit">Sign in</button>
+          <button type="button" class="auth-text-action" onclick="openPasswordRecovery()">Forgot your password?</button>
+        </form>
+
+        <form id="recovery-form" style="display:none;" onsubmit="return requestPasswordRecovery(event)">
+          <div class="field auth-field"><label for="recovery-email">Account email</label><input id="recovery-email" type="email" placeholder="name@company.com" autocomplete="email" required></div>
+          <button type="submit" class="btn btn-primary btn-block auth-submit">Email password reset link</button>
+          <button type="button" class="auth-text-action" onclick="switchAuthTab('login')">Back to sign in</button>
+        </form>
+
+        <form id="new-password-form" style="display:none;" onsubmit="return completePasswordRecovery(event)">
+          <div class="field auth-field"><label for="recovery-password">New password</label><div class="auth-password"><input id="recovery-password" type="password" placeholder="Create a strong password" autocomplete="new-password" minlength="8" required><button type="button" onclick="togglePasswordVisibility('recovery-password',this)" aria-label="Show password">Show</button></div></div>
+          <div class="field auth-field"><label for="recovery-password-confirm">Confirm new password</label><div class="auth-password"><input id="recovery-password-confirm" type="password" placeholder="Repeat your password" autocomplete="new-password" minlength="8" required><button type="button" onclick="togglePasswordVisibility('recovery-password-confirm',this)" aria-label="Show password">Show</button></div></div>
+          <button type="submit" class="btn btn-primary btn-block auth-submit">Update password</button>
         </form>
 
         <form id="register-form" role="tabpanel" aria-labelledby="tab-register" style="display:none;" onsubmit="return doRegister(event)">
@@ -110,13 +123,13 @@
             <div class="notification-foot"><span class="small">Alerts are generated from current HR records.</span><button class="btn btn-ghost btn-sm" type="button" onclick="goFromNotifications('actionCenter')">Action Center</button></div>
           </div>
         </div>
-        <div class="who">
+        <button class="who account-security-trigger" type="button" onclick="openAccountSecurity()" title="Account security" aria-label="Open account security">
           <div>
             <div class="name" id="tb-name" style="text-align:right;"></div>
             <div class="role" id="tb-role" style="text-align:right;"></div>
           </div>
           <div class="av" id="tb-av"></div>
-        </div>
+        </button>
       </div>
     </div>
     <div id="content"></div>
@@ -140,6 +153,6 @@
 <div class="toast" id="toast"></div>
 
 <script src="js/vendor/xlsx.full.min.js?v=0.20.3"></script>
-  <script type="module" src="js/app.js?v=20261001-44"></script>
+  <script type="module" src="js/app.js?v=20261006-45"></script>
 </body>
 </html>

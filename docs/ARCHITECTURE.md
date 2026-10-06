@@ -18,6 +18,8 @@ Supabase PostgreSQL remains the record source of truth. Authentication loads onl
 
 Phase 19 assigns every operational row to a tenant and adds restrictive tenant policies on top of existing role and ownership policies. Existing deployments are backfilled into the default SLSC tenant. New Supabase Storage uploads use `tenant/user/module/file` paths; legacy `user/module/file` objects remain readable only for users in the default tenant.
 
+Phase 20 adds a normalized RBAC layer: permission catalog, tenant roles, role permissions, multi-role user assignments, direct grant/deny overrides, scopes, and resource assignments. Database helpers calculate effective access with direct-deny precedence and the `hr_records` policies enforce both the applicable module action and record scope. `profiles.role` remains synchronized as a compatibility role for older workflows while the application transitions to permission checks.
+
 Employee Information uses a cache-first list/detail boundary: cached records paint immediately, the projected directory RPC returns only visible columns, and complete employee data remains the source for authorized profile operations.
 
 Google Drive is treated as document storage for future secure server-side upload/link flows; the browser must not contain Google client secrets.

@@ -24,7 +24,8 @@ const required=[
   'database/migrations/phase12-user-preferences.sql','supabase/phase13-onboarding.sql',
   'database/migrations/phase13-onboarding.sql','supabase/phase14-admin-storage-settings.sql',
   'database/migrations/phase14-admin-storage-settings.sql','supabase/phase15-organization-structure.sql',
-  'database/migrations/phase15-organization-structure.sql'
+  'database/migrations/phase15-organization-structure.sql','js/core/access-control.js','supabase/phase20-access-control.sql',
+  'database/migrations/phase20-access-control.sql','docs/ACCESS-CONTROL-SETUP.md'
 ];
 const missing=required.filter(f=>!fs.existsSync(path.join(root,f)));
 if(missing.length){
@@ -168,6 +169,18 @@ const organizationMigrationCopy=fs.readFileSync(path.join(root,'database/migrati
 if(organizationMigration!==organizationMigrationCopy || !organizationMigration.includes("current_profile_role() not in ('Administrator', 'HR Staff')") || !organizationMigration.includes("grant execute on function public.save_organization_structure")){
   console.error('Delegated Organization Structure migration copies are missing, unsafe, or out of sync.');
   process.exit(1);
+}
+const accessMigration=fs.readFileSync(path.join(root,'supabase/phase20-access-control.sql'),'utf8');
+const accessMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase20-access-control.sql'),'utf8');
+if(accessMigration!==accessMigrationCopy || !accessMigration.includes('get_effective_access') || !accessMigration.includes('current_user_has_permission')){
+  console.error('Access Control migration copies are missing, incomplete, or out of sync.');
+  process.exit(1);
+}
+for(const feature of ['renderUsers','openEffectiveAccess','save_user_access','requestPasswordRecovery','openAccountSecurity','ACCESS_MODULES']){
+  if(!app.includes(feature)){
+    console.error(`Access Control feature contract is missing: ${feature}`);
+    process.exit(1);
+  }
 }
 for(const feature of ['catalog-add-button','saveCatalogQuickAdd','persistOrganizationStructure',"roles:['Administrator','HR Staff']"]){
   if(!app.includes(feature)){
