@@ -426,8 +426,12 @@ function uploadDocumentType(module,key){
   return specific[key]||uploadModuleFolder(module).replace(/[^a-zA-Z0-9-]/g,'-');
 }
 function uploadEmployeeContext(){
-  const pickerIds=['f_employeeName','cv_employeeName','in_employeeName'];
+  const pickerIds=['f_employeeName','cv_employeeName','in_employeeName','case_employee'];
   let employee=pickerIds.map(id=>employeePickerSelected(id)).find(Boolean)||null;
+  if(!employee){
+    const lockedCaseEmployeeId=document.getElementById('case_employee_locked')?.value||'';
+    if(lockedCaseEmployeeId)employee=DB.employees.find(row=>String(row.id)===String(lockedCaseEmployeeId))||null;
+  }
   const explicit=document.querySelector('[data-upload-employee-id],[data-upload-record-id]');
   if(!employee&&explicit?.dataset.uploadEmployeeId) employee=DB.employees.find(row=>String(row.id)===String(explicit.dataset.uploadEmployeeId))||null;
   if(employee) return {name:employeeDisplayName(employee),employeeNo:employee.employeeNo||'',department:employee.department||''};
@@ -1679,7 +1683,7 @@ async function openEmployeeOperation(module,employeeId){
     const next=EVAL_MILESTONES.find(m=>{const st=evalStatusInfo(emp,m); return st.label!=='Completed';})||EVAL_MILESTONES[EVAL_MILESTONES.length-1];
     openEvalForm(employeeId,next.key); return;
   }
-  if(module==='cases'){ openCaseForm(); setTimeout(()=>opsPrefill('cases',emp),0); return; }
+  if(module==='cases'){ openCaseForm('',emp.id); return; }
   if(module==='incidents'){ openIncidentForm(); setTimeout(()=>opsPrefill('incidents',emp),0); return; }
   if(module==='cvr'){ openCVRForm(); setTimeout(()=>opsPrefill('cvr',emp),0); return; }
   openRecordForm(module); setTimeout(()=>opsPrefill(module,emp),0);
@@ -2464,8 +2468,17 @@ function openModal(html){
   const overlay=document.getElementById('overlay');
   const modal=document.getElementById('modal');
   MODAL_TRIGGER=document.activeElement instanceof HTMLElement?document.activeElement:null;
-  modal.classList.remove('case-modal','employee-workspace-modal');
+  modal.classList.remove('case-modal','employee-workspace-modal','entry-modal','relations-modal');
   modal.innerHTML=html;
+  const employeeRelationsView=navSectionForView(STATE.view)==='Employee Relations'||Boolean(modal.querySelector('[data-employee-relations-modal]'));
+  modal.classList.toggle('relations-modal',employeeRelationsView);
+  modal.classList.toggle('entry-modal',employeeRelationsView&&Boolean(modal.querySelector('.modal-body .formgrid')));
+  const closeButton=modal.querySelector(':scope > .modal-head > button:last-child');
+  if(closeButton){
+    closeButton.type='button';
+    if(!closeButton.getAttribute('aria-label'))closeButton.setAttribute('aria-label','Close dialog');
+    if(!closeButton.getAttribute('title'))closeButton.setAttribute('title','Close');
+  }
   enhanceModalHeader(modal);
   overlay.classList.add('on');
   overlay.setAttribute('aria-hidden','false');
@@ -3028,8 +3041,8 @@ async function openRecordForm(key, id){
     return next;
   });
   openModal(`
-    <div class="modal-head"><h3>${existing? 'Edit':'Add'} ${cfg.singular}</h3><button onclick="closeModal()">&times;</button></div>
-    <div class="modal-body">
+    <div class="modal-head"><div><h3>${existing? 'Edit':'Add'} ${cfg.singular}</h3><div class="small">${esc(cfg.subtitle||`Complete the ${cfg.singular.toLowerCase()} details below.`)}</div></div><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body" ${VIEW_PERMISSION_MODULE[key]==='employee_relations'?'data-employee-relations-modal':''}>
       <div class="formgrid" id="record-form">
         ${fields.map(f=> fieldHTML(f, existing? existing[f.key] : (f.default? f.default() : ''))).join('')}
       </div>
@@ -4218,7 +4231,7 @@ async function renderTdaCatalog(){
 function openTdaForm(id=''){
   const record=id?(DB.offenseCatalog||[]).find(item=>item.id===id):null;
   openModal(`<div class="modal-head"><div><h3>${record?'Edit':'Add'} TDA Offense</h3><div class="small">Define the approved sanction schedule and where it applies.</div></div><button type="button" onclick="closeModal()" aria-label="Close">&times;</button></div>
-    <div class="modal-body tda-form-body"><div class="formgrid">
+    <div class="modal-body tda-form-body" data-employee-relations-modal><div class="formgrid">
       <div class="field"><label>Offense No.</label><input id="tda_offenseNumber" value="${esc(record?.offenseNumber||'')}"></div>
       <div class="field"><label>Offense Category *</label><input id="tda_category" value="${esc(record?.category||'')}"></div>
       <div class="field full"><label>Offense / Violation *</label><textarea id="tda_offense" rows="3">${esc(record?.offense||'')}</textarea></div>
@@ -4246,7 +4259,7 @@ function openTdaImport(){
   if(SESSION?.role!=='Administrator'){toast('Only a System Administrator can import a TDA workbook.',true);return;}
   TDA_IMPORT_PREVIEW=null;
   openModal(`<div class="modal-head"><div><h3>Import TDA Workbook</h3><div class="small">Apply an approved disciplinary schedule to the correct workforce scope.</div></div><button type="button" onclick="closeModal()" aria-label="Close import">&times;</button></div>
-    <div class="modal-body employee-import-body tda-import-body"><div class="tda-import-scope"><h4>Catalog applicability</h4>${tdaScopeEditorHTML('tdai',{tdaType:'Industrial',allClients:true,allBranches:true,allDepartments:true})}</div>
+    <div class="modal-body employee-import-body tda-import-body" data-employee-relations-modal><div class="tda-import-scope"><h4>Catalog applicability</h4>${tdaScopeEditorHTML('tdai',{tdaType:'Industrial',allClients:true,allBranches:true,allDepartments:true})}</div>
       <div class="field full"><label>When a matching offense already exists</label><select id="tdai_conflict"><option value="skip">Skip duplicates</option><option value="update">Update matching offenses</option><option value="replace">Replace the matching applicability scope</option></select></div>
       <div class="employee-import-drop"><span>${iUpload(22)}</span><div><b>Select the approved TDA workbook</b><p>Expected worksheet: TDA-OFFENSES. All five occurrence levels are validated before saving.</p></div><label class="btn btn-primary btn-sm" for="tda-import-file">Choose File</label><input id="tda-import-file" type="file" accept=".xlsx,.xls" hidden onchange="handleTdaImportFile(this)"></div>
       <div class="employee-import-rules"><b>Formula handling</b><span>Disciplinary classification is recalculated from the first consequence instead of trusting cached Excel or Google Sheets formula results.</span></div>
@@ -4271,7 +4284,7 @@ function tdaImportSummary(){
 function renderTdaImportPreview(){
   const summary=tdaImportSummary();const preview=TDA_IMPORT_PREVIEW;
   openModal(`<div class="modal-head"><div><h3>Review TDA Import</h3><div class="small">${esc(preview.fileName)} · ${esc(preview.sheetName||'No worksheet')} · ${esc(preview.scope.tdaType)}</div></div><button type="button" onclick="closeModal()" aria-label="Close preview">&times;</button></div>
-    <div class="modal-body employee-import-body"><div class="employee-import-summary"><div><span>Ready</span><b>${summary.valid}</b></div><div class="${summary.errors?'has-error':''}"><span>Errors</span><b>${summary.errors}</b></div><div class="${summary.warnings?'has-warning':''}"><span>Notices</span><b>${summary.warnings}</b></div></div>
+    <div class="modal-body employee-import-body" data-employee-relations-modal><div class="employee-import-summary"><div><span>Ready</span><b>${summary.valid}</b></div><div class="${summary.errors?'has-error':''}"><span>Errors</span><b>${summary.errors}</b></div><div class="${summary.warnings?'has-warning':''}"><span>Notices</span><b>${summary.warnings}</b></div></div>
       ${preview.fileErrors.length?`<div class="employee-import-file-errors"><b>Workbook errors</b>${preview.fileErrors.map(error=>`<span>${esc(error)}</span>`).join('')}</div>`:''}
       <div class="tda-import-context"><b>${esc(tdaClientLabel(preview.scope))}</b><span>${esc(tdaScopeLabel(preview.scope))}</span><span>Conflict mode: ${esc(preview.conflictMode)}</span></div>
       <div class="tablewrap employee-import-preview tda-import-preview"><table class="data-table"><thead><tr><th>Row</th><th>No.</th><th>Category</th><th>Offense</th><th>1st</th><th>2nd</th><th>3rd</th><th>4th</th><th>5th</th><th>Validation</th></tr></thead><tbody>${preview.rows.map(row=>`<tr><td class="mono">${row.rowNumber}</td><td class="mono">${esc(row.values.offenseNumber)}</td><td>${esc(row.values.category)}</td><td><b>${esc(row.values.offense)}</b></td>${[1,2,3,4,5].map(level=>`<td>${esc(row.values[`consequence${level}`]||'—')}</td>`).join('')}<td>${row.errors.length?`<div class="import-issues error">${row.errors.map(error=>`<span>${esc(error)}</span>`).join('')}</div>`:row.warnings.length?`<div class="import-issues warning">${row.warnings.map(warning=>`<span>${esc(warning)}</span>`).join('')}</div>`:'<span class="badge b-green"><span class="dot"></span>Ready</span>'}</td></tr>`).join('')}</tbody></table></div>
@@ -5135,8 +5148,8 @@ function openCVRForm(id){
   const context=tdaContextForEmployee(existing?.employeeId,existing?.employeeName,existing?.department);
   const catalog=applicableTdaCatalog(context);
   openModal(`
-    <div class="modal-head"><h3>${existing?'Edit':'Add'} CVR</h3><button onclick="closeModal()">&times;</button></div>
-    <div class="modal-body">
+    <div class="modal-head"><div><h3>${existing?'Edit':'Add'} CVR</h3><div class="small">Document checked offenses, supporting evidence, and the current resolution status.</div></div><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body" data-employee-relations-modal>
       <div class="formgrid">
         ${employeePickerHTML({id:'cv_employeeName',label:'Employee Name',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true,onSelect:'refreshCVROffenseChoices'})}
         <div class="field"><label>Department *</label><select id="cv_department" onchange="refreshCVROffenseChoices()">${employeeDepartmentNames(existing?.department||'').map(d=>`<option ${existing&&existing.department===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
@@ -5264,8 +5277,8 @@ function openIncidentForm(id){
   const existing = id? DB.incidents.find(i=>i.id===id): null;
   const checked = existing? (existing.incidentTypes||[]) : [];
   openModal(`
-    <div class="modal-head"><h3>${existing?'Edit':'Add'} Incident Report</h3><button onclick="closeModal()">&times;</button></div>
-    <div class="modal-body">
+    <div class="modal-head"><div><h3>${existing?'Edit':'Add'} Incident Report</h3><div class="small">Capture the incident facts, classification, evidence, and follow-up status.</div></div><button onclick="closeModal()">&times;</button></div>
+    <div class="modal-body" data-employee-relations-modal>
       <div class="formgrid">
         ${employeePickerHTML({id:'in_employeeName',label:'Employee Name',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true})}
         <div class="field"><label>Department *</label><select id="in_department">${employeeDepartmentNames(existing?.department||'').map(d=>`<option ${existing&&existing.department===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
@@ -8108,7 +8121,7 @@ async function openRecordCaseDialog(module,recordId){
     const linkedCases=(cases||[]).filter(c=>linkedIds.has(String(c.id)));
     const availableCases=(cases||[]).filter(c=>!linkedIds.has(String(c.id)));
     openModal(`<div class="modal-head"><div><h3>${esc(caseModuleLabel(module))} — HR Case</h3><div class="small">${esc(caseRecordLabel(module,rec))}</div></div><button onclick="closeModal()">&times;</button></div>
-      <div class="modal-body">
+      <div class="modal-body" data-employee-relations-modal>
         <div class="panel" style="padding:14px;margin-bottom:14px;">
           <h3>Linked Case${linkedCases.length===1?'':'s'}</h3>
           <div class="desc">This record can belong to one or more HR case files.</div>
@@ -8229,15 +8242,30 @@ async function renderCases(){
     <div class="tablewrap"><table class="data-table"><thead><tr><th>Case No.</th><th>Employee</th><th>Priority</th><th>Status</th><th>Due</th><th>Assigned To</th><th style="text-align:right;">Actions</th></tr></thead>
     <tbody>${rows.length?rows.map(c=>{const ass=DB.users.find(u=>u.id===c.assigned_to);const dl=caseDeadlineInfo(c.due_date,c.status); return `<tr><td><b class="mono">${esc(c.case_number)}</b><div class="small">${esc(c.subject||'HR Case')}</div></td><td><b>${esc(c.employee_name)}</b><div class="small">${esc(c.department||'Unassigned')}</div></td><td>${casePriorityBadge(c.priority)}</td><td>${statusBadge(c.status,CASE_STATUS_MAP)}</td><td><span class="case-deadline ${dl.cls}">${dl.label}</span><div class="small">${c.due_date?fmtDate(c.due_date):'No date'}</div></td><td>${esc(ass?.fullName||'Unassigned')}</td><td><div class="rowactions"><button class="iconbtn" title="Open case" onclick="openCaseDetails('${c.id}')">${iDoc(14)}</button>${canEdit()?`<button class="iconbtn" title="Edit case" onclick="openCaseForm('${c.id}')">${iEdit(14)}</button><button class="iconbtn" title="Delete case" onclick="deleteCase('${c.id}')">${iTrash(14)}</button>`:''}</div></td></tr>`;}).join(''):`<tr><td colspan="8"><div class="empty"><b>No HR cases yet</b>${canEdit()?'Create your first case to begin linking HR records.':'No cases are available for viewing.'}</div></td></tr>`}</tbody></table></div>`;
 }
-function openCaseForm(id){
+function openCaseForm(id,employeeId=''){
   if(SESSION?.role==='Viewer'){ toast('Viewer accounts have read-only access.',true); return; }
-  if(!id){ openCaseFormMarkup(null); return; }
+  if(!id){
+    const employee=employeeId?DB.employees.find(row=>String(row.id)===String(employeeId)):null;
+    openCaseFormMarkup(null,employee||null);
+    return;
+  }
   supabase.from('hr_cases').select('*').eq('id',id).maybeSingle().then(({data,error})=>{ if(error||!data){toast('Could not load the case for editing.',true);return;} openCaseFormMarkup(data); });
 }
-function openCaseFormMarkup(existing){
+function caseEmployeeContextHTML(employee){
+  if(!employee)return '';
+  return `<div class="case-employee-context full" data-upload-employee-id="${esc(employee.id)}" data-upload-employee-name="${esc(employeeDisplayName(employee))}" data-upload-employee-no="${esc(employee.employeeNo||'')}" data-upload-department="${esc(employee.department||'')}">
+    <input type="hidden" id="case_employee_locked" value="${esc(employee.id)}">
+    <span class="avatar-sm">${esc(opsInitials(employeeDisplayName(employee)))}</span>
+    <div><span>Case employee</span><b>${esc(employeeDisplayName(employee))}</b><small>${esc(employee.employeeNo||'No employee number')} · ${esc(employee.position||'No position')} · ${esc(employee.department||'Unassigned')}</small></div>
+    ${statusBadge(employee.status||'—',EMP_STATUS_MAP)}
+  </div>`;
+}
+function openCaseFormMarkup(existing,lockedEmployee=null){
   const assigned=DB.users.filter(u=>u.role==='Administrator'||u.role==='HR Staff');
-  openModal(`<div class="modal-head"><h3>${existing?'Edit':'Create'} HR Case</h3><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="formgrid">
-    ${employeePickerHTML({id:'case_employee',label:'Employee',selectedId:existing?.employee_record_id||'',required:true,full:true,autofill:false})}
+  const title=existing?'Edit HR Case':'New HR Case';
+  const lockedTrail=lockedEmployee?`<div class="modal-context-breadcrumb" aria-label="Current location"><span>Employee Information</span><span aria-hidden="true">›</span><span>${esc(employeeDisplayName(lockedEmployee))}</span><span aria-hidden="true">›</span><b>${esc(title)}</b></div>`:'';
+  openModal(`<div class="modal-head"><div class="modal-head-copy">${lockedTrail}<h3>${esc(title)}</h3><div class="small">Record the case details and supporting document in one workspace.</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body" data-employee-relations-modal><div class="formgrid">
+    ${lockedEmployee?caseEmployeeContextHTML(lockedEmployee):employeePickerHTML({id:'case_employee',label:'Employee',selectedId:existing?.employee_record_id||'',required:true,full:true,autofill:false})}
     <div class="field"><label>Case Number</label><input value="${esc(existing?.case_number||'Generated on save')}" disabled style="background:var(--paper);"></div>
     <div class="field"><label>Status</label><select id="case_status">${Object.keys(CASE_STATUS_MAP).map(x=>`<option ${existing?.status===x||(!existing&&x==='Open')?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
     <div class="field"><label>Priority</label><select id="case_priority">${['Low','Normal','High','Urgent'].map(x=>`<option ${existing?.priority===x||(!existing&&x==='Normal')?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
@@ -8246,16 +8274,19 @@ function openCaseFormMarkup(existing){
     <div class="field"><label>Closed Date</label><input type="date" id="case_closed" value="${esc(existing?.closed_at||'')}"></div>
     <div class="field"><label>Assigned To</label><select id="case_assigned"><option value="">Unassigned</option>${assigned.map(u=>`<option value="${esc(u.id)}" ${existing?.assigned_to===u.id?'selected':''}>${esc(u.fullName)} · ${esc(u.role)}</option>`).join('')}</select></div>
     <div class="field full"><label>Subject / Matter</label><input id="case_subject" value="${esc(existing?.subject||'')}" placeholder="e.g. Attendance violation — repeated unauthorized absence"></div>
+    ${fieldHTML({key:'caseAttachment',label:'Primary Case File / Supporting Document',type:'file',full:true,storagePrefix:'cases',existingData:existing?.attachment_ref||''},existing?.attachment_name||'')}
     <div class="field full"><label>Remarks</label><textarea id="case_remarks" rows="3" placeholder="Case notes, context, or internal remarks…">${esc(existing?.remarks||'')}</textarea></div>
   </div><div class="computed-note">Case numbers are generated sequentially per calendar year. Priority and due date drive the Action Center and case deadline indicators.</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveCase('${existing?.id||''}')">Save Case</button></div>`);
 }
 async function saveCase(id){
   if(SESSION?.role==='Viewer') return;
-  const employee=employeePickerSelected('case_employee');
+  const lockedEmployeeId=document.getElementById('case_employee_locked')?.value||'';
+  const employee=employeePickerSelected('case_employee')||DB.employees.find(row=>String(row.id)===String(lockedEmployeeId));
   const employeeRecordId=employee?.id||''; const employeeName=employee?.name||''; const department=employee?.department||'';
   const status=document.getElementById('case_status').value; const priority=document.getElementById('case_priority').value;
   const openedAt=document.getElementById('case_opened').value; const dueDate=document.getElementById('case_due').value||null; const closedAt=document.getElementById('case_closed').value||null;
   const subject=document.getElementById('case_subject').value.trim(); const remarks=document.getElementById('case_remarks').value.trim(); const assignedTo=document.getElementById('case_assigned').value||null;
+  const attachmentName=document.getElementById('f_caseAttachment')?.value||''; const attachmentRef=document.getElementById('f_caseAttachment_data')?.value||'';
   if(!employeeRecordId||!employeeName||!openedAt){toast('Please select an employee and opened date.');return;}
   if(dueDate&&dueDate<openedAt){toast('Due date cannot be before the opened date.');return;}
   if(closedAt&&closedAt<openedAt){toast('Closed date cannot be before the opened date.');return;}
@@ -8263,24 +8294,30 @@ async function saveCase(id){
   if(dueDate&&closedAt&&closedAt<dueDate&&status!=='Closed'){toast('An open case cannot have a closed date earlier than its due date.');return;}
   try{
     if(id){
-      const {data:before,error:beforeError}=await supabase.from('hr_cases').select('status,priority,due_date,assigned_to,remarks').eq('id',id).maybeSingle(); if(beforeError) throw beforeError;
-      const {error}=await supabase.from('hr_cases').update({employee_record_id:employeeRecordId,employee_name:employeeName,department,subject,status,opened_at:openedAt,closed_at:closedAt,assigned_to:assignedTo,priority,due_date:dueDate,updated_by:SESSION?.id||null,remarks}).eq('id',id); if(error) throw error;
+      const {data:before,error:beforeError}=await supabase.from('hr_cases').select('status,priority,due_date,assigned_to,remarks,attachment_ref').eq('id',id).maybeSingle(); if(beforeError) throw beforeError;
+      const {error}=await supabase.from('hr_cases').update({employee_record_id:employeeRecordId,employee_name:employeeName,department,subject,status,opened_at:openedAt,closed_at:closedAt,assigned_to:assignedTo,priority,due_date:dueDate,updated_by:SESSION?.id||null,remarks,attachment_name:attachmentName||null,attachment_ref:attachmentRef||null}).eq('id',id); if(error) throw error;
       if(before?.status!==status) await addCaseActivity(id,'status',`Status changed from ${before?.status||'—'} to ${status}.`,before?.status||null,status,dueDate);
       if(before?.priority!==priority) await addCaseActivity(id,'priority',`Priority changed to ${priority}.`,null,null,dueDate);
       if((before?.due_date||null)!==(dueDate||null)) await addCaseActivity(id,'deadline',dueDate?`Case deadline set to ${fmtDate(dueDate)}.`:'Case deadline cleared.',null,null,dueDate);
       if((before?.assigned_to||null)!==(assignedTo||null)){ const ass=DB.users.find(u=>u.id===assignedTo); await addCaseActivity(id,'assignment',assignedTo?`Assigned to ${ass?.fullName||'HR staff'}.`:'Case assignment cleared.'); }
       if((before?.remarks||'')!==remarks && remarks) await addCaseActivity(id,'updated','Case remarks updated.');
-      logAudit('Updated an HR case'); closeModal(); toast('HR case updated.'); await renderCases();
+      rememberCommittedRecordFiles({caseAttachmentData:attachmentRef});
+      if(before?.attachment_ref&&before.attachment_ref!==attachmentRef)await deleteStorageObjects([before.attachment_ref]);
+      logAudit('Updated an HR case'); await closeModal(attachmentRef?[attachmentRef]:[]); toast('HR case updated.'); await renderCases();
     }else{
       const caseNumber=await nextCaseNumber();
-      const {data,error}=await supabase.from('hr_cases').insert({case_number:caseNumber,employee_record_id:employeeRecordId,employee_name:employeeName,department,subject,status,opened_at:openedAt,closed_at:closedAt,assigned_to:assignedTo,priority,due_date:dueDate,created_by:SESSION?.id||null,updated_by:SESSION?.id||null,remarks}).select('id').single(); if(error) throw error;
+      const {data,error}=await supabase.from('hr_cases').insert({case_number:caseNumber,employee_record_id:employeeRecordId,employee_name:employeeName,department,subject,status,opened_at:openedAt,closed_at:closedAt,assigned_to:assignedTo,priority,due_date:dueDate,created_by:SESSION?.id||null,updated_by:SESSION?.id||null,remarks,attachment_name:attachmentName||null,attachment_ref:attachmentRef||null}).select('id').single(); if(error) throw error;
       await addCaseActivity(data.id,'created',`Case created for ${employeeName}.`,null,status,dueDate);
       if(assignedTo){ const ass=DB.users.find(u=>u.id===assignedTo); await addCaseActivity(data.id,'assignment',`Assigned to ${ass?.fullName||'HR staff'}.`); }
       if(dueDate) await addCaseActivity(data.id,'deadline',`Case deadline set to ${fmtDate(dueDate)}.`,null,null,dueDate);
       if(priority!=='Normal') await addCaseActivity(data.id,'priority',`Case priority set to ${priority}.`);
-      logAudit(`Created HR case ${caseNumber}`); closeModal(); toast(`HR case ${caseNumber} created.`); await openCaseDetails(data.id);
+      rememberCommittedRecordFiles({caseAttachmentData:attachmentRef});
+      logAudit(`Created HR case ${caseNumber}`); await closeModal(attachmentRef?[attachmentRef]:[]); toast(`HR case ${caseNumber} created.`); await openCaseDetails(data.id);
     }
-  }catch(e){toast('Could not save HR case: '+e.message,true);}
+  }catch(e){
+    const schemaHint=/attachment_(?:name|ref)|schema cache|PGRST204|42703/i.test(`${e.code||''} ${e.message||''}`)?' Run supabase/phase22-hr-case-attachments.sql, then reload the app.':'';
+    toast('Could not save HR case: '+e.message+schemaHint,true);
+  }
 }
 async function openCaseDetails(id){
   const [{data:caseRec,error:caseError},{data:links,error:linkError},{data:activity,error:activityError}]=await Promise.all([
@@ -8297,7 +8334,8 @@ async function openCaseDetails(id){
   const linkRows=(links||[]).map((ln,i)=>{const rec=(DB[ln.module]||[]).find(r=>String(r.id)===String(ln.record_id));const label=ln.label||caseRecordLabel(ln.module,rec);const date=caseRecordDate(ln.module,rec);return `<div class="case-link"><div class="stage">${i+1}</div><div class="body"><div class="title">${esc(caseModuleLabel(ln.module))}</div><div class="meta">${esc(label)}${date?' · '+esc(fmtDate(date)):''} · Linked ${new Date(ln.linked_at).toLocaleString()}</div></div><div class="actions">${canEdit()?`<button class="iconbtn" title="Remove link" onclick="unlinkCaseRecord('${id}','${esc(ln.module)}','${esc(ln.record_id)}')">${iTrash(13)}</button>`:''}</div></div>`;}).join('');
   const activityRows=(activity||[]).map(a=>{const actor=DB.users.find(u=>u.id===a.created_by); return `<div class="case-activity-item"><div class="case-activity-dot">${caseActivityIcon(a)}</div><div class="case-activity-body"><div class="case-activity-head"><div><div class="case-activity-title">${esc(caseActivityLabel(a))}</div><div class="case-activity-meta">${esc(actor?.fullName||'System')} · ${new Date(a.created_at).toLocaleString()}</div></div>${a.status_to?statusBadge(a.status_to,CASE_STATUS_MAP):''}</div>${a.note?`<div class="case-activity-note">${esc(a.note)}</div>`:''}</div></div>`;}).join('');
   const currentStep=['Open','NTE Issued','Memo Issued','For Decision','Resolved','Closed'].includes(caseRec.status)?caseRec.status:'Open';
-  openModal(`<div class="modal-head"><div><h3>${esc(caseRec.case_number)}</h3><div class="small">${esc(caseRec.subject||'HR Case File')}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body">
+  const caseFile=caseRec.attachment_ref?`<button type="button" class="btn btn-ghost btn-sm" onclick="downloadAttachment('${esc(caseRec.attachment_ref)}','${esc(caseRec.attachment_name||'HR Case File').replace(/'/g,"\\'")}')">${iDownload(13)} ${esc(caseRec.attachment_name||'Open case file')}</button>`:'<span class="small">No primary case file uploaded.</span>';
+  openModal(`<div class="modal-head"><div><h3>${esc(caseRec.case_number)}</h3><div class="small">${esc(caseRec.subject||'HR Case File')}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body" data-employee-relations-modal>
     <div class="case-summary"><div class="mini"><div class="k">Employee</div><div class="v">${esc(caseRec.employee_name)}</div></div><div class="mini"><div class="k">Department</div><div class="v">${esc(caseRec.department||'—')}</div></div><div class="mini"><div class="k">Status</div><div class="v">${statusBadge(caseRec.status,CASE_STATUS_MAP)}</div></div><div class="mini"><div class="k">Assigned To</div><div class="v">${esc(assigned?.fullName||'Unassigned')}</div></div></div>
     ${caseWorkflowSteps(currentStep)}
     <div class="case-intel-grid">
@@ -8309,7 +8347,7 @@ async function openCaseDetails(id){
       <div class="panel" style="padding:14px;"><div class="sectionhead" style="margin-bottom:10px;"><div><h2 style="font-size:16px;">Linked HR Records</h2><p>${links?.length||0} linked record${(links?.length||0)===1?'':'s'}.</p></div></div><div class="case-links">${linkRows||'<div class="empty"><b>No records linked yet</b>Use the workflow buttons or link an existing record to build the case history.</div>'}</div></div>
       <div class="panel" style="padding:14px;"><div class="sectionhead" style="margin-bottom:10px;"><div><h2 style="font-size:16px;">Activity Timeline</h2><p>Chronological case actions and internal notes.</p></div></div><div class="case-activity">${activityRows||'<div class="empty"><b>No activity yet</b>Case activity will appear here as the file progresses.</div>'}</div></div>
     </div>
-    <div style="margin-top:14px;" class="panel"><h3>Case Information</h3><div class="small" style="margin-top:6px;line-height:1.7;">Opened: <b>${fmtDate(caseRec.opened_at)}</b> · Due: <b>${fmtDate(caseRec.due_date)}</b> · Closed: <b>${fmtDate(caseRec.closed_at)}</b><br>Priority: <b>${esc(caseRec.priority||'Normal')}</b> · Assigned: <b>${esc(assigned?.fullName||'Unassigned')}</b><br>Remarks: ${esc(caseRec.remarks||'—')}</div></div>
+    <div style="margin-top:14px;" class="panel"><h3>Case Information</h3><div class="small" style="margin-top:6px;line-height:1.7;">Opened: <b>${fmtDate(caseRec.opened_at)}</b> · Due: <b>${fmtDate(caseRec.due_date)}</b> · Closed: <b>${fmtDate(caseRec.closed_at)}</b><br>Priority: <b>${esc(caseRec.priority||'Normal')}</b> · Assigned: <b>${esc(assigned?.fullName||'Unassigned')}</b><br>Remarks: ${esc(caseRec.remarks||'—')}</div><div class="case-primary-file"><span>Primary case file</span>${caseFile}</div></div>
   </div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal(); renderCases();">Close</button>${canEdit()?`<button class="btn btn-primary" onclick="openCaseForm('${id}')">Edit Case</button>`:''}</div>`);
   document.getElementById('modal').classList.add('case-modal');
 }
@@ -8339,7 +8377,7 @@ async function setCaseWorkflowStatus(caseId,status){
 function openCaseLinkForm(caseId){
   if(SESSION?.role==='Viewer') return;
   const allowed=['incidents','cvr','disciplinary','nte','memos','nod','atd','employees','leaves','oncall','transfers','prf','evaluations'];
-  openModal(`<div class="modal-head"><h3>Link Existing HR Record</h3><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="field"><label>Record Type *</label><select id="case-link-module" onchange="populateCaseRecordOptions(this.value)">${allowed.map((m,i)=>`<option value="${m}" ${i===0?'selected':''}>${esc(caseModuleLabel(m))}</option>`).join('')}</select></div><div class="field"><label>Record *</label><select id="case-link-record"><option value="">Select a record…</option></select></div><div class="computed-note">The record remains in its original module. This action creates only a relationship to the case file.</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="linkCaseRecord('${caseId}')">Link Record</button></div>`);
+  openModal(`<div class="modal-head"><div><h3>Link Existing HR Record</h3><div class="small">Attach an existing transaction to this case timeline without moving its source record.</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body" data-employee-relations-modal><div class="formgrid"><div class="field"><label>Record Type *</label><select id="case-link-module" onchange="populateCaseRecordOptions(this.value)">${allowed.map((m,i)=>`<option value="${m}" ${i===0?'selected':''}>${esc(caseModuleLabel(m))}</option>`).join('')}</select></div><div class="field"><label>Record *</label><select id="case-link-record"><option value="">Select a record…</option></select></div></div><div class="computed-note">The record remains in its original module. This action creates only a relationship to the case file.</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="linkCaseRecord('${caseId}')">Link Record</button></div>`);
   populateCaseRecordOptions(allowed[0]);
 }
 function populateCaseRecordOptions(module){const sel=document.getElementById('case-link-record');if(!sel)return;const rows=(DB[module]||[]).slice().sort((a,b)=>caseRecordLabel(module,a).localeCompare(caseRecordLabel(module,b)));sel.innerHTML='<option value="">Select a record…</option>'+rows.map(r=>`<option value="${esc(r.id)}">${esc(caseRecordLabel(module,r))}</option>`).join('');}
@@ -8364,8 +8402,11 @@ async function unlinkCaseRecord(caseId,module,recordId){
 }
 async function deleteCase(id){
   if(SESSION?.role==='Viewer') return;
+  const {data:caseRec,error:loadError}=await supabase.from('hr_cases').select('attachment_ref').eq('id',id).maybeSingle();
+  if(loadError){toast('Could not load the case before deletion: '+loadError.message,true);return;}
   const {error}=await supabase.from('hr_cases').delete().eq('id',id);
   if(error){toast('Could not delete case: '+error.message,true);return;}
+  if(caseRec?.attachment_ref)await deleteStorageObjects([caseRec.attachment_ref]);
   logAudit('Deleted an HR case');toast('HR case deleted.');await renderCases();
 }
 
