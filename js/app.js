@@ -1671,13 +1671,14 @@ function opsPrefill(module,emp){
 async function openEmployeeOperation(module,employeeId){
   if(SESSION?.role==='Viewer'){ toast('Viewer accounts have read-only access.',true); return; }
   const emp=DB.employees.find(e=>e.id===employeeId); if(!emp) return;
+  const returnToEmployee=Boolean(document.getElementById('overlay')?.classList.contains('on')&&document.getElementById('modal')?.classList.contains('employee-workspace-modal'));
   await ensureRecordModules(recordModulesForView(module));
-  closeModal();
   if(module==='profile'){ openEmployeeProfile(employeeId); return; }
   if(module==='status'){ openEmployeeStatusForm(employeeId); return; }
   if(module==='lifecycle'){ openEmployeeLifecycleEventForm(employeeId); return; }
   if(module==='transfer'){ openTransferForEmployee(employeeId); return; }
-  if(module==='documents'){ closeModal(); STATE.view='documents'; STATE.search=emp.name||''; STATE.filter=''; STATE.tablePages={}; STATE.documentStorage=''; STATE.documentCategory=''; STATE.documentExpiry=''; STATE.documentStatus=''; renderNav(); renderDocuments(); return; }
+  if(module==='documents'){ EMPLOYEE_TRANSACTION_RETURN=null; closeModal(); STATE.view='documents'; STATE.search=emp.name||''; STATE.filter=''; STATE.tablePages={}; STATE.documentStorage=''; STATE.documentCategory=''; STATE.documentExpiry=''; STATE.documentStatus=''; renderNav(); renderDocuments(); return; }
+  EMPLOYEE_TRANSACTION_RETURN=returnToEmployee?{employeeId:emp.id,module,returnTarget:'overview'}:null;
   if(module==='atd'){ openATDForm(); setTimeout(()=>opsPrefill('atd',emp),0); return; }
   if(module==='evaluations'){
     const next=EVAL_MILESTONES.find(m=>{const st=evalStatusInfo(emp,m); return st.label!=='Completed';})||EVAL_MILESTONES[EVAL_MILESTONES.length-1];
@@ -2330,6 +2331,7 @@ function downloadCSV(filename, csv){
 /* ---------------- modal helpers ---------------- */
 let MODAL_TRIGGER=null;
 let MODAL_EDIT_STATE=null;
+let EMPLOYEE_TRANSACTION_RETURN=null;
 let PAGE_EDIT_STATE=null;
 let PENDING_PAGE_NAVIGATION=null;
 const CONFIRMED_MODAL_CLOSE_TARGETS=new WeakSet();
@@ -2412,6 +2414,10 @@ async function requestPageNavigation(view){
 }
 async function requestCloseModal(trigger=null){
   const finishClose=async()=>{
+    if(EMPLOYEE_TRANSACTION_RETURN){
+      await returnFromEmployeeTransaction();
+      return;
+    }
     const handler=trigger?.getAttribute?.('onclick')||'';
     if(trigger && !handler.includes('requestCloseModal(')){
       CONFIRMED_MODAL_CLOSE_TARGETS.add(trigger);
@@ -2585,7 +2591,7 @@ document.addEventListener('click',async event=>{
   const target=event.target.closest?.('#modal button,#modal [role="button"]');
   if(!target) return;
   if(CONFIRMED_MODAL_CLOSE_TARGETS.has(target)){CONFIRMED_MODAL_CLOSE_TARGETS.delete(target);return;}
-  if(!(target.getAttribute('onclick')||'').includes('closeModal(') || !modalHasUnsavedChanges()) return;
+  if(!(target.getAttribute('onclick')||'').includes('closeModal(') || (!modalHasUnsavedChanges()&&!EMPLOYEE_TRANSACTION_RETURN)) return;
   event.preventDefault();
   event.stopImmediatePropagation();
   await requestCloseModal(target);
@@ -3133,12 +3139,15 @@ async function saveRecord(key, id){
   const newStoragePaths=recordStoragePaths(rec);
   rememberCommittedRecordFiles(rec);
   await deleteStorageObjects([...oldStoragePaths].filter(path=>!newStoragePaths.has(path)));
-  await closeModal([...newStoragePaths]); renderNav();
   CASE_WORKFLOW_CONTEXT=null;
   if(workflowCaseId && !id){
+    await closeModal([...newStoragePaths]); renderNav();
     await linkNewRecordToCase(workflowCaseId,key,rec);
     await openCaseDetails(workflowCaseId);
+  } else if(await finishEmployeeTransaction([...newStoragePaths])){
+    renderNav();
   } else {
+    await closeModal([...newStoragePaths]); renderNav();
     RENDERERS[key]? RENDERERS[key]() : renderModuleView(key);
   }
 }
@@ -3876,6 +3885,27 @@ function renderEmployees(){
 function openEmployeeWorkspaceModal(html){
   openModal(html);
   document.getElementById('modal')?.classList.add('employee-workspace-modal');
+}
+async function returnFromEmployeeTransaction(keepUploads=[]){
+  const context=EMPLOYEE_TRANSACTION_RETURN;
+  if(!context?.employeeId)return false;
+  const employee=DB.employees.find(row=>String(row.id)===String(context.employeeId));
+  if(!employee){EMPLOYEE_TRANSACTION_RETURN=null;await closeModal(keepUploads);return false;}
+  const keep=new Set(Array.isArray(keepUploads)?keepUploads:[keepUploads]);
+  const pending=[...PENDING_UPLOADS].filter(path=>!keep.has(path));
+  pending.forEach(path=>PENDING_UPLOADS.delete(path));
+  keep.forEach(path=>PENDING_UPLOADS.delete(path));
+  EMPLOYEE_TRANSACTION_RETURN=null;
+  MODAL_EDIT_STATE=null;
+  const modal=document.getElementById('modal');
+  modal?.setAttribute('aria-busy','true');
+  selectEmployeeDirectoryRow(employee.id);
+  await openEmployeeProfile(employee.id);
+  await deleteStorageObjects(pending);
+  return true;
+}
+async function finishEmployeeTransaction(keepUploads=[]){
+  return EMPLOYEE_TRANSACTION_RETURN?returnFromEmployeeTransaction(keepUploads):false;
 }
 function selectEmployeeDirectoryRow(id){
   STATE.employeeSelectedId=id;
@@ -5239,7 +5269,8 @@ async function saveCVR(id){
   await saveDB();
   const newStoragePaths=recordStoragePaths(rec); rememberCommittedRecordFiles(rec);
   await deleteStorageObjects([...oldStoragePaths].filter(path=>!newStoragePaths.has(path)));
-  await closeModal([...newStoragePaths]); renderNav(); renderCVR();
+  if(await finishEmployeeTransaction([...newStoragePaths]))renderNav();
+  else {await closeModal([...newStoragePaths]); renderNav(); renderCVR();}
 }
 function deleteCVR(id){
   DB.cvr = DB.cvr.filter(c=>c.id!==id);
@@ -5365,7 +5396,8 @@ async function saveIncident(id){
   await saveDB();
   const newStoragePaths=recordStoragePaths(rec); rememberCommittedRecordFiles(rec);
   await deleteStorageObjects([...oldStoragePaths].filter(path=>!newStoragePaths.has(path)));
-  await closeModal([...newStoragePaths]); renderNav(); renderIncidents();
+  if(await finishEmployeeTransaction([...newStoragePaths]))renderNav();
+  else {await closeModal([...newStoragePaths]); renderNav(); renderIncidents();}
 }
 function deleteIncident(id){
   DB.incidents = DB.incidents.filter(i=>i.id!==id);
@@ -5675,12 +5707,15 @@ async function saveATDRecord(id){
   await saveDB();
   const newStoragePaths=recordStoragePaths(rec); rememberCommittedRecordFiles(rec);
   await deleteStorageObjects([...oldStoragePaths].filter(path=>!newStoragePaths.has(path)));
-  await closeModal([...newStoragePaths]); renderNav();
   CASE_WORKFLOW_CONTEXT=null;
   if(workflowCaseId && !id){
+    await closeModal([...newStoragePaths]); renderNav();
     await linkNewRecordToCase(workflowCaseId,'atd',rec);
     await openCaseDetails(workflowCaseId);
+  } else if(await finishEmployeeTransaction([...newStoragePaths])){
+    renderNav();
   } else {
+    await closeModal([...newStoragePaths]); renderNav();
     renderATD();
   }
 }
@@ -5862,7 +5897,7 @@ async function saveEval(employeeId, milestoneKey){
   await saveDB(); const newStoragePaths=recordStoragePaths(rec); rememberCommittedRecordFiles(rec);
   await deleteStorageObjects([...oldStoragePaths].filter(path=>!newStoragePaths.has(path)));
   await workflowSyncTasks({silent:true});
-  await closeModal([...newStoragePaths]); renderEvaluations();
+  if(!(await finishEmployeeTransaction([...newStoragePaths]))){await closeModal([...newStoragePaths]);renderEvaluations();}
   toast('Evaluation saved.');
 }
 
@@ -8344,7 +8379,10 @@ async function saveCase(id){
       if((before?.remarks||'')!==remarks && remarks) await addCaseActivity(id,'updated','Case remarks updated.');
       rememberCommittedRecordFiles({caseAttachmentData:attachmentRef});
       if(before?.attachment_ref&&before.attachment_ref!==attachmentRef)await deleteStorageObjects([before.attachment_ref]);
-      logAudit('Updated an HR case'); await closeModal(attachmentRef?[attachmentRef]:[]); toast('HR case updated.'); await renderCases();
+      logAudit('Updated an HR case');
+      const returned=await finishEmployeeTransaction(attachmentRef?[attachmentRef]:[]);
+      if(!returned){await closeModal(attachmentRef?[attachmentRef]:[]);await renderCases();}
+      toast('HR case updated.');
     }else{
       const caseNumber=await nextCaseNumber();
       const {data,error}=await supabase.from('hr_cases').insert({case_number:caseNumber,employee_record_id:employeeRecordId,employee_name:employeeName,department,subject,status,opened_at:openedAt,closed_at:closedAt,assigned_to:assignedTo,priority,due_date:dueDate,created_by:SESSION?.id||null,updated_by:SESSION?.id||null,remarks,attachment_name:attachmentName||null,attachment_ref:attachmentRef||null}).select('id').single(); if(error) throw error;
@@ -8353,7 +8391,10 @@ async function saveCase(id){
       if(dueDate) await addCaseActivity(data.id,'deadline',`Case deadline set to ${fmtDate(dueDate)}.`,null,null,dueDate);
       if(priority!=='Normal') await addCaseActivity(data.id,'priority',`Case priority set to ${priority}.`);
       rememberCommittedRecordFiles({caseAttachmentData:attachmentRef});
-      logAudit(`Created HR case ${caseNumber}`); await closeModal(attachmentRef?[attachmentRef]:[]); toast(`HR case ${caseNumber} created.`); await openCaseDetails(data.id);
+      logAudit(`Created HR case ${caseNumber}`);
+      const returned=await finishEmployeeTransaction(attachmentRef?[attachmentRef]:[]);
+      toast(`HR case ${caseNumber} created.`);
+      if(!returned){await closeModal(attachmentRef?[attachmentRef]:[]);await openCaseDetails(data.id);}
     }
   }catch(e){
     const schemaHint=/attachment_(?:name|ref)|schema cache|PGRST204|42703/i.test(`${e.code||''} ${e.message||''}`)?' Run supabase/phase22-hr-case-attachments.sql, then reload the app.':'';

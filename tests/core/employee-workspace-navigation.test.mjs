@@ -24,3 +24,20 @@ test('workspace transitions expose a stable busy state',()=>{
   assert.match(source,/removeAttribute\('aria-busy'\)/);
   assert.match(styles,/employee-workspace-modal\[aria-busy="true"\]/);
 });
+
+test('employee transactions return to the selected overview on cancel or save',()=>{
+  assert.match(source,/let EMPLOYEE_TRANSACTION_RETURN=null/);
+  assert.match(source,/EMPLOYEE_TRANSACTION_RETURN=returnToEmployee\?\{employeeId:emp\.id,module,returnTarget:'overview'\}:null/);
+  assert.match(source,/async function returnFromEmployeeTransaction\(keepUploads=\[\]\)/);
+  assert.match(source,/if\(EMPLOYEE_TRANSACTION_RETURN\)[\s\S]*returnFromEmployeeTransaction\(\)/);
+  for(const saver of ['saveRecord','saveCVR','saveIncident','saveATDRecord','saveEval','saveCase']){
+    const start=source.indexOf(`function ${saver}(`)>=0?source.indexOf(`function ${saver}(`):source.indexOf(`function ${saver}`);
+    assert.ok(start>=0,`${saver} exists`);
+    assert.match(source.slice(start,start+7000),/finishEmployeeTransaction\(/,`${saver} returns to employee context`);
+  }
+});
+
+test('Access Control role editor keeps form fields away from modal edges',()=>{
+  assert.match(styles,/\.access-role-editor>\.formgrid\{padding:17px 20px/);
+  assert.match(styles,/\.access-editor-section,\.access-role-editor>\.formgrid\{padding:14px 13px/);
+});
