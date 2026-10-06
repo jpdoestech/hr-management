@@ -8,6 +8,7 @@ const styles=await readFile(new URL('../../css/professional.css',import.meta.url
 test('employee workspace tabs navigate in place without closing the modal first',()=>{
   assert.match(source,/async function employeeWorkspaceNavigate\(employeeId,target='overview'\)/);
   assert.match(source,/onclick="employeeWorkspaceNavigate\('\$\{emp\.id\}','\$\{key\}'\)"/);
+  assert.match(source,/Object\.assign\(window,[\s\S]*employeeWorkspaceNavigate/);
   assert.doesNotMatch(source,/employeeWorkspaceNav[\s\S]{0,900}onclick="closeModal\(\);\$\{handler\}"/);
 });
 
