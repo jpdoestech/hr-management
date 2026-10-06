@@ -8,6 +8,7 @@ import { roleCanExport } from './core/export-access.js?v=20260930-1';
 import { manpowerRequestSummary, manpowerRequestTotals, requirementSlotCounts, slotChronologyIssues, slotMetrics } from './core/manpower.js?v=20260930-1';
 import { measureAsync, recordPerformance, performanceSnapshot } from './core/performance.js?v=20261002-1';
 import { ACCESS_ACTIONS, ACCESS_MODULES, ACCESS_PERMISSION_KEYS, evaluateEffectiveAccess, hasEffectivePermission, legacyPermissions, permissionLabel } from './core/access-control.js?v=20261006-1';
+import { normalizeTdaScope, normalizeTdaText, parseTdaMatrix, selectApplicableTdaRecord, tdaDuplicateKey, tdaRecordApplies, tdaScopeKey } from './core/tda-import.js?v=20261006-1';
 import { addressComponentHTML, addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom, addressDetailInput, initializeAddressComponents, readAddressComponent } from './address/address-component.js?v=20260930-2';
 import { formatPhilippineAddress, normalizeAddress } from './address/address-models.js?v=20260930-2';
 
@@ -614,7 +615,7 @@ const LEAVE_TYPES = ['Vacation Leave','Sick Leave','Emergency Leave','Maternity 
 const LEAVE_STATUS = ['Pending','Approved','Ongoing','Completed','Disapproved'];
 const NTE_STATUS = ['Pending Explanation','Explanation Submitted','Under Review','Resolved'];
 const ONCALL_STATUS = ['Active','Completed','Cancelled'];
-const OFFENSE_LEVELS = ['1st Offense','2nd Offense','3rd Offense','4th Offense+'];
+const OFFENSE_LEVELS = ['1st Offense','2nd Offense','3rd Offense','4th Offense','5th Offense+'];
 const CVR_STATUS = ['Pending Review','Acknowledged','Escalated to NTE','Resolved'];
 const CVR_STATUS_MAP = {'Pending Review':'b-amber','Acknowledged':'b-blue','Escalated to NTE':'b-red','Resolved':'b-green'};
 const INCIDENT_TYPES = ['Workplace Accident','Property Damage / Loss','Safety Violation','Equipment Malfunction','Altercation / Conflict','Theft','Near Miss'];
@@ -651,12 +652,35 @@ const ONBOARDING_CHECKLIST = [
 ];
 function defaultOffenseCatalog(){
   return [
-    {id:uid(), offense:'Tardiness', consequence1:'Verbal Reminder', consequence2:'Written Warning', consequence3:'Suspension (3 days)', consequence4:'Termination'},
-    {id:uid(), offense:'Unauthorized Absence (AWOL)', consequence1:'Written Warning', consequence2:'Suspension (5 days)', consequence3:'Suspension (10 days)', consequence4:'Termination'},
-    {id:uid(), offense:'Insubordination', consequence1:'Written Warning', consequence2:'Suspension (3 days)', consequence3:'Termination', consequence4:'Termination'},
-    {id:uid(), offense:'Sleeping on Duty', consequence1:'Verbal Reminder', consequence2:'Written Warning', consequence3:'Suspension (3 days)', consequence4:'Termination'},
-    {id:uid(), offense:'Negligence of Duty', consequence1:'Written Warning', consequence2:'Suspension (5 days)', consequence3:'Termination', consequence4:'Termination'},
+    {id:uid(), offense:'Tardiness', consequence1:'Verbal Reminder', consequence2:'Written Warning', consequence3:'Suspension (3 days)', consequence4:'Termination',consequence5:'Termination'},
+    {id:uid(), offense:'Unauthorized Absence (AWOL)', consequence1:'Written Warning', consequence2:'Suspension (5 days)', consequence3:'Suspension (10 days)', consequence4:'Termination',consequence5:'Termination'},
+    {id:uid(), offense:'Insubordination', consequence1:'Written Warning', consequence2:'Suspension (3 days)', consequence3:'Termination', consequence4:'Termination',consequence5:'Termination'},
+    {id:uid(), offense:'Sleeping on Duty', consequence1:'Verbal Reminder', consequence2:'Written Warning', consequence3:'Suspension (3 days)', consequence4:'Termination',consequence5:'Termination'},
+    {id:uid(), offense:'Negligence of Duty', consequence1:'Written Warning', consequence2:'Suspension (5 days)', consequence3:'Termination', consequence4:'Termination',consequence5:'Termination'},
   ];
+}
+function normalizeTdaCatalogRecords(){
+  let changed=false;
+  DB.offenseCatalog=(DB.offenseCatalog||[]).map((record,index)=>{
+    const normalized={
+      ...record,
+      offenseNumber:String(record.offenseNumber||index+1),
+      tdaType:normalizeTdaText(record.tdaType)||'General',
+      category:normalizeTdaText(record.category)||'GENERAL',
+      disciplinaryRemarks:normalizeTdaText(record.disciplinaryRemarks)||normalizeTdaText(record.category)||'GENERAL',
+      consequence5:record.consequence5||record.consequence4||'',
+      allClients:record.allClients!==false,
+      clientName:record.allClients===false?normalizeTdaText(record.clientName):'',
+      allBranches:record.allBranches!==false,
+      branches:record.allBranches===false?uniqueSettingNames(record.branches):[],
+      allDepartments:record.allDepartments!==false,
+      departments:record.allDepartments===false?uniqueSettingNames(record.departments):[],
+      active:record.active!==false,
+    };
+    if(JSON.stringify(normalized)!==JSON.stringify(record))changed=true;
+    return normalized;
+  });
+  return changed;
 }
 
 function uid(){ return 'r' + Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4); }
@@ -925,8 +949,9 @@ async function bootAuthenticated(user){
     DB=state;
     if(!DB.audit) DB.audit=[]; if(!DB.onboardingCandidates) DB.onboardingCandidates=[]; if(!DB.transfers) DB.transfers=[]; if(!DB.offenseCatalog) DB.offenseCatalog=defaultOffenseCatalog(); if(!DB.cvr) DB.cvr=[]; if(!DB.incidents) DB.incidents=[]; if(!DB.prf) DB.prf=[]; DB.prf.forEach(p=>{if(!p.status)p.status='Draft';}); if(!DB.manpowerRequests) DB.manpowerRequests=[]; if(!DB.manpowerRequirements) DB.manpowerRequirements=[]; if(!DB.manpowerSlots) DB.manpowerSlots=[]; if(!DB.evaluations) DB.evaluations=[]; if(!DB.atd) DB.atd=[]; if(!DB.workflowTasks) DB.workflowTasks=[]; if(!DB.automationRuns) DB.automationRuns=[]; if(!DB.documents) DB.documents=[]; if(!DB.lifecycleChecklists) DB.lifecycleChecklists=[]; if(!DB.serviceRequests) DB.serviceRequests=[]; DB.atd.forEach(a=>{if(!a.payments)a.payments=[];}); if(!DB.settings) DB.settings={orgName:'SCPA',probationDays:180}; DB.settings.branchLocations=uniqueSettingNames(DB.settings.branchLocations); if(!DB.settings.branchLocations.length)DB.settings.branchLocations=['Main Office']; DB.settings.allowanceTypes=uniqueSettingNames(DB.settings.allowanceTypes);
     const employeeMasterChanged=isHRRole()?normalizeEmployeeMasterData():false;
+    const tdaCatalogChanged=isHRRole()?normalizeTdaCatalogRecords():false;
     DB_SNAPSHOT=JSON.parse(JSON.stringify(DB));
-    if(employeeMasterChanged) await saveDB();
+    if(employeeMasterChanged||tdaCatalogChanged) await saveDB();
     await loadProfiles();
     const profile=DB.users.find(x=>x.id===user.id);
     if(profile) SESSION=profile;
@@ -1923,7 +1948,7 @@ const NAV = [
     {v:'memos',label:'Memorandum',icon:iDoc},
     {v:'nod',label:'NOD',icon:iDoc},
     {v:'disciplinary',label:'Disciplinary Action',icon:iShield},
-    {v:'offenseCatalog',label:'Offense Catalog',icon:iDoc},
+    {v:'offenseCatalog',label:'TDA Catalog',icon:iDoc},
     {v:'offenseSummary',label:'Offense Summary',icon:iChart},
   ]},
   {sec:'Documents & Governance',items:[
@@ -3721,7 +3746,7 @@ function localEmployeeDirectoryRows(query){
       &&(!query.branch||employee.branchReporting===query.branch)
       &&(!query.status||employee.status===query.status)
       &&(!query.classification||classify(employee)===query.classification);
-  }).sort((left,right)=>String(right.employeeNo||'').localeCompare(String(left.employeeNo||''),undefined,{numeric:true,sensitivity:'base'}));
+  }).sort((left,right)=>employeeDisplayName(left).localeCompare(employeeDisplayName(right),undefined,{numeric:true,sensitivity:'base'})||String(left.employeeNo||'').localeCompare(String(right.employeeNo||''),undefined,{numeric:true,sensitivity:'base'}));
 }
 function employeeDirectoryRowsHTML(rows,columns){
   if(!rows.length)return `<tr><td colspan="${columns.length+1}"><div class="empty"><b>No employees found</b><span>${employeeDirectoryHasFilters()?'Try adjusting the search or filters.':'Add an employee to begin building the directory.'}</span>${employeeDirectoryHasFilters()?`<button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="resetEmployeeDirectoryFilters()">Reset search and filters</button>`:''}</div></td></tr>`;
@@ -3762,7 +3787,7 @@ function refreshEmployeeDirectoryPage(query,signature){
   if((!EMPLOYEE_DIRECTORY_QUERY_READY&&!SERVER_RECORD_QUERY_READY)||EMPLOYEE_DIRECTORY_PENDING.has(signature))return;
   const token=++EMPLOYEE_DIRECTORY_REQUEST_TOKEN;
   const request=queryEmployeeDirectoryPage({scope:query.pageScope,search:query.search,department:query.department,branch:query.branch,status:query.status,classification:query.classification,fields:query.fields,defaultSize:10})
-    .then(pageResult=>pageResult||queryRecordPage({module:'employees',scope:query.pageScope,search:query.search,searchFields:EMPLOYEE_DIRECTORY_SEARCH_FIELDS,filters:{department:query.department,branchReporting:query.branch,status:query.status},classification:query.classification,sortKey:'employeeNo',defaultSize:10}))
+    .then(pageResult=>pageResult||queryRecordPage({module:'employees',scope:query.pageScope,search:query.search,searchFields:EMPLOYEE_DIRECTORY_SEARCH_FIELDS,filters:{department:query.department,branchReporting:query.branch,status:query.status},classification:query.classification,sortKey:'lastName',defaultSize:10}))
     .then(pageResult=>{
       if(!pageResult)return;
       EMPLOYEE_DIRECTORY_PAGE_CACHE.set(signature,{pageResult,storedAt:Date.now()});
@@ -4089,6 +4114,185 @@ function employeeImportSummary(preview){
   const warnings=preview.rows.reduce((sum,row)=>sum+row.warnings.length,0);
   const valid=preview.rows.filter(row=>!row.errors.length).length;
   return {errors,warnings,valid,total:preview.rows.length};
+}
+
+/* ---------------- scoped TDA catalog + workbook import ---------------- */
+let TDA_IMPORT_PREVIEW=null;
+function tdaTypeOptions(current=''){
+  return uniqueSettingNames(['Industrial',...(DB.offenseCatalog||[]).map(record=>record.tdaType),current]);
+}
+function tdaClientOptions(current=''){
+  return uniqueSettingNames([...(DB.offenseCatalog||[]).filter(record=>record.allClients===false).map(record=>record.clientName),current]);
+}
+function tdaScopeLabel(record){
+  const departments=record.allDepartments!==false?'All departments':(record.departments||[]).join(', ')||'No department';
+  const branches=record.allBranches!==false?'All branches':(record.branches||[]).join(', ')||'No branch';
+  return `${branches} · ${departments}`;
+}
+function tdaClientLabel(record){return record.allClients!==false?'All clients':record.clientName||'Unassigned client';}
+function tdaScopeChecklist(prefix,label,values,selected){
+  return `<div class="field full tda-scope-field"><label>${esc(label)}</label><div class="tda-scope-options">${values.map((value,index)=>`<label class="checkrow"><input type="checkbox" name="${prefix}" value="${esc(value)}" ${(selected||[]).includes(value)?'checked':''}> <span>${esc(value)}</span></label>`).join('')||'<span class="small">No configured values are available.</span>'}</div></div>`;
+}
+function tdaScopeEditorHTML(prefix,record={}){
+  const scope=normalizeTdaScope(record);
+  return `<div class="tda-scope-editor">
+    <div class="field"><label>TDA Type *</label><input id="${prefix}_tdaType" list="${prefix}_tdaTypes" value="${esc(scope.tdaType)}" placeholder="e.g. Industrial"><datalist id="${prefix}_tdaTypes">${tdaTypeOptions(scope.tdaType).map(value=>`<option value="${esc(value)}"></option>`).join('')}</datalist></div>
+    <div class="field"><label>Client / Account</label><input id="${prefix}_clientName" value="${esc(scope.clientName)}" placeholder="Client or account name" ${scope.allClients?'disabled':''}></div>
+    <label class="tda-scope-toggle"><input id="${prefix}_allClients" type="checkbox" ${scope.allClients?'checked':''} onchange="toggleTdaScope('${prefix}')"> <span>Apply to all clients</span></label>
+    <label class="tda-scope-toggle"><input id="${prefix}_allBranches" type="checkbox" ${scope.allBranches?'checked':''} onchange="toggleTdaScope('${prefix}')"> <span>Apply to all branches</span></label>
+    <div id="${prefix}_branchScope" class="full" ${scope.allBranches?'hidden':''}>${tdaScopeChecklist(`${prefix}_branches`,'Applicable branches',employeeBranchLocations(),scope.branches)}</div>
+    <label class="tda-scope-toggle"><input id="${prefix}_allDepartments" type="checkbox" ${scope.allDepartments?'checked':''} onchange="toggleTdaScope('${prefix}')"> <span>Apply to all departments</span></label>
+    <div id="${prefix}_departmentScope" class="full" ${scope.allDepartments?'hidden':''}>${tdaScopeChecklist(`${prefix}_departments`,'Applicable departments',employeeDepartmentNames(),scope.departments)}</div>
+  </div>`;
+}
+function toggleTdaScope(prefix){
+  const allClients=document.getElementById(`${prefix}_allClients`)?.checked!==false;
+  const allBranches=document.getElementById(`${prefix}_allBranches`)?.checked!==false;
+  const allDepartments=document.getElementById(`${prefix}_allDepartments`)?.checked!==false;
+  const client=document.getElementById(`${prefix}_clientName`);if(client)client.disabled=allClients;
+  const branch=document.getElementById(`${prefix}_branchScope`);if(branch)branch.hidden=allBranches;
+  const department=document.getElementById(`${prefix}_departmentScope`);if(department)department.hidden=allDepartments;
+}
+function readTdaScope(prefix){
+  const checked=name=>Array.from(document.querySelectorAll(`input[name="${name}"]:checked`)).map(input=>input.value);
+  return normalizeTdaScope({
+    tdaType:document.getElementById(`${prefix}_tdaType`)?.value,
+    allClients:document.getElementById(`${prefix}_allClients`)?.checked,
+    clientName:document.getElementById(`${prefix}_clientName`)?.value,
+    allBranches:document.getElementById(`${prefix}_allBranches`)?.checked,
+    branches:checked(`${prefix}_branches`),
+    allDepartments:document.getElementById(`${prefix}_allDepartments`)?.checked,
+    departments:checked(`${prefix}_departments`),
+  });
+}
+function validateTdaScope(scope){
+  if(!scope.tdaType)return 'TDA Type is required.';
+  if(!scope.allClients&&!scope.clientName)return 'Enter the client / account or select All Clients.';
+  if(!scope.allBranches&&!scope.branches.length)return 'Select at least one branch or use All Branches.';
+  if(!scope.allDepartments&&!scope.departments.length)return 'Select at least one department or use All Departments.';
+  return '';
+}
+async function renderTdaCatalog(){
+  if(normalizeTdaCatalogRecords())await saveDB();
+  setTitle('Table of Disciplinary Action','Maintain approved offense schedules and their applicability by TDA type, client, branch, and department.');
+  const search=String(STATE.search||'').toLowerCase();
+  let rows=(DB.offenseCatalog||[]).filter(record=>{
+    const searchOk=!search||[record.offenseNumber,record.offense,record.category,record.tdaType,record.clientName,record.disciplinaryRemarks].some(value=>String(value||'').toLowerCase().includes(search));
+    const typeOk=!STATE.tdaType||record.tdaType===STATE.tdaType;
+    const clientOk=!STATE.tdaClient||(STATE.tdaClient==='*'?record.allClients!==false:record.allClients===false&&record.clientName===STATE.tdaClient);
+    const categoryOk=!STATE.tdaCategory||record.category===STATE.tdaCategory;
+    const departmentOk=!STATE.tdaDepartment||record.allDepartments!==false||(record.departments||[]).includes(STATE.tdaDepartment);
+    return searchOk&&typeOk&&clientOk&&categoryOk&&departmentOk;
+  }).sort((a,b)=>String(a.tdaType||'').localeCompare(String(b.tdaType||''))||Number(a.offenseNumber||0)-Number(b.offenseNumber||0)||String(a.offense||'').localeCompare(String(b.offense||'')));
+  const pageScope='tda-catalog';
+  const page=paginateRows(rows,STATE,pageScope,25);
+  const types=tdaTypeOptions();
+  const clients=tdaClientOptions();
+  const categories=uniqueSettingNames((DB.offenseCatalog||[]).map(record=>record.category)).sort();
+  const filtersActive=STATE.search||STATE.tdaType||STATE.tdaClient||STATE.tdaCategory||STATE.tdaDepartment;
+  document.getElementById('content').innerHTML=`
+    <div class="data-toolbar record-directory-toolbar tda-toolbar">
+      <div class="searchbox">${iSearch(16)}<input data-table-search data-search-key="search" placeholder="Search TDA offenses…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderTdaCatalog)" aria-label="Search TDA catalog"></div>
+      <select class="filter-select" aria-label="Filter TDA type" onchange="STATE.tdaType=this.value;paginationReset(STATE,'${pageScope}');renderTdaCatalog()"><option value="">All TDA Types</option>${types.map(value=>`<option value="${esc(value)}" ${STATE.tdaType===value?'selected':''}>${esc(value)}</option>`).join('')}</select>
+      <select class="filter-select" aria-label="Filter client" onchange="STATE.tdaClient=this.value;paginationReset(STATE,'${pageScope}');renderTdaCatalog()"><option value="">All Clients</option><option value="*" ${STATE.tdaClient==='*'?'selected':''}>Shared / All Clients</option>${clients.map(value=>`<option value="${esc(value)}" ${STATE.tdaClient===value?'selected':''}>${esc(value)}</option>`).join('')}</select>
+      <details class="employee-more-menu tda-more-menu"><summary class="btn btn-ghost btn-sm">${iMore(15)} More</summary><div class="employee-more-popover">
+        ${SESSION?.role==='Administrator'?`<button type="button" onclick="this.closest('details').removeAttribute('open');openTdaImport()">${iUpload(15)}<span><b>Import TDA workbook</b><small>Validate and apply an approved schedule</small></span></button>`:''}
+        ${filtersActive?`<button type="button" onclick="STATE.search='';STATE.tdaType='';STATE.tdaClient='';STATE.tdaCategory='';STATE.tdaDepartment='';paginationReset(STATE,'${pageScope}');renderTdaCatalog()">${iFilter(15)}<span><b>Clear filters</b><small>Show the complete catalog</small></span></button>`:''}
+      </div></details>
+      <div class="toolbar-spacer"></div>${moduleInformationButton('offenseCatalog')}
+      ${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportModuleCSV('offenseCatalog')">${iDownload(14)} Export</button>`:''}
+      ${canEdit()?`<button class="btn btn-primary btn-sm" onclick="openTdaForm()">${iPlus(15)} Add Offense</button>`:''}
+      <div class="tda-filter-set">
+        <select class="filter-select" aria-label="Filter category" onchange="STATE.tdaCategory=this.value;paginationReset(STATE,'${pageScope}');renderTdaCatalog()"><option value="">All Categories</option>${categories.map(value=>`<option value="${esc(value)}" ${STATE.tdaCategory===value?'selected':''}>${esc(value)}</option>`).join('')}</select>
+        <select class="filter-select" aria-label="Filter applicable department" onchange="STATE.tdaDepartment=this.value;paginationReset(STATE,'${pageScope}');renderTdaCatalog()"><option value="">All Departments</option>${employeeDepartmentNames().map(value=>`<option value="${esc(value)}" ${STATE.tdaDepartment===value?'selected':''}>${esc(value)}</option>`).join('')}</select>
+      </div>
+    </div>
+    <div class="table-card tda-table-card"><div class="table-card-head"><div class="table-meta"><b>${rows.length}</b> ${rows.length===1?'offense':'offenses'} <span class="table-meta-muted">${filtersActive?`filtered from ${DB.offenseCatalog.length}`:'in the approved catalog'}</span></div></div>
+      <div class="tablewrap"><table class="data-table tda-table"><thead><tr><th data-column-key="offenseNumber">No.</th><th data-column-key="tdaType">TDA / Client</th><th data-column-key="scope">Applicability</th><th data-column-key="category">Category</th><th data-column-key="offense">Offense</th>${[1,2,3,4,5].map(level=>`<th data-column-key="consequence${level}">${level}${level===1?'st':level===2?'nd':level===3?'rd':'th'}</th>`).join('')}<th class="actions-head">Actions</th></tr></thead><tbody>
+        ${page.rows.length?page.rows.map(record=>`<tr><td class="mono" data-column="offenseNumber">${esc(record.offenseNumber||'—')}</td><td data-column="tdaType"><b>${esc(record.tdaType||'General')}</b><div class="small">${esc(tdaClientLabel(record))}</div></td><td data-column="scope"><span class="tda-scope-summary">${esc(tdaScopeLabel(record))}</span></td><td data-column="category"><b>${esc(record.category||'GENERAL')}</b><div class="small">${esc(record.disciplinaryRemarks||'')}</div></td><td data-column="offense"><span class="tda-offense-text">${esc(record.offense)}</span></td>${[1,2,3,4,5].map(level=>`<td data-column="consequence${level}">${esc(record[`consequence${level}`]||'—')}</td>`).join('')}<td><div class="rowactions">${canEdit()?`<button class="iconbtn" title="Edit offense" onclick="openTdaForm('${record.id}')">${iEdit(14)}</button><button class="iconbtn" title="Delete offense" onclick="deleteRecord('offenseCatalog','${record.id}')">${iTrash(14)}</button>`:'<span class="small">View only</span>'}</div></td></tr>`).join(''):`<tr><td colspan="11"><div class="empty"><b>No matching TDA offenses</b><span>${filtersActive?'Clear or change the filters.':'Import the approved workbook or add an offense.'}</span></div></td></tr>`}
+      </tbody></table></div>
+      ${rows.length?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${page.meta.start}–${page.meta.end} <span>of ${rows.length} offenses</span></div>${paginationHTML(page.meta,pageScope,{go:'serverTablePageGo',size:'serverTablePageSize'})}</div>`:''}
+    </div>`;
+  requestAnimationFrame(()=>enhanceDataTables());
+}
+function openTdaForm(id=''){
+  const record=id?(DB.offenseCatalog||[]).find(item=>item.id===id):null;
+  openModal(`<div class="modal-head"><div><h3>${record?'Edit':'Add'} TDA Offense</h3><div class="small">Define the approved sanction schedule and where it applies.</div></div><button type="button" onclick="closeModal()" aria-label="Close">&times;</button></div>
+    <div class="modal-body tda-form-body"><div class="formgrid">
+      <div class="field"><label>Offense No.</label><input id="tda_offenseNumber" value="${esc(record?.offenseNumber||'')}"></div>
+      <div class="field"><label>Offense Category *</label><input id="tda_category" value="${esc(record?.category||'')}"></div>
+      <div class="field full"><label>Offense / Violation *</label><textarea id="tda_offense" rows="3">${esc(record?.offense||'')}</textarea></div>
+      <div class="field full"><label>Disciplinary Classification</label><input id="tda_disciplinaryRemarks" value="${esc(record?.disciplinaryRemarks||'')}"></div>
+      ${[1,2,3,4,5].map(level=>`<div class="field"><label>${level}${level===1?'st':level===2?'nd':level===3?'rd':'th'} Offense</label><input id="tda_consequence${level}" value="${esc(record?.[`consequence${level}`]||'')}"></div>`).join('')}
+    </div><div class="tda-form-section"><h4>Applicability</h4>${tdaScopeEditorHTML('tda',record||{tdaType:'Industrial',allClients:true,allBranches:true,allDepartments:true})}</div></div>
+    <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><div class="toolbar-spacer"></div><button class="btn btn-primary" onclick="saveTdaRecord('${id}')">Save Offense</button></div>`);
+}
+async function saveTdaRecord(id=''){
+  const scope=readTdaScope('tda');const scopeError=validateTdaScope(scope);if(scopeError){toast(scopeError,true);return;}
+  const values={...scope,offenseNumber:document.getElementById('tda_offenseNumber').value.trim(),category:document.getElementById('tda_category').value.trim().toUpperCase(),offense:document.getElementById('tda_offense').value.trim(),disciplinaryRemarks:document.getElementById('tda_disciplinaryRemarks').value.trim(),active:true};
+  for(let level=1;level<=5;level++)values[`consequence${level}`]=document.getElementById(`tda_consequence${level}`).value.trim();
+  if(!values.category||!values.offense){toast('Offense Category and Offense / Violation are required.',true);return;}
+  if(!Object.keys(values).some(key=>key.startsWith('consequence')&&values[key])){toast('Enter at least one consequence.',true);return;}
+  const duplicate=(DB.offenseCatalog||[]).find(record=>record.id!==id&&tdaDuplicateKey(record)===tdaDuplicateKey(values));
+  if(duplicate){toast('This offense already exists for the same TDA applicability scope.',true);return;}
+  const before=id?JSON.stringify(DB.offenseCatalog):'';const auditLength=DB.audit.length;
+  if(id)Object.assign(DB.offenseCatalog.find(record=>record.id===id),values,{updatedAt:new Date().toISOString(),updatedBy:SESSION?.id||null});
+  else DB.offenseCatalog.push({id:uid(),...values,createdAt:new Date().toISOString(),createdBy:SESSION?.id||null});
+  logAudit(`${id?'Updated':'Added'} TDA offense: ${values.offense}`);
+  if(!(await saveDB())){if(id)DB.offenseCatalog=JSON.parse(before);else DB.offenseCatalog.pop();DB.audit.length=auditLength;return;}
+  await closeModal();renderTdaCatalog();toast(`TDA offense ${id?'updated':'added'}.`);
+}
+function openTdaImport(){
+  if(SESSION?.role!=='Administrator'){toast('Only a System Administrator can import a TDA workbook.',true);return;}
+  TDA_IMPORT_PREVIEW=null;
+  openModal(`<div class="modal-head"><div><h3>Import TDA Workbook</h3><div class="small">Apply an approved disciplinary schedule to the correct workforce scope.</div></div><button type="button" onclick="closeModal()" aria-label="Close import">&times;</button></div>
+    <div class="modal-body employee-import-body tda-import-body"><div class="tda-import-scope"><h4>Catalog applicability</h4>${tdaScopeEditorHTML('tdai',{tdaType:'Industrial',allClients:true,allBranches:true,allDepartments:true})}</div>
+      <div class="field full"><label>When a matching offense already exists</label><select id="tdai_conflict"><option value="skip">Skip duplicates</option><option value="update">Update matching offenses</option><option value="replace">Replace the matching applicability scope</option></select></div>
+      <div class="employee-import-drop"><span>${iUpload(22)}</span><div><b>Select the approved TDA workbook</b><p>Expected worksheet: TDA-OFFENSES. All five occurrence levels are validated before saving.</p></div><label class="btn btn-primary btn-sm" for="tda-import-file">Choose File</label><input id="tda-import-file" type="file" accept=".xlsx,.xls" hidden onchange="handleTdaImportFile(this)"></div>
+      <div class="employee-import-rules"><b>Formula handling</b><span>Disciplinary classification is recalculated from the first consequence instead of trusting cached Excel or Google Sheets formula results.</span></div>
+    </div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button></div>`);
+}
+async function handleTdaImportFile(input){
+  if(SESSION?.role!=='Administrator'||!employeeSpreadsheetReady())return;
+  const file=input.files?.[0];if(!file)return;
+  const scope=readTdaScope('tdai');const scopeError=validateTdaScope(scope);if(scopeError){toast(scopeError,true);input.value='';return;}
+  try{
+    const workbook=window.XLSX.read(await file.arrayBuffer(),{cellDates:true});
+    const sheetName=workbook.SheetNames.find(name=>name.trim().toUpperCase()==='TDA-OFFENSES')||workbook.SheetNames[0];
+    const matrix=sheetName?window.XLSX.utils.sheet_to_json(workbook.Sheets[sheetName],{header:1,defval:'',raw:false}):[];
+    const parsed=parseTdaMatrix(matrix,scope);const conflictMode=document.getElementById('tdai_conflict').value;
+    parsed.rows.forEach(row=>{if((DB.offenseCatalog||[]).some(record=>tdaDuplicateKey(record)===tdaDuplicateKey(row.values)))row.warnings.push(conflictMode==='skip'?'Existing match will be skipped':conflictMode==='update'?'Existing match will be updated':'Existing scope will be replaced');});
+    TDA_IMPORT_PREVIEW={...parsed,fileName:file.name,sheetName,scope,conflictMode};renderTdaImportPreview();
+  }catch(error){toast('The TDA workbook could not be read: '+error.message,true);input.value='';}
+}
+function tdaImportSummary(){
+  const preview=TDA_IMPORT_PREVIEW;const errors=(preview?.fileErrors||[]).length+(preview?.rows||[]).reduce((sum,row)=>sum+row.errors.length,0);const warnings=(preview?.rows||[]).reduce((sum,row)=>sum+row.warnings.length,0);return {errors,warnings,valid:(preview?.rows||[]).filter(row=>!row.errors.length).length,total:preview?.rows?.length||0};
+}
+function renderTdaImportPreview(){
+  const summary=tdaImportSummary();const preview=TDA_IMPORT_PREVIEW;
+  openModal(`<div class="modal-head"><div><h3>Review TDA Import</h3><div class="small">${esc(preview.fileName)} · ${esc(preview.sheetName||'No worksheet')} · ${esc(preview.scope.tdaType)}</div></div><button type="button" onclick="closeModal()" aria-label="Close preview">&times;</button></div>
+    <div class="modal-body employee-import-body"><div class="employee-import-summary"><div><span>Ready</span><b>${summary.valid}</b></div><div class="${summary.errors?'has-error':''}"><span>Errors</span><b>${summary.errors}</b></div><div class="${summary.warnings?'has-warning':''}"><span>Notices</span><b>${summary.warnings}</b></div></div>
+      ${preview.fileErrors.length?`<div class="employee-import-file-errors"><b>Workbook errors</b>${preview.fileErrors.map(error=>`<span>${esc(error)}</span>`).join('')}</div>`:''}
+      <div class="tda-import-context"><b>${esc(tdaClientLabel(preview.scope))}</b><span>${esc(tdaScopeLabel(preview.scope))}</span><span>Conflict mode: ${esc(preview.conflictMode)}</span></div>
+      <div class="tablewrap employee-import-preview tda-import-preview"><table class="data-table"><thead><tr><th>Row</th><th>No.</th><th>Category</th><th>Offense</th><th>1st</th><th>2nd</th><th>3rd</th><th>4th</th><th>5th</th><th>Validation</th></tr></thead><tbody>${preview.rows.map(row=>`<tr><td class="mono">${row.rowNumber}</td><td class="mono">${esc(row.values.offenseNumber)}</td><td>${esc(row.values.category)}</td><td><b>${esc(row.values.offense)}</b></td>${[1,2,3,4,5].map(level=>`<td>${esc(row.values[`consequence${level}`]||'—')}</td>`).join('')}<td>${row.errors.length?`<div class="import-issues error">${row.errors.map(error=>`<span>${esc(error)}</span>`).join('')}</div>`:row.warnings.length?`<div class="import-issues warning">${row.warnings.map(warning=>`<span>${esc(warning)}</span>`).join('')}</div>`:'<span class="badge b-green"><span class="dot"></span>Ready</span>'}</td></tr>`).join('')}</tbody></table></div>
+    </div><div class="modal-foot"><button class="btn btn-ghost" onclick="openTdaImport()">Choose Another File</button><div class="toolbar-spacer"></div><button class="btn btn-primary" ${summary.errors||!summary.valid?'disabled':''} onclick="commitTdaImport()">Import ${summary.valid} Offenses</button></div>`);
+}
+async function commitTdaImport(){
+  if(SESSION?.role!=='Administrator'||!TDA_IMPORT_PREVIEW)return;
+  const summary=tdaImportSummary();if(summary.errors||!summary.valid){toast('Resolve every TDA import error before continuing.',true);return;}
+  const confirmed=await confirmDataChange({title:'Import TDA catalog',message:`Import ${summary.valid} validated offenses as ${TDA_IMPORT_PREVIEW.scope.tdaType}? The selected client, branch, and department applicability will control where sanctions are used.`,confirmLabel:'Import TDA',cancelLabel:'Cancel',warning:TDA_IMPORT_PREVIEW.conflictMode==='replace'});if(!confirmed)return;
+  const previous=JSON.stringify(DB.offenseCatalog);const auditLength=DB.audit.length;const now=new Date().toISOString();const batchId=uid();let added=0,updated=0,skipped=0;
+  if(TDA_IMPORT_PREVIEW.conflictMode==='replace')DB.offenseCatalog=DB.offenseCatalog.filter(record=>tdaScopeKey(record)!==tdaScopeKey(TDA_IMPORT_PREVIEW.scope));
+  for(const row of TDA_IMPORT_PREVIEW.rows){
+    const values={...row.values,sourceFile:TDA_IMPORT_PREVIEW.fileName,sourceSheet:TDA_IMPORT_PREVIEW.sheetName,importBatchId:batchId,importedAt:now,importedBy:SESSION?.id||null,importedByName:SESSION?.fullName||'System',active:true};
+    const existing=DB.offenseCatalog.find(record=>tdaDuplicateKey(record)===tdaDuplicateKey(values));
+    if(existing&&TDA_IMPORT_PREVIEW.conflictMode==='skip'){skipped++;continue;}
+    if(existing){Object.assign(existing,values,{updatedAt:now,updatedBy:SESSION?.id||null});updated++;}
+    else {DB.offenseCatalog.push({id:uid(),...values,createdAt:now,createdBy:SESSION?.id||null});added++;}
+  }
+  logAudit(`Imported TDA catalog ${TDA_IMPORT_PREVIEW.fileName}: ${added} added, ${updated} updated, ${skipped} skipped`);
+  if(!(await saveDB())){DB.offenseCatalog=JSON.parse(previous);DB.audit.length=auditLength;return;}
+  TDA_IMPORT_PREVIEW=null;await closeModal();renderNav();renderTdaCatalog();toast(`TDA import complete: ${added} added, ${updated} updated${skipped?`, ${skipped} skipped`:''}.`);
 }
 function openEmployeeImport(){
   if(SESSION?.role!=='Administrator'){toast('Only a System Administrator can import employee records.',true);return;}
@@ -4858,18 +5062,32 @@ function cvrOffenseLevel(employeeName, offenseName, beforeId){
   const idx = Math.min(prior.length, OFFENSE_LEVELS.length-1);
   return {label: OFFENSE_LEVELS[idx], index: idx};
 }
-function consequenceFor(offenseName, levelIndex){
-  const cat = DB.offenseCatalog.find(o=> o.offense.trim().toLowerCase()===offenseName.trim().toLowerCase());
+function tdaContextForEmployee(employeeId,employeeName,department=''){
+  const employee=DB.employees.find(item=>String(item.id)===String(employeeId||''))||DB.employees.find(item=>normalizeEmployeeName(item.name)===normalizeEmployeeName(employeeName));
+  return {tdaType:employee?.tdaType||'Industrial',clientName:employee?.clientName||'',branch:employee?.branchReporting||'',department:department||employee?.department||''};
+}
+function applicableTdaCatalog(context={}){
+  const candidates=(DB.offenseCatalog||[]).filter(record=>tdaRecordApplies(record,context));
+  const byOffense=new Map();
+  candidates.forEach(record=>{
+    const key=normalizeTdaText(record.offense).toLowerCase();const current=byOffense.get(key);
+    if(!current||selectApplicableTdaRecord([current,record],record.offense,context)===record)byOffense.set(key,record);
+  });
+  return [...byOffense.values()].sort((a,b)=>String(a.offense||'').localeCompare(String(b.offense||'')));
+}
+function consequenceFor(offenseName, levelIndex,context={}){
+  let cat=selectApplicableTdaRecord(DB.offenseCatalog,offenseName,context);
+  if(!cat&&context.tdaType)cat=selectApplicableTdaRecord(DB.offenseCatalog,offenseName,{...context,tdaType:''});
   if(!cat) return `Not in Offense Catalog — add "${offenseName}" there to define its consequence.`;
-  const c = [cat.consequence1,cat.consequence2,cat.consequence3,cat.consequence4][levelIndex];
-  return c || cat.consequence4 || '—';
+  const consequences=[cat.consequence1,cat.consequence2,cat.consequence3,cat.consequence4,cat.consequence5];
+  return consequences[Math.min(levelIndex,4)]||cat.consequence5||cat.consequence4||'—';
 }
 function cvrOffenseSummaryHTML(rec){
   const list = [...(rec.offenses||[]), ...(rec.otherOffense? [rec.otherOffense]:[])];
   if(!list.length) return '<span class="small">—</span>';
   return list.map(o=>{
     const lvl = cvrOffenseLevel(rec.employeeName, o, rec.id);
-    const cons = consequenceFor(o, lvl.index);
+    const cons = consequenceFor(o, lvl.index,tdaContextForEmployee(rec.employeeId,rec.employeeName,rec.department));
     return `<div style="margin-bottom:6px;"><b>${esc(o)}</b> ${statusBadge(lvl.label,{})}<div class="small" style="margin-top:2px;">${esc(cons)}</div></div>`;
   }).join('');
 }
@@ -4914,28 +5132,37 @@ function renderCVR(){
 function openCVRForm(id){
   const existing = id? DB.cvr.find(c=>c.id===id): null;
   const checked = existing? (existing.offenses||[]) : [];
+  const context=tdaContextForEmployee(existing?.employeeId,existing?.employeeName,existing?.department);
+  const catalog=applicableTdaCatalog(context);
   openModal(`
     <div class="modal-head"><h3>${existing?'Edit':'Add'} CVR</h3><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
       <div class="formgrid">
-        ${employeePickerHTML({id:'cv_employeeName',label:'Employee Name',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true})}
-        <div class="field"><label>Department *</label><select id="cv_department">${employeeDepartmentNames(existing?.department||'').map(d=>`<option ${existing&&existing.department===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+        ${employeePickerHTML({id:'cv_employeeName',label:'Employee Name',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true,onSelect:'refreshCVROffenseChoices'})}
+        <div class="field"><label>Department *</label><select id="cv_department" onchange="refreshCVROffenseChoices()">${employeeDepartmentNames(existing?.department||'').map(d=>`<option ${existing&&existing.department===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
         <div class="field"><label>Date of CVR *</label><input type="date" id="cv_date" value="${existing?existing.dateOfCVR:todayISO()}"></div>
         <div class="field"><label>Status</label><select id="cv_status">${CVR_STATUS.map(s=>`<option ${(existing?existing.status:CVR_STATUS[0])===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
         <div class="field full">
           <label>Offense(s) Checked</label>
-          <div class="checklist">
-            ${DB.offenseCatalog.length? DB.offenseCatalog.map(o=>`<label class="checkrow"><input type="checkbox" value="${esc(o.offense)}" ${checked.includes(o.offense)?'checked':''}> ${esc(o.offense)}</label>`).join('') : '<div class="small">No offenses in the catalog yet — add them under Offense Catalog, or write one in below.</div>'}
+          <div class="checklist" id="cv_offense_options">
+            ${catalog.length? catalog.map(o=>`<label class="checkrow"><input type="checkbox" value="${esc(o.offense)}" ${checked.includes(o.offense)?'checked':''}> <span>${esc(o.offense)}<small>${esc(o.category||o.tdaType||'')}</small></span></label>`).join('') : '<div class="small">No TDA offenses apply to this employee scope. Review the catalog type, client, branch, and department applicability.</div>'}
           </div>
         </div>
         <div class="field full"><label>Other / Additional Offense (write-in, not in catalog)</label><input id="cv_other" value="${esc((existing&&existing.otherOffense)||'')}"></div>
         ${fieldHTML({key:'attachment', label:'Uploaded CVR Document', type:'file', full:true, storagePrefix:'cvr', existingData:(existing&&existing.attachmentData)||''}, existing?existing.attachment:'')}
         <div class="field full"><label>Remarks</label><textarea id="cv_remarks" rows="2">${esc((existing&&existing.remarks)||'')}</textarea></div>
       </div>
-      <div class="computed-note">Offense level (1st/2nd/3rd/4th+) and consequence are computed automatically per offense from this employee's CVR history and the Offense Catalog — no need to set them manually.</div>
+      <div class="computed-note">Offense level (1st through 5th+) and consequence are computed automatically per offense from this employee's CVR history and the applicable TDA catalog — no need to set them manually.</div>
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveCVR('${id||''}')">Save CVR</button></div>
   `);
+}
+function refreshCVROffenseChoices(){
+  const target=document.getElementById('cv_offense_options');if(!target)return;
+  const checked=new Set(Array.from(target.querySelectorAll('input:checked')).map(input=>input.value));
+  const selected=employeePickerSelected('cv_employeeName');const department=document.getElementById('cv_department')?.value||selected?.department||'';
+  const catalog=applicableTdaCatalog(tdaContextForEmployee(selected?.id,selected?.name,department));
+  target.innerHTML=catalog.length?catalog.map(record=>`<label class="checkrow"><input type="checkbox" value="${esc(record.offense)}" ${checked.has(record.offense)?'checked':''}> <span>${esc(record.offense)}<small>${esc(record.category||record.tdaType||'')}</small></span></label>`).join(''):'<div class="small">No TDA offenses apply to this employee scope. Review the catalog applicability.</div>';
 }
 async function saveCVR(id){
   const employeeName = document.getElementById('cv_employeeName').value.trim();
@@ -5607,7 +5834,7 @@ function renderOffenseSummary(){
       <h3>${esc(n)} <span class="small" style="font-weight:400;">${esc(m.department||'')}</span></h3>
       <div class="tablewrap"><table class="data-table">
         <thead><tr><th>Offense</th><th>Count</th><th>Level</th><th>Consequence</th></tr></thead>
-        <tbody>${rows.map(([o,c])=>{ const idx=Math.min(c-1, OFFENSE_LEVELS.length-1); const level=OFFENSE_LEVELS[idx]; const cons=consequenceFor(o, idx); return `<tr><td><b>${esc(o)}</b></td><td>${c}</td><td>${statusBadge(level,{})}</td><td class="small">${esc(cons)}</td></tr>`; }).join('')}</tbody>
+        <tbody>${rows.map(([o,c])=>{ const idx=Math.min(c-1, OFFENSE_LEVELS.length-1); const level=OFFENSE_LEVELS[idx]; const cons=consequenceFor(o, idx,tdaContextForEmployee('',n,m.department)); return `<tr><td><b>${esc(o)}</b></td><td>${c}</td><td>${statusBadge(level,{})}</td><td class="small">${esc(cons)}</td></tr>`; }).join('')}</tbody>
       </table></div>
     </div>`;
   }).join('') : '<div class="empty"><b>No offenses recorded yet</b></div>'}`;
@@ -6417,22 +6644,33 @@ const MODULES = {
       {key:'remarks', label:'Remarks'},
     ],
   },
-  offenseCatalog:{ title:'Offense Catalog', subtitle:"Your agency's disciplinary offense list and consequence per occurrence — CVR uses this to compute offense level automatically.", singular:'Offense', addLabel:'Add Offense',
-    searchFields:['offense'], sortKey:'offense',
-    notice:"Add every offense from your agency's disciplinary matrix here, with the consequence for each occurrence. CVR records reference this list automatically to determine the offense level and consequence.",
+  offenseCatalog:{ title:'Table of Disciplinary Action', subtitle:'Approved offense schedules by TDA type and workforce applicability.', singular:'TDA Offense', addLabel:'Add Offense',
+    searchFields:['offenseNumber','tdaType','clientName','category','offense','disciplinaryRemarks'], sortKey:'offenseNumber',
+    notice:'Import or maintain approved TDA schedules with five occurrence-level consequences. Applicability may cover all or selected clients, branches, and departments; CVR records use the most specific applicable schedule.',
     fields:[
-      {key:'offense', label:'Offense / Violation', type:'text', required:true, full:true},
+      {key:'offenseNumber', label:'Offense No.', type:'text'},
+      {key:'tdaType', label:'TDA Type', type:'text', required:true},
+      {key:'clientName', label:'Client / Account', type:'text'},
+      {key:'category', label:'Offense Category', type:'text', required:true},
+      {key:'disciplinaryRemarks', label:'Disciplinary Classification', type:'text'},
+      {key:'offense', label:'Offense / Violation', type:'textarea', required:true, full:true},
       {key:'consequence1', label:'1st Offense — Consequence', type:'text', full:true},
       {key:'consequence2', label:'2nd Offense — Consequence', type:'text', full:true},
       {key:'consequence3', label:'3rd Offense — Consequence', type:'text', full:true},
-      {key:'consequence4', label:'4th Offense+ — Consequence', type:'text', full:true},
+      {key:'consequence4', label:'4th Offense — Consequence', type:'text', full:true},
+      {key:'consequence5', label:'5th Offense+ — Consequence', type:'text', full:true},
     ],
     columns:[
+      {key:'offenseNumber', label:'No.'},
+      {key:'tdaType', label:'TDA Type'},
+      {key:'clientName', label:'Client'},
+      {key:'category', label:'Category'},
       {key:'offense', label:'Offense', render:r=>`<b>${esc(r.offense)}</b>`},
       {key:'consequence1', label:'1st'},
       {key:'consequence2', label:'2nd'},
       {key:'consequence3', label:'3rd'},
-      {key:'consequence4', label:'4th+'},
+      {key:'consequence4', label:'4th'},
+      {key:'consequence5', label:'5th+'},
     ],
   },
   prf:{ title:'PRF / Replacement Tracking', subtitle:'Personnel Request Forms — replacement and additional manpower requests.', singular:'PRF Record', addLabel:'Add PRF Record',
@@ -8190,7 +8428,7 @@ const RENDERERS = {
   prf: renderManpowerFulfillment,
   evaluations: renderEvaluations,
   offenseSummary: renderOffenseSummary,
-  offenseCatalog: ()=>renderModuleView('offenseCatalog'),
+  offenseCatalog: renderTdaCatalog,
   reports: renderReports,
   dataQuality: renderDataQuality,
   users: renderUsers,
@@ -8253,6 +8491,7 @@ Object.assign(window, {
   deleteATDRecord, deleteCVR, deleteEmployee, deleteIncident, deleteRecord, doLogin, doLogout, doRegister, donut,
   downloadATDPayslip, downloadAttachment, downloadCSV, downloadRecordAttachment, enterApp, esc, evalDueDate,
   evalStatusInfo, exportATDCSV, exportCVRCSV, exportEmployeesCSV, exportIncidentsCSV, exportModuleCSV, exportWeeklyCSV, openEmployeeImport, handleEmployeeImportFile, renderEmployeeImportPreview, commitEmployeeImport, downloadEmployeeImportTemplate,
+  renderTdaCatalog, openTdaForm, saveTdaRecord, openTdaImport, handleTdaImportFile, renderTdaImportPreview, commitTdaImport, toggleTdaScope, refreshCVROffenseChoices,
   fieldHTML, fmtDate, formatGovernmentIdInput, getEvalRecord, go, handleFileInput, incidentTypeOccurrence, incidentTypeSummaryHTML,
   toggleSidebar, closeSidebar, applyReportFilters, exportReportEmployees, exportReportActivity, exportReportATD, exportReportCases,
   loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,

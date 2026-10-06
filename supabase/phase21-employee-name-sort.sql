@@ -1,43 +1,5 @@
--- Phase 18: indexed, projected Employee Information directory queries.
--- Safe additive migration. Run after phase17-user-export-permissions.sql.
-
-create extension if not exists pg_trgm with schema extensions;
-
-create or replace function public.employee_directory_search_text(p_data jsonb)
-returns text
-language sql
-immutable
-parallel safe
-set search_path = ''
-as $$
-  select lower(
-    coalesce(p_data ->> 'employeeNo', '') || ' ' ||
-    coalesce(p_data ->> 'prfNumber', '') || ' ' ||
-    coalesce(p_data ->> 'name', '') || ' ' ||
-    coalesce(p_data ->> 'lastName', '') || ' ' ||
-    coalesce(p_data ->> 'firstName', '') || ' ' ||
-    coalesce(p_data ->> 'middleName', '') || ' ' ||
-    coalesce(p_data ->> 'position', '') || ' ' ||
-    coalesce(p_data ->> 'department', '') || ' ' ||
-    coalesce(p_data ->> 'branchReporting', '') || ' ' ||
-    coalesce(p_data ->> 'mobileNumber', '') || ' ' ||
-    coalesce(p_data ->> 'personalEmail', '') || ' ' ||
-    coalesce(p_data ->> 'address', '') || ' ' ||
-    coalesce(p_data ->> 'presentAddressText', '') || ' ' ||
-    coalesce(p_data ->> 'remarks', '') || ' ' ||
-    coalesce(p_data ->> 'homeAddress', '') || ' ' ||
-    coalesce(p_data ->> 'presentAddress', '') || ' ' ||
-    coalesce(p_data ->> 'allowances', '')
-  );
-$$;
-
-create index if not exists hr_records_employee_directory_search_trgm_idx
-  on public.hr_records using gin (public.employee_directory_search_text(data) extensions.gin_trgm_ops)
-  where module = 'employees';
-
-create index if not exists hr_records_employee_number_idx
-  on public.hr_records ((data ->> 'employeeNo') desc, updated_at desc)
-  where module = 'employees';
+-- Phase 21: make Employee Information default to employee name A-Z.
+-- Safe additive migration. Run once after Phase 18 on an existing project.
 
 create index if not exists hr_records_employee_name_idx
   on public.hr_records (
@@ -45,22 +7,6 @@ create index if not exists hr_records_employee_name_idx
     lower(coalesce(data ->> 'firstName', '')),
     (data ->> 'employeeNo')
   )
-  where module = 'employees';
-
-create index if not exists hr_records_employee_department_idx
-  on public.hr_records ((data ->> 'department'))
-  where module = 'employees';
-
-create index if not exists hr_records_employee_branch_idx
-  on public.hr_records ((data ->> 'branchReporting'))
-  where module = 'employees';
-
-create index if not exists hr_records_employee_status_idx
-  on public.hr_records ((data ->> 'status'))
-  where module = 'employees';
-
-create index if not exists hr_records_employee_date_hired_idx
-  on public.hr_records ((data ->> 'dateHired'))
   where module = 'employees';
 
 create or replace function public.search_employee_directory(
@@ -130,10 +76,8 @@ as $$
   from paged;
 $$;
 
-revoke all on function public.employee_directory_search_text(jsonb) from public;
 revoke all on function public.search_employee_directory(text,text,text,text,text,integer,text[],integer,integer) from public;
-grant execute on function public.employee_directory_search_text(jsonb) to authenticated;
 grant execute on function public.search_employee_directory(text,text,text,text,text,integer,text[],integer,integer) to authenticated;
 
 comment on function public.search_employee_directory(text,text,text,text,text,integer,text[],integer,integer)
-  is 'RLS-aware indexed employee directory search with field projection and pagination.';
+  is 'RLS-aware indexed employee directory search, projected pagination, and default employee-name A-Z ordering.';

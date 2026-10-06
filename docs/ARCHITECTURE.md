@@ -16,6 +16,8 @@ The current application is heavily interdependent, so the first structural refac
 
 Supabase PostgreSQL remains the record source of truth. Authentication loads only the modules required by the landing workspace; additional record modules are fetched through an explicit workspace dependency map. Saves diff only modules that were loaded when the edit began, preventing an unloaded module from being treated as an empty deleted collection.
 
+TDA catalog entries remain tenant-owned `hr_records` documents and include type, client/account, branch, and department applicability metadata. Workbook imports are validated in the browser, then committed through the same diff-based persistence and audit path as manually maintained records. Client names are intentionally metadata until a formal client-under-branch directory supplies stable client identifiers.
+
 Phase 19 assigns every operational row to a tenant and adds restrictive tenant policies on top of existing role and ownership policies. Existing deployments are backfilled into the default SLSC tenant. New Supabase Storage uploads use `tenant/user/module/file` paths; legacy `user/module/file` objects remain readable only for users in the default tenant.
 
 Phase 20 adds a normalized RBAC layer: permission catalog, tenant roles, role permissions, multi-role user assignments, direct grant/deny overrides, scopes, and resource assignments. Database helpers calculate effective access with direct-deny precedence and the `hr_records` policies enforce both the applicable module action and record scope. `profiles.role` remains synchronized as a compatibility role for older workflows while the application transitions to permission checks.

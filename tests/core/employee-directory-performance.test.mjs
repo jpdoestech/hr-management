@@ -50,4 +50,14 @@ test('Phase 18 keeps RLS and adds employee-specific search indexes',()=>{
   assert.match(migration,/where module = 'employees'/);
   assert.match(migration,/jsonb_object_agg\(field\.key, field\.value\)/);
   assert.match(migration,/grant execute on function public\.search_employee_directory[\s\S]*to authenticated/);
+  assert.match(migration,/hr_records_employee_name_idx/);
+  assert.match(migration,/lastName[\s\S]*asc/i);
+});
+
+test('employee directory defaults to employee name A-Z locally and on the indexed query',()=>{
+  const start=source.indexOf('function localEmployeeDirectoryRows');
+  const end=source.indexOf('function employeeDirectoryRowsHTML',start);
+  const localSort=source.slice(start,end);
+  assert.match(localSort,/employeeDisplayName\(left\)\.localeCompare\(employeeDisplayName\(right\)/);
+  assert.doesNotMatch(localSort,/sort\(\(left,right\)=>String\(right\.employeeNo/);
 });
