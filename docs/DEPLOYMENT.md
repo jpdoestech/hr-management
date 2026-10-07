@@ -30,6 +30,8 @@ Apply `supabase/phase19-tenant-scale-foundation.sql` after deploying the matchin
 
 Apply `supabase/phase20-access-control.sql` after Phase 19. Phase 20 upgrades User Management into tenant-aware RBAC with multiple roles, applicable-action permission matrices, direct grants and denies, scopes, resource assignments, effective-access explanations, and employee password self-service policy. Follow [Access Control and Account Recovery Setup](ACCESS-CONTROL-SETUP.md) to configure redirects, SMTP, seeded roles, and recovery testing.
 
+Apply `supabase/phase23-employee-relations-case-foundation.sql` after Phases 19, 20, and 22. Run the complete file once in **Supabase Dashboard > SQL Editor**, then reload the application. The migration expands case stages without rewriting existing values, records legacy workflow values, adds tenant-scoped allegations/findings, and replaces broad case policies with the existing effective-permission and scope checks. It does not delete or move Incident, CVR, NTE, Memorandum, NOD, Disciplinary Action, case-link, activity, or attachment data. Review the Phase A implementation map in [Employee Relations Redesign: Phase A Audit and Mapping](EMPLOYEE-RELATIONS-REDESIGN-PHASE-A.md) before continuing with later workflow phases.
+
 Apply `supabase/phase17-user-export-permissions.sql` before deploying the matching frontend. Viewer, Manager, and Employee profiles default to no export access. A System Administrator can enable export for a specific account from User Management; Administrator and HR Staff roles include export access automatically.
 
 ## Google Drive

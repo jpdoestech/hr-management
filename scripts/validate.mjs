@@ -25,7 +25,9 @@ const required=[
   'database/migrations/phase13-onboarding.sql','supabase/phase14-admin-storage-settings.sql',
   'database/migrations/phase14-admin-storage-settings.sql','supabase/phase15-organization-structure.sql',
   'database/migrations/phase15-organization-structure.sql','js/core/access-control.js','supabase/phase20-access-control.sql',
-  'database/migrations/phase20-access-control.sql','docs/ACCESS-CONTROL-SETUP.md'
+  'database/migrations/phase20-access-control.sql','docs/ACCESS-CONTROL-SETUP.md',
+  'js/core/employee-relations.js','supabase/phase23-employee-relations-case-foundation.sql',
+  'database/migrations/phase23-employee-relations-case-foundation.sql','docs/EMPLOYEE-RELATIONS-REDESIGN-PHASE-A.md'
 ];
 const missing=required.filter(f=>!fs.existsSync(path.join(root,f)));
 if(missing.length){
@@ -174,6 +176,22 @@ const accessMigration=fs.readFileSync(path.join(root,'supabase/phase20-access-co
 const accessMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase20-access-control.sql'),'utf8');
 if(accessMigration!==accessMigrationCopy || !accessMigration.includes('get_effective_access') || !accessMigration.includes('current_user_has_permission')){
   console.error('Access Control migration copies are missing, incomplete, or out of sync.');
+  process.exit(1);
+}
+const employeeRelationsMigration=fs.readFileSync(path.join(root,'supabase/phase23-employee-relations-case-foundation.sql'),'utf8');
+const employeeRelationsMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase23-employee-relations-case-foundation.sql'),'utf8');
+if(employeeRelationsMigration!==employeeRelationsMigrationCopy || !employeeRelationsMigration.includes('hr_case_allegations') || !employeeRelationsMigration.includes("current_user_has_permission('employee_relations.view')")){
+  console.error('Employee Relations case-foundation migration copies are missing, incomplete, or out of sync.');
+  process.exit(1);
+}
+for(const feature of ['CASE_WORKFLOW_STAGES','caseTransitionValidation','createCaseAllegationFromReport','openCaseAllegationForm','Report / allegation']){
+  if(!app.includes(feature)){
+    console.error(`Employee Relations case-domain contract is missing: ${feature}`);
+    process.exit(1);
+  }
+}
+if(/module==='memos'\?'Memo Issued'/.test(app) || /\['incidents','cvr','disciplinary'\]/.test(app)){
+  console.error('Legacy memo advancement or disciplinary-as-allegation behavior is still active.');
   process.exit(1);
 }
 for(const feature of ['renderUsers','openEffectiveAccess','save_user_access','requestPasswordRecovery','openAccountSecurity','ACCESS_MODULES']){

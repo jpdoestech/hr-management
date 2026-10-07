@@ -9,6 +9,7 @@ import { manpowerRequestSummary, manpowerRequestTotals, requirementSlotCounts, s
 import { measureAsync, recordPerformance, performanceSnapshot } from './core/performance.js?v=20261002-1';
 import { ACCESS_ACTIONS, ACCESS_MODULES, ACCESS_PERMISSION_KEYS, evaluateEffectiveAccess, hasEffectivePermission, legacyPermissions, permissionLabel } from './core/access-control.js?v=20261006-1';
 import { filterTdaRecords, normalizeTdaScope, normalizeTdaText, parseTdaMatrix, selectApplicableTdaRecord, tdaDuplicateKey, tdaRecordApplies, tdaScopeKey } from './core/tda-import.js?v=20261007-2';
+import { CASE_WORKFLOW_STAGES, CASE_TERMINAL_STAGES, LEGACY_CASE_STAGES, canTransitionCase, caseStageOptions, caseTransitionValidation, isCaseReportSource, isCaseTerminalStage } from './core/employee-relations.js?v=20261007-1';
 import { addressComponentHTML, addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom, addressDetailInput, initializeAddressComponents, readAddressComponent } from './address/address-component.js?v=20260930-2';
 import { formatPhilippineAddress, normalizeAddress } from './address/address-models.js?v=20260930-2';
 
@@ -35,8 +36,23 @@ let SELF_SERVICE_READY = true;
 let USER_PREFERENCES = {employeeColumns:[],tableLayouts:{}};
 let USER_PREFERENCES_SYNC_READY = true;
 let ACCESS_CONTROL_READY = true;
+let CASE_DOMAIN_READY = null;
 let ACCESS_STORE = {roles:[],rolePermissions:[],userRoles:[],overrides:[],scopes:[],assignments:[]};
 const DEFAULT_DEPARTMENT_NAMES = ['LOGISTICS','WAREHOUSE','UTILITY','MAINTENANCE','PRODUCTION','ADMIN','SALES'];
+
+function isMissingCaseDomain(error){
+  return ['42P01','PGRST205','PGRST204'].includes(error?.code) || /hr_case_allegations/i.test(error?.message||'')&&/not find|does not exist|schema cache/i.test(error?.message||'');
+}
+async function ensureCaseDomainReady(){
+  if(CASE_DOMAIN_READY!==null)return CASE_DOMAIN_READY;
+  const {error}=await supabase.from('hr_case_allegations').select('id').limit(1);
+  if(error){
+    if(isMissingCaseDomain(error)){CASE_DOMAIN_READY=false;return false;}
+    console.warn('Could not verify the Employee Relations case foundation',error);
+    CASE_DOMAIN_READY=false;return false;
+  }
+  CASE_DOMAIN_READY=true;return true;
+}
 
 function blankDB(){
   return {employees:[],onboardingCandidates:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],manpowerRequests:[],manpowerRequirements:[],manpowerSlots:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],lifecycleChecklists:[],serviceRequests:[],settings:{orgName:'SCPA',probationDays:180,fileStorageProvider:'supabase',googleDriveRootUrl:'',googleDriveClientId:'',branchLocations:['Main Office'],allowanceTypes:[],departments:DEFAULT_DEPARTMENT_NAMES.map(name=>({name,active:true})),positions:[]},audit:[],users:[]};
@@ -1083,13 +1099,13 @@ async function buildNotificationItems(){
     cases=data||[];
   }catch(e){ console.warn('Notification case query failed',e); }
 
-  const openCases=cases.filter(c=>!['Closed','Cancelled','Resolved'].includes(c.status));
+  const openCases=cases.filter(c=>!caseIsClosedStatus(c.status));
   openCases.forEach(c=>{
     const label=c.case_number||'HR Case';
     if(c.due_date && c.due_date<today) items.push(notificationItem(`case-overdue-${c.id}`,'danger',`${label} is overdue`,`${c.employee_name||'Employee'} · Due ${fmtDate(c.due_date)}${c.priority?' · '+c.priority:''}`,'cases',c.id));
     else if(c.due_date && c.due_date<=next3) items.push(notificationItem(`case-due-${c.id}`,'warning',`${label} is due soon`,`${c.employee_name||'Employee'} · Due ${fmtDate(c.due_date)}${c.priority?' · '+c.priority:''}`,'cases',c.id));
     if(c.status==='For Decision') items.push(notificationItem(`case-decision-${c.id}`,'warning',`${label} is ready for decision`,`${c.employee_name||'Employee'}${c.department?' · '+c.department:''}`,'cases',c.id));
-    if(c.assigned_to && SESSION?.id && c.assigned_to===SESSION.id && !['Closed','Cancelled','Resolved'].includes(c.status)){
+    if(c.assigned_to && SESSION?.id && c.assigned_to===SESSION.id && !caseIsClosedStatus(c.status)){
       items.push(notificationItem(`case-assigned-${c.id}`,'info',`${label} is assigned to you`,`${c.employee_name||'Employee'} · ${c.status||'Open'}${c.due_date?' · Due '+fmtDate(c.due_date):''}`,'cases',c.id));
     }
     if(!c.assigned_to) items.push(notificationItem(`case-unassigned-${c.id}`,'warning',`${label} has no assignee`,`${c.employee_name||'Employee'}${c.department?' · '+c.department:''}`,'cases',c.id));
@@ -1510,7 +1526,7 @@ function actionCenterItems(caseRows){
   const next7=addDaysISO(today,7);
   const next14=addDaysISO(today,14);
   const items=[];
-  const activeCases=(caseRows||[]).filter(c=>!['Closed','Cancelled','Resolved'].includes(c.status));
+  const activeCases=(caseRows||[]).filter(c=>!caseIsClosedStatus(c.status));
   activeCases.forEach(c=>{
     const age=analyticsDaysOpen(c.opened_at,c.closed_at);
     if(age>=30) items.push({level:'danger',title:`${c.case_number} has been open ${age} days`,detail:`${c.employee_name} · ${c.status}${c.department?' · '+c.department:''}`,meta:['HR Case','30+ days'],view:'cases',id:c.id});
@@ -1640,7 +1656,7 @@ function opsOpenItems(){
   return casePromise.then(({data,error})=>{
     if(error) throw error;
     (data||[]).forEach(c=>{
-      if(['Closed','Cancelled','Resolved'].includes(c.status)) return;
+      if(caseIsClosedStatus(c.status)) return;
       openCases.push(c);
       if(c.assigned_to===SESSION?.id || SESSION?.role==='Administrator'){
         const age=analyticsDaysOpen(c.opened_at,null);
@@ -1950,11 +1966,11 @@ const NAV = [
     {v:'incidents',label:'Incident Reports',icon:iShield},
     {v:'cvr',label:'CVR',icon:iShield},
     {v:'nte',label:'NTE',icon:iDoc},
-    {v:'memos',label:'Memorandum',icon:iDoc},
+    {v:'memos',label:'Legacy Memoranda',icon:iDoc},
     {v:'nod',label:'NOD',icon:iDoc},
-    {v:'disciplinary',label:'Disciplinary Action',icon:iShield},
+    {v:'disciplinary',label:'Legacy Disciplinary History',icon:iShield},
     {v:'offenseCatalog',label:'TDA Catalog',icon:iDoc},
-    {v:'offenseSummary',label:'Offense Summary',icon:iChart},
+    {v:'offenseSummary',label:'History Review',icon:iChart},
   ]},
   {sec:'Documents & Governance',items:[
     {v:'documents',label:'Document Center',icon:iDoc},
@@ -2269,12 +2285,12 @@ function setTitle(t,sub){
 
 const INFORMATION_NOTES={
   leaveUploads:{title:'Leave document handling',body:`Uploaded leave forms use the storage destination selected by the System Administrator. Files can be up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each. Automatic OCR or text extraction is not performed, so all fields must be entered or confirmed manually.`},
-  disciplinaryLevels:{title:'Offense level calculation',body:"The offense level is counted automatically from the employee's prior records for the same violation and references the approved disciplinary policy. Confirm the suggested action before saving."},
-  cvrOcr:{title:'CVR document handling',body:"The system does not automatically scan or OCR a photo or scan of a printed CVR. Select or enter the offenses shown on the paper CVR and attach the source document. Offense level and consequence are calculated from the employee's CVR history and the Offense Catalog."},
+  disciplinaryLevels:{title:'Legacy disciplinary history',body:'Legacy disciplinary records remain available for historical reference but are not automatically treated as substantiated findings. HR must verify and migrate qualifying outcomes before they affect progressive occurrence.'},
+  cvrOcr:{title:'CVR document handling',body:'The system does not automatically scan or OCR a photo or scan of a printed CVR. Select or enter the reported matters shown on the paper CVR and attach the source document. A CVR remains an allegation/source report and does not count as a confirmed offense.'},
   incidentOcr:{title:'Incident report handling',body:'The system does not automatically scan or OCR a printed or photographed incident report. Select or enter the incident types shown on the report and attach the source document. Repeat-incident counts are calculated from saved history.'},
   atdUploads:{title:'ATD document handling',body:`ATD forms, incident reports, quotation or SOA documents, and payslips use the storage destination selected by the System Administrator. Files can be up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each. Payment status and balances are calculated from recorded payments.`},
   evaluations:{title:'Evaluation due dates',body:'Evaluation due dates are calculated from Date Hired at 30, 90, and 180 days. Mark an evaluation complete and attach its document after completion.'},
-  offenseSummary:{title:'Offense summary calculation',body:'This view combines Disciplinary Action and CVR records by employee. Levels and consequences use the same Offense Catalog lookup used by CVR.'},
+  offenseSummary:{title:'Employee relations history review',body:'Only finalized qualifying findings may count as confirmed occurrences. CVRs remain source reports, and legacy disciplinary records stay unverified until HR reviews or migrates them.'},
   userAdministration:{title:'User administration access',body:'Only Administrators can change account roles or profile details. New users register from the login screen and must then be linked to the appropriate employee record.'},
   workflowRule:{title:'Workflow source records',body:'Source records remain the system of record. Approvals and task states coordinate HR work around those records and are retained in the audit trail.'},
   caseFiles:{title:'HR case files',body:'A case groups allegations, evidence, notices, decisions, and corrective actions into one trackable matter. Select the applicable TDA rule when the matter concerns an offense. The suggested consequence is policy guidance only; HR must still verify evidence, prior records, due process, and the final decision.'},
@@ -2877,10 +2893,12 @@ async function renderDashboard({skipFetch=false}={}){
     }));
 
     const allCases=cases||[];
-    const activeCases=allCases.filter(c=>!['Closed','Cancelled','Resolved'].includes(c.status));
+    const activeCases=allCases.filter(c=>!isCaseTerminalStage(c.status)&&c.status!=='Resolved');
     const agedCases=activeCases.filter(c=>analyticsDaysOpen(c.opened_at,c.closed_at)>=30);
-    const statusList=['Open','NTE Issued','Memo Issued','For Decision','Resolved','Closed'];
     const caseStatus={}; allCases.forEach(c=>caseStatus[c.status]=(caseStatus[c.status]||0)+1);
+    const statusOrder=[...CASE_WORKFLOW_STAGES,...CASE_TERMINAL_STAGES,'Open','Memo Issued','Resolved'];
+    const statusList=statusOrder.filter(status=>caseStatus[status]>0);
+    if(!statusList.length)statusList.push('Reported / Created','Under Investigation','For Decision','Closed');
     const caseDept={}; activeCases.forEach(c=>{const d=c.department||'Unassigned';caseDept[d]=(caseDept[d]||0)+1;});
     const recentCases=allCases.slice(0,6);
 
@@ -2941,7 +2959,7 @@ async function renderDashboard({skipFetch=false}={}){
         <div class="panel">
           <div class="dashboard-panel-head"><div><h3>Case Pipeline</h3><div class="desc">Current distribution of HR case stages.</div></div><button class="btn btn-ghost btn-sm" onclick="go('cases')">Manage</button></div>
           <div class="case-pipeline">
-            ${statusList.map(s=>{const c=caseStatus[s]||0;const pct=Math.round(c/statusMax*100);const stage=s==='Open'?'var(--brass)':s==='NTE Issued'||s==='Memo Issued'?'var(--amber)':s==='For Decision'?'var(--ink)':s==='Resolved'?'var(--forest)':'var(--slate)';return `<button type="button" class="case-stage case-stage-link" onclick="dashboardOpenCases('${esc(s)}')"><span class="stage-label">${esc(s)}</span><span class="stage-count">${c}</span><span class="stage-bar"><span class="stage-fill" style="--stage:${stage};width:${pct}%"></span></span></button>`;}).join('')}
+            ${statusList.map(s=>{const c=caseStatus[s]||0;const pct=Math.round(c/statusMax*100);const stage=isCaseTerminalStage(s)||s==='Resolved'?'var(--forest)':s.includes('NTE')||s.includes('Response')?'var(--amber)':s.includes('Decision')||s.includes('Implementation')?'var(--ink)':'var(--slate)';return `<button type="button" class="case-stage case-stage-link" onclick="dashboardOpenCases('${esc(s)}')"><span class="stage-label">${esc(s)}${LEGACY_CASE_STAGES.includes(s)?' (legacy)':''}</span><span class="stage-count">${c}</span><span class="stage-bar"><span class="stage-fill" style="--stage:${stage};width:${pct}%"></span></span></button>`;}).join('')}
           </div>
         </div>
       </div>
@@ -3123,12 +3141,8 @@ async function linkNewRecordToCase(caseId, module, rec){
     toast('Record saved, but it could not be linked to the HR case: '+error.message,true);
     return false;
   }
-  const newStatus = module==='nte'?'NTE Issued' : module==='memos'?'Memo Issued' : module==='nod'?'For Decision' : null;
-  if(newStatus){
-    const {data:beforeCase}=await supabase.from('hr_cases').select('status,due_date').eq('id',caseId).maybeSingle();
-    const {error:statusError}=await supabase.from('hr_cases').update({status:newStatus,updated_by:SESSION?.id||null}).eq('id',caseId);
-    if(statusError) console.warn('Case status update failed',statusError);
-    else await addCaseActivity(caseId,'status',`Status changed from ${beforeCase?.status||'—'} to ${newStatus} after creating ${caseModuleLabel(module)}.`,beforeCase?.status||null,newStatus,beforeCase?.due_date||null);
+  if(isCaseReportSource(module)){
+    try{await createCaseAllegationFromReport(caseId,module,rec);}catch(allegationError){console.warn('Could not create a case allegation from the report',allegationError);}
   }
   await addCaseActivity(caseId,'linked',`Linked ${caseModuleLabel(module)}: ${label}.`);
   logAudit(`Linked ${caseModuleLabel(module)} to HR case`);
@@ -5163,30 +5177,30 @@ function calShift(dir){
    ================================================================ */
 function offenseLevelFor(emp, violation, beforeId,savedRule=null){
   if(savedRule?.offenseLevel)return savedRule.offenseLevel;
-  const prior = DB.disciplinary.filter(d=> d.employeeName===emp && d.violation===violation && d.id!==beforeId);
-  const n = prior.length; // this record will be n+1'th
-  return OFFENSE_LEVELS[Math.min(n, OFFENSE_LEVELS.length-1)];
+  const record=DB.disciplinary.find(item=>String(item.id)===String(beforeId));
+  if(record?.confirmedOccurrence)return OFFENSE_LEVELS[Math.min(Math.max(Number(record.confirmedOccurrence)-1,0),OFFENSE_LEVELS.length-1)];
+  return 'Legacy / Unverified';
 }
 function renderDisciplinary(){
-  setTitle('Disciplinary Action', "Monitor violations, offense levels, and actions taken per employee.");
+  setTitle('Legacy Disciplinary History', 'Review historical disciplinary entries while verified case outcomes move into the normalized history model.');
   const q=(STATE.search||'').toLowerCase();
   let rows = DB.disciplinary.filter(d=> !q || String(d.employeeName||'').toLowerCase().includes(q) || (d.violation||'').toLowerCase().includes(q));
   if(STATE.disciplinaryFilter) rows=rows.filter(d=>offenseLevelFor(d.employeeName,d.violation,d.id)===STATE.disciplinaryFilter || d.department===STATE.disciplinaryFilter);
   rows = rows.slice().sort((a,b)=>(b.dateOfIncident||'').localeCompare(a.dateOfIncident||''));
   const html = `
   <div class="sectionhead">
-    <div><h2>Disciplinary Action</h2><p>${DB.disciplinary.length} records across ${new Set(DB.disciplinary.map(d=>d.employeeName)).size} employees.</p></div>
-    <div class="page-header-actions">${informationNoteButton('disciplinaryLevels')}${canEdit()? `<button class="btn btn-brass" onclick="openRecordForm('disciplinary')">${iPlus(15)} Add Disciplinary Record</button>`:''}</div>
+    <div><h2>Legacy Disciplinary History</h2><p>${DB.disciplinary.length} preserved historical record${DB.disciplinary.length===1?'':'s'} across ${new Set(DB.disciplinary.map(d=>d.employeeName)).size} employees.</p></div>
+    <div class="page-header-actions">${informationNoteButton('disciplinaryLevels')}${canEdit()? `<button class="btn btn-brass" onclick="openRecordForm('disciplinary')">${iPlus(15)} Add Legacy Record</button>`:''}</div>
   </div>
   <div class="toolbar">
     <div class="search">${iSearch(15)}<input data-search-key="search" placeholder="Search by employee or violation…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderDisciplinary)"></div>
-    <select onchange="STATE.disciplinaryFilter=this.value;STATE.tablePages={};renderDisciplinary()"><option value="">All Levels / Departments</option>${OFFENSE_LEVELS.map(v=>`<option value="${esc(v)}" ${STATE.disciplinaryFilter===v?'selected':''}>${esc(v)}</option>`).join('')}${employeeDepartmentNames().map(v=>`<option value="${esc(v)}" ${STATE.disciplinaryFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
+    <select onchange="STATE.disciplinaryFilter=this.value;STATE.tablePages={};renderDisciplinary()"><option value="">All Verification / Departments</option>${['Legacy / Unverified',...OFFENSE_LEVELS].map(v=>`<option value="${esc(v)}" ${STATE.disciplinaryFilter===v?'selected':''}>${esc(v)}</option>`).join('')}${employeeDepartmentNames().map(v=>`<option value="${esc(v)}" ${STATE.disciplinaryFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
     <button class="btn btn-ghost btn-sm" onclick="STATE.disciplinaryFilter='';STATE.search='';STATE.tablePages={};renderDisciplinary()">Clear</button>
     <div class="spacer"></div>
     ${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportModuleCSV('disciplinary')">${iDownload(14)} Export CSV</button>`:''}
   </div>
   <div class="tablewrap"><table class="data-table">
-    <thead><tr><th>Employee</th><th>Department</th><th>Violation</th><th>Offense Level</th><th>Date</th><th>Action Taken</th><th style="text-align:right;">Actions</th></tr></thead>
+    <thead><tr><th>Employee</th><th>Department</th><th>Recorded Matter</th><th>Verification</th><th>Date</th><th>Historical Action</th><th style="text-align:right;">Actions</th></tr></thead>
     <tbody>
     ${rows.length? rows.map(d=>`<tr>
       <td><b>${esc(d.employeeName)}</b></td><td>${esc(d.department||'—')}</td><td>${esc(d.violation)}</td>
@@ -5194,14 +5208,7 @@ function renderDisciplinary(){
       <td>${fmtDate(d.dateOfIncident)}</td><td>${esc(d.action||'—')}</td>
       <td><div class="rowactions">${canEdit()?`<button class="iconbtn" title="HR Case" onclick="openRecordCaseDialog('disciplinary','${d.id}')">${iShield(14)}</button><button class="iconbtn" onclick="openRecordForm('disciplinary','${d.id}')">${iEdit(14)}</button><button class="iconbtn" onclick="deleteRecord('disciplinary','${d.id}')">${iTrash(14)}</button>`:'<span class="small">View only</span>'}</div></td>
     </tr>`).join('') : `<tr><td colspan="8"><div class="empty"><b>No disciplinary records</b>Add a record to begin tracking violations.</div></td></tr>`}
-    </tbody></table></div>
-  <div class="panel" style="margin-top:16px;">
-    <h3>Offense Count by Employee</h3>
-    <div class="desc">Total disciplinary entries per employee, across all violation types.</div>
-    ${(()=>{ const c={}; DB.disciplinary.forEach(d=>c[d.employeeName]=(c[d.employeeName]||0)+1);
-      const entries = Object.entries(c).sort((a,b)=>b[1]-a[1]);
-      return entries.length? entries.map(([n,v])=>`<div class="barrow"><div class="name">${esc(n)}</div><div class="bartrack"><div class="barfill" style="width:${Math.round(v/Math.max(...entries.map(e=>e[1]))*100)}%"></div></div><div class="amt">${v}</div></div>`).join('') : '<div class="small">No data yet.</div>'; })()}
-  </div>`;
+    </tbody></table></div>`;
   document.getElementById('content').innerHTML = html;
 }
 
@@ -5210,8 +5217,11 @@ function renderDisciplinary(){
    + consequence lookup from the Offense Catalog, file attachment)
    ================================================================ */
 function cvrOffenseLevel(employeeName, offenseName, beforeId){
-  const prior = DB.cvr.filter(c=> c.id!==beforeId && c.employeeName===employeeName && (c.offenses||[]).includes(offenseName));
-  const idx = Math.min(prior.length, OFFENSE_LEVELS.length-1);
+  const employee=DB.employees.find(item=>normalizeEmployeeName(item.name)===normalizeEmployeeName(employeeName));
+  const context=tdaContextForEmployee(employee?.id,employeeName,employee?.department||'');
+  const rule=selectApplicableTdaRecord(DB.offenseCatalog,offenseName,context);
+  const prior=rule?tdaEmployeeOffenseCount(employee?.id,employeeName,rule.id,{module:'cvr',id:beforeId}):0;
+  const idx = Math.min(prior, OFFENSE_LEVELS.length-1);
   return {label: OFFENSE_LEVELS[idx], index: idx};
 }
 function tdaContextForEmployee(employeeId,employeeName,department=''){
@@ -5237,12 +5247,16 @@ function consequenceFor(offenseName, levelIndex,context={}){
 const TDA_CONNECTED_MODULES=new Set(['disciplinary','nte','memos','nod']);
 function tdaOrdinal(levelIndex){return ['1st','2nd','3rd','4th','5th+'][Math.max(0,Math.min(Number(levelIndex)||0,4))];}
 function tdaRuleRecord(rule){return rule?.catalogId?(DB.offenseCatalog||[]).find(record=>String(record.id)===String(rule.catalogId)):null;}
-function tdaEmployeeOffenseCount(employeeId,employeeName,offense,before={}){
-  const sameEmployee=record=>employeeId&&record.employeeId?String(record.employeeId)===String(employeeId):normalizeEmployeeName(record.employeeName)===normalizeEmployeeName(employeeName);
-  const sameOffense=value=>normalizeTdaText(value).toLowerCase()===normalizeTdaText(offense).toLowerCase();
-  const disciplinary=(DB.disciplinary||[]).filter(record=>!(before.module==='disciplinary'&&String(record.id)===String(before.id))&&sameEmployee(record)&&sameOffense(record.violation)).length;
-  const cvr=(DB.cvr||[]).filter(record=>!(before.module==='cvr'&&String(record.id)===String(before.id))&&sameEmployee(record)&&[...(record.offenses||[]),record.otherOffense].filter(Boolean).some(sameOffense)).length;
-  return disciplinary+cvr;
+function tdaEmployeeOffenseCount(employeeId,employeeName,tdaRuleId,before={}){
+  if(!employeeId||!tdaRuleId)return 0;
+  return (DB.disciplinary||[]).filter(record=>
+    !(before.module==='disciplinary'&&String(record.id)===String(before.id))
+    && String(record.employeeId||'')===String(employeeId)
+    && String(record.tdaRule?.catalogId||record.tdaRuleId||'')===String(tdaRuleId)
+    && ['Substantiated','Partially Substantiated'].includes(record.finding)
+    && (record.finalized===true||record.status==='Finalized')
+    && !record.voidedAt&&!record.reversedAt
+  ).length;
 }
 function tdaRuleSnapshot(record,levelIndex,context={}){
   if(!record)return null;
@@ -5255,11 +5269,11 @@ function tdaRuleSnapshot(record,levelIndex,context={}){
   };
 }
 function tdaRuleContext(prefix){
-  const config={case:['case_employee','case_employee_locked','case_department'],record:['f_employeeName','','f_department'],incident:['in_employeeName','','in_department'],atd:['f_employeeName','','f_department']}[prefix]||[];
+  const config={case:['case_employee','case_employee_locked','case_department'],allegation:['','allegation_employee_locked','allegation_department'],record:['f_employeeName','','f_department'],incident:['in_employeeName','','in_department'],atd:['f_employeeName','','f_department']}[prefix]||[];
   const selected=employeePickerSelected(config[0]);
   const lockedId=config[1]?document.getElementById(config[1])?.value||'':'';
   const employee=selected||DB.employees.find(row=>String(row.id)===String(lockedId));
-  const employeeName=employee?.name||document.getElementById(config[0])?.value||'';
+  const employeeName=employee?.name||(config[0]?document.getElementById(config[0])?.value:'')||'';
   const department=document.getElementById(config[2])?.value||employee?.department||'';
   return {employee,employeeId:employee?.id||'',employeeName,department,context:tdaContextForEmployee(employee?.id,employeeName,department)};
 }
@@ -5330,7 +5344,7 @@ function refreshTdaRuleSelector(prefix){
 function refreshTdaRulePreview(prefix,resetLevel=false){
   const root=document.getElementById(`${prefix}_tda_policy`);const select=document.getElementById(`${prefix}_tda_rule`);const level=document.getElementById(`${prefix}_tda_level`);const preview=document.getElementById(`${prefix}_tda_preview`);if(!root||!select||!level||!preview)return;
   const record=(DB.offenseCatalog||[]).find(item=>String(item.id)===String(select.value));const info=tdaRuleContext(prefix);
-  if(record&&resetLevel){const prior=tdaEmployeeOffenseCount(info.employeeId,info.employeeName,record.offense,{module:root.dataset.module,id:root.dataset.recordId});level.value=String(Math.min(prior,4));}
+  if(record&&resetLevel){const prior=tdaEmployeeOffenseCount(info.employeeId,info.employeeName,record.id,{module:root.dataset.module,id:root.dataset.recordId});level.value=String(Math.min(prior,4));}
   const rule=record?tdaRuleSnapshot(record,level.value,info.context):null;root.dataset.selectedRule=record?.id||'';preview.innerHTML=tdaRulePreviewHTML(rule);applyTdaRuleToForm(prefix,root.dataset.module,rule);
 }
 function readTdaRuleSelection(prefix){
@@ -6084,28 +6098,27 @@ async function saveEval(employeeId, milestoneKey){
    CONSOLIDATED EMPLOYEE OFFENSE SUMMARY
    ================================================================ */
 function renderOffenseSummary(){
-  setTitle('Employee Offense Summary', 'One consolidated view per employee — every offense, count, level, and consequence, from Disciplinary Action and CVR combined.');
+  setTitle('Employee Relations History Review', 'Separate confirmed outcomes, unverified legacy history, and incoming CVR reports without treating allegations as violations.');
   const q=(STATE.search||'').toLowerCase();
-  const map = {};
-  function ensure(name, dept){ if(!map[name]) map[name]={department:dept, offenses:{}}; else if(dept && !map[name].department) map[name].department=dept; return map[name]; }
-  DB.disciplinary.forEach(d=>{ const m=ensure(d.employeeName, d.department); const key=d.violation||'Unspecified'; m.offenses[key]=(m.offenses[key]||0)+1; });
-  DB.cvr.forEach(c=>{ const m=ensure(c.employeeName, c.department); [...(c.offenses||[]), ...(c.otherOffense?[c.otherOffense]:[])].forEach(o=>{ m.offenses[o]=(m.offenses[o]||0)+1; }); });
-  let names = Object.keys(map).sort((a,b)=>a.localeCompare(b));
-  if(q) names = names.filter(n=> n.toLowerCase().includes(q) || Object.keys(map[n].offenses).some(o=>o.toLowerCase().includes(q)));
+  const map=new Map();
+  function ensure(record){
+    const employee=DB.employees.find(item=>String(item.id)===String(record.employeeId||''))||DB.employees.find(item=>normalizeEmployeeName(item.name)===normalizeEmployeeName(record.employeeName));
+    const key=employee?.id||`legacy:${normalizeEmployeeName(record.employeeName)}`;
+    if(!map.has(key))map.set(key,{employeeId:employee?.id||'',employeeName:employee?.name||record.employeeName||'Unknown employee',department:employee?.department||record.department||'',confirmed:0,legacy:0,reports:0,terms:[]});
+    return map.get(key);
+  }
+  (DB.disciplinary||[]).forEach(record=>{
+    const row=ensure(record);row.terms.push(record.violation||'');
+    const verified=Boolean(record.employeeId&&(record.tdaRule?.catalogId||record.tdaRuleId)&&['Substantiated','Partially Substantiated'].includes(record.finding)&&(record.finalized===true||record.status==='Finalized')&&!record.voidedAt&&!record.reversedAt);
+    if(verified)row.confirmed+=1;else row.legacy+=1;
+  });
+  (DB.cvr||[]).forEach(record=>{const row=ensure(record);row.reports+=1;row.terms.push(...(record.offenses||[]),record.otherOffense||'');});
+  let rows=[...map.values()].sort((a,b)=>a.employeeName.localeCompare(b.employeeName));
+  if(q)rows=rows.filter(row=>[row.employeeName,row.department,...row.terms].some(value=>String(value||'').toLowerCase().includes(q)));
   const html = `
-  <div class="sectionhead"><div><h2>Employee Offense Summary</h2><p>${names.length} employee(s) with recorded offenses.</p></div><div class="page-header-actions">${informationNoteButton('offenseSummary')}</div></div>
-  <div class="toolbar"><div class="search">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search by employee or offense…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderOffenseSummary)"></div></div>
-  ${names.length? names.map(n=>{
-    const m = map[n];
-    const rows = Object.entries(m.offenses).sort((a,b)=>b[1]-a[1]);
-    return `<div class="panel" style="margin-bottom:12px;">
-      <h3>${esc(n)} <span class="small" style="font-weight:400;">${esc(m.department||'')}</span></h3>
-      <div class="tablewrap"><table class="data-table">
-        <thead><tr><th>Offense</th><th>Count</th><th>Level</th><th>Consequence</th></tr></thead>
-        <tbody>${rows.map(([o,c])=>{ const idx=Math.min(c-1, OFFENSE_LEVELS.length-1); const level=OFFENSE_LEVELS[idx]; const cons=consequenceFor(o, idx,tdaContextForEmployee('',n,m.department)); return `<tr><td><b>${esc(o)}</b></td><td>${c}</td><td>${statusBadge(level,{})}</td><td class="small">${esc(cons)}</td></tr>`; }).join('')}</tbody>
-      </table></div>
-    </div>`;
-  }).join('') : '<div class="empty"><b>No offenses recorded yet</b></div>'}`;
+  <div class="sectionhead"><div><h2>Employee Relations History Review</h2><p>${rows.length} employee${rows.length===1?'':'s'} with confirmed, legacy, or reported Employee Relations activity.</p></div><div class="page-header-actions">${informationNoteButton('offenseSummary')}</div></div>
+  <div class="toolbar"><div class="search">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search employee, department, or reported matter…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderOffenseSummary)"></div></div>
+  <div class="tablewrap"><table class="data-table"><thead><tr><th>Employee</th><th>Department</th><th>Confirmed Findings</th><th>Legacy Unverified</th><th>CVR Reports</th><th>Review</th></tr></thead><tbody>${rows.length?rows.map(row=>`<tr><td><b>${esc(row.employeeName)}</b><div class="small mono">${esc(row.employeeId||'Legacy name reference')}</div></td><td>${esc(row.department||'—')}</td><td>${statusBadge(String(row.confirmed),{[String(row.confirmed)]:row.confirmed?'b-green':'b-grey'})}</td><td>${statusBadge(String(row.legacy),{[String(row.legacy)]:row.legacy?'b-amber':'b-grey'})}</td><td>${statusBadge(String(row.reports),{[String(row.reports)]:row.reports?'b-blue':'b-grey'})}</td><td><button class="btn btn-ghost btn-sm" onclick="go('disciplinary')">History</button></td></tr>`).join(''):'<tr><td colspan="6"><div class="empty"><b>No Employee Relations history found</b>CVR reports and legacy records will appear here without being counted as confirmed offenses.</div></td></tr>'}</tbody></table></div>`;
   document.getElementById('content').innerHTML = html;
 }
 
@@ -6180,7 +6193,7 @@ async function workflowSyncTasks({silent=false}={}){
     const {data:cases,error}=await supabase.from('hr_cases').select('id,case_number,employee_record_id,employee_name,department,subject,status,opened_at,closed_at,assigned_to,priority,due_date,updated_at').order('updated_at',{ascending:false}).limit(500);
     if(!error){
       (cases||[]).forEach(c=>{
-        const closed=['Closed','Cancelled','Resolved'].includes(c.status);
+        const closed=caseIsClosedStatus(c.status);
         const forDecision=c.status==='For Decision';
         const title=closed?`Case closed — ${c.case_number||'HR Case'}`:forDecision?`Decision required — ${c.case_number||'HR Case'}`:c.assigned_to?`Review case — ${c.case_number||'HR Case'}`:`Assign case — ${c.case_number||'HR Case'}`;
         const existing=workflowExistingTask('cases',c.id);
@@ -6641,7 +6654,7 @@ async function runAutomationEngine({manual=false,silent=false}={}){
       const {data:cases,error}=await supabase.from('hr_cases').select('id,case_number,employee_record_id,employee_name,department,status,opened_at,assigned_to,priority,due_date,updated_at').order('updated_at',{ascending:false}).limit(1000);
       if(error) throw error;
       (cases||[]).forEach(c=>{
-        const closed=['Closed','Cancelled','Resolved'].includes(c.status); const age=analyticsDaysOpen(c.opened_at,null);
+        const closed=caseIsClosedStatus(c.status); const age=analyticsDaysOpen(c.opened_at,null);
         const key=String(c.id);
         if(closed || age<30){ if(automationCloseTask('aged_cases',key,closed?'Case closed':'Case is under 30 days old')) rstat.closed++; return; }
         const existed=!!automationExistingTask('aged_cases',key);
@@ -6783,14 +6796,14 @@ const MODULES = {
       {key:'status', label:'Status', render:r=>statusBadge(r.status, LEAVE_STATUS_MAP)},
     ],
   },
-  disciplinary:{ title:'Disciplinary Action', subtitle:'', singular:'Disciplinary Record', addLabel:'Add Record',
+  disciplinary:{ title:'Legacy Disciplinary History', subtitle:'Preserved historical entries pending verification or migration from finalized HR Cases.', singular:'Legacy Disciplinary Record', addLabel:'Add Legacy Record',
     searchFields:['employeeName','violation'], sortKey:'dateOfIncident',
     fields:[
       {key:'employeeName', label:'Employee Name', type:'text', required:true},
       {key:'department', label:'Department', type:'select', options:employeeDepartmentNames, required:true},
-      {key:'violation', label:'Violation Committed', type:'text', required:true, full:true},
+      {key:'violation', label:'Alleged / Recorded Offense', type:'text', required:true, full:true},
       {key:'dateOfIncident', label:'Date of Incident', type:'date', required:true},
-      {key:'action', label:'Disciplinary Action Taken', type:'text', full:true},
+      {key:'action', label:'Historical Action Taken', type:'text', full:true},
       {key:'remarks', label:'Remarks', type:'textarea'},
     ],
     columns:[ // used for CSV export only — table itself is custom-rendered in renderDisciplinary()
@@ -6827,7 +6840,7 @@ const MODULES = {
       {key:'status', label:'Status', render:r=>statusBadge(r.status, NTE_STATUS_MAP)},
     ],
   },
-  memos:{ title:'Memorandum of Offense', subtitle:'Monitor memoranda issued for disciplinary offenses.', singular:'Memorandum', addLabel:'Add Memorandum',
+  memos:{ title:'Legacy Memoranda / Correspondence', subtitle:'Preserve prior memorandum records as case correspondence; they no longer advance case status.', singular:'Legacy Memorandum', addLabel:'Add Legacy Memorandum',
     searchFields:['employeeName','offenseType'], sortKey:'dateOfMemo',
     fields:[
       {key:'employeeName', label:'Employee Name', type:'text', required:true},
@@ -7287,7 +7300,7 @@ async function exportAnalyticsSnapshot(){
   const start=STATE.analyticsStart||addDaysISO(todayISO(),-89), end=STATE.analyticsEnd||todayISO(), dept=STATE.analyticsDept||'', branch=STATE.analyticsBranch||'';
   const employees=DB.employees.filter(e=>reportDeptMatch(e,dept)&&analyticsBranchMatch(e,branch));
   const cases=(REPORT_CACHE.cases||[]).filter(c=>(!dept||(c.department||'Unassigned')===dept)&&analyticsBranchMatch({employeeName:c.employee_name,department:c.department},branch));
-  const openCases=cases.filter(c=>!['Closed','Cancelled','Resolved'].includes(c.status));
+  const openCases=cases.filter(c=>!caseIsClosedStatus(c.status));
   const separations=employees.filter(e=>['Resigned','AWOL','Separated'].includes(e.status)&&reportInRange(e.statusDate,start,end));
   const beginning=employees.filter(employee=>analyticsEmployeeActiveOn(employee,start));
   const ending=employees.filter(employee=>analyticsEmployeeActiveOn(employee,end));
@@ -7327,7 +7340,7 @@ async function renderAnalytics({skipFetch=false}={}){
     const allCases=cases||[]; REPORT_CACHE.cases=allCases;
     const caseScope=allCases.filter(c=>(!dept||(c.department||'Unassigned')===dept)&&analyticsBranchMatch({employeeName:c.employee_name,department:c.department},branch));
     const periodCases=caseScope.filter(c=>reportInRange(String(c.opened_at||c.updated_at||'').slice(0,10),start,end));
-    const openCases=caseScope.filter(c=>!['Closed','Cancelled','Resolved'].includes(c.status));
+    const openCases=caseScope.filter(c=>!caseIsClosedStatus(c.status));
     const overdueCases=openCases.filter(c=>c.due_date && c.due_date<todayISO());
     const agingBuckets=[
       ['0–7 days',openCases.filter(c=>analyticsDaysOpen(c.opened_at)<=7).length],
@@ -7437,7 +7450,7 @@ async function renderAnalytics({skipFetch=false}={}){
 
       <div class="analytics-grid equal ${tab==='activity'?'':'workspace-section-hidden'}">
         <div class="panel"><div class="dashboard-panel-head"><div><h3>Case Status in Period</h3><div class="desc">Cases opened or updated during the selected period.</div></div></div>
-          <div class="chart-list">${Object.keys(CASE_STATUS_MAP).map((status,i)=>{const c=caseStatus[status]||0;return `<div class="chart-row"><div class="label">${esc(status)}</div><div class="chart-track"><div class="chart-fill ${status==='Cancelled'?'danger':status==='Resolved'||status==='Closed'?'alt':'warn'}" style="width:${Math.round(c/maxCaseStatus*100)}%"></div></div><div class="chart-count">${c}</div></div>`;}).join('')}</div>
+          <div class="chart-list">${caseStatusDisplayKeys(caseStatus).map(status=>{const c=caseStatus[status]||0;return `<div class="chart-row"><div class="label">${esc(status)}</div><div class="chart-track"><div class="chart-fill ${status==='Cancelled'?'danger':caseIsClosedStatus(status)?'alt':'warn'}" style="width:${Math.round(c/maxCaseStatus*100)}%"></div></div><div class="chart-count">${c}</div></div>`;}).join('')}</div>
         </div>
         <div class="panel"><div class="dashboard-panel-head"><div><h3>HR Activity by Module</h3><div class="desc">Operational volume within the selected period.</div></div></div>
           <div class="chart-list">${activityModules.map((x,i)=>`<div class="chart-row"><div class="label">${esc(x[0])}</div><div class="chart-track"><div class="chart-fill ${i%3===1?'alt':i%3===2?'warn':''}" style="width:${Math.round(x[1]/maxActivity*100)}%"></div></div><div class="chart-count">${x[1]}</div></div>`).join('')}</div>
@@ -7740,7 +7753,7 @@ async function renderReports(){
     const movement=employees.filter(e=>['Resigned','AWOL','Separated'].includes(e.status)&&e.statusDate>=start&&e.statusDate<=end);
     const activityTotal=incidents.length+cvr.length+disc.length+nte.length+memos.length+nod.length+leaves.length+oncall.length+transfers.length+atdRows.length;
     const caseStatus={}; caseRows.forEach(c=>caseStatus[c.status]=(caseStatus[c.status]||0)+1);
-    const deptCases={}; caseRows.filter(c=>!['Closed','Cancelled','Resolved'].includes(c.status)).forEach(c=>{const d=c.department||'Unassigned';deptCases[d]=(deptCases[d]||0)+1;});
+    const deptCases={}; caseRows.filter(c=>!caseIsClosedStatus(c.status)).forEach(c=>{const d=c.department||'Unassigned';deptCases[d]=(deptCases[d]||0)+1;});
     const topCaseDepts=Object.entries(deptCases).sort((a,b)=>b[1]-a[1]).slice(0,8);
     const maxDept=Math.max(...topCaseDepts.map(x=>x[1]),1);
     const reportKpis=[
@@ -7768,7 +7781,7 @@ async function renderReports(){
       </div>
       <div class="report-grid" style="display:grid;grid-template-columns:1.05fr .95fr;gap:16px;margin-bottom:16px;">
         <div class="panel"><div class="dashboard-panel-head"><div><h3>HR Case Status</h3><div class="desc">Cases opened or updated within the selected period.</div></div><button class="btn btn-ghost btn-sm" onclick="go('cases')">Open Cases</button></div>
-          <div class="chart-list">${Object.keys(CASE_STATUS_MAP).map(st=>{const n=caseStatus[st]||0;return `<div class="chart-row"><div class="label">${esc(st)}</div><div class="chart-track"><div class="chart-fill" style="width:${Math.round(n/Math.max(caseRows.length,1)*100)}%"></div></div><div class="chart-count">${n}</div></div>`;}).join('')||'<div class="empty">No cases in this period.</div>'}</div>
+          <div class="chart-list">${caseStatusDisplayKeys(caseStatus).map(st=>{const n=caseStatus[st]||0;return `<div class="chart-row"><div class="label">${esc(st)}</div><div class="chart-track"><div class="chart-fill" style="width:${Math.round(n/Math.max(caseRows.length,1)*100)}%"></div></div><div class="chart-count">${n}</div></div>`;}).join('')||'<div class="empty">No cases in this period.</div>'}</div>
         </div>
         <div class="panel"><div class="dashboard-panel-head"><div><h3>Open Case Load by Department</h3><div class="desc">Current open case distribution from the selected case set.</div></div></div>
           <div class="chart-list">${topCaseDepts.length?topCaseDepts.map(([d,n])=>`<div class="chart-row"><div class="label">${esc(d)}</div><div class="chart-track"><div class="chart-fill alt" style="width:${Math.round(n/maxDept*100)}%"></div></div><div class="chart-count">${n}</div></div>`).join(''):'<div class="empty">No open cases in this period.</div>'}</div>
@@ -8332,12 +8345,24 @@ function openDriveWorkspace(){
    HR CASES (central case tracking + linked HR records)
    ================================================================ */
 const CASE_STATUS_MAP = {
-  'Open':'b-blue','NTE Issued':'b-amber','Memo Issued':'b-amber',
-  'For Decision':'b-blue','Resolved':'b-green','Closed':'b-grey','Cancelled':'b-red'
+  'Reported / Created':'b-blue','Under Triage':'b-amber','Under Investigation':'b-blue',
+  'NTE Preparation':'b-amber','NTE Issued':'b-amber','Awaiting Employee Response':'b-amber',
+  'Response Received':'b-blue','Hearing / Conference':'b-blue','For Findings':'b-blue',
+  'For Decision':'b-blue','Decision Approved':'b-green','NOD Issued':'b-green',
+  'For Implementation':'b-amber','Implemented':'b-green','Closed':'b-grey',
+  'Closed - No Violation':'b-grey','Closed - Insufficient Evidence':'b-grey',
+  'Closed - Informal Resolution':'b-grey','Cancelled':'b-red','Duplicate':'b-grey',
+  'Open':'b-blue','Memo Issued':'b-amber','Resolved':'b-green'
 };
+const CASE_OUTCOMES=['Violation Substantiated','Partially Substantiated','No Violation','Insufficient Evidence','Informal Resolution','Cancelled','Duplicate'];
+function caseIsClosedStatus(status){return isCaseTerminalStage(status)||status==='Resolved';}
+function caseStatusDisplayKeys(counts={}){
+  const keys=Object.keys(CASE_STATUS_MAP).filter(status=>Number(counts[status]||0)>0);
+  return keys.length?keys:['Reported / Created','Under Investigation','For Decision','Closed'];
+}
 const CASE_MODULE_LABELS = {
-  employees:'Employee', leaves:'Leave Record', disciplinary:'Disciplinary Action', nte:'Notice to Explain',
-  memos:'Memorandum of Offense', nod:'Notice of Decision', oncall:'On-Call / Replacement', transfers:'Department Transfer',
+  employees:'Employee', leaves:'Leave Record', disciplinary:'Disciplinary History (Legacy)', nte:'Notice to Explain',
+  memos:'Case Correspondence (Legacy Memorandum)', nod:'Notice of Decision', oncall:'On-Call / Replacement', transfers:'Department Transfer',
   cvr:'CVR / Violation Report', incidents:'Incident Report', offenseCatalog:'TDA Rule', prf:'Legacy PRF / Replacement', manpowerRequests:'Manpower Request', evaluations:'Probationary Evaluation', atd:'ATD Record'
 };
 function caseModuleLabel(module){ return CASE_MODULE_LABELS[module] || module; }
@@ -8380,6 +8405,44 @@ async function syncCaseTdaRule(caseId,rule){
   if(!rule){const {error}=await supabase.from('hr_case_links').delete().eq('case_id',caseId).eq('module','offenseCatalog');if(error)throw error;return;}
   const {error:upsertError}=await supabase.from('hr_case_links').upsert({case_id:caseId,module:'offenseCatalog',record_id:String(rule.catalogId),label:tdaCaseLinkLabel(rule),linked_by:SESSION?.id||null},{onConflict:'case_id,module,record_id'});if(upsertError)throw upsertError;
   const {error:deleteError}=await supabase.from('hr_case_links').delete().eq('case_id',caseId).eq('module','offenseCatalog').neq('record_id',String(rule.catalogId));if(deleteError)throw deleteError;
+}
+function caseStatusOptionsHTML(currentStatus=''){
+  const current=currentStatus||(CASE_DOMAIN_READY===false?'Open':'Reported / Created');
+  return caseStageOptions(current).map(status=>`<option value="${esc(status)}" ${status===current?'selected':''}>${esc(status)}${LEGACY_CASE_STAGES.includes(status)?' (legacy)':''}</option>`).join('');
+}
+async function loadCaseAllegations(caseId){
+  if(!(await ensureCaseDomainReady()))return [];
+  const {data,error}=await supabase.from('hr_case_allegations').select('*').eq('case_id',caseId).order('allegation_number',{ascending:true});
+  if(error)throw error;
+  return data||[];
+}
+function caseAllegationDescriptionFromReport(module,record){
+  if(module==='incidents')return [
+    ...(record?.incidentTypes||[]),record?.otherType,record?.description,record?.details,record?.remarks,
+  ].filter(Boolean).join(' — ')||caseRecordLabel(module,record);
+  if(module==='cvr')return [
+    ...((record?.offenses)||[]),record?.otherOffense,record?.details,record?.remarks,
+  ].filter(Boolean).join(' — ')||caseRecordLabel(module,record);
+  return '';
+}
+async function createCaseAllegationFromReport(caseId,module,record){
+  if(!isCaseReportSource(module)||!record||!(await ensureCaseDomainReady()))return null;
+  const {data:existing,error:existingError}=await supabase.from('hr_case_allegations').select('id').eq('case_id',caseId).eq('source_module',module).eq('source_record_id',String(record.id)).maybeSingle();
+  if(existingError)throw existingError;
+  if(existing)return existing;
+  const {data:last,error:lastError}=await supabase.from('hr_case_allegations').select('allegation_number').eq('case_id',caseId).order('allegation_number',{ascending:false}).limit(1).maybeSingle();
+  if(lastError)throw lastError;
+  const snapshot=record.tdaRule||(record.tdaRules||[])[0]||null;
+  const {data,error}=await supabase.from('hr_case_allegations').insert({
+    case_id:caseId,allegation_number:Number(last?.allegation_number||0)+1,
+    description:caseAllegationDescriptionFromReport(module,record),incident_date:caseRecordDate(module,record)||null,
+    source_module:module,source_record_id:String(record.id),tda_rule_id:snapshot?.catalogId?String(snapshot.catalogId):null,
+    tda_snapshot:snapshot||null,potential_occurrence:null,
+    created_by:SESSION?.id||null,updated_by:SESSION?.id||null,
+  }).select('*').single();
+  if(error)throw error;
+  await addCaseActivity(caseId,'allegation',`Allegation ${data.allegation_number} created from ${caseModuleLabel(module)}.`);
+  return data;
 }
 
 async function openRecordCaseDialog(module,recordId){
@@ -8425,16 +8488,20 @@ async function createCaseFromRecord(module,recordId){
   const openedAt=caseRecordDate(module,rec)||todayISO();
   const subject=caseRecordLabel(module,rec);
   try{
+    const caseDomainReady=await ensureCaseDomainReady();
     const caseNumber=await nextCaseNumber();
-    const {data,error}=await supabase.from('hr_cases').insert({
-      case_number:caseNumber,employee_record_id:emp?.id||null,employee_name:employeeName||'Unassigned',department,subject,status:'Open',
+    const payload={
+      case_number:caseNumber,employee_record_id:emp?.id||null,employee_name:employeeName||'Unassigned',department,subject,status:caseDomainReady?'Reported / Created':'Open',
       opened_at:openedAt,assigned_to:SESSION?.id||null,created_by:SESSION?.id||null,updated_by:SESSION?.id||null
-    }).select('id').single();
+    };
+    if(caseDomainReady)payload.case_type='Employee Relations';
+    const {data,error}=await supabase.from('hr_cases').insert(payload).select('id').single();
     if(error) throw error;
     const {error:linkError}=await supabase.from('hr_case_links').insert({case_id:data.id,module,record_id:String(recordId),label:subject,linked_by:SESSION?.id||null});
     if(linkError){await supabase.from('hr_cases').delete().eq('id',data.id);throw linkError;}
     const inheritedRule=rec.tdaRule||(rec.tdaRules||[])[0]||null;
     if(inheritedRule){await syncCaseTdaRule(data.id,inheritedRule);await addCaseActivity(data.id,'policy',`TDA rule applied: ${tdaCaseLinkLabel(inheritedRule)}.`);}
+    if(isCaseReportSource(module))await createCaseAllegationFromReport(data.id,module,rec);
     logAudit(`Created HR case ${caseNumber} from ${caseModuleLabel(module)}`);
     toast(`HR case ${caseNumber} created and linked.`);
     await openCaseDetails(data.id);
@@ -8449,6 +8516,9 @@ async function linkRecordToExistingCase(module,recordId){
   const label=caseRecordLabel(module,rec);
   const {error}=await supabase.from('hr_case_links').insert({case_id:caseId,module,record_id:String(recordId),label,linked_by:SESSION?.id||null});
   if(error){toast(error.code==='23505'?'That record is already linked to this case.':'Could not link record: '+error.message,true);return;}
+  if(isCaseReportSource(module)){
+    try{await createCaseAllegationFromReport(caseId,module,rec);}catch(allegationError){console.warn('Could not create a case allegation from the linked report',allegationError);}
+  }
   logAudit(`Linked ${caseModuleLabel(module)} to existing HR case`);
   toast('Record linked to HR case.');
   await openCaseDetails(caseId);
@@ -8468,7 +8538,7 @@ function casePriorityBadge(priority){
   return `<span class="case-priority ${cls}"><span class="dot"></span>${esc(p)}</span>`;
 }
 function caseDeadlineInfo(dueDate,status){
-  if(!dueDate || ['Closed','Cancelled','Resolved'].includes(status)) return {label:'No deadline',cls:''};
+  if(!dueDate || isCaseTerminalStage(status) || status==='Resolved') return {label:'No deadline',cls:''};
   const today=new Date(todayISO()+'T00:00:00');
   const due=new Date(dueDate+'T00:00:00');
   const days=Math.ceil((due-today)/86400000);
@@ -8478,33 +8548,74 @@ function caseDeadlineInfo(dueDate,status){
   return {label:`Due in ${days}d`,cls:'ok'};
 }
 function caseWorkflowSteps(status){
-  const steps=['Open','NTE Issued','Memo Issued','For Decision','Resolved','Closed'];
-  const idx=Math.max(0,steps.indexOf(status));
-  return `<div class="case-progress">${steps.map((st,i)=>`<div class="case-progress-step ${i<=idx?'active':''} ${i===idx?'current':''}"><div class="dot"></div><div class="label">${esc(st)}</div></div>`).join('')}</div>`;
+  const legacyStage={Open:'Reported / Created','Memo Issued':'For Findings',Resolved:'Implemented'}[status];
+  const normalized=legacyStage||status;
+  const terminal=!CASE_WORKFLOW_STAGES.includes(normalized)&&isCaseTerminalStage(normalized);
+  const idx=terminal?CASE_WORKFLOW_STAGES.length-1:Math.max(0,CASE_WORKFLOW_STAGES.indexOf(normalized));
+  return `<div class="case-progress" aria-label="Case workflow progress">${CASE_WORKFLOW_STAGES.map((stage,i)=>`<div class="case-progress-step ${i<=idx?'active':''} ${i===idx?'current':''}" ${i===idx?'aria-current="step"':''}><div class="dot"></div><div class="label" title="${esc(stage)}">${esc(stage)}</div></div>`).join('')}</div>`;
 }
-function caseDueProcessHTML(links=[]){
+function caseDueProcessHTML(links=[],allegations=[]){
   const records=links.map(link=>({link,record:(DB[link.module]||[]).find(row=>String(row.id)===String(link.record_id))}));
-  const hasSource=records.some(({link})=>['incidents','cvr','disciplinary'].includes(link.module));
-  const hasPolicy=records.some(({link})=>link.module==='offenseCatalog');
+  const hasSource=allegations.length>0||records.some(({link})=>isCaseReportSource(link.module));
+  const hasPolicy=allegations.some(item=>item.tda_rule_id)||records.some(({link})=>link.module==='offenseCatalog');
   const notices=records.filter(({link})=>link.module==='nte');
   const hasNotice=notices.length>0;
   const hasResponse=notices.some(({record})=>String(record?.explanation||'').trim());
+  const hasFindings=allegations.length>0&&allegations.every(item=>item.finding&&item.finding!=='Pending');
   const hasDecision=records.some(({link})=>link.module==='nod');
   const steps=[
-    ['Allegation / evidence',hasSource,'Link an incident, CVR, or disciplinary source record.'],
-    ['Governing TDA policy',hasPolicy,'Select the applicable catalog rule and occurrence.'],
+    ['Report / allegation',hasSource,'Link an Incident or CVR, or record an allegation.'],
+    ['Governing TDA policy',hasPolicy,'Select the applicable catalog rule when policy applies.'],
     ['First notice / NTE',hasNotice,'Issue and link a Notice to Explain.'],
     ['Employee response',hasResponse,'Record the employee explanation or hearing notes.'],
+    ['Findings',hasFindings,'Record a finding for each allegation.'],
     ['Decision notice',hasDecision,'Issue and link the final Notice of Decision.'],
   ];
   return `<section class="case-due-process"><div class="case-due-process-head"><div><span class="eyebrow">Process readiness</span><h4>Employee relations due-process check</h4><p>Operational guidance only; HR remains responsible for evaluating evidence and legal requirements.</p></div><b>${steps.filter(step=>step[1]).length}/${steps.length}</b></div><div class="case-due-process-list">${steps.map(([label,done,hint])=>`<div class="${done?'done':''}"><span>${done?iCheck(13):iMore(13)}</span><div><b>${esc(label)}</b><small>${done?'Recorded in this case':esc(hint)}</small></div></div>`).join('')}</div></section>`;
 }
+function caseTransitionContext(caseRecord,links=[],allegations=[],overrides={}){
+  const linked=links.map(link=>({link,record:(DB[link.module]||[]).find(row=>String(row.id)===String(link.record_id))}));
+  const nte=linked.filter(item=>item.link.module==='nte');
+  const nod=linked.filter(item=>item.link.module==='nod');
+  const hasResponse=nte.some(item=>String(item.record?.explanation||'').trim()||item.record?.responseOutcome==='No Response');
+  const findings=allegations.filter(item=>item.finding&&item.finding!=='Pending');
+  return {
+    employeeIdentified:Boolean(caseRecord?.employee_record_id||caseRecord?.employee_name),
+    hasSourceReport:linked.some(item=>isCaseReportSource(item.link.module)),
+    hasSummary:Boolean(String(overrides.subject??caseRecord?.subject??'').trim()||allegations.some(item=>String(item.description||'').trim())),
+    hasAllegation:allegations.length>0,
+    hasAssignee:Boolean(overrides.assignedTo??caseRecord?.assigned_to),
+    hasNte:nte.length>0,
+    hasNteIssueDate:nte.some(item=>item.record?.dateIssued),
+    hasResponse,
+    responseOpportunityHandled:hasResponse,
+    hasPreparedFindings:findings.length>0,
+    hasFinalFindings:allegations.length>0&&findings.length===allegations.length,
+    hasApprovedDecision:false,
+    hasDecisionNotice:nod.some(item=>item.record?.dateOfNod),
+    requiresImplementation:false,
+    hasImplementation:false,
+    hasOutcome:Boolean(overrides.outcome??caseRecord?.outcome),
+    hasClosureDate:Boolean(overrides.closedAt??caseRecord?.closed_at),
+    hasOpenImplementationTasks:false,
+  };
+}
+async function validateCaseStageChange(caseRecord,nextStatus,overrides={}){
+  if(!caseRecord||caseRecord.status===nextStatus)return {valid:true,missing:[]};
+  if(!canTransitionCase(caseRecord.status,nextStatus))return {valid:false,missing:[`an allowed transition from ${caseRecord.status} to ${nextStatus}`]};
+  const [{data:links,error:linkError},allegations]=await Promise.all([
+    supabase.from('hr_case_links').select('module,record_id').eq('case_id',caseRecord.id),
+    loadCaseAllegations(caseRecord.id),
+  ]);
+  if(linkError)throw linkError;
+  return caseTransitionValidation(nextStatus,caseTransitionContext(caseRecord,links||[],allegations,overrides));
+}
 function caseActivityLabel(a){
-  const labels={created:'Case Created',updated:'Case Updated',status:'Status Changed',linked:'Record Linked',unlinked:'Record Unlinked',note:'Case Note',deadline:'Deadline Updated',assignment:'Assignment Updated',priority:'Priority Updated',policy:'TDA Policy Updated'};
+  const labels={created:'Case Created',updated:'Case Updated',status:'Status Changed',linked:'Record Linked',unlinked:'Record Unlinked',note:'Case Note',deadline:'Deadline Updated',assignment:'Assignment Updated',priority:'Priority Updated',policy:'TDA Policy Updated',allegation:'Allegation Updated',finding:'Finding Recorded'};
   return labels[a.activity_type] || a.activity_type || 'Case Activity';
 }
 function caseActivityIcon(a){
-  const m={created:iPlus(12),updated:iEdit(12),status:iShield(12),linked:iDoc(12),unlinked:iTrash(12),note:iDoc(12),deadline:iCal(12),assignment:iUser(12),priority:iShield(12),policy:iShield(12)};
+  const m={created:iPlus(12),updated:iEdit(12),status:iShield(12),linked:iDoc(12),unlinked:iTrash(12),note:iDoc(12),deadline:iCal(12),assignment:iUser(12),priority:iShield(12),policy:iShield(12),allegation:iShield(12),finding:iCheck(12)};
   return m[a.activity_type] || iDoc(12);
 }
 async function addCaseActivity(caseId,activityType,note='',statusFrom=null,statusTo=null,dueDate=null){
@@ -8531,14 +8642,17 @@ async function renderCases(){
   const {data:cases,error}=await query;
   if(error){ document.getElementById('content').innerHTML=`<div class="notice"><b>Could not load HR cases.</b> ${esc(error.message)}</div>`; return; }
   const rows=(cases||[]).filter(c=>!q || [c.case_number,c.employee_name,c.department,c.subject,c.status,c.priority].some(v=>String(v||'').toLowerCase().includes(q)));
+  const casePage=paginateRows(rows,STATE,'cases:list',10);
   document.getElementById('content').innerHTML=`
     <div class="sectionhead"><div><h2>HR Cases</h2><p>${rows.length} case${rows.length===1?'':'s'} shown${STATE.filter?' · filtered by status':''}.</p></div></div>
     <div class="toolbar record-directory-toolbar"><div class="search">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search case number, employee, subject…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderCases)"></div><select onchange="STATE.filter=this.value;STATE.tablePages={};renderCases()"><option value="">All Statuses</option>${Object.keys(CASE_STATUS_MAP).map(x=>`<option value="${esc(x)}" ${STATE.filter===x?'selected':''}>${esc(x)}</option>`).join('')}</select>${STATE.search||STATE.filter?`<button class="btn btn-ghost btn-sm" onclick="STATE.search='';STATE.filter='';STATE.tablePages={};renderCases()">Clear</button>`:''}<div class="spacer"></div>${informationNoteButton('caseFiles')}${canEdit()?`<button class="btn btn-primary btn-sm" onclick="openCaseForm()">${iPlus(15)} New HR Case</button>`:''}</div>
-    <div class="tablewrap"><table class="data-table"><thead><tr><th>Case No.</th><th>Employee</th><th>Priority</th><th>Status</th><th>Due</th><th>Assigned To</th><th style="text-align:right;">Actions</th></tr></thead>
-    <tbody>${rows.length?rows.map(c=>{const ass=DB.users.find(u=>u.id===c.assigned_to);const dl=caseDeadlineInfo(c.due_date,c.status); return `<tr><td><b class="mono">${esc(c.case_number)}</b><div class="small">${esc(c.subject||'HR Case')}</div></td><td><b>${esc(c.employee_name)}</b><div class="small">${esc(c.department||'Unassigned')}</div></td><td>${casePriorityBadge(c.priority)}</td><td>${statusBadge(c.status,CASE_STATUS_MAP)}</td><td><span class="case-deadline ${dl.cls}">${dl.label}</span><div class="small">${c.due_date?fmtDate(c.due_date):'No date'}</div></td><td>${esc(ass?.fullName||'Unassigned')}</td><td><div class="rowactions"><button class="iconbtn" title="Open case" onclick="openCaseDetails('${c.id}')">${iDoc(14)}</button>${canEdit()?`<button class="iconbtn" title="Edit case" onclick="openCaseForm('${c.id}')">${iEdit(14)}</button><button class="iconbtn" title="Delete case" onclick="deleteCase('${c.id}')">${iTrash(14)}</button>`:''}</div></td></tr>`;}).join(''):`<tr><td colspan="8"><div class="empty"><b>No HR cases yet</b>${canEdit()?'Create your first case to begin linking HR records.':'No cases are available for viewing.'}</div></td></tr>`}</tbody></table></div>`;
+    <div class="table-card"><div class="table-card-head"><div class="table-meta"><b>${rows.length}</b> case${rows.length===1?'':'s'} <span class="table-meta-muted">${STATE.filter?'in the selected stage':'in the current result'}</span></div></div><div class="tablewrap"><table class="data-table" data-page-scope="cases:list" data-page-handler="tablePageSize"><thead><tr><th>Case No.</th><th>Employee</th><th>Priority</th><th>Status</th><th>Due</th><th>Assigned To</th><th class="actions-head">Actions</th></tr></thead>
+    <tbody>${casePage.rows.length?casePage.rows.map(c=>{const ass=DB.users.find(u=>u.id===c.assigned_to);const dl=caseDeadlineInfo(c.due_date,c.status); return `<tr><td><b class="mono">${esc(c.case_number)}</b><div class="small">${esc(c.subject||'HR Case')}</div></td><td><b>${esc(c.employee_name)}</b><div class="small">${esc(c.department||'Unassigned')}</div></td><td>${casePriorityBadge(c.priority)}</td><td>${statusBadge(c.status,CASE_STATUS_MAP)}</td><td><span class="case-deadline ${dl.cls}">${dl.label}</span><div class="small">${c.due_date?fmtDate(c.due_date):'No date'}</div></td><td>${esc(ass?.fullName||'Unassigned')}</td><td><div class="rowactions"><button class="iconbtn" title="Open case" onclick="openCaseDetails('${c.id}')">${iDoc(14)}</button>${canEdit()?`<button class="iconbtn" title="Edit case" onclick="openCaseForm('${c.id}')">${iEdit(14)}</button><button class="iconbtn" title="Delete case" onclick="deleteCase('${c.id}')">${iTrash(14)}</button>`:''}</div></td></tr>`;}).join(''):`<tr><td colspan="7"><div class="empty"><b>No HR cases yet</b>${canEdit()?'Create your first case to begin linking HR records.':'No cases are available for viewing.'}</div></td></tr>`}</tbody></table></div>${rows.length?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${casePage.meta.start}–${casePage.meta.end} <span>of ${rows.length} cases</span></div>${paginationHTML(casePage.meta,'cases:list',{go:'tablePageGo',size:'tablePageSize'})}</div>`:''}</div>`;
+  requestAnimationFrame(()=>enhanceDataTables());
 }
-function openCaseForm(id,employeeId=''){
+async function openCaseForm(id,employeeId=''){
   if(SESSION?.role==='Viewer'){ toast('Viewer accounts have read-only access.',true); return; }
+  await ensureCaseDomainReady();
   if(!id){
     const employee=employeeId?DB.employees.find(row=>String(row.id)===String(employeeId)):null;
     openCaseFormMarkup(null,employee||null);
@@ -8562,7 +8676,8 @@ function openCaseFormMarkup(existing,lockedEmployee=null){
   const assigned=DB.users.filter(u=>u.role==='Administrator'||u.role==='HR Staff');
   const title=existing?'Edit HR Case':'New HR Case';
   const lockedTrail=lockedEmployee?`<div class="modal-context-breadcrumb" aria-label="Current location"><span>Employee Information</span><span aria-hidden="true">›</span><span>${esc(employeeDisplayName(lockedEmployee))}</span><span aria-hidden="true">›</span><b>${esc(title)}</b></div>`:'';
-  const overview=`<div class="formgrid">${lockedEmployee?caseEmployeeContextHTML(lockedEmployee):employeePickerHTML({id:'case_employee',label:'Employee',selectedId:existing?.employee_record_id||'',required:true,full:true,autofill:false,onSelect:'refreshCaseTdaRules'})}<input type="hidden" id="case_department" value="${esc(existing?.department||lockedEmployee?.department||'')}"><div class="field"><label>Case Number</label><input value="${esc(existing?.case_number||'Generated on save')}" disabled></div><div class="field"><label>Status</label><select id="case_status">${Object.keys(CASE_STATUS_MAP).map(x=>`<option ${existing?.status===x||(!existing&&x==='Open')?'selected':''}>${esc(x)}</option>`).join('')}</select></div><div class="field"><label>Priority</label><select id="case_priority">${['Low','Normal','High','Urgent'].map(x=>`<option ${existing?.priority===x||(!existing&&x==='Normal')?'selected':''}>${esc(x)}</option>`).join('')}</select></div><div class="field"><label>Opened Date *</label><input type="date" id="case_opened" value="${esc(existing?.opened_at||todayISO())}"></div><div class="field"><label>Due Date</label><input type="date" id="case_due" value="${esc(existing?.due_date||'')}"></div><div class="field"><label>Closed Date</label><input type="date" id="case_closed" value="${esc(existing?.closed_at||'')}"></div><div class="field full"><label>Assigned To</label><select id="case_assigned"><option value="">Unassigned</option>${assigned.map(u=>`<option value="${esc(u.id)}" ${existing?.assigned_to===u.id?'selected':''}>${esc(u.fullName)} · ${esc(u.role)}</option>`).join('')}</select></div></div><div class="computed-note">Case numbers are generated sequentially per calendar year. Priority and due date drive the Action Center and deadline indicators.</div>`;
+  const defaultStatus=existing?.status||(CASE_DOMAIN_READY===false?'Open':'Reported / Created');
+  const overview=`<div class="formgrid">${lockedEmployee?caseEmployeeContextHTML(lockedEmployee):employeePickerHTML({id:'case_employee',label:'Employee',selectedId:existing?.employee_record_id||'',required:true,full:true,autofill:false,onSelect:'refreshCaseTdaRules'})}<input type="hidden" id="case_department" value="${esc(existing?.department||lockedEmployee?.department||'')}"><div class="field"><label>Case Number</label><input value="${esc(existing?.case_number||'Generated on save')}" disabled></div><div class="field"><label>Case Type</label><input id="case_type" value="${esc(existing?.case_type||'Employee Relations')}" maxlength="100"></div><div class="field"><label>Current Stage</label><select id="case_status">${caseStatusOptionsHTML(defaultStatus)}</select></div><div class="field"><label>Priority</label><select id="case_priority">${['Low','Normal','High','Urgent'].map(x=>`<option ${existing?.priority===x||(!existing&&x==='Normal')?'selected':''}>${esc(x)}</option>`).join('')}</select></div><div class="field"><label>Opened Date *</label><input type="date" id="case_opened" value="${esc(existing?.opened_at||todayISO())}"></div><div class="field"><label>Due Date</label><input type="date" id="case_due" value="${esc(existing?.due_date||'')}"></div><div class="field"><label>Closed Date</label><input type="date" id="case_closed" value="${esc(existing?.closed_at||'')}"></div><div class="field"><label>Case Outcome</label><select id="case_outcome"><option value="">Not yet determined</option>${CASE_OUTCOMES.map(value=>`<option value="${esc(value)}" ${existing?.outcome===value?'selected':''}>${esc(value)}</option>`).join('')}</select></div><div class="field full"><label>Assigned To</label><select id="case_assigned"><option value="">Unassigned</option>${assigned.map(u=>`<option value="${esc(u.id)}" ${existing?.assigned_to===u.id?'selected':''}>${esc(u.fullName)} · ${esc(u.role)}</option>`).join('')}</select></div></div><div class="computed-note">Only valid next stages are shown. Advancing a case is checked against its reports, allegations, notices, findings, decision, and closure requirements.</div>${CASE_DOMAIN_READY===false?'<div class="notice warning"><b>Legacy case mode:</b> Run the Phase 23 Employee Relations migration to enable controlled stages and allegations.</div>':''}`;
   const policy=`<div class="formgrid"><div class="field full"><label>Subject / Matter</label><input id="case_subject" value="${esc(existing?.subject||'')}" placeholder="e.g. Attendance violation — repeated unauthorized absence"></div>${tdaRuleSelectorHTML('case','cases',existing?.tdaRule||null,lockedEmployee||DB.employees.find(employee=>String(employee.id)===String(existing?.employee_record_id||'')),existing?.department||lockedEmployee?.department||'',existing?.id||'')}</div>`;
   const evidence=`<div class="formgrid">${fieldHTML({key:'caseAttachment',label:'Primary Case File / Supporting Document',type:'file',full:true,storagePrefix:'cases',existingData:existing?.attachment_ref||''},existing?.attachment_name||'')}<div class="field full"><label>Remarks</label><textarea id="case_remarks" rows="5" placeholder="Case notes, context, or internal remarks…">${esc(existing?.remarks||'')}</textarea></div></div>`;
   openModal(`<div class="modal-head"><div class="modal-head-copy">${lockedTrail}<h3>${esc(title)}</h3><div class="small">Record the case details and supporting document in one workspace.</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body" data-employee-relations-modal>${modalFormTabsHTML('case_form_tabs',[{id:'overview',label:'Overview',content:overview},{id:'policy',label:'Matter & Policy',content:policy},{id:'evidence',label:'Evidence & Notes',content:evidence}])}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveCase('${existing?.id||''}')">Save Case</button></div>`);
@@ -8573,20 +8688,30 @@ async function saveCase(id){
   const employee=employeePickerSelected('case_employee')||DB.employees.find(row=>String(row.id)===String(lockedEmployeeId));
   const employeeRecordId=employee?.id||''; const employeeName=employee?.name||''; const department=employee?.department||'';
   const status=document.getElementById('case_status').value; const priority=document.getElementById('case_priority').value;
+  const caseType=(document.getElementById('case_type')?.value||'Employee Relations').trim();
   const openedAt=document.getElementById('case_opened').value; const dueDate=document.getElementById('case_due').value||null; const closedAt=document.getElementById('case_closed').value||null;
+  const terminalOutcome={'Closed - No Violation':'No Violation','Closed - Insufficient Evidence':'Insufficient Evidence','Closed - Informal Resolution':'Informal Resolution',Cancelled:'Cancelled',Duplicate:'Duplicate'}[status];
+  const outcome=terminalOutcome||(document.getElementById('case_outcome')?.value||null);
   const subject=document.getElementById('case_subject').value.trim(); const remarks=document.getElementById('case_remarks').value.trim(); const assignedTo=document.getElementById('case_assigned').value||null;
   const attachmentName=document.getElementById('f_caseAttachment')?.value||''; const attachmentRef=document.getElementById('f_caseAttachment_data')?.value||'';
   const tdaRule=readTdaRuleSelection('case');if(tdaRule===false)return;
   if(!employeeRecordId||!employeeName||!openedAt){switchModalFormTab('case_form_tabs','overview');toast('Please select an employee and opened date.',true);return;}
   if(dueDate&&dueDate<openedAt){switchModalFormTab('case_form_tabs','overview');toast('Due date cannot be before the opened date.',true);return;}
   if(closedAt&&closedAt<openedAt){switchModalFormTab('case_form_tabs','overview');toast('Closed date cannot be before the opened date.',true);return;}
-  if(status==='Closed'&&!closedAt){switchModalFormTab('case_form_tabs','overview');toast('Please enter the closed date for a Closed case.',true);return;}
-  if(dueDate&&closedAt&&closedAt<dueDate&&status!=='Closed'){switchModalFormTab('case_form_tabs','overview');toast('An open case cannot have a closed date earlier than its due date.',true);return;}
+  if((status==='Closed'||status.startsWith('Closed - '))&&!closedAt){switchModalFormTab('case_form_tabs','overview');toast('Please enter the closure date for this case outcome.',true);return;}
+  if(dueDate&&closedAt&&closedAt<dueDate&&!caseIsClosedStatus(status)){switchModalFormTab('case_form_tabs','overview');toast('An open case cannot have a closed date earlier than its due date.',true);return;}
   try{
+    const caseDomainReady=await ensureCaseDomainReady();
+    const payload={employee_record_id:employeeRecordId,employee_name:employeeName,department,subject,status,opened_at:openedAt,closed_at:closedAt,assigned_to:assignedTo,priority,due_date:dueDate,updated_by:SESSION?.id||null,remarks,attachment_name:attachmentName||null,attachment_ref:attachmentRef||null};
+    if(caseDomainReady){payload.case_type=caseType||'Employee Relations';payload.outcome=outcome;}
     if(id){
       const beforeRule=await loadCaseTdaRule(id);
-      const {data:before,error:beforeError}=await supabase.from('hr_cases').select('status,priority,due_date,assigned_to,remarks,attachment_ref').eq('id',id).maybeSingle(); if(beforeError) throw beforeError;
-      const {error}=await supabase.from('hr_cases').update({employee_record_id:employeeRecordId,employee_name:employeeName,department,subject,status,opened_at:openedAt,closed_at:closedAt,assigned_to:assignedTo,priority,due_date:dueDate,updated_by:SESSION?.id||null,remarks,attachment_name:attachmentName||null,attachment_ref:attachmentRef||null}).eq('id',id); if(error) throw error;
+      const {data:before,error:beforeError}=await supabase.from('hr_cases').select('*').eq('id',id).maybeSingle(); if(beforeError) throw beforeError;
+      if(caseDomainReady&&before?.status!==status){
+        const transition=await validateCaseStageChange(before,status,{subject,assignedTo,outcome,closedAt});
+        if(!transition.valid){switchModalFormTab('case_form_tabs','overview');toast(`Cannot move this case to ${status}. Required: ${transition.missing.join('; ')}.`,true);return;}
+      }
+      const {error}=await supabase.from('hr_cases').update(payload).eq('id',id); if(error) throw error;
       await syncCaseTdaRule(id,tdaRule);
       if(tdaCaseLinkLabel(beforeRule)!==tdaCaseLinkLabel(tdaRule))await addCaseActivity(id,'policy',tdaRule?`TDA rule updated: ${tdaCaseLinkLabel(tdaRule)}.`:'Governing TDA rule removed from the case.');
       if(before?.status!==status) await addCaseActivity(id,'status',`Status changed from ${before?.status||'—'} to ${status}.`,before?.status||null,status,dueDate);
@@ -8601,8 +8726,14 @@ async function saveCase(id){
       if(!returned){await closeModal(attachmentRef?[attachmentRef]:[]);await renderCases();}
       toast('HR case updated.');
     }else{
+      const initialStatus=caseDomainReady?'Reported / Created':'Open';
+      if(caseDomainReady&&status!==initialStatus){
+        if(!canTransitionCase(initialStatus,status)){switchModalFormTab('case_form_tabs','overview');toast(`A new case cannot start at ${status}.`,true);return;}
+        const transition=caseTransitionValidation(status,caseTransitionContext({...payload,status:initialStatus},[],[],{subject,assignedTo,outcome,closedAt}));
+        if(!transition.valid){switchModalFormTab('case_form_tabs','overview');toast(`Cannot start this case at ${status}. Required: ${transition.missing.join('; ')}.`,true);return;}
+      }
       const caseNumber=await nextCaseNumber();
-      const {data,error}=await supabase.from('hr_cases').insert({case_number:caseNumber,employee_record_id:employeeRecordId,employee_name:employeeName,department,subject,status,opened_at:openedAt,closed_at:closedAt,assigned_to:assignedTo,priority,due_date:dueDate,created_by:SESSION?.id||null,updated_by:SESSION?.id||null,remarks,attachment_name:attachmentName||null,attachment_ref:attachmentRef||null}).select('id').single(); if(error) throw error;
+      const {data,error}=await supabase.from('hr_cases').insert({...payload,case_number:caseNumber,created_by:SESSION?.id||null}).select('id').single(); if(error) throw error;
       await syncCaseTdaRule(data.id,tdaRule);
       await addCaseActivity(data.id,'created',`Case created for ${employeeName}.`,null,status,dueDate);
       if(tdaRule)await addCaseActivity(data.id,'policy',`TDA rule applied: ${tdaCaseLinkLabel(tdaRule)}.`);
@@ -8621,40 +8752,92 @@ async function saveCase(id){
   }
 }
 async function openCaseDetails(id){
-  const [{data:caseRec,error:caseError},{data:links,error:linkError},{data:activity,error:activityError}]=await Promise.all([
+  const caseDomainReady=await ensureCaseDomainReady();
+  const [{data:caseRec,error:caseError},{data:links,error:linkError},{data:activity,error:activityError},{data:allegations,error:allegationError}]=await Promise.all([
     supabase.from('hr_cases').select('*').eq('id',id).maybeSingle(),
     supabase.from('hr_case_links').select('case_id,module,record_id,label,linked_at').eq('case_id',id).order('linked_at',{ascending:true}),
-    supabase.from('hr_case_activity').select('*').eq('case_id',id).order('created_at',{ascending:false})
+    supabase.from('hr_case_activity').select('*').eq('case_id',id).order('created_at',{ascending:false}),
+    caseDomainReady?supabase.from('hr_case_allegations').select('*').eq('case_id',id).order('allegation_number',{ascending:true}):Promise.resolve({data:[],error:null}),
   ]);
   if(caseError||!caseRec){toast('Could not load case details.',true);return;}
   if(linkError){toast('Could not load linked records: '+linkError.message,true);return;}
   if(activityError){toast('Could not load case activity. Please run the Phase 9 SQL first: '+activityError.message,true);return;}
+  if(allegationError){toast('Could not load case allegations: '+allegationError.message,true);return;}
   const assigned=DB.users.find(u=>u.id===caseRec.assigned_to);
   const deadline=caseDeadlineInfo(caseRec.due_date,caseRec.status);
   const age=analyticsDaysOpen(caseRec.opened_at,caseRec.closed_at);
   const linkRows=(links||[]).map((ln,i)=>{const rec=(DB[ln.module]||[]).find(r=>String(r.id)===String(ln.record_id));const label=ln.label||caseRecordLabel(ln.module,rec);const date=caseRecordDate(ln.module,rec);return `<div class="case-link"><div class="stage">${i+1}</div><div class="body"><div class="title">${esc(caseModuleLabel(ln.module))}</div><div class="meta">${esc(label)}${date?' · '+esc(fmtDate(date)):''} · Linked ${new Date(ln.linked_at).toLocaleString()}</div></div><div class="actions">${canEdit()?`<button class="iconbtn" title="Remove link" onclick="unlinkCaseRecord('${id}','${esc(ln.module)}','${esc(ln.record_id)}')">${iTrash(13)}</button>`:''}</div></div>`;}).join('');
   const activityRows=(activity||[]).map(a=>{const actor=DB.users.find(u=>u.id===a.created_by); return `<div class="case-activity-item"><div class="case-activity-dot">${caseActivityIcon(a)}</div><div class="case-activity-body"><div class="case-activity-head"><div><div class="case-activity-title">${esc(caseActivityLabel(a))}</div><div class="case-activity-meta">${esc(actor?.fullName||'System')} · ${new Date(a.created_at).toLocaleString()}</div></div>${a.status_to?statusBadge(a.status_to,CASE_STATUS_MAP):''}</div>${a.note?`<div class="case-activity-note">${esc(a.note)}</div>`:''}</div></div>`;}).join('');
-  const currentStep=['Open','NTE Issued','Memo Issued','For Decision','Resolved','Closed'].includes(caseRec.status)?caseRec.status:'Open';
+  const currentStep=caseRec.status||'Reported / Created';
   const governingRule=tdaRuleFromCaseLink((links||[]).find(link=>link.module==='offenseCatalog'));
   const governingRuleHTML=governingRule?`<section class="case-tda-policy"><div><span class="eyebrow">Governing TDA rule</span><h4>${esc(governingRule.offense)}</h4><p>${esc(governingRule.tdaType)}${governingRule.offenseNumber?' · '+esc(governingRule.offenseNumber):''} · ${esc(governingRule.category||'Unclassified')}</p></div><div><span>${esc(governingRule.offenseLevel)} offense</span><b>${esc(governingRule.recommendedConsequence)}</b><small>Policy recommendation captured for this case</small></div></section>`:'';
   const caseFile=caseRec.attachment_ref?`<button type="button" class="btn btn-ghost btn-sm" onclick="downloadAttachment('${esc(caseRec.attachment_ref)}','${esc(caseRec.attachment_name||'HR Case File').replace(/'/g,"\\'")}')">${iDownload(13)} ${esc(caseRec.attachment_name||'Open case file')}</button>`:'<span class="small">No primary case file uploaded.</span>';
+  const allegationRows=(allegations||[]).map(item=>{const source=item.source_module?`${caseModuleLabel(item.source_module)} · ${item.source_record_id}`:'Direct case allegation';const finding=item.finding||'Pending';return `<article class="case-allegation"><div class="case-allegation-number">${item.allegation_number}</div><div class="case-allegation-body"><div class="case-allegation-head"><b>Allegation ${item.allegation_number}</b>${statusBadge(finding,{Pending:'b-amber',Substantiated:'b-green','Partially Substantiated':'b-blue',Unsubstantiated:'b-grey',Unfounded:'b-grey','Not a Policy Violation':'b-grey',Withdrawn:'b-grey'})}</div><p>${esc(item.description)}</p><div class="case-allegation-meta"><span>${esc(source)}</span>${item.incident_date?`<span>${fmtDate(item.incident_date)}</span>`:''}${item.tda_snapshot?.offense?`<span>${esc(item.tda_snapshot.offense)}</span>`:''}${item.potential_occurrence?`<span>Potential occurrence ${item.potential_occurrence}</span>`:''}</div>${item.finding_reason?`<div class="small">Finding basis: ${esc(item.finding_reason)}</div>`:''}</div>${canEdit()?`<div class="case-allegation-actions"><button class="iconbtn" title="Edit allegation" onclick="openCaseAllegationForm('${id}','${item.id}')">${iEdit(14)}</button>${hasPermission('employee_relations.delete')?`<button class="iconbtn" title="Delete allegation" onclick="deleteCaseAllegation('${id}','${item.id}')">${iTrash(14)}</button>`:''}</div>`:''}</article>`;}).join('');
   openModal(`<div class="modal-head"><div><h3>${esc(caseRec.case_number)}</h3><div class="small">${esc(caseRec.subject||'HR Case File')}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body" data-employee-relations-modal>
-    <div class="case-summary"><div class="mini"><div class="k">Employee</div><div class="v">${esc(caseRec.employee_name)}</div></div><div class="mini"><div class="k">Department</div><div class="v">${esc(caseRec.department||'—')}</div></div><div class="mini"><div class="k">Status</div><div class="v">${statusBadge(caseRec.status,CASE_STATUS_MAP)}</div></div><div class="mini"><div class="k">Assigned To</div><div class="v">${esc(assigned?.fullName||'Unassigned')}</div></div></div>
+    <div class="case-summary"><div class="mini"><div class="k">Employee</div><div class="v">${esc(caseRec.employee_name)}</div></div><div class="mini"><div class="k">Department</div><div class="v">${esc(caseRec.department||'—')}</div></div><div class="mini"><div class="k">Current Stage</div><div class="v">${statusBadge(caseRec.status,CASE_STATUS_MAP)}</div></div><div class="mini"><div class="k">Assigned To</div><div class="v">${esc(assigned?.fullName||'Unassigned')}</div></div></div>
     ${governingRuleHTML}
     ${caseWorkflowSteps(currentStep)}
-    ${caseDueProcessHTML(links||[])}
+    ${caseDueProcessHTML(links||[],allegations||[])}
+    <section class="panel case-allegations-panel"><div class="panel-heading-row"><div><h3>Reports &amp; Allegations</h3><p>Reported matters remain allegations until an authorized finding is finalized.</p></div>${canEdit()&&caseDomainReady?`<button class="btn btn-ghost btn-sm" onclick="openCaseAllegationForm('${id}')">${iPlus(13)} Add Allegation</button>`:''}</div><div class="case-allegations">${allegationRows||`<div class="empty"><b>No allegations recorded</b>${caseDomainReady?'Link an Incident/CVR or add an allegation before investigation.':'Run the Phase 23 migration to enable normalized allegations.'}</div>`}</div></section>
     <div class="case-intel-grid">
       <div class="panel" style="padding:14px;"><div class="dashboard-panel-head"><div><h3>Case Intelligence</h3><div class="desc">Key tracking details for this case.</div></div></div><div class="case-intel-cards"><div class="case-intel-card"><div class="k">Priority</div><div class="v">${casePriorityBadge(caseRec.priority)}</div></div><div class="case-intel-card"><div class="k">Age</div><div class="v">${age} day${age===1?'':'s'}</div></div><div class="case-intel-card"><div class="k">Deadline</div><div class="v"><span class="case-deadline ${deadline.cls}">${esc(deadline.label)}</span><div class="small" style="margin-top:3px;">${caseRec.due_date?fmtDate(caseRec.due_date):'No deadline'}</div></div></div><div class="case-intel-card"><div class="k">Opened</div><div class="v">${fmtDate(caseRec.opened_at)}</div></div><div class="case-intel-card"><div class="k">Updated</div><div class="v">${fmtDate(String(caseRec.updated_at).slice(0,10))}</div></div><div class="case-intel-card"><div class="k">Records</div><div class="v">${links?.length||0}</div></div></div></div>
       <div class="panel" style="padding:14px;"><h3>Internal Case Note</h3><div class="desc">Append a dated note to the case timeline.</div>${canEdit()?`<div class="case-note-box"><textarea id="case-note-input" placeholder="Add investigation notes, follow-up details, reminders, or handover information…"></textarea><button class="btn btn-primary" onclick="addCaseNote('${id}')">Add Note</button></div>`:'<div class="small">Viewer accounts can read case notes but cannot add them.</div>'}</div>
     </div>
-    ${canEdit()?`<div class="panel" style="padding:14px;margin-bottom:14px;"><div class="sectionhead" style="margin-bottom:10px;"><div><h3>Case Workflow</h3><div class="desc" style="margin-bottom:0;">Create the next HR document directly from this case. New records are automatically linked back to this case.</div></div></div><div style="display:flex;flex-wrap:wrap;gap:8px;"><button class="btn btn-ghost btn-sm" onclick="openWorkflowRecordForm('nte','${id}')">${iPlus(13)} New NTE</button><button class="btn btn-ghost btn-sm" onclick="openWorkflowRecordForm('memos','${id}')">${iPlus(13)} New Memorandum</button><button class="btn btn-ghost btn-sm" onclick="openWorkflowRecordForm('nod','${id}')">${iPlus(13)} New NOD</button><button class="btn btn-ghost btn-sm" onclick="openWorkflowATDForm('${id}')">${iPlus(13)} New ATD</button><button class="btn btn-ghost btn-sm" onclick="openCaseLinkForm('${id}')">${iPlus(13)} Link Existing Record</button><button class="btn btn-ghost btn-sm" onclick="setCaseWorkflowStatus('${id}','Resolved')">Mark Resolved</button><button class="btn btn-ghost btn-sm" onclick="setCaseWorkflowStatus('${id}','Closed')">Close Case</button></div></div>`:''}
+    ${canEdit()?`<div class="panel case-workflow-actions"><div class="sectionhead"><div><h3>Case Workflow</h3><div class="desc">Create case documents here. Linking a document preserves the relationship but never decides or advances the case automatically.</div></div></div><div class="case-workflow-buttons"><button class="btn btn-ghost btn-sm" onclick="openWorkflowRecordForm('nte','${id}')">${iPlus(13)} New NTE</button><button class="btn btn-ghost btn-sm" onclick="openWorkflowRecordForm('nod','${id}')">${iPlus(13)} New NOD</button><button class="btn btn-ghost btn-sm" onclick="openWorkflowATDForm('${id}')">${iPlus(13)} New ATD</button><button class="btn btn-ghost btn-sm" onclick="openCaseLinkForm('${id}')">${iPlus(13)} Link Existing Record</button>${caseDomainReady&&!isCaseTerminalStage(caseRec.status)?`<div class="case-stage-control"><label for="case_next_stage">Next stage</label><select id="case_next_stage">${caseStageOptions(caseRec.status).filter(stage=>stage!==caseRec.status).map(stage=>`<option value="${esc(stage)}">${esc(stage)}</option>`).join('')}</select><button class="btn btn-primary btn-sm" onclick="setCaseWorkflowStatus('${id}',document.getElementById('case_next_stage').value)">Advance</button></div>`:''}</div></div>`:''}
     <div class="analytics-grid equal">
       <div class="panel" style="padding:14px;"><div class="sectionhead" style="margin-bottom:10px;"><div><h2 style="font-size:16px;">Linked HR Records</h2><p>${links?.length||0} linked record${(links?.length||0)===1?'':'s'}.</p></div></div><div class="case-links">${linkRows||'<div class="empty"><b>No records linked yet</b>Use the workflow buttons or link an existing record to build the case history.</div>'}</div></div>
       <div class="panel" style="padding:14px;"><div class="sectionhead" style="margin-bottom:10px;"><div><h2 style="font-size:16px;">Activity Timeline</h2><p>Chronological case actions and internal notes.</p></div></div><div class="case-activity">${activityRows||'<div class="empty"><b>No activity yet</b>Case activity will appear here as the file progresses.</div>'}</div></div>
     </div>
-    <div style="margin-top:14px;" class="panel"><h3>Case Information</h3><div class="small" style="margin-top:6px;line-height:1.7;">Opened: <b>${fmtDate(caseRec.opened_at)}</b> · Due: <b>${fmtDate(caseRec.due_date)}</b> · Closed: <b>${fmtDate(caseRec.closed_at)}</b><br>Priority: <b>${esc(caseRec.priority||'Normal')}</b> · Assigned: <b>${esc(assigned?.fullName||'Unassigned')}</b><br>Remarks: ${esc(caseRec.remarks||'—')}</div><div class="case-primary-file"><span>Primary case file</span>${caseFile}</div></div>
+    <div style="margin-top:14px;" class="panel"><h3>Case Information</h3><div class="small" style="margin-top:6px;line-height:1.7;">Type: <b>${esc(caseRec.case_type||'Employee Relations')}</b> · Outcome: <b>${esc(caseRec.outcome||'Not yet determined')}</b><br>Opened: <b>${fmtDate(caseRec.opened_at)}</b> · Due: <b>${fmtDate(caseRec.due_date)}</b> · Closed: <b>${fmtDate(caseRec.closed_at)}</b><br>Priority: <b>${esc(caseRec.priority||'Normal')}</b> · Assigned: <b>${esc(assigned?.fullName||'Unassigned')}</b><br>Remarks: ${esc(caseRec.remarks||'—')}</div><div class="case-primary-file"><span>Primary case file</span>${caseFile}</div></div>
   </div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal(); renderCases();">Close</button>${canEdit()?`<button class="btn btn-primary" onclick="openCaseForm('${id}')">Edit Case</button>`:''}</div>`);
   document.getElementById('modal').classList.add('case-modal');
+}
+async function openCaseAllegationForm(caseId,allegationId=''){
+  if(!canEdit()||!(await ensureCaseDomainReady())){toast('Run the Phase 23 Employee Relations migration before managing allegations.',true);return;}
+  const [{data:caseRecord,error:caseError},{data:links,error:linkError},{data:existing,error:allegationError}]=await Promise.all([
+    supabase.from('hr_cases').select('*').eq('id',caseId).maybeSingle(),
+    supabase.from('hr_case_links').select('module,record_id,label').eq('case_id',caseId).in('module',['incidents','cvr']),
+    allegationId?supabase.from('hr_case_allegations').select('*').eq('id',allegationId).eq('case_id',caseId).maybeSingle():Promise.resolve({data:null,error:null}),
+  ]);
+  if(caseError||!caseRecord){toast('Could not load the HR case.',true);return;}
+  if(linkError||allegationError){toast('Could not load allegation details.',true);return;}
+  const employee=DB.employees.find(item=>String(item.id)===String(caseRecord.employee_record_id));
+  const selectedSource=existing?.source_module&&existing?.source_record_id?`${existing.source_module}|${existing.source_record_id}`:'';
+  const sources=(links||[]).map(link=>`<option value="${esc(`${link.module}|${link.record_id}`)}" ${selectedSource===`${link.module}|${link.record_id}`?'selected':''}>${esc(link.label||caseRecordLabel(link.module,(DB[link.module]||[]).find(item=>String(item.id)===String(link.record_id))))}</option>`).join('');
+  const findings=['Pending','Substantiated','Partially Substantiated','Unsubstantiated','Unfounded','Not a Policy Violation','Withdrawn'];
+  const details=`<div class="formgrid"><input type="hidden" id="allegation_employee_locked" value="${esc(caseRecord.employee_record_id||'')}"><input type="hidden" id="allegation_department" value="${esc(caseRecord.department||'')}"><div class="field full"><label>Source Report</label><select id="allegation_source"><option value="">Direct case allegation</option>${sources}</select></div><div class="field full"><label>Allegation *</label><textarea id="allegation_description" rows="5" maxlength="5000" placeholder="Describe the reported conduct or policy concern without presenting it as a confirmed violation.">${esc(existing?.description||'')}</textarea></div><div class="field"><label>Incident Date</label><input type="date" id="allegation_incident_date" value="${esc(existing?.incident_date||'')}"></div><div class="field"><label>Allegation Status</label><select id="allegation_status">${['Open','Withdrawn','Resolved'].map(value=>`<option ${existing?.status===value?'selected':''}>${value}</option>`).join('')}</select></div></div>`;
+  const policy=`<div class="formgrid">${tdaRuleSelectorHTML('allegation','allegation',existing?.tda_snapshot||null,employee,caseRecord.department||'',existing?.id||'')}</div><div class="computed-note">Potential occurrence is calculated from qualifying finalized disciplinary history. Incident and CVR counts are never used as confirmed occurrences.</div>`;
+  const finding=`<div class="formgrid"><div class="field"><label>Finding</label><select id="allegation_finding">${findings.map(value=>`<option value="${esc(value)}" ${(existing?.finding||'Pending')===value?'selected':''}>${esc(value)}</option>`).join('')}</select></div><div class="field full"><label>Finding Basis</label><textarea id="allegation_finding_reason" rows="5" placeholder="Required when a finding is recorded.">${esc(existing?.finding_reason||'')}</textarea></div><div class="field"><label>Confirmed Occurrence</label><input value="${esc(existing?.confirmed_occurrence||'Not finalized')}" disabled></div><div class="field"><label>Final Consequence</label><input value="${esc(existing?.final_consequence||'Not decided')}" disabled></div></div><div class="computed-note">A finding records HR's evaluated conclusion. Final consequence and confirmed occurrence remain part of the approved decision workflow.</div>`;
+  openModal(`<div class="modal-head"><div class="modal-head-copy"><div class="modal-context-breadcrumb"><span>Employee Relations</span><span aria-hidden="true">›</span><span>${esc(caseRecord.case_number)}</span><span aria-hidden="true">›</span><b>${allegationId?'Edit Allegation':'Add Allegation'}</b></div><h3>${allegationId?'Edit Allegation':'Add Allegation'}</h3><div class="small">${esc(caseRecord.employee_name)} · ${esc(caseRecord.department||'Unassigned')}</div></div><button onclick="openCaseDetails('${caseId}')">&times;</button></div><div class="modal-body" data-employee-relations-modal>${modalFormTabsHTML('case_allegation_tabs',[{id:'details',label:'Allegation',content:details},{id:'policy',label:'TDA / Policy',content:policy},{id:'finding',label:'Finding',content:finding}])}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="openCaseDetails('${caseId}')">Cancel</button><button class="btn btn-primary" onclick="saveCaseAllegation('${caseId}','${allegationId}')">Save Allegation</button></div>`);
+  const level=document.getElementById('allegation_tda_level');if(level){level.disabled=true;level.title='Calculated from qualifying finalized disciplinary history';}
+}
+async function saveCaseAllegation(caseId,allegationId=''){
+  if(!canEdit())return;
+  const description=(document.getElementById('allegation_description')?.value||'').trim();
+  const finding=document.getElementById('allegation_finding')?.value||'Pending';
+  const findingReason=(document.getElementById('allegation_finding_reason')?.value||'').trim();
+  if(!description){switchModalFormTab('case_allegation_tabs','details');toast('Allegation description is required.',true);return;}
+  if(finding!=='Pending'&&!findingReason){switchModalFormTab('case_allegation_tabs','finding');toast('Enter the basis for the recorded finding.',true);return;}
+  const tdaRule=readTdaRuleSelection('allegation');if(tdaRule===false)return;
+  const [sourceModule,sourceRecordId]=(document.getElementById('allegation_source')?.value||'').split('|');
+  const payload={description,incident_date:document.getElementById('allegation_incident_date')?.value||null,source_module:sourceModule||null,source_record_id:sourceRecordId||null,tda_rule_id:tdaRule?.catalogId?String(tdaRule.catalogId):null,tda_snapshot:tdaRule||null,potential_occurrence:tdaRule?Number(tdaRule.levelIndex)+1:null,status:document.getElementById('allegation_status')?.value||'Open',finding,finding_reason:findingReason||null,updated_by:SESSION?.id||null};
+  try{
+    if(allegationId){
+      const {error}=await supabase.from('hr_case_allegations').update(payload).eq('id',allegationId).eq('case_id',caseId);if(error)throw error;
+      await addCaseActivity(caseId,finding==='Pending'?'allegation':'finding',finding==='Pending'?'Allegation updated.':`Allegation finding recorded as ${finding}.`);
+    }else{
+      const {data:last,error:lastError}=await supabase.from('hr_case_allegations').select('allegation_number').eq('case_id',caseId).order('allegation_number',{ascending:false}).limit(1).maybeSingle();if(lastError)throw lastError;
+      const {error}=await supabase.from('hr_case_allegations').insert({...payload,case_id:caseId,allegation_number:Number(last?.allegation_number||0)+1,created_by:SESSION?.id||null});if(error)throw error;
+      await addCaseActivity(caseId,'allegation','Case allegation added.');
+    }
+    logAudit(allegationId?'Updated a case allegation':'Added a case allegation');toast('Allegation saved.');await openCaseDetails(caseId);
+  }catch(error){toast(error.code==='23505'?'That source report is already represented by an allegation in this case.':'Could not save allegation: '+error.message,true);}
+}
+async function deleteCaseAllegation(caseId,allegationId){
+  if(!hasPermission('employee_relations.delete'))return;
+  const {error}=await supabase.from('hr_case_allegations').delete().eq('id',allegationId).eq('case_id',caseId);
+  if(error){toast('Could not delete allegation: '+error.message,true);return;}
+  await addCaseActivity(caseId,'allegation','Case allegation removed.');logAudit('Deleted a case allegation');toast('Allegation removed.');await openCaseDetails(caseId);
 }
 async function openWorkflowATDForm(caseId){
   if(SESSION?.role==='Viewer') return;
@@ -8673,10 +8856,16 @@ async function openWorkflowATDForm(caseId){
 
 async function setCaseWorkflowStatus(caseId,status){
   if(SESSION?.role==='Viewer') return;
-  const {data:before,error:beforeError}=await supabase.from('hr_cases').select('status,due_date').eq('id',caseId).maybeSingle();
+  if(!(await ensureCaseDomainReady())){toast('Run the Phase 23 Employee Relations migration before using controlled case stages.',true);return;}
+  const {data:before,error:beforeError}=await supabase.from('hr_cases').select('*').eq('id',caseId).maybeSingle();
   if(beforeError){toast('Could not load case status: '+beforeError.message,true);return;}
-  const closed_at=status==='Closed'?todayISO():null;
-  const {error}=await supabase.from('hr_cases').update({status,closed_at,updated_by:SESSION?.id||null}).eq('id',caseId);
+  const terminalOutcome={'Closed - No Violation':'No Violation','Closed - Insufficient Evidence':'Insufficient Evidence','Closed - Informal Resolution':'Informal Resolution',Cancelled:'Cancelled',Duplicate:'Duplicate'}[status];
+  const closedAt=(status==='Closed'||status.startsWith('Closed - ')||status==='Cancelled'||status==='Duplicate')?todayISO():before?.closed_at||null;
+  const outcome=terminalOutcome||before?.outcome||null;
+  let transition;
+  try{transition=await validateCaseStageChange(before,status,{closedAt,outcome});}catch(error){toast('Could not validate the case transition: '+error.message,true);return;}
+  if(!transition.valid){toast(`Cannot move this case to ${status}. Required: ${transition.missing.join('; ')}.`,true);return;}
+  const {error}=await supabase.from('hr_cases').update({status,closed_at:closedAt,outcome,updated_by:SESSION?.id||null}).eq('id',caseId);
   if(error){toast('Could not update case status: '+error.message,true);return;}
   await addCaseActivity(caseId,'status',`Status changed from ${before?.status||'—'} to ${status}.`,before?.status||null,status,before?.due_date||null);
   logAudit(`Changed HR case status to ${status}`);
@@ -8697,8 +8886,9 @@ async function linkCaseRecord(caseId){
   const rec=(DB[module]||[]).find(r=>String(r.id)===String(recordId)); const label=caseRecordLabel(module,rec);
   const {error}=await supabase.from('hr_case_links').insert({case_id:caseId,module,record_id:String(recordId),label,linked_by:SESSION?.id||null});
   if(error){toast(error.code==='23505'?'That record is already linked to this case.':'Could not link record: '+error.message,true);return;}
-  const newStatus=module==='nte'?'NTE Issued':module==='memos'?'Memo Issued':module==='nod'?'For Decision':null;
-  if(newStatus){const {data:beforeCase}=await supabase.from('hr_cases').select('status,due_date').eq('id',caseId).maybeSingle(); const {error:statusError}=await supabase.from('hr_cases').update({status:newStatus,updated_by:SESSION?.id||null}).eq('id',caseId);if(statusError){console.warn('Case status update failed',statusError);} else await addCaseActivity(caseId,'status',`Status changed from ${beforeCase?.status||'—'} to ${newStatus} after linking ${caseModuleLabel(module)}.`,beforeCase?.status||null,newStatus,beforeCase?.due_date||null);}
+  if(isCaseReportSource(module)){
+    try{await createCaseAllegationFromReport(caseId,module,rec);}catch(allegationError){console.warn('Could not create a case allegation from the linked report',allegationError);}
+  }
   await addCaseActivity(caseId,'linked',`Linked ${caseModuleLabel(module)}: ${label}.`);
   logAudit(`Linked ${caseModuleLabel(module)} to HR case`); await openCaseDetails(caseId);
 }
@@ -8834,7 +9024,7 @@ Object.assign(window, {
   STATE,
   performanceSnapshot,
   addDaysISO, atdComputeStatus, atdFillEmployee, atdPayslipCellHTML, atdRemaining, atdToggleCategory, atdTotalPaid,
-  addCaseActivity, addCaseNote, caseActivityIcon, caseActivityLabel, caseDeadlineInfo, casePriorityBadge, caseWorkflowSteps, caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, setCaseWorkflowStatus, buildNotificationItems, closeNotificationPanel, markAllNotificationsRead, openNotification, goFromNotifications, refreshNotificationBadge, renderNotificationPanel, toggleNotificationPanel, analyticsApplyFilters, analyticsSetPreset, exportAnalyticsSnapshot,
+  addCaseActivity, addCaseNote, caseActivityIcon, caseActivityLabel, caseDeadlineInfo, casePriorityBadge, caseWorkflowSteps, caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, deleteCaseAllegation, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseAllegationForm, openCaseDetails, openCaseForm, openCaseLinkForm, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, populateCaseRecordOptions, renderCases, saveCase, saveCaseAllegation, setCaseWorkflowStatus, buildNotificationItems, closeNotificationPanel, markAllNotificationsRead, openNotification, goFromNotifications, refreshNotificationBadge, renderNotificationPanel, toggleNotificationPanel, analyticsApplyFilters, analyticsSetPreset, exportAnalyticsSnapshot,
   renderSelfService, renderTeamApprovals, openProfileChangeRequest, saveProfileChangeRequest, openLeaveRequest, saveLeaveRequest, cancelSelfServiceRequest, openServiceRequestReview, reviewServiceRequest, dashboardSetTab, weeklySetTab, automationSetTab, analyticsSetTab,
   renderLifecycleChecklists, openLifecycleChecklistForm, saveLifecycleChecklist, openLifecycleChecklist, openLifecycleChecklistItem, returnToLifecycleChecklist, saveLifecycleChecklistItem, cancelLifecycleChecklist, lifecycleTemplateChanged,
   workflowSyncTasks, workflowPendingCount, workflowFindTask, workflowOpenSource, workflowSaveTaskNote, saveWorkflowTaskNote, workflowAssignTask, workflowSaveAssignment, workflowCompleteTask, workflowDecideTask, openWorkflowTask, openWorkflowCreateForm, saveWorkflowManualTask, renderWorkflowCenter, workflowActionButtons, workflowPriorityBadge, workflowDueText, workflowPageGo, workflowPageSize, workflowSetQuickFilter, workflowResetFilters, automationPageGo, automationPageSize,

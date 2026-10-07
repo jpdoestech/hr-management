@@ -52,9 +52,10 @@ test('TDA recommendation is presented as policy guidance, not an automatic decis
 });
 
 test('case workspace tracks due-process readiness without auto-deciding liability',()=>{
-  const tracker=source.slice(source.indexOf('function caseDueProcessHTML'),source.indexOf('function caseActivityLabel'));
-  for(const label of ['Allegation / evidence','Governing TDA policy','First notice / NTE','Employee response','Decision notice'])assert.match(tracker,new RegExp(label.replace('/','\\/')));
+  const tracker=source.slice(source.indexOf('function caseDueProcessHTML'),source.indexOf('function caseTransitionContext'));
+  for(const label of ['Report / allegation','Governing TDA policy','First notice / NTE','Employee response','Findings','Decision notice'])assert.match(tracker,new RegExp(label.replace('/','\\/')));
+  assert.doesNotMatch(tracker,/disciplinary/);
   assert.match(tracker,/Operational guidance only; HR remains responsible/);
-  assert.match(source,/caseDueProcessHTML\(links\|\|\[\]\)/);
+  assert.match(source,/caseDueProcessHTML\(links\|\|\[\],allegations\|\|\[\]\)/);
   assert.match(styles,/\.case-due-process-list\{/);
 });
