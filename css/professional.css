@@ -940,7 +940,7 @@ body,input,select,textarea,button,table{font-family:'Plus Jakarta Sans',sans-ser
 .tda-picker-input input{width:100%;min-width:0;height:auto!important;min-height:0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;outline:0;color:var(--text);font-size:12px;}
 .tda-picker-clear{width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex:none;padding:0;border:0;border-radius:6px;background:transparent;color:#918D98;font-size:19px;line-height:1;}
 .tda-picker-clear:hover,.tda-picker-clear:focus-visible{background:#F0EDFF;color:var(--accent);outline:0;}
-.tda-picker-options{position:absolute;z-index:150;top:calc(100% + 5px);left:0;right:0;max-height:min(350px,48vh);overflow:auto;padding:5px;border:1px solid var(--border);border-radius:8px;background:#fff;box-shadow:0 14px 38px rgba(28,23,40,.16);}
+.tda-picker-options{position:absolute;z-index:150;top:calc(100% + 5px);left:0;width:min(680px,calc(100vw - 72px));max-height:min(420px,56vh);overflow:auto;padding:6px;border:1px solid var(--border);border-radius:8px;background:#fff;box-shadow:0 16px 42px rgba(28,23,40,.18);}
 .tda-picker-options[hidden]{display:none;}
 .tda-picker-options>button{width:100%;display:grid;grid-template-columns:minmax(44px,auto) minmax(0,1fr) auto;align-items:center;gap:10px;min-height:53px;padding:8px 9px;border:0;border-radius:6px;background:#fff;color:var(--text);text-align:left;}
 .tda-picker-options>button:hover,.tda-picker-options>button.active{background:#F3F0FF;outline:0;}
@@ -1620,6 +1620,7 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
 
 /* Employee Relations dialogs: one compact, responsive transaction shell. */
 .modal.relations-modal{width:min(760px,calc(100vw - 28px));max-width:760px;max-height:calc(100dvh - 28px);border-radius:9px;}
+.modal.relations-modal.tabbed-form-modal{width:min(980px,calc(100vw - 28px));max-width:980px;}
 .modal.relations-modal.case-modal{width:min(1040px,calc(100vw - 28px));max-width:1040px;}
 .modal.relations-modal:has(.information-modal-body){width:min(480px,calc(100vw - 28px));max-width:480px;}
 .modal.relations-modal:has(.tda-import-body),.modal.relations-modal:has(.tda-import-preview){width:min(1180px,calc(100vw - 28px));max-width:1180px;}
@@ -1629,6 +1630,7 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
 .relations-modal>.modal-head h3{font-size:16px;line-height:1.25;letter-spacing:0;}
 .relations-modal>.modal-head .small{margin-top:3px;font-size:10px;line-height:1.45;overflow-wrap:anywhere;}
 .relations-modal>.modal-body{padding:16px 18px 18px;}
+.relations-modal.tabbed-form-modal>.modal-body{padding:0;overflow:hidden;}
 .relations-modal.entry-modal .formgrid{gap:13px 14px;}
 .relations-modal.entry-modal .field label{font-size:10px;line-height:1.35;}
 .relations-modal.entry-modal .field input,.relations-modal.entry-modal .field select{min-height:40px;}
@@ -1643,12 +1645,32 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
 .case-employee-context small{margin-top:2px;color:var(--muted);font-size:9px;line-height:1.35;overflow-wrap:anywhere;}
 .case-primary-file{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);}
 .case-primary-file>span{color:var(--muted);font-size:9px;font-weight:800;text-transform:uppercase;}
+.modal-form-tabs{display:flex;min-height:420px;max-height:calc(100dvh - 162px);flex-direction:column;background:#fff;}
+.modal-form-tablist{display:flex;align-items:center;gap:2px;flex:none;overflow-x:auto;padding:0 16px;border-bottom:1px solid var(--border);background:#F8F9FB;scrollbar-width:thin;}
+.modal-form-tablist button{min-height:43px;padding:0 13px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font-size:10px;font-weight:750;white-space:nowrap;cursor:pointer;}
+.modal-form-tablist button:hover{color:var(--text);background:#F1F2F6;}.modal-form-tablist button.active{border-bottom-color:var(--accent);background:#fff;color:var(--accent);}
+.modal-form-panels{min-height:0;flex:1;overflow:auto;}
+.modal-form-panel{padding:17px 18px 20px;}.modal-form-panel[hidden]{display:none;}.modal-form-panel>.formgrid{gap:13px 14px;}
+.modal-form-panel>.tda-rule-card{margin:0;}
+.field input[readonly],.field input[aria-readonly="true"]{background:#F4F6F8;color:#536075;font-weight:700;cursor:default;}
+.field-help{display:block;margin-top:5px;color:var(--muted);font-size:8.5px;line-height:1.4;}
+.incident-classification-search{display:flex;align-items:center;gap:8px;height:40px;padding:0 6px 0 10px;border:1px solid var(--border-strong);border-radius:7px;background:#fff;color:var(--muted);}
+.incident-classification-search:focus-within{border-color:#9B8BEA;box-shadow:0 0 0 3px rgba(98,70,229,.10);}
+.incident-classification-search input{min-width:0!important;height:auto!important;padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important;outline:0;}
+.incident-classification-search .btn{min-height:29px;height:29px;flex:none;}
+.incident-classification-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;max-height:190px;margin-top:8px;overflow:auto;padding:7px;border:1px solid var(--border);border-radius:7px;background:#FAFBFC;}
+.incident-classification-options.no-results::after{content:'No matching classification. Type a new name and choose Add.';grid-column:1/-1;padding:16px;color:var(--muted);font-size:9.5px;text-align:center;}
+.incident-classification-option{display:flex;align-items:center;gap:7px;min-width:0;padding:8px;border:1px solid #E3E6EC;border-radius:6px;background:#fff;color:var(--text);font-size:9.5px;font-weight:650;cursor:pointer;}
+.incident-classification-option:hover{border-color:#C8C0EA;background:#F7F5FF;}.incident-classification-option:has(input:checked){border-color:#B8AAED;background:#F1EEFF;color:var(--accent);}
+.incident-classification-option input{width:14px!important;height:14px!important;min-height:0!important;margin:0;accent-color:var(--accent);}.incident-classification-option span{min-width:0;overflow-wrap:anywhere;}
+.incident-classification-summary{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:8px;}.incident-classification-summary>span{padding:4px 7px;border-radius:5px;background:#EDF2F8;color:#315F95;font-size:8.5px;font-weight:750;}.incident-classification-summary>span.empty{background:#F4F4F6;color:var(--muted);font-weight:600;}
 @media(max-width:720px){
   .modal.relations-modal,.modal.relations-modal.case-modal,.modal.relations-modal:has(.tda-import-body),.modal.relations-modal:has(.tda-import-preview),.modal.relations-modal.entry-modal:has(.tda-form-body){width:calc(100vw - 12px);max-width:none;max-height:calc(100dvh - 12px);border-radius:8px;}
   .relations-modal>.modal-head{min-height:64px;padding:10px 12px;}
   .relations-modal>.modal-head h3{font-size:14px;}
   .relations-modal>.modal-head .small{font-size:9px;}
   .relations-modal>.modal-body{padding:12px;}
+  .relations-modal.tabbed-form-modal>.modal-body{padding:0;}
   .relations-modal.entry-modal .formgrid{grid-template-columns:1fr;gap:11px;}
   .relations-modal.entry-modal .formgrid .full{grid-column:auto;}
   .relations-modal>.modal-foot{display:grid;grid-template-columns:1fr 1fr;min-height:58px;padding:9px 12px;}
@@ -1657,4 +1679,6 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
   .case-employee-context>.badge{grid-column:2;justify-self:start;}
   .case-primary-file{align-items:flex-start;flex-direction:column;}
   .case-primary-file .btn{width:100%;white-space:normal;overflow-wrap:anywhere;}
+  .modal-form-tabs{min-height:0;max-height:calc(100dvh - 134px);}.modal-form-tablist{padding:0 8px}.modal-form-tablist button{min-height:40px;padding:0 10px;font-size:9px}.modal-form-panel{padding:13px 12px 16px}.incident-classification-options{grid-template-columns:1fr 1fr}.tda-picker-options{width:calc(100vw - 52px);max-height:48vh;}
 }
+@media(max-width:420px){.incident-classification-options{grid-template-columns:1fr}.incident-classification-search .btn{padding:0 8px;font-size:0}.incident-classification-search .btn svg{margin:0}.tda-picker-options{width:calc(100vw - 36px);}}

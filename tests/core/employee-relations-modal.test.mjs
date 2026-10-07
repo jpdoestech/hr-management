@@ -31,3 +31,25 @@ test('Employee Relations entry dialogs share a responsive modal shell',()=>{
   assert.match(styles,/\.relations-modal\.entry-modal \.formgrid/);
   assert.match(styles,/@media\(max-width:720px\)[\s\S]*\.modal\.relations-modal/);
 });
+
+test('long shared record forms use responsive classified tabs',()=>{
+  assert.match(source,/function modalFormTabsHTML\(groupId,tabs/);
+  assert.match(source,/function switchModalFormTab\(groupId,tabId\)/);
+  assert.match(source,/label:'Governing Policy'/);
+  assert.match(source,/label:'Files & Notes'/);
+  assert.match(source,/modalFormTabsHTML\('record_form_tabs'/);
+  assert.match(styles,/\.modal-form-tablist/);
+  assert.match(styles,/\.modal-form-panel\[hidden\]/);
+});
+
+test('incident entry separates facts, policy, and evidence without editable assignment data',()=>{
+  const form=source.slice(source.indexOf('function openIncidentForm'),source.indexOf('async function saveIncident'));
+  assert.match(form,/label:'Classification & Facts'/);
+  assert.match(form,/label:'Governing Policy'/);
+  assert.match(form,/label:'Evidence & Notes'/);
+  assert.match(form,/id="in_department"[\s\S]{0,180}readonly/);
+  assert.match(source,/function incidentClassificationOptions\(extra=\[\]\)/);
+  assert.match(source,/Classifications describe what happened/);
+  assert.match(source,/#in_type_options input\[type=checkbox\]:checked/);
+  assert.match(styles,/\.incident-classification-options/);
+});

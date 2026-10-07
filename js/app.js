@@ -2481,6 +2481,7 @@ function openModal(html){
   const employeeRelationsView=navSectionForView(STATE.view)==='Employee Relations'||Boolean(modal.querySelector('[data-employee-relations-modal]'));
   modal.classList.toggle('relations-modal',employeeRelationsView);
   modal.classList.toggle('entry-modal',employeeRelationsView&&Boolean(modal.querySelector('.modal-body .formgrid')));
+  modal.classList.toggle('tabbed-form-modal',Boolean(modal.querySelector('.modal-form-tabs')));
   const closeButton=modal.querySelector(':scope > .modal-head > button:last-child');
   if(closeButton){
     closeButton.type='button';
@@ -2498,6 +2499,24 @@ function openModal(html){
     Promise.resolve(initializeAddressComponents(modal)).finally(()=>captureModalEditState());
     (modal.querySelector('.modal-head button')||modal).focus();
   });
+}
+function modalFormTabsHTML(groupId,tabs,activeId=tabs[0]?.id){
+  const available=tabs.filter(tab=>tab?.content);
+  if(!available.length)return '';
+  const selected=available.some(tab=>tab.id===activeId)?activeId:available[0].id;
+  return `<div class="modal-form-tabs" id="${esc(groupId)}" data-active-tab="${esc(selected)}"><div class="modal-form-tablist" role="tablist" aria-label="Form sections">${available.map(tab=>`<button type="button" role="tab" id="${esc(groupId)}_${esc(tab.id)}_tab" aria-controls="${esc(groupId)}_${esc(tab.id)}" aria-selected="${tab.id===selected}" class="${tab.id===selected?'active':''}" onclick="switchModalFormTab('${esc(groupId)}','${esc(tab.id)}')">${esc(tab.label)}</button>`).join('')}</div><div class="modal-form-panels">${available.map(tab=>`<section class="modal-form-panel ${tab.id===selected?'active':''}" id="${esc(groupId)}_${esc(tab.id)}" data-form-tab-panel="${esc(tab.id)}" role="tabpanel" aria-labelledby="${esc(groupId)}_${esc(tab.id)}_tab" ${tab.id===selected?'':'hidden'}>${tab.content}</section>`).join('')}</div></div>`;
+}
+function switchModalFormTab(groupId,tabId){
+  const root=document.getElementById(groupId);if(!root)return;
+  root.dataset.activeTab=tabId;
+  root.querySelectorAll(':scope > .modal-form-tablist > button').forEach(button=>{const active=button.id===`${groupId}_${tabId}_tab`;button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active));});
+  root.querySelectorAll(':scope > .modal-form-panels > .modal-form-panel').forEach(panel=>{const active=panel.dataset.formTabPanel===tabId;panel.classList.toggle('active',active);panel.hidden=!active;});
+  root.closest('.modal-body')?.scrollTo({top:0,behavior:'smooth'});
+}
+function revealModalField(element){
+  const panel=element?.closest('[data-form-tab-panel]');const tabs=panel?.closest('.modal-form-tabs');
+  if(panel&&tabs)switchModalFormTab(tabs.id,panel.dataset.formTabPanel);
+  requestAnimationFrame(()=>element?.focus());
 }
 async function transitionModal(openTarget){
   if(MODAL_TRANSITIONING||typeof openTarget!=='function')return false;
@@ -3059,21 +3078,32 @@ async function openRecordForm(key, id){
   await ensureRecordModules(recordModulesForView(key));
   const cfg = MODULES[key];
   const existing = id? DB[key].find(r=>r.id===id) : null;
+  const employeeBased=cfg.fields.some(field=>field.key==='employeeName');
   const fields = cfg.fields.map(f=>{
     const next=f.type==='file'&&existing?{...f,storagePrefix:key,existingData:existing[f.key+'Data']||''}:{...f,storagePrefix:key};
     if(existing&&f.key==='employeeName')next.employeeSelectedId=existing.employeeId||'';
     if(f.key==='employeeName'&&TDA_CONNECTED_MODULES.has(key))next.onSelect='refreshRecordTdaRules';
     if(existing&&f.key==='employeeReplaced')next.employeeSelectedId=existing.employeeReplacedId||'';
+    if(employeeBased&&f.key==='department')Object.assign(next,{type:'text',readonly:true,label:'Department (employee assignment)'});
     return next;
   });
+  const fieldValue=field=>existing?existing[field.key]:(field.default?field.default():'');
+  const assignmentKeys=new Set(['employeeName','employeeReplaced','position','department','prfNumber']);
+  const recordKeys=new Set(['status','startDate','endDate','dateApplied','dateReceived','dateOfIncident','dateIssued','dateOfMemo','dateOfNod','fromDate','toDate']);
+  const evidenceFields=fields.filter(field=>field.type==='file'||field.type==='textarea'||['remarks','explanation','reason'].includes(field.key));
+  const contextFields=fields.filter(field=>assignmentKeys.has(field.key)||recordKeys.has(field.key));
+  const detailFields=fields.filter(field=>!contextFields.includes(field)&&!evidenceFields.includes(field));
+  const tabContent=list=>list.length?`<div class="formgrid">${list.map(field=>fieldHTML(field,fieldValue(field))).join('')}</div>`:'';
+  const recordTabs=[
+    {id:'record',label:'Record',content:tabContent(contextFields)},
+    {id:'details',label:'Details',content:tabContent(detailFields)},
+    {id:'policy',label:'Governing Policy',content:TDA_CONNECTED_MODULES.has(key)?tdaRuleSelectorHTML('record',key,existing?.tdaRule||null,DB.employees.find(employee=>String(employee.id)===String(existing?.employeeId||'')),existing?.department||'',id||''):''},
+    {id:'evidence',label:'Files & Notes',content:tabContent(evidenceFields)+(cfg.computedNote?`<div class="computed-note">${cfg.computedNote}</div>`:'')},
+  ];
   openModal(`
     <div class="modal-head"><div><h3>${existing? 'Edit':'Add'} ${cfg.singular}</h3><div class="small">${esc(cfg.subtitle||`Complete the ${cfg.singular.toLowerCase()} details below.`)}</div></div><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body" ${VIEW_PERMISSION_MODULE[key]==='employee_relations'?'data-employee-relations-modal':''}>
-      <div class="formgrid" id="record-form">
-        ${fields.map(f=> fieldHTML(f, existing? existing[f.key] : (f.default? f.default() : ''))).join('')}
-        ${TDA_CONNECTED_MODULES.has(key)?tdaRuleSelectorHTML('record',key,existing?.tdaRule||null,DB.employees.find(employee=>String(employee.id)===String(existing?.employeeId||'')),existing?.department||'',id||''):''}
-      </div>
-      ${cfg.computedNote? `<div class="computed-note">${cfg.computedNote}</div>`:''}
+      ${modalFormTabsHTML('record_form_tabs',recordTabs)}
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -3129,7 +3159,7 @@ async function openWorkflowRecordForm(module, caseId){
     }
     if(caseRule){
       const ruleSelect=document.getElementById('record_tda_rule');const levelSelect=document.getElementById('record_tda_level');
-      if(ruleSelect)ruleSelect.value=String(caseRule.catalogId);if(levelSelect)levelSelect.value=String(caseRule.levelIndex);refreshTdaRulePreview('record',false);
+      if(ruleSelect)ruleSelect.value=String(caseRule.catalogId);if(levelSelect)levelSelect.value=String(caseRule.levelIndex);refreshTdaRuleSelector('record');refreshTdaRulePreview('record',false);
       const offenseField={nte:'f_violation',memos:'f_offenseType',nod:'f_relatedOffense'}[module];const actionField={memos:'f_action',nod:'f_finalAction'}[module];
       if(offenseField&&document.getElementById(offenseField))document.getElementById(offenseField).value=caseRule.offense;
       if(actionField&&document.getElementById(actionField))document.getElementById(actionField).value=caseRule.recommendedConsequence;
@@ -3149,9 +3179,9 @@ async function saveRecord(key, id){
     const typed=document.getElementById(`f_${f.key}_search`)?.value.trim();
     return typed&&!employeePickerSelected(`f_${f.key}`);
   });
-  if(invalidEmployeeFields.length){toast('Select '+invalidEmployeeFields.map(f=>f.label).join(', ')+' from the employee results.',true);return;}
+  if(invalidEmployeeFields.length){revealModalField(document.getElementById(`f_${invalidEmployeeFields[0].key}_search`));toast('Select '+invalidEmployeeFields.map(f=>f.label).join(', ')+' from the employee results.',true);return;}
   const missing = cfg.fields.filter(f=>f.required && !vals[f.key]);
-  if(missing.length){ toast('Please complete: '+missing.map(f=>f.label).join(', ')); return; }
+  if(missing.length){revealModalField(document.getElementById(`f_${missing[0].key}`)||document.getElementById(`f_${missing[0].key}_search`));toast('Please complete: '+missing.map(f=>f.label).join(', ')); return; }
   let rec;
   let oldStoragePaths=new Set();
   const workflowCaseId = CASE_WORKFLOW_CONTEXT?.module===key ? CASE_WORKFLOW_CONTEXT.caseId : null;
@@ -4341,14 +4371,11 @@ async function renderTdaCatalog(){
 }
 function openTdaForm(id=''){
   const record=id?(DB.offenseCatalog||[]).find(item=>item.id===id):null;
+  const definition=`<div class="formgrid"><div class="field"><label>Offense No.</label><input id="tda_offenseNumber" value="${esc(record?.offenseNumber||'')}"></div><div class="field"><label>Offense Category *</label><input id="tda_category" value="${esc(record?.category||'')}"></div><div class="field full"><label>Offense / Violation *</label><textarea id="tda_offense" rows="5">${esc(record?.offense||'')}</textarea></div><div class="field full"><label>Disciplinary Classification</label><input id="tda_disciplinaryRemarks" value="${esc(record?.disciplinaryRemarks||'')}"></div></div>`;
+  const schedule=`<div class="formgrid">${[1,2,3,4,5].map(level=>`<div class="field ${level===5?'full':''}"><label>${level}${level===1?'st':level===2?'nd':level===3?'rd':'th'} Offense</label><input id="tda_consequence${level}" value="${esc(record?.[`consequence${level}`]||'')}"></div>`).join('')}</div><div class="computed-note">Define progressive consequences as approved. Empty later levels fall back only where the catalog normalization rules permit it.</div>`;
+  const applicability=`<div class="tda-form-section compact"><h4>Workforce applicability</h4>${tdaScopeEditorHTML('tda',record||{tdaType:'Industrial',allClients:true,allBranches:true,allDepartments:true})}</div>`;
   openModal(`<div class="modal-head"><div><h3>${record?'Edit':'Add'} TDA Offense</h3><div class="small">Define the approved sanction schedule and where it applies.</div></div><button type="button" onclick="closeModal()" aria-label="Close">&times;</button></div>
-    <div class="modal-body tda-form-body" data-employee-relations-modal><div class="formgrid">
-      <div class="field"><label>Offense No.</label><input id="tda_offenseNumber" value="${esc(record?.offenseNumber||'')}"></div>
-      <div class="field"><label>Offense Category *</label><input id="tda_category" value="${esc(record?.category||'')}"></div>
-      <div class="field full"><label>Offense / Violation *</label><textarea id="tda_offense" rows="3">${esc(record?.offense||'')}</textarea></div>
-      <div class="field full"><label>Disciplinary Classification</label><input id="tda_disciplinaryRemarks" value="${esc(record?.disciplinaryRemarks||'')}"></div>
-      ${[1,2,3,4,5].map(level=>`<div class="field"><label>${level}${level===1?'st':level===2?'nd':level===3?'rd':'th'} Offense</label><input id="tda_consequence${level}" value="${esc(record?.[`consequence${level}`]||'')}"></div>`).join('')}
-    </div><div class="tda-form-section"><h4>Applicability</h4>${tdaScopeEditorHTML('tda',record||{tdaType:'Industrial',allClients:true,allBranches:true,allDepartments:true})}</div></div>
+    <div class="modal-body tda-form-body" data-employee-relations-modal>${modalFormTabsHTML('tda_form_tabs',[{id:'definition',label:'Offense Definition',content:definition},{id:'schedule',label:'Sanction Schedule',content:schedule},{id:'scope',label:'Applicability',content:applicability}])}</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><div class="toolbar-spacer"></div><button class="btn btn-primary" onclick="saveTdaRecord('${id}')">Save Offense</button></div>`);
 }
 async function saveTdaRecord(id=''){
@@ -5321,7 +5348,7 @@ function readTdaRuleSelection(prefix){
   return tdaRuleSnapshot(record,document.getElementById(`${prefix}_tda_level`)?.value||0,info.context);
 }
 function refreshRecordTdaRules(){refreshTdaRuleSelector('record');}
-function refreshIncidentTdaRules(){const selected=employeePickerSelected('in_employeeName');const department=document.getElementById('in_department');if(selected&&department&&[...department.options].some(option=>option.value===selected.department))department.value=selected.department||'';refreshTdaRuleSelector('incident');}
+function refreshIncidentTdaRules(){const selected=employeePickerSelected('in_employeeName');const department=document.getElementById('in_department');if(department)department.value=selected?.department||'';refreshTdaRuleSelector('incident');}
 function refreshATDTdaRules(){atdFillEmployee();refreshTdaRuleSelector('atd');}
 function refreshCaseTdaRules(){const selected=employeePickerSelected('case_employee');const department=document.getElementById('case_department');if(selected&&department)department.value=selected.department||'';refreshTdaRuleSelector('case');}
 function cvrOffenseSummaryHTML(rec){
@@ -5377,25 +5404,14 @@ function openCVRForm(id){
   const checked = existing? (existing.offenses||[]) : [];
   const context=tdaContextForEmployee(existing?.employeeId,existing?.employeeName,existing?.department);
   const catalog=applicableTdaCatalog(context);
+  const employee=DB.employees.find(item=>String(item.id)===String(existing?.employeeId||''));
+  const overview=`<div class="formgrid">${employeePickerHTML({id:'cv_employeeName',label:'Employee Name',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true,onSelect:'refreshCVROffenseChoices'})}<div class="field"><label>Department</label><input id="cv_department" value="${esc(existing?.department||employee?.department||'')}" readonly aria-readonly="true"><small class="field-help">Automatically taken from the selected employee's current assignment.</small></div><div class="field"><label>Date of CVR *</label><input type="date" id="cv_date" value="${existing?existing.dateOfCVR:todayISO()}"></div><div class="field"><label>Status</label><select id="cv_status">${CVR_STATUS.map(s=>`<option ${(existing?existing.status:CVR_STATUS[0])===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div></div>`;
+  const offenses=`<div class="formgrid"><div class="field full"><label>Applicable TDA offense(s)</label><div class="checklist policy-offense-list" id="cv_offense_options">${catalog.length? catalog.map(o=>`<label class="checkrow"><input type="checkbox" value="${esc(o.offense)}" ${checked.includes(o.offense)?'checked':''}> <span>${esc(o.offense)}<small>${esc(o.offenseNumber||'TDA')} · ${esc(o.category||o.tdaType||'')}</small></span></label>`).join('') : '<div class="small">Select an employee to load TDA offenses applicable to their assignment.</div>'}</div></div><div class="field full"><label>Other / Additional Offense</label><input id="cv_other" value="${esc(existing?.otherOffense||'')}" placeholder="Use only when the offense is not yet in the approved catalog"></div></div><div class="computed-note">Each checked offense is resolved against the employee's applicable TDA scope. Occurrence level and recommended consequence are snapshotted when saved.</div>`;
+  const evidence=`<div class="formgrid">${fieldHTML({key:'attachment', label:'Uploaded CVR Document', type:'file', full:true, storagePrefix:'cvr', existingData:existing?.attachmentData||''}, existing?.attachment||'')}<div class="field full"><label>Remarks</label><textarea id="cv_remarks" rows="4">${esc(existing?.remarks||'')}</textarea></div></div>`;
   openModal(`
     <div class="modal-head"><div><h3>${existing?'Edit':'Add'} CVR</h3><div class="small">Document checked offenses, supporting evidence, and the current resolution status.</div></div><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body" data-employee-relations-modal>
-      <div class="formgrid">
-        ${employeePickerHTML({id:'cv_employeeName',label:'Employee Name',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true,onSelect:'refreshCVROffenseChoices'})}
-        <div class="field"><label>Department *</label><select id="cv_department" onchange="refreshCVROffenseChoices()">${employeeDepartmentNames(existing?.department||'').map(d=>`<option ${existing&&existing.department===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
-        <div class="field"><label>Date of CVR *</label><input type="date" id="cv_date" value="${existing?existing.dateOfCVR:todayISO()}"></div>
-        <div class="field"><label>Status</label><select id="cv_status">${CVR_STATUS.map(s=>`<option ${(existing?existing.status:CVR_STATUS[0])===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
-        <div class="field full">
-          <label>Offense(s) Checked</label>
-          <div class="checklist" id="cv_offense_options">
-            ${catalog.length? catalog.map(o=>`<label class="checkrow"><input type="checkbox" value="${esc(o.offense)}" ${checked.includes(o.offense)?'checked':''}> <span>${esc(o.offense)}<small>${esc(o.category||o.tdaType||'')}</small></span></label>`).join('') : '<div class="small">No TDA offenses apply to this employee scope. Review the catalog type, client, branch, and department applicability.</div>'}
-          </div>
-        </div>
-        <div class="field full"><label>Other / Additional Offense (write-in, not in catalog)</label><input id="cv_other" value="${esc((existing&&existing.otherOffense)||'')}"></div>
-        ${fieldHTML({key:'attachment', label:'Uploaded CVR Document', type:'file', full:true, storagePrefix:'cvr', existingData:(existing&&existing.attachmentData)||''}, existing?existing.attachment:'')}
-        <div class="field full"><label>Remarks</label><textarea id="cv_remarks" rows="2">${esc((existing&&existing.remarks)||'')}</textarea></div>
-      </div>
-      <div class="computed-note">Offense level (1st through 5th+) and consequence are computed automatically per offense from this employee's CVR history and the applicable TDA catalog — no need to set them manually.</div>
+      ${modalFormTabsHTML('cvr_form_tabs',[{id:'overview',label:'Overview',content:overview},{id:'offenses',label:'TDA Offenses',content:offenses},{id:'evidence',label:'Evidence & Notes',content:evidence}])}
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveCVR('${id||''}')">Save CVR</button></div>
   `);
@@ -5403,7 +5419,7 @@ function openCVRForm(id){
 function refreshCVROffenseChoices(){
   const target=document.getElementById('cv_offense_options');if(!target)return;
   const checked=new Set(Array.from(target.querySelectorAll('input:checked')).map(input=>input.value));
-  const selected=employeePickerSelected('cv_employeeName');const department=document.getElementById('cv_department')?.value||selected?.department||'';
+  const selected=employeePickerSelected('cv_employeeName');const departmentInput=document.getElementById('cv_department');if(departmentInput)departmentInput.value=selected?.department||'';const department=selected?.department||'';
   const catalog=applicableTdaCatalog(tdaContextForEmployee(selected?.id,selected?.name,department));
   target.innerHTML=catalog.length?catalog.map(record=>`<label class="checkrow"><input type="checkbox" value="${esc(record.offense)}" ${checked.has(record.offense)?'checked':''}> <span>${esc(record.offense)}<small>${esc(record.category||record.tdaType||'')}</small></span></label>`).join(''):'<div class="small">No TDA offenses apply to this employee scope. Review the catalog applicability.</div>';
 }
@@ -5418,8 +5434,8 @@ async function saveCVR(id){
   const offenses = Array.from(document.querySelectorAll('#modal input[type=checkbox]:checked')).map(el=>el.value);
   const attachment = document.getElementById('f_attachment').value;
   const attachmentData = document.getElementById('f_attachment_data').value;
-  if(!employeeName || !department || !dateOfCVR){ toast('Please complete employee, department, and date.'); return; }
-  if(!offenses.length && !otherOffense){ toast('Check at least one offense, or write one in.'); return; }
+  if(!employeeName || !employeeId || !department || !dateOfCVR){switchModalFormTab('cvr_form_tabs','overview');toast('Select an employee and complete the record date.',true);return;}
+  if(!offenses.length && !otherOffense){switchModalFormTab('cvr_form_tabs','offenses');toast('Select an applicable TDA offense or enter an additional offense.',true);return;}
   const context=tdaContextForEmployee(employeeId,employeeName,department);
   const tdaRules=offenses.map(offense=>{
     const catalog=selectApplicableTdaRecord(DB.offenseCatalog,offense,context);const level=cvrOffenseLevel(employeeName,offense,id).index;
@@ -5463,6 +5479,31 @@ function incidentTypeOccurrence(employeeName, typeName, beforeId){
   return prior.length+1;
 }
 function nthLabel(n){ return n===1?'1st time':n===2?'2nd time':n===3?'3rd time':n+'th time'; }
+function incidentClassificationOptions(extra=[]){
+  return uniqueSettingNames([...INCIDENT_TYPES,...(DB.incidents||[]).flatMap(record=>[...(record.incidentTypes||[]),record.otherType].filter(Boolean)),...extra]);
+}
+function incidentClassificationPickerHTML(selected=[]){
+  const checked=new Set(selected.map(value=>normalizeTdaText(value).toLowerCase()));
+  const options=incidentClassificationOptions(selected);
+  return `<div class="field full incident-classification-field"><label for="in_type_search">Incident classification(s) *</label><div class="incident-classification-search">${iSearch(14)}<input id="in_type_search" type="search" autocomplete="off" placeholder="Search accident, safety, property, conflict…" oninput="filterIncidentClassifications(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();addIncidentClassification()}"><button type="button" class="btn btn-ghost btn-sm" onclick="addIncidentClassification()">${iPlus(13)} Add</button></div><div class="incident-classification-options" id="in_type_options">${options.map(value=>`<label class="incident-classification-option" data-search-text="${esc(value.toLowerCase())}"><input type="checkbox" value="${esc(value)}" ${checked.has(value.toLowerCase())?'checked':''} onchange="refreshIncidentClassificationSummary()"><span>${esc(value)}</span></label>`).join('')}</div><div class="incident-classification-summary" id="in_type_summary"></div><p class="field-help">Classifications describe what happened. A TDA rule in the Governing Policy tab separately identifies any potentially applicable employee offense.</p></div>`;
+}
+function filterIncidentClassifications(query=''){
+  const q=normalizeTdaText(query).toLowerCase();let visible=0;
+  document.querySelectorAll('#in_type_options .incident-classification-option').forEach(option=>{const show=!q||option.dataset.searchText.includes(q);option.hidden=!show;if(show)visible+=1;});
+  const target=document.getElementById('in_type_options');if(target)target.classList.toggle('no-results',visible===0);
+}
+function refreshIncidentClassificationSummary(){
+  const target=document.getElementById('in_type_summary');if(!target)return;
+  const selected=[...document.querySelectorAll('#in_type_options input:checked')].map(input=>input.value);
+  target.innerHTML=selected.length?selected.map(value=>`<span>${esc(value)}</span>`).join(''):'<span class="empty">No classification selected</span>';
+}
+function addIncidentClassification(){
+  const input=document.getElementById('in_type_search');const value=normalizeTdaText(input?.value);if(!value)return;
+  if(value.length>80){toast('Incident classifications must be 80 characters or fewer.',true);return;}
+  let checkbox=[...document.querySelectorAll('#in_type_options input')].find(item=>normalizeTdaText(item.value).toLowerCase()===value.toLowerCase());
+  if(!checkbox){const list=document.getElementById('in_type_options');const label=document.createElement('label');label.className='incident-classification-option';label.dataset.searchText=value.toLowerCase();label.innerHTML=`<input type="checkbox" value="${esc(value)}" checked onchange="refreshIncidentClassificationSummary()"><span>${esc(value)}</span>`;list?.appendChild(label);checkbox=label.querySelector('input');}
+  if(checkbox)checkbox.checked=true;if(input)input.value='';filterIncidentClassifications('');refreshIncidentClassificationSummary();
+}
 function incidentTypeSummaryHTML(rec){
   const list = [...(rec.incidentTypes||[]), ...(rec.otherType? [rec.otherType]:[])];
   if(!list.length) return '<span class="small">—</span>';
@@ -5513,32 +5554,20 @@ function renderIncidents(){
 }
 function openIncidentForm(id){
   const existing = id? DB.incidents.find(i=>i.id===id): null;
-  const checked = existing? (existing.incidentTypes||[]) : [];
+  const checked = existing? [...(existing.incidentTypes||[]),existing.otherType].filter(Boolean) : [];
+  const employee=DB.employees.find(item=>String(item.id)===String(existing?.employeeId||''));
+  const overview=`<div class="formgrid">${employeePickerHTML({id:'in_employeeName',label:'Employee Name',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true,onSelect:'refreshIncidentTdaRules'})}<div class="field"><label>Department</label><input id="in_department" value="${esc(existing?.department||employee?.department||'')}" readonly aria-readonly="true"><small class="field-help">Automatically taken from the selected employee's current assignment.</small></div><div class="field"><label>Date of Incident *</label><input type="date" id="in_date" value="${existing?existing.dateOfIncident:todayISO()}"></div><div class="field"><label>Severity</label><select id="in_severity">${INCIDENT_SEVERITY.map(s=>`<option ${(existing?existing.severity:INCIDENT_SEVERITY[0])===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div><div class="field"><label>Status</label><select id="in_status">${INCIDENT_STATUS.map(s=>`<option ${(existing?existing.status:INCIDENT_STATUS[0])===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div></div>`;
+  const classification=`<div class="formgrid">${incidentClassificationPickerHTML(checked)}<div class="field full"><label>Description *</label><textarea id="in_description" rows="5" placeholder="Record observable facts, location, witnesses, and immediate action taken.">${esc((existing&&existing.description)||'')}</textarea></div></div>`;
+  const policy=tdaRuleSelectorHTML('incident','incidents',existing?.tdaRule||null,employee,existing?.department||'',id||'');
+  const evidence=`<div class="formgrid">${fieldHTML({key:'attachment', label:'Uploaded Incident Report Document', type:'file', full:true, storagePrefix:'incident', existingData:(existing&&existing.attachmentData)||''}, existing?existing.attachment:'')}<div class="field full"><label>Remarks</label><textarea id="in_remarks" rows="4">${esc((existing&&existing.remarks)||'')}</textarea></div></div><div class="computed-note">Repeat-occurrence counts are calculated per employee and incident classification. Governing TDA offense history is tracked separately through the selected policy snapshot.</div>`;
   openModal(`
     <div class="modal-head"><div><h3>${existing?'Edit':'Add'} Incident Report</h3><div class="small">Capture the incident facts, classification, evidence, and follow-up status.</div></div><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body" data-employee-relations-modal>
-      <div class="formgrid">
-        ${employeePickerHTML({id:'in_employeeName',label:'Employee Name',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true,onSelect:'refreshIncidentTdaRules'})}
-        <div class="field"><label>Department *</label><select id="in_department" onchange="refreshIncidentTdaRules()">${employeeDepartmentNames(existing?.department||'').map(d=>`<option ${existing&&existing.department===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
-        <div class="field"><label>Date of Incident *</label><input type="date" id="in_date" value="${existing?existing.dateOfIncident:todayISO()}"></div>
-        <div class="field"><label>Severity</label><select id="in_severity">${INCIDENT_SEVERITY.map(s=>`<option ${(existing?existing.severity:INCIDENT_SEVERITY[0])===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
-        <div class="field full">
-          <label>Incident Type(s) Checked</label>
-          <div class="checklist">
-            ${INCIDENT_TYPES.map(t=>`<label class="checkrow"><input type="checkbox" value="${esc(t)}" ${checked.includes(t)?'checked':''}> ${esc(t)}</label>`).join('')}
-          </div>
-        </div>
-        <div class="field full"><label>Other / Additional Type (write-in)</label><input id="in_other" value="${esc((existing&&existing.otherType)||'')}"></div>
-        <div class="field full"><label>Description *</label><textarea id="in_description" rows="3">${esc((existing&&existing.description)||'')}</textarea></div>
-        <div class="field"><label>Status</label><select id="in_status">${INCIDENT_STATUS.map(s=>`<option ${(existing?existing.status:INCIDENT_STATUS[0])===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
-        ${tdaRuleSelectorHTML('incident','incidents',existing?.tdaRule||null,DB.employees.find(employee=>String(employee.id)===String(existing?.employeeId||'')),existing?.department||'',id||'')}
-        ${fieldHTML({key:'attachment', label:'Uploaded Incident Report Document', type:'file', full:true, storagePrefix:'incident', existingData:(existing&&existing.attachmentData)||''}, existing?existing.attachment:'')}
-        <div class="field full"><label>Remarks</label><textarea id="in_remarks" rows="2">${esc((existing&&existing.remarks)||'')}</textarea></div>
-      </div>
-      <div class="computed-note">Repeat-occurrence count per incident type is computed automatically from this employee's incident history — no need to set it manually.</div>
+      ${modalFormTabsHTML('incident_form_tabs',[{id:'overview',label:'Overview',content:overview},{id:'classification',label:'Classification & Facts',content:classification},{id:'policy',label:'Governing Policy',content:policy},{id:'evidence',label:'Evidence & Notes',content:evidence}])}
     </div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveIncident('${id||''}')">Save Incident Report</button></div>
   `);
+  requestAnimationFrame(refreshIncidentClassificationSummary);
 }
 async function saveIncident(id){
   const employeeName = document.getElementById('in_employeeName').value.trim();
@@ -5546,16 +5575,17 @@ async function saveIncident(id){
   const department = document.getElementById('in_department').value;
   const dateOfIncident = document.getElementById('in_date').value;
   const severity = document.getElementById('in_severity').value;
-  const otherType = document.getElementById('in_other').value.trim();
+  const otherType = '';
   const description = document.getElementById('in_description').value.trim();
   const status = document.getElementById('in_status').value;
   const remarks = document.getElementById('in_remarks').value.trim();
-  const incidentTypes = Array.from(document.querySelectorAll('#modal input[type=checkbox]:checked')).map(el=>el.value);
+  const incidentTypes = Array.from(document.querySelectorAll('#in_type_options input[type=checkbox]:checked')).map(el=>el.value);
   const attachment = document.getElementById('f_attachment').value;
   const attachmentData = document.getElementById('f_attachment_data').value;
   const tdaRule=readTdaRuleSelection('incident');if(tdaRule===false)return;
-  if(!employeeName || !department || !dateOfIncident || !description){ toast('Please complete employee, department, date, and description.'); return; }
-  if(!incidentTypes.length && !otherType){ toast('Check at least one incident type, or write one in.'); return; }
+  if(!employeeName || !department || !dateOfIncident){switchModalFormTab('incident_form_tabs','overview');toast('Please select an employee and enter the incident date.',true);return;}
+  if(!incidentTypes.length){switchModalFormTab('incident_form_tabs','classification');document.getElementById('in_type_search')?.focus();toast('Select or add at least one incident classification.',true);return;}
+  if(!description){switchModalFormTab('incident_form_tabs','classification');document.getElementById('in_description')?.focus();toast('Enter the incident facts and description.',true);return;}
   const rec=id?DB.incidents.find(i=>i.id===id):{id:uid()};
   const oldStoragePaths=recordStoragePaths(id?rec:null);
   Object.assign(rec,{employeeId,employeeName, department, dateOfIncident, severity, incidentTypes, otherType, description, status, attachment, attachmentData, remarks,tdaRule});
@@ -5808,31 +5838,14 @@ function renderATD(){
 function openATDForm(id){
   const existing = id? DB.atd.find(r=>r.id===id) : null;
   const cat = existing? existing.category : 'Uniforms/Expenses';
+  const employee=DB.employees.find(item=>String(item.id)===String(existing?.employeeId||''));
+  const overview=`<div class="formgrid">${employeePickerHTML({id:'f_employeeName',label:'Employee',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true,onSelect:'refreshATDTdaRules'})}<div class="field"><label>Department</label><input id="f_department" value="${esc(existing?.department||employee?.department||'')}" readonly aria-readonly="true"><small class="field-help">Automatically taken from the selected employee's current assignment.</small></div><div class="field"><label>Position</label><input id="f_position" value="${esc(existing?.position||employee?.position||'')}" readonly aria-readonly="true"></div><div class="field"><label>ATD Category *</label><select id="f_category" onchange="atdToggleCategory()">${ATD_CATEGORIES.map(c=>`<option value="${esc(c)}" ${cat===c?'selected':''}>${esc(c)}</option>`).join('')}</select></div><div class="field"><label>ATD Date *</label><input type="date" id="f_atdDate" value="${existing?existing.atdDate:todayISO()}"></div></div>`;
+  const details=`<div class="formgrid"><div class="field full"><label>Deduction Type / Reason *</label><input id="f_deductionType" value="${esc(existing?.deductionType||'')}" placeholder="e.g. Uniform cost, negligence — damaged equipment"></div><div class="field"><label>Total ATD Amount (₱) *</label><input type="number" step="0.01" id="f_totalAmount" value="${existing?existing.totalAmount:''}"></div><div class="field"><label>Payment Terms / Installment</label><input id="f_paymentTerms" value="${esc(existing?.paymentTerms||'')}" placeholder="e.g. 3 cut-offs"></div></div>`;
+  const policy=`<div id="atd-tda-fields" ${cat==='Charges'?'':'hidden'}>${tdaRuleSelectorHTML('atd','atd',existing?.tdaRule||null,employee,existing?.department||'',id||'')}</div><div id="atd-policy-na" class="computed-note" ${cat==='Charges'?'hidden':''}>A governing TDA policy is used for employee charges. Uniform and ordinary expense deductions do not require an offense policy.</div>`;
+  const evidence=`<div class="formgrid">${fieldHTML({key:'atdForm', label:'ATD Form', type:'file', full:true, storagePrefix:'atd', existingData:existing?existing.atdFormData:''}, existing?existing.atdForm:'')}<div id="atd-charges-fields" style="display:${cat==='Charges'?'contents':'none'}">${fieldHTML({key:'incidentReport', label:'Incident Report (IR)', type:'file', storagePrefix:'atd', existingData:existing?existing.incidentReportData:''}, existing?existing.incidentReport:'')}${fieldHTML({key:'quotation', label:'Quotation / SOA Basis', type:'file', storagePrefix:'atd', existingData:existing?existing.quotationData:''}, existing?existing.quotation:'')}<div class="field"><label>Statement of Account (SOA) Amount (₱)</label><input type="number" step="0.01" id="f_soaAmount" value="${existing?existing.soaAmount||'':''}"></div></div><div class="field full"><label>Remarks</label><textarea id="f_remarks" rows="4">${esc(existing?.remarks||'')}</textarea></div></div><div class="computed-note">Charges require the linked incident report and quotation/SOA. Uniform or expense deductions only need the ATD form.</div>`;
   openModal(`
     <div class="modal-head"><h3>${existing?'Edit':'New'} ATD Record</h3><button onclick="closeModal()">&times;</button></div>
-    <div class="modal-body">
-      <div class="formgrid" id="atd-form">
-        ${employeePickerHTML({id:'f_employeeName',label:'Employee',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true,onSelect:'refreshATDTdaRules'})}
-        <div class="field"><label>Department</label><input id="f_department" value="${esc(existing?existing.department:'')}"></div>
-        <div class="field"><label>Position</label><input id="f_position" value="${esc(existing?existing.position:'')}"></div>
-        <div class="field"><label>ATD Category *</label><select id="f_category" onchange="atdToggleCategory()">
-          ${ATD_CATEGORIES.map(c=>`<option value="${esc(c)}" ${cat===c?'selected':''}>${esc(c)}</option>`).join('')}
-        </select></div>
-        <div class="field"><label>ATD Date *</label><input type="date" id="f_atdDate" value="${existing?existing.atdDate:todayISO()}"></div>
-        <div class="field"><label>Deduction Type / Reason *</label><input id="f_deductionType" value="${esc(existing?existing.deductionType:'')}" placeholder="e.g. Uniform cost, Negligence — damaged equipment"></div>
-        <div class="field"><label>Total ATD Amount (₱) *</label><input type="number" step="0.01" id="f_totalAmount" value="${existing?existing.totalAmount:''}"></div>
-        <div class="field"><label>Payment Terms / Installment</label><input id="f_paymentTerms" value="${esc(existing?existing.paymentTerms:'')}" placeholder="e.g. 3 cut-offs"></div>
-        ${fieldHTML({key:'atdForm', label:'ATD Form', type:'file', full:true, storagePrefix:'atd', existingData:existing?existing.atdFormData:''}, existing?existing.atdForm:'')}
-        <div id="atd-charges-fields" style="display:${cat==='Charges'?'contents':'none'}">
-          ${fieldHTML({key:'incidentReport', label:'Incident Report (IR)', type:'file', storagePrefix:'atd', existingData:existing?existing.incidentReportData:''}, existing?existing.incidentReport:'')}
-          ${fieldHTML({key:'quotation', label:'Quotation / SOA Basis', type:'file', storagePrefix:'atd', existingData:existing?existing.quotationData:''}, existing?existing.quotation:'')}
-          <div class="field"><label>Statement of Account (SOA) Amount (₱)</label><input type="number" step="0.01" id="f_soaAmount" value="${existing?existing.soaAmount||'':''}"></div>
-        </div>
-        <div id="atd-tda-fields" class="full" ${cat==='Charges'?'':'hidden'}>${tdaRuleSelectorHTML('atd','atd',existing?.tdaRule||null,DB.employees.find(employee=>String(employee.id)===String(existing?.employeeId||'')),existing?.department||'',id||'')}</div>
-        <div class="field full"><label>Remarks</label><textarea id="f_remarks" rows="2">${esc(existing?existing.remarks:'')}</textarea></div>
-      </div>
-      <div class="computed-note">Charges (negligence, incidents, damages) require the linked Incident Report and quotation/SOA. Uniform/expense deductions only need the ATD form.</div>
-    </div>
+    <div class="modal-body" data-employee-relations-modal>${modalFormTabsHTML('atd_form_tabs',[{id:'overview',label:'Overview',content:overview},{id:'details',label:'Deduction Details',content:details},{id:'policy',label:'Governing Policy',content:policy},{id:'evidence',label:'Evidence & Notes',content:evidence}])}</div>
     <div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveATDRecord('${id||''}')">Save ATD Record</button></div>
   `);
 }
@@ -5841,6 +5854,7 @@ function atdToggleCategory(){
   const charges=document.getElementById('f_category').value==='Charges';
   box.style.display = charges ? 'contents' : 'none';
   const policy=document.getElementById('atd-tda-fields');if(policy)policy.hidden=!charges;
+  const notApplicable=document.getElementById('atd-policy-na');if(notApplicable)notApplicable.hidden=charges;
 }
 function atdFillEmployee(){
   const name=document.getElementById('f_employeeName').value;
@@ -5855,7 +5869,8 @@ async function saveATDRecord(id){
   const atdDate=document.getElementById('f_atdDate').value;
   const deductionType=document.getElementById('f_deductionType').value.trim();
   const tdaRule=category==='Charges'?readTdaRuleSelection('atd'):null;if(tdaRule===false)return;
-  if(!employeeName||!category||!totalAmount||!atdDate||!deductionType){ toast('Please complete all required fields.'); return; }
+  if(!employeeName||!employeeId||!category||!atdDate){switchModalFormTab('atd_form_tabs','overview');toast('Select an employee and complete the ATD overview.',true);return;}
+  if(!totalAmount||!deductionType){switchModalFormTab('atd_form_tabs','details');toast('Complete the deduction reason and amount.',true);return;}
   const vals = {
     employeeId,employeeName, department:document.getElementById('f_department').value.trim(), position:document.getElementById('f_position').value.trim(),
     category, atdDate, deductionType, totalAmount:parseFloat(totalAmount)||0,
@@ -8556,21 +8571,10 @@ function openCaseFormMarkup(existing,lockedEmployee=null){
   const assigned=DB.users.filter(u=>u.role==='Administrator'||u.role==='HR Staff');
   const title=existing?'Edit HR Case':'New HR Case';
   const lockedTrail=lockedEmployee?`<div class="modal-context-breadcrumb" aria-label="Current location"><span>Employee Information</span><span aria-hidden="true">›</span><span>${esc(employeeDisplayName(lockedEmployee))}</span><span aria-hidden="true">›</span><b>${esc(title)}</b></div>`:'';
-  openModal(`<div class="modal-head"><div class="modal-head-copy">${lockedTrail}<h3>${esc(title)}</h3><div class="small">Record the case details and supporting document in one workspace.</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body" data-employee-relations-modal><div class="formgrid">
-    ${lockedEmployee?caseEmployeeContextHTML(lockedEmployee):employeePickerHTML({id:'case_employee',label:'Employee',selectedId:existing?.employee_record_id||'',required:true,full:true,autofill:false,onSelect:'refreshCaseTdaRules'})}
-    <input type="hidden" id="case_department" value="${esc(existing?.department||lockedEmployee?.department||'')}">
-    <div class="field"><label>Case Number</label><input value="${esc(existing?.case_number||'Generated on save')}" disabled style="background:var(--paper);"></div>
-    <div class="field"><label>Status</label><select id="case_status">${Object.keys(CASE_STATUS_MAP).map(x=>`<option ${existing?.status===x||(!existing&&x==='Open')?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
-    <div class="field"><label>Priority</label><select id="case_priority">${['Low','Normal','High','Urgent'].map(x=>`<option ${existing?.priority===x||(!existing&&x==='Normal')?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
-    <div class="field"><label>Opened Date *</label><input type="date" id="case_opened" value="${esc(existing?.opened_at||todayISO())}"></div>
-    <div class="field"><label>Due Date</label><input type="date" id="case_due" value="${esc(existing?.due_date||'')}"></div>
-    <div class="field"><label>Closed Date</label><input type="date" id="case_closed" value="${esc(existing?.closed_at||'')}"></div>
-    <div class="field"><label>Assigned To</label><select id="case_assigned"><option value="">Unassigned</option>${assigned.map(u=>`<option value="${esc(u.id)}" ${existing?.assigned_to===u.id?'selected':''}>${esc(u.fullName)} · ${esc(u.role)}</option>`).join('')}</select></div>
-    <div class="field full"><label>Subject / Matter</label><input id="case_subject" value="${esc(existing?.subject||'')}" placeholder="e.g. Attendance violation — repeated unauthorized absence"></div>
-    ${tdaRuleSelectorHTML('case','cases',existing?.tdaRule||null,lockedEmployee||DB.employees.find(employee=>String(employee.id)===String(existing?.employee_record_id||'')),existing?.department||lockedEmployee?.department||'',existing?.id||'')}
-    ${fieldHTML({key:'caseAttachment',label:'Primary Case File / Supporting Document',type:'file',full:true,storagePrefix:'cases',existingData:existing?.attachment_ref||''},existing?.attachment_name||'')}
-    <div class="field full"><label>Remarks</label><textarea id="case_remarks" rows="3" placeholder="Case notes, context, or internal remarks…">${esc(existing?.remarks||'')}</textarea></div>
-  </div><div class="computed-note">Case numbers are generated sequentially per calendar year. Priority and due date drive the Action Center and case deadline indicators.</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveCase('${existing?.id||''}')">Save Case</button></div>`);
+  const overview=`<div class="formgrid">${lockedEmployee?caseEmployeeContextHTML(lockedEmployee):employeePickerHTML({id:'case_employee',label:'Employee',selectedId:existing?.employee_record_id||'',required:true,full:true,autofill:false,onSelect:'refreshCaseTdaRules'})}<input type="hidden" id="case_department" value="${esc(existing?.department||lockedEmployee?.department||'')}"><div class="field"><label>Case Number</label><input value="${esc(existing?.case_number||'Generated on save')}" disabled></div><div class="field"><label>Status</label><select id="case_status">${Object.keys(CASE_STATUS_MAP).map(x=>`<option ${existing?.status===x||(!existing&&x==='Open')?'selected':''}>${esc(x)}</option>`).join('')}</select></div><div class="field"><label>Priority</label><select id="case_priority">${['Low','Normal','High','Urgent'].map(x=>`<option ${existing?.priority===x||(!existing&&x==='Normal')?'selected':''}>${esc(x)}</option>`).join('')}</select></div><div class="field"><label>Opened Date *</label><input type="date" id="case_opened" value="${esc(existing?.opened_at||todayISO())}"></div><div class="field"><label>Due Date</label><input type="date" id="case_due" value="${esc(existing?.due_date||'')}"></div><div class="field"><label>Closed Date</label><input type="date" id="case_closed" value="${esc(existing?.closed_at||'')}"></div><div class="field full"><label>Assigned To</label><select id="case_assigned"><option value="">Unassigned</option>${assigned.map(u=>`<option value="${esc(u.id)}" ${existing?.assigned_to===u.id?'selected':''}>${esc(u.fullName)} · ${esc(u.role)}</option>`).join('')}</select></div></div><div class="computed-note">Case numbers are generated sequentially per calendar year. Priority and due date drive the Action Center and deadline indicators.</div>`;
+  const policy=`<div class="formgrid"><div class="field full"><label>Subject / Matter</label><input id="case_subject" value="${esc(existing?.subject||'')}" placeholder="e.g. Attendance violation — repeated unauthorized absence"></div>${tdaRuleSelectorHTML('case','cases',existing?.tdaRule||null,lockedEmployee||DB.employees.find(employee=>String(employee.id)===String(existing?.employee_record_id||'')),existing?.department||lockedEmployee?.department||'',existing?.id||'')}</div>`;
+  const evidence=`<div class="formgrid">${fieldHTML({key:'caseAttachment',label:'Primary Case File / Supporting Document',type:'file',full:true,storagePrefix:'cases',existingData:existing?.attachment_ref||''},existing?.attachment_name||'')}<div class="field full"><label>Remarks</label><textarea id="case_remarks" rows="5" placeholder="Case notes, context, or internal remarks…">${esc(existing?.remarks||'')}</textarea></div></div>`;
+  openModal(`<div class="modal-head"><div class="modal-head-copy">${lockedTrail}<h3>${esc(title)}</h3><div class="small">Record the case details and supporting document in one workspace.</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body" data-employee-relations-modal>${modalFormTabsHTML('case_form_tabs',[{id:'overview',label:'Overview',content:overview},{id:'policy',label:'Matter & Policy',content:policy},{id:'evidence',label:'Evidence & Notes',content:evidence}])}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveCase('${existing?.id||''}')">Save Case</button></div>`);
 }
 async function saveCase(id){
   if(SESSION?.role==='Viewer') return;
@@ -8582,11 +8586,11 @@ async function saveCase(id){
   const subject=document.getElementById('case_subject').value.trim(); const remarks=document.getElementById('case_remarks').value.trim(); const assignedTo=document.getElementById('case_assigned').value||null;
   const attachmentName=document.getElementById('f_caseAttachment')?.value||''; const attachmentRef=document.getElementById('f_caseAttachment_data')?.value||'';
   const tdaRule=readTdaRuleSelection('case');if(tdaRule===false)return;
-  if(!employeeRecordId||!employeeName||!openedAt){toast('Please select an employee and opened date.');return;}
-  if(dueDate&&dueDate<openedAt){toast('Due date cannot be before the opened date.');return;}
-  if(closedAt&&closedAt<openedAt){toast('Closed date cannot be before the opened date.');return;}
-  if(status==='Closed'&&!closedAt){toast('Please enter the closed date for a Closed case.');return;}
-  if(dueDate&&closedAt&&closedAt<dueDate&&status!=='Closed'){toast('An open case cannot have a closed date earlier than its due date.');return;}
+  if(!employeeRecordId||!employeeName||!openedAt){switchModalFormTab('case_form_tabs','overview');toast('Please select an employee and opened date.',true);return;}
+  if(dueDate&&dueDate<openedAt){switchModalFormTab('case_form_tabs','overview');toast('Due date cannot be before the opened date.',true);return;}
+  if(closedAt&&closedAt<openedAt){switchModalFormTab('case_form_tabs','overview');toast('Closed date cannot be before the opened date.',true);return;}
+  if(status==='Closed'&&!closedAt){switchModalFormTab('case_form_tabs','overview');toast('Please enter the closed date for a Closed case.',true);return;}
+  if(dueDate&&closedAt&&closedAt<dueDate&&status!=='Closed'){switchModalFormTab('case_form_tabs','overview');toast('An open case cannot have a closed date earlier than its due date.',true);return;}
   try{
     if(id){
       const beforeRule=await loadCaseTdaRule(id);
@@ -8852,7 +8856,7 @@ Object.assign(window, {
   evalStatusInfo, exportATDCSV, exportCVRCSV, exportEmployeesCSV, exportIncidentsCSV, exportModuleCSV, exportWeeklyCSV, openEmployeeImport, handleEmployeeImportFile, renderEmployeeImportPreview, commitEmployeeImport, downloadEmployeeImportTemplate,
   renderTdaCatalog, openTdaForm, saveTdaRecord, openTdaImport, handleTdaImportFile, renderTdaImportPreview, commitTdaImport, toggleTdaScope, refreshCVROffenseChoices,
   refreshTdaRuleSelector, refreshTdaRulePreview, refreshRecordTdaRules, refreshIncidentTdaRules, refreshATDTdaRules, refreshCaseTdaRules, tdaRulePickerOpen, tdaRulePickerInput, tdaRulePickerClose, tdaRulePickerChoose, tdaRulePickerClear, tdaRulePickerKeydown,
-  fieldHTML, fmtDate, formatGovernmentIdInput, getEvalRecord, go, handleFileInput, incidentTypeOccurrence, incidentTypeSummaryHTML,
+  fieldHTML, fmtDate, formatGovernmentIdInput, getEvalRecord, go, handleFileInput, incidentTypeOccurrence, incidentTypeSummaryHTML, filterIncidentClassifications, refreshIncidentClassificationSummary, addIncidentClassification,
   toggleSidebar, closeSidebar, applyReportFilters, exportReportEmployees, exportReportActivity, exportReportATD, exportReportCases,
   loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
   openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, employeeWorkspaceNavigate, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
@@ -8863,7 +8867,7 @@ Object.assign(window, {
   renderManpowerFulfillment, manpowerSetView, manpowerResetFilters, openManpowerRequestForm, saveManpowerRequest, deleteManpowerRequest, openManpowerRequestDetails, openManpowerRequirementForm, saveManpowerRequirement, openManpowerSlotForm, saveManpowerSlot, manpowerSlotReplacementChanged, exportManpowerFulfillment,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, saveDepartmentSetting, savePositionSetting, setTitle, shiftDate, statusBadge, storageSettingsChanged, testGoogleDriveConnection, switchAuthTab, switchSettingsTab, syncPositionSelect, syncUserExportControl, toggleCatalogQuickAdd, catalogQuickAddKeydown, saveCatalogQuickAdd, openDepartmentSetting, openPositionSetting, toCSV,
   openPasswordRecovery, requestPasswordRecovery, completePasswordRecovery, openAccountSecurity, requestOwnEmailChange, requestOwnPasswordReset, switchAccessTab, openEffectiveAccess, openRoleForm, saveAccessRole, saveRoleMatrix, syncUserPasswordPolicy,
-  toast, todayISO, togglePasswordVisibility, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, serverTablePageGo, serverTablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, openInformationNote, openModuleInformation, paginationMeta, paginationHTML, paginationReset, paginateRows,
+  toast, todayISO, togglePasswordVisibility, toggleWeeklyCat, uid, uploadAttachment, weeklyShiftWeek, tablePageGo, tablePageSize, serverTablePageGo, serverTablePageSize, resetAllTablePages, enhanceDataTables, enhanceRowActionMenus, openRowActionMenu, runRowAction, openInformationNote, openModuleInformation, paginationMeta, paginationHTML, paginationReset, paginateRows, switchModalFormTab,
   addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom, addressDetailInput
 });
 
