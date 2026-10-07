@@ -16,12 +16,13 @@ test('employee relations transactions use one scoped TDA rule selector',()=>{
 
 test('TDA rule selection is a searchable keyboard-accessible policy picker',()=>{
   assert.match(source,/function tdaRulePickerMatches\(prefix,query=''/);
-  assert.match(source,/record\.offenseNumber,record\.offense,record\.category,record\.disciplinaryRemarks,record\.tdaType/);
+  assert.match(source,/filterTdaRecords\(tdaRulePickerRecords\(prefix\),query\)/);
   assert.match(source,/role="combobox" aria-autocomplete="list"/);
   assert.match(source,/function tdaRulePickerKeydown\(event,prefix\)/);
   assert.match(source,/event\.key==='Enter'/);
   assert.match(source,/data-tda-rule-id/);
   assert.match(styles,/\.tda-picker-options>button\.active/);
+  assert.match(styles,/\.tda-picker-options\{position:static/);
 });
 
 test('TDA snapshots preserve the rule, occurrence, recommendation, and schedule',()=>{

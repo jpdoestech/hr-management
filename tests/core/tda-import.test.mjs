@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   deriveDisciplinaryRemarks,
+  filterTdaRecords,
   parseTdaMatrix,
   selectApplicableTdaRecord,
   tdaDuplicateKey,
@@ -51,4 +52,18 @@ test('selects the most specific applicable TDA record', () => {
   ];
   assert.equal(selectApplicableTdaRecord(records,'Negligence',{tdaType:'Industrial',department:'PRODUCTION'}),records[1]);
   assert.equal(selectApplicableTdaRecord(records,'Negligence',{tdaType:'Industrial',department:'SALES'}),records[0]);
+});
+
+test('searches TDA records by code, offense, category, type, scope, and consequence', () => {
+  const records=[
+    {id:'a',offenseNumber:'17',offense:'Failure to wear PPE',category:'SAFETY',tdaType:'Industrial',departments:['PRODUCTION'],consequence1:'Written warning',active:true},
+    {id:'b',offenseNumber:'22',offense:'Unauthorized absence',category:'ATTENDANCE',tdaType:'Office',departments:['ADMIN'],consequence1:'Reprimand',active:true},
+    {id:'c',offenseNumber:'30',offense:'Inactive rule',category:'SAFETY',active:false},
+  ];
+  assert.deepEqual(filterTdaRecords(records,'17').map(record=>record.id),['a']);
+  assert.deepEqual(filterTdaRecords(records,'ppe').map(record=>record.id),['a']);
+  assert.deepEqual(filterTdaRecords(records,'attendance').map(record=>record.id),['b']);
+  assert.deepEqual(filterTdaRecords(records,'production').map(record=>record.id),['a']);
+  assert.deepEqual(filterTdaRecords(records,'written warning').map(record=>record.id),['a']);
+  assert.deepEqual(filterTdaRecords(records,'safety').map(record=>record.id),['a']);
 });

@@ -8,7 +8,7 @@ import { roleCanExport } from './core/export-access.js?v=20260930-1';
 import { manpowerRequestSummary, manpowerRequestTotals, requirementSlotCounts, slotChronologyIssues, slotMetrics } from './core/manpower.js?v=20260930-1';
 import { measureAsync, recordPerformance, performanceSnapshot } from './core/performance.js?v=20261002-1';
 import { ACCESS_ACTIONS, ACCESS_MODULES, ACCESS_PERMISSION_KEYS, evaluateEffectiveAccess, hasEffectivePermission, legacyPermissions, permissionLabel } from './core/access-control.js?v=20261006-1';
-import { normalizeTdaScope, normalizeTdaText, parseTdaMatrix, selectApplicableTdaRecord, tdaDuplicateKey, tdaRecordApplies, tdaScopeKey } from './core/tda-import.js?v=20261006-1';
+import { filterTdaRecords, normalizeTdaScope, normalizeTdaText, parseTdaMatrix, selectApplicableTdaRecord, tdaDuplicateKey, tdaRecordApplies, tdaScopeKey } from './core/tda-import.js?v=20261007-2';
 import { addressComponentHTML, addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom, addressDetailInput, initializeAddressComponents, readAddressComponent } from './address/address-component.js?v=20260930-2';
 import { formatPhilippineAddress, normalizeAddress } from './address/address-models.js?v=20260930-2';
 
@@ -5269,7 +5269,7 @@ function tdaRuleDisplay(record){
 }
 function tdaRulePickerRecords(prefix){
   const root=document.getElementById(`${prefix}_tda_policy`);const selectedId=document.getElementById(`${prefix}_tda_rule`)?.value||root?.dataset.selectedRule||'';
-  const {employee,context}=tdaRuleContext(prefix);const records=employee?applicableTdaCatalog(context):[];
+  const {employee,context}=tdaRuleContext(prefix);const records=employee?applicableTdaCatalog(context):filterTdaRecords(DB.offenseCatalog||[],'');
   const saved=(DB.offenseCatalog||[]).find(record=>String(record.id)===String(selectedId));
   if(saved&&!records.some(record=>String(record.id)===String(saved.id)))records.unshift(saved);
   return records;
@@ -5279,21 +5279,12 @@ function tdaRulePickerHTML(prefix,records,selectedId=''){
   return `<div class="field"><label for="${prefix}_tda_rule_search">Applicable TDA offense</label><div class="tda-picker" id="${prefix}_tda_rule_picker" data-active-index="-1"><input type="hidden" id="${prefix}_tda_rule" value="${esc(selected?.id||'')}"><div class="tda-picker-input">${iSearch(15)}<input id="${prefix}_tda_rule_search" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${prefix}_tda_rule_options" autocomplete="off" spellcheck="false" placeholder="Search offense, code, category, or TDA type…" value="${esc(tdaRuleDisplay(selected))}" onfocus="tdaRulePickerOpen('${prefix}')" oninput="tdaRulePickerInput('${prefix}',this.value)" onkeydown="tdaRulePickerKeydown(event,'${prefix}')"><button type="button" class="tda-picker-clear" title="Clear TDA rule" aria-label="Clear TDA rule" onclick="tdaRulePickerClear('${prefix}')">&times;</button></div><div class="tda-picker-options" id="${prefix}_tda_rule_options" role="listbox" hidden></div></div></div>`;
 }
 function tdaRulePickerMatches(prefix,query=''){
-  const q=normalizeTdaText(query).toLowerCase();
-  return tdaRulePickerRecords(prefix).filter(record=>!q||[
-    record.offenseNumber,record.offense,record.category,record.disciplinaryRemarks,record.tdaType,tdaScopeLabel(record),
-    record.consequence1,record.consequence2,record.consequence3,record.consequence4,record.consequence5,
-  ].some(value=>normalizeTdaText(value).toLowerCase().includes(q))).sort((a,b)=>{
-    const aValues=[a.offenseNumber,a.offense].map(value=>normalizeTdaText(value).toLowerCase());
-    const bValues=[b.offenseNumber,b.offense].map(value=>normalizeTdaText(value).toLowerCase());
-    const aFirst=q&&aValues.some(value=>value.startsWith(q))?0:1;const bFirst=q&&bValues.some(value=>value.startsWith(q))?0:1;
-    return aFirst-bFirst||String(a.offense||'').localeCompare(String(b.offense||''));
-  });
+  return filterTdaRecords(tdaRulePickerRecords(prefix),query);
 }
 function tdaRulePickerRender(prefix,query=''){
   const picker=document.getElementById(`${prefix}_tda_rule_picker`);const options=document.getElementById(`${prefix}_tda_rule_options`);const input=document.getElementById(`${prefix}_tda_rule_search`);if(!picker||!options||!input)return;
   const records=tdaRulePickerMatches(prefix,query);const visible=String(query||'').trim()?records:records.slice(0,20);picker.dataset.activeIndex='-1';
-  options.innerHTML=visible.length?visible.map((record,index)=>`<button type="button" role="option" data-index="${index}" data-tda-rule-id="${esc(record.id)}" onmousedown="event.preventDefault()" onclick="tdaRulePickerChoose('${prefix}','${esc(record.id)}')"><span class="tda-picker-code">${esc(record.offenseNumber||'TDA')}</span><span><b>${esc(record.offense||'Unnamed offense')}</b><small>${esc(record.category||record.disciplinaryRemarks||'Unclassified')} · ${esc(tdaScopeLabel(record))}</small></span><em>${esc(record.tdaType||'General')}</em></button>`).join(''):`<div class="tda-picker-empty"><b>No applicable TDA rule found</b><span>${tdaRulePickerRecords(prefix).length?'Try another offense, code, category, or TDA type.':'Select an employee first or review the catalog scope.'}</span></div>`;
+  options.innerHTML=visible.length?visible.map((record,index)=>`<button type="button" role="option" data-index="${index}" data-tda-rule-id="${esc(record.id)}" onmousedown="event.preventDefault()" onclick="tdaRulePickerChoose('${prefix}','${esc(record.id)}')"><span class="tda-picker-code">${esc(record.offenseNumber||'TDA')}</span><span><b>${esc(record.offense||'Unnamed offense')}</b><small>${esc(record.category||record.disciplinaryRemarks||'Unclassified')} · ${esc(tdaScopeLabel(record))}</small></span><em>${esc(record.tdaType||'General')}</em></button>`).join(''):`<div class="tda-picker-empty"><b>No matching TDA rule found</b><span>${tdaRulePickerRecords(prefix).length?'Try another offense, code, category, consequence, or TDA type.':'The active TDA catalog has no rule for this employee assignment.'}</span></div>`;
   if(records.length>visible.length)options.insertAdjacentHTML('beforeend',`<div class="tda-picker-more">Type to search all ${records.length} applicable policies.</div>`);
   options.hidden=false;input.setAttribute('aria-expanded','true');
 }

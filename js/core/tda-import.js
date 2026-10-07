@@ -33,6 +33,33 @@ export function normalizeTdaHeader(value) {
   return normalizeTdaText(value).toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+export function filterTdaRecords(records, query = '') {
+  const normalizedQuery = normalizeTdaText(query).toLowerCase();
+  return (records || []).filter(record => record?.active !== false).filter(record => {
+    if (!normalizedQuery) return true;
+    const searchable = [
+      record.offenseNumber,
+      record.offense,
+      record.category,
+      record.disciplinaryRemarks,
+      record.tdaType,
+      record.clientName,
+      ...(record.branches || []),
+      ...(record.departments || []),
+      record.consequence1,
+      record.consequence2,
+      record.consequence3,
+      record.consequence4,
+      record.consequence5,
+    ];
+    return searchable.some(value => normalizeTdaText(value).toLowerCase().includes(normalizedQuery));
+  }).sort((a, b) => {
+    const starts = record => [record.offenseNumber, record.offense]
+      .some(value => normalizeTdaText(value).toLowerCase().startsWith(normalizedQuery));
+    return Number(starts(b)) - Number(starts(a)) || String(a.offense || '').localeCompare(String(b.offense || ''));
+  });
+}
+
 export function deriveDisciplinaryRemarks(category, firstConsequence) {
   const normalizedCategory = normalizeTdaText(category).toUpperCase();
   return normalizeTdaText(firstConsequence).toUpperCase() === 'DISMISSAL'
