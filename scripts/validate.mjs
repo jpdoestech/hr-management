@@ -28,7 +28,8 @@ const required=[
   'database/migrations/phase20-access-control.sql','docs/ACCESS-CONTROL-SETUP.md',
   'js/core/employee-relations.js','supabase/phase23-employee-relations-case-foundation.sql',
   'database/migrations/phase23-employee-relations-case-foundation.sql','supabase/phase24-employee-relations-due-process.sql',
-  'database/migrations/phase24-employee-relations-due-process.sql','docs/EMPLOYEE-RELATIONS-REDESIGN-PHASE-A.md'
+  'database/migrations/phase24-employee-relations-due-process.sql','supabase/phase25-disciplinary-history.sql',
+  'database/migrations/phase25-disciplinary-history.sql','docs/EMPLOYEE-RELATIONS-REDESIGN-PHASE-A.md','docs/EMPLOYEE-RELATIONS-PHASE-D.md'
 ];
 const missing=required.filter(f=>!fs.existsSync(path.join(root,f)));
 if(missing.length){
@@ -191,6 +192,12 @@ if(dueProcessMigration!==dueProcessMigrationCopy || !dueProcessMigration.include
   console.error('Employee Relations due-process migration copies are missing, incomplete, or out of sync.');
   process.exit(1);
 }
+const disciplinaryHistoryMigration=fs.readFileSync(path.join(root,'supabase/phase25-disciplinary-history.sql'),'utf8');
+const disciplinaryHistoryMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase25-disciplinary-history.sql'),'utf8');
+if(disciplinaryHistoryMigration!==disciplinaryHistoryMigrationCopy || !disciplinaryHistoryMigration.includes('hr_disciplinary_history') || !disciplinaryHistoryMigration.includes('generate_case_disciplinary_history') || !disciplinaryHistoryMigration.includes("current_user_has_permission('employee_relations.view')")){
+  console.error('Employee Relations disciplinary-history migration copies are missing, incomplete, or out of sync.');
+  process.exit(1);
+}
 for(const feature of ['CASE_WORKFLOW_STAGES','caseTransitionValidation','createCaseAllegationFromReport','openCaseAllegationForm','Report / allegation']){
   if(!app.includes(feature)){
     console.error(`Employee Relations case-domain contract is missing: ${feature}`);
@@ -200,6 +207,12 @@ for(const feature of ['CASE_WORKFLOW_STAGES','caseTransitionValidation','createC
 for(const feature of ['openCaseResponseForm','openCaseHearingForm','openCaseDecisionForm','saveCaseDecisionReview','finalizationStatus','Approve Decision']){
   if(!app.includes(feature)){
     console.error(`Employee Relations due-process contract is missing: ${feature}`);
+    process.exit(1);
+  }
+}
+for(const feature of ['loadDisciplinaryHistory','qualifyingDisciplinaryHistory(DISCIPLINARY_HISTORY_CACHE','Verified History','Legacy Review','exportDisciplinaryHistoryCSV']){
+  if(!app.includes(feature)){
+    console.error(`Employee Relations disciplinary-history contract is missing: ${feature}`);
     process.exit(1);
   }
 }

@@ -9,7 +9,7 @@ import { manpowerRequestSummary, manpowerRequestTotals, requirementSlotCounts, s
 import { measureAsync, recordPerformance, performanceSnapshot } from './core/performance.js?v=20261002-1';
 import { ACCESS_ACTIONS, ACCESS_MODULES, ACCESS_PERMISSION_KEYS, evaluateEffectiveAccess, hasEffectivePermission, legacyPermissions, permissionLabel } from './core/access-control.js?v=20261006-1';
 import { filterTdaRecords, normalizeTdaScope, normalizeTdaText, parseTdaMatrix, selectApplicableTdaRecord, tdaDuplicateKey, tdaRecordApplies, tdaScopeKey } from './core/tda-import.js?v=20261007-2';
-import { CASE_WORKFLOW_STAGES, CASE_TERMINAL_STAGES, LEGACY_CASE_STAGES, CASE_RESPONSE_STATUSES, CASE_HEARING_STATUSES, CASE_DECISION_STATUSES, CASE_DECISION_OUTCOMES, CASE_NOD_STATUSES, canTransitionCase, caseStageOptions, caseTransitionValidation, caseDueProcessReadiness, caseDecisionValidation, isCaseReportSource, isCaseTerminalStage } from './core/employee-relations.js?v=20261007-2';
+import { CASE_WORKFLOW_STAGES, CASE_TERMINAL_STAGES, LEGACY_CASE_STAGES, CASE_RESPONSE_STATUSES, CASE_HEARING_STATUSES, CASE_DECISION_STATUSES, CASE_DECISION_OUTCOMES, CASE_NOD_STATUSES, canTransitionCase, caseStageOptions, caseTransitionValidation, caseDueProcessReadiness, caseDecisionValidation, isCaseReportSource, isCaseTerminalStage, qualifyingDisciplinaryHistory } from './core/employee-relations.js?v=20261007-3';
 import { addressComponentHTML, addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom, addressDetailInput, initializeAddressComponents, readAddressComponent } from './address/address-component.js?v=20260930-2';
 import { formatPhilippineAddress, normalizeAddress } from './address/address-models.js?v=20260930-2';
 
@@ -38,6 +38,9 @@ let USER_PREFERENCES_SYNC_READY = true;
 let ACCESS_CONTROL_READY = true;
 let CASE_DOMAIN_READY = null;
 let CASE_DUE_PROCESS_READY = null;
+let DISCIPLINARY_HISTORY_READY = null;
+let DISCIPLINARY_HISTORY_LOADED = false;
+let DISCIPLINARY_HISTORY_CACHE = [];
 let ACCESS_STORE = {roles:[],rolePermissions:[],userRoles:[],overrides:[],scopes:[],assignments:[]};
 const DEFAULT_DEPARTMENT_NAMES = ['LOGISTICS','WAREHOUSE','UTILITY','MAINTENANCE','PRODUCTION','ADMIN','SALES'];
 
@@ -79,6 +82,39 @@ async function loadCaseDueProcess(caseId){
   if(error)throw error;
   return {responses:responseResult.data||[],hearings:hearingResult.data||[],decisions:decisionResult.data||[]};
 }
+
+function isMissingDisciplinaryHistory(error){
+  return ['42P01','PGRST205','PGRST204'].includes(error?.code) || /hr_disciplinary_history/i.test(error?.message||'')&&/not find|does not exist|schema cache/i.test(error?.message||'');
+}
+async function ensureDisciplinaryHistoryReady(){
+  if(DISCIPLINARY_HISTORY_READY!==null)return DISCIPLINARY_HISTORY_READY;
+  const {error}=await supabase.from('hr_disciplinary_history').select('id').limit(1);
+  if(error){
+    if(isMissingDisciplinaryHistory(error)){DISCIPLINARY_HISTORY_READY=false;return false;}
+    console.warn('Could not verify the disciplinary history table',error);
+    DISCIPLINARY_HISTORY_READY=false;return false;
+  }
+  DISCIPLINARY_HISTORY_READY=true;return true;
+}
+async function loadDisciplinaryHistory({force=false}={}){
+  if(!(await ensureDisciplinaryHistoryReady()))return [];
+  if(DISCIPLINARY_HISTORY_LOADED&&!force)return DISCIPLINARY_HISTORY_CACHE;
+  const rows=[];
+  const pageSize=1000;
+  for(let offset=0;;offset+=pageSize){
+    const {data,error}=await supabase.from('hr_disciplinary_history').select('*').order('finalization_date',{ascending:false}).order('created_at',{ascending:false}).range(offset,offset+pageSize-1);
+    if(error){
+      if(isMissingDisciplinaryHistory(error)){DISCIPLINARY_HISTORY_READY=false;DISCIPLINARY_HISTORY_LOADED=false;DISCIPLINARY_HISTORY_CACHE=[];return [];}
+      throw error;
+    }
+    const batch=data||[];rows.push(...batch);
+    if(batch.length<pageSize)break;
+  }
+  DISCIPLINARY_HISTORY_CACHE=rows;
+  DISCIPLINARY_HISTORY_LOADED=true;
+  return rows;
+}
+function invalidateDisciplinaryHistory(){DISCIPLINARY_HISTORY_LOADED=false;DISCIPLINARY_HISTORY_CACHE=[];}
 
 function blankDB(){
   return {employees:[],onboardingCandidates:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],manpowerRequests:[],manpowerRequirements:[],manpowerSlots:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],lifecycleChecklists:[],serviceRequests:[],settings:{orgName:'SCPA',probationDays:180,fileStorageProvider:'supabase',googleDriveRootUrl:'',googleDriveClientId:'',branchLocations:['Main Office'],allowanceTypes:[],departments:DEFAULT_DEPARTMENT_NAMES.map(name=>({name,active:true})),positions:[]},audit:[],users:[]};
@@ -830,7 +866,7 @@ function shiftDate(days){ const d=new Date(); d.setDate(d.getDate()+days); retur
 let DB = blankDB();
 
 let SESSION = null; // current user
-let STATE = { view:'dashboard', dashboardTab:'priorities', accessTab:'users', accessSearch:'', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeBranchFilter:'', employeeStatusFilter:'', employeeClassFilter:'', employeeFiltersExpanded:false, lifecycleSearch:'', lifecycleFilter:'', checklistSearch:'', checklistType:'', checklistStatus:'Active', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', actionSearch:'', actionLevel:'all', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, weeklyTab:'summary', opsTab:'employee', opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', workflowPriority:'', workflowDepartment:'', analyticsTab:'overview', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', analyticsBranch:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationTab:'overview', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryFilter:'', cvrFilter:'', incidentFilter:'', evaluationFilter:'', manpowerView:'requests', manpowerSearch:'', manpowerBranch:'', manpowerStatus:'', manpowerRisk:'', manpowerType:'', tablePages:{}, tablePageSizes:{} };
+let STATE = { view:'dashboard', dashboardTab:'priorities', accessTab:'users', accessSearch:'', search:'', filter:'', filterDept:'', filterStatus:'', employeeSearch:'', employeeDepartmentFilter:'', employeeBranchFilter:'', employeeStatusFilter:'', employeeClassFilter:'', employeeFiltersExpanded:false, lifecycleSearch:'', lifecycleFilter:'', checklistSearch:'', checklistType:'', checklistStatus:'Active', selfServiceSearch:'', selfServiceStatus:'', serviceApprovalSearch:'', serviceApprovalStatus:'Pending', actionSearch:'', actionLevel:'all', calMonth:new Date().getMonth(), calYear:new Date().getFullYear(), calSel:null, leaveTab:'records', weekStart:null, weeklyOpenCat:null, weeklyTab:'summary', opsTab:'employee', opsEmployeeId:'', workflowFilter:'queue', workflowStatus:'Pending', workflowType:'', workflowPriority:'', workflowDepartment:'', analyticsTab:'overview', analyticsRange:'90d', analyticsStart:addDaysISO(new Date().toISOString().slice(0,10),-89), analyticsEnd:new Date().toISOString().slice(0,10), analyticsDept:'', analyticsBranch:'', reportStart:addDaysISO(new Date().toISOString().slice(0,10),-29), reportEnd:new Date().toISOString().slice(0,10), reportDept:'', documentStorage:'', documentCategory:'', documentExpiry:'', documentStatus:'', qualityFilter:'all', qualitySearch:'', automationTab:'overview', automationFilter:'all', automationSearch:'', opsEmployeeSearch:'', opsEmployeeDept:'', opsEmployeeStatus:'', opsEmployeeClass:'', opsWorkFilter:'all', opsHistorySearch:'', disciplinaryTab:'verified', disciplinaryFilter:'', offenseSummaryFilter:'all', cvrFilter:'', incidentFilter:'', evaluationFilter:'', manpowerView:'requests', manpowerSearch:'', manpowerBranch:'', manpowerStatus:'', manpowerRisk:'', manpowerType:'', tablePages:{}, tablePageSizes:{} };
 let REPORT_CACHE = {cases:[], atdRows:[]};
 let DASHBOARD_CASE_CACHE = null;
 let ANALYTICS_CASE_CACHE = null;
@@ -991,6 +1027,7 @@ async function bootAuthenticated(user){
     LOADED_RECORD_MODULES.clear();
     MODULE_LOAD_QUEUE=Promise.resolve();
     invalidateEmployeeDirectoryCache();
+    invalidateDisciplinaryHistory();
     let state=await measureAsync('app.bootstrap-data',()=>loadDB());
     // An empty database is a valid production state, including after an
     // administrator performs the user-preserving reset.
@@ -1029,6 +1066,7 @@ async function doLogout(){
   SESSION=null;
   LOADED_RECORD_MODULES.clear();
   MODULE_LOAD_QUEUE=Promise.resolve();
+  invalidateDisciplinaryHistory();
   revealSessionUI();
   document.getElementById('app').classList.remove('on');
   document.getElementById('auth-screen').style.display='';
@@ -1996,7 +2034,7 @@ const NAV = [
     {v:'nte',label:'NTE',icon:iDoc},
     {v:'memos',label:'Legacy Memoranda',icon:iDoc},
     {v:'nod',label:'NOD',icon:iDoc},
-    {v:'disciplinary',label:'Legacy Disciplinary History',icon:iShield},
+    {v:'disciplinary',label:'Disciplinary History',icon:iShield},
     {v:'offenseCatalog',label:'TDA Catalog',icon:iDoc},
     {v:'offenseSummary',label:'History Review',icon:iChart},
   ]},
@@ -2313,7 +2351,7 @@ function setTitle(t,sub){
 
 const INFORMATION_NOTES={
   leaveUploads:{title:'Leave document handling',body:`Uploaded leave forms use the storage destination selected by the System Administrator. Files can be up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each. Automatic OCR or text extraction is not performed, so all fields must be entered or confirmed manually.`},
-  disciplinaryLevels:{title:'Legacy disciplinary history',body:'Legacy disciplinary records remain available for historical reference but are not automatically treated as substantiated findings. HR must verify and migrate qualifying outcomes before they affect progressive occurrence.'},
+  disciplinaryLevels:{title:'Disciplinary history',body:'Verified entries are generated from approved decisions and finalized NODs. Legacy records remain available for historical reference but do not affect progressive occurrence until they are reviewed and migrated.'},
   cvrOcr:{title:'CVR document handling',body:'The system does not automatically scan or OCR a photo or scan of a printed CVR. Select or enter the reported matters shown on the paper CVR and attach the source document. A CVR remains an allegation/source report and does not count as a confirmed offense.'},
   incidentOcr:{title:'Incident report handling',body:'The system does not automatically scan or OCR a printed or photographed incident report. Select or enter the incident types shown on the report and attach the source document. Repeat-incident counts are calculated from saved history.'},
   atdUploads:{title:'ATD document handling',body:`ATD forms, incident reports, quotation or SOA documents, and payslips use the storage destination selected by the System Administrator. Files can be up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each. Payment status and balances are calculated from recorded payments.`},
@@ -3128,6 +3166,10 @@ async function renderModuleView(key){
 }
 async function openRecordForm(key, id){
   await ensureRecordModules(recordModulesForView(key));
+  if(TDA_CONNECTED_MODULES.has(key)){
+    try{await loadDisciplinaryHistory();}catch(error){toast('Could not load verified disciplinary history: '+error.message,true);return;}
+  }
+  if(key==='disciplinary'&&!hasPermission('employee_relations.manage')){toast('Employee Relations management permission is required to maintain legacy history.',true);return;}
   const cfg = MODULES[key];
   const existing = id? DB[key].find(r=>r.id===id) : null;
   const employeeBased=cfg.fields.some(field=>field.key==='employeeName');
@@ -3250,6 +3292,7 @@ async function openCaseLinkedRecord(caseId,module,recordId){
 }
 
 async function saveRecord(key, id){
+  if(key==='disciplinary'&&!hasPermission('employee_relations.manage')){toast('Employee Relations management permission is required to maintain legacy history.',true);return;}
   const cfg = MODULES[key];
   const vals = readFields(cfg.fields);
   if(TDA_CONNECTED_MODULES.has(key)){
@@ -3300,8 +3343,19 @@ async function saveRecord(key, id){
     if(key==='nte')await addCaseActivity(workflowCaseId,'nte',`NTE ${rec.nteReference||''} ${id?'updated':'recorded'}${rec.dateReceived?' and served':''}.`.replace(/\s+/g,' ').trim());
     if(key==='nod'&&workflowContext?.decisionId){
       const nodStatus=rec.finalizationStatus||'Draft';
+      let historyBefore=0;
+      if(await ensureDisciplinaryHistoryReady()){
+        try{historyBefore=(await loadDisciplinaryHistory()).filter(row=>String(row.decision_id)===String(workflowContext.decisionId)).length;}catch(error){console.warn('Could not inspect disciplinary history before NOD finalization',error);}
+      }
       const {error:decisionError}=await supabase.from('hr_case_decisions').update({nod_record_id:String(rec.id),nod_status:nodStatus,nod_number:rec.nodReference||null,nod_issued_at:rec.dateOfNod||null,nod_served_at:rec.dateReceived||null,nod_service_method:rec.serviceMethod||null,employee_acknowledged:rec.acknowledgementStatus==='Received and Acknowledged',reconsideration_info:rec.reconsiderationInfo||null,updated_by:SESSION?.id||null}).eq('id',workflowContext.decisionId);
       if(decisionError)toast('NOD saved, but decision finalization metadata could not be updated: '+decisionError.message,true);
+      else if(DISCIPLINARY_HISTORY_READY){
+        try{
+          invalidateDisciplinaryHistory();
+          const historyAfter=(await loadDisciplinaryHistory({force:true})).filter(row=>String(row.decision_id)===String(workflowContext.decisionId)).length;
+          if(historyAfter>historyBefore)await addCaseActivity(workflowCaseId,'history',`${historyAfter-historyBefore} verified disciplinary histor${historyAfter-historyBefore===1?'y entry':'y entries'} generated from the finalized decision.`);
+        }catch(error){console.warn('Could not refresh generated disciplinary history',error);}
+      }
       await addCaseActivity(workflowCaseId,'nod',`NOD ${rec.nodReference||''} saved as ${nodStatus}.`.replace(/\s+/g,' ').trim());
     }
     await openCaseDetails(workflowCaseId);
@@ -3313,6 +3367,7 @@ async function saveRecord(key, id){
   }
 }
 async function deleteRecord(key,id){
+  if(key==='disciplinary'&&!hasPermission('employee_relations.manage')){toast('Employee Relations management permission is required to remove legacy history.',true);return;}
   const cfg = MODULES[key];
   const old=DB[key].find(r=>r.id===id);
   const storagePaths=recordStoragePaths(old);
@@ -5259,41 +5314,49 @@ function calShift(dir){
 /* ================================================================
    DISCIPLINARY (custom — offense counting)
    ================================================================ */
-function offenseLevelFor(emp, violation, beforeId,savedRule=null){
-  if(savedRule?.offenseLevel)return savedRule.offenseLevel;
-  const record=DB.disciplinary.find(item=>String(item.id)===String(beforeId));
-  if(record?.confirmedOccurrence)return OFFENSE_LEVELS[Math.min(Math.max(Number(record.confirmedOccurrence)-1,0),OFFENSE_LEVELS.length-1)];
-  return 'Legacy / Unverified';
+function disciplinaryHistoryPolicy(record){return record?.tda_snapshot?.offense||record?.tda_snapshot?.offenseNumber||'No TDA rule linked';}
+function setDisciplinaryHistoryTab(tab){STATE.disciplinaryTab=tab;STATE.disciplinaryFilter='';STATE.search='';STATE.tablePages={};renderDisciplinary();}
+function exportDisciplinaryHistoryCSV(){
+  if(!requireExportAccess())return;
+  const csv=toCSV(DISCIPLINARY_HISTORY_CACHE,[
+    {label:'Employee ID',get:r=>r.employee_record_id},{label:'Employee',get:r=>r.employee_name},{label:'Department',get:r=>r.department},
+    {label:'TDA Rule ID',get:r=>r.tda_rule_id},{label:'Policy / Offense',get:disciplinaryHistoryPolicy},{label:'Finding',get:r=>r.finding},
+    {label:'Confirmed Occurrence',get:r=>r.confirmed_occurrence},{label:'Final Action',get:r=>r.disciplinary_action},
+    {label:'Decision Date',get:r=>r.decision_date},{label:'Effective Date',get:r=>r.effective_date},{label:'Finalization Date',get:r=>r.finalization_date},
+    {label:'Implementation Status',get:r=>r.implementation_status},{label:'History Status',get:r=>r.status},{label:'Case ID',get:r=>r.case_id},
+  ]);
+  downloadCSV('disciplinary_history_export.csv',csv);toast('Verified disciplinary history exported.');
 }
-function renderDisciplinary(){
-  setTitle('Legacy Disciplinary History', 'Review historical disciplinary entries while verified case outcomes move into the normalized history model.');
-  const q=(STATE.search||'').toLowerCase();
-  let rows = DB.disciplinary.filter(d=> !q || String(d.employeeName||'').toLowerCase().includes(q) || (d.violation||'').toLowerCase().includes(q));
-  if(STATE.disciplinaryFilter) rows=rows.filter(d=>offenseLevelFor(d.employeeName,d.violation,d.id)===STATE.disciplinaryFilter || d.department===STATE.disciplinaryFilter);
-  rows = rows.slice().sort((a,b)=>(b.dateOfIncident||'').localeCompare(a.dateOfIncident||''));
-  const html = `
-  <div class="sectionhead">
-    <div><h2>Legacy Disciplinary History</h2><p>${DB.disciplinary.length} preserved historical record${DB.disciplinary.length===1?'':'s'} across ${new Set(DB.disciplinary.map(d=>d.employeeName)).size} employees.</p></div>
-    <div class="page-header-actions">${informationNoteButton('disciplinaryLevels')}${canEdit()? `<button class="btn btn-brass" onclick="openRecordForm('disciplinary')">${iPlus(15)} Add Legacy Record</button>`:''}</div>
-  </div>
-  <div class="toolbar">
-    <div class="search">${iSearch(15)}<input data-search-key="search" placeholder="Search by employee or violation…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderDisciplinary)"></div>
-    <select onchange="STATE.disciplinaryFilter=this.value;STATE.tablePages={};renderDisciplinary()"><option value="">All Verification / Departments</option>${['Legacy / Unverified',...OFFENSE_LEVELS].map(v=>`<option value="${esc(v)}" ${STATE.disciplinaryFilter===v?'selected':''}>${esc(v)}</option>`).join('')}${employeeDepartmentNames().map(v=>`<option value="${esc(v)}" ${STATE.disciplinaryFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
-    <button class="btn btn-ghost btn-sm" onclick="STATE.disciplinaryFilter='';STATE.search='';STATE.tablePages={};renderDisciplinary()">Clear</button>
-    <div class="spacer"></div>
-    ${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportModuleCSV('disciplinary')">${iDownload(14)} Export CSV</button>`:''}
-  </div>
-  <div class="tablewrap"><table class="data-table">
-    <thead><tr><th>Employee</th><th>Department</th><th>Recorded Matter</th><th>Verification</th><th>Date</th><th>Historical Action</th><th style="text-align:right;">Actions</th></tr></thead>
-    <tbody>
-    ${rows.length? rows.map(d=>`<tr>
-      <td><b>${esc(d.employeeName)}</b></td><td>${esc(d.department||'—')}</td><td>${esc(d.violation)}</td>
-      <td>${statusBadge(offenseLevelFor(d.employeeName,d.violation,d.id,d.tdaRule), {}) }${d.tdaRule?`<div class="small">${esc(d.tdaRule.tdaType||'TDA')} · ${esc(d.tdaRule.offenseNumber||'Policy')}</div>`:''}</td>
-      <td>${fmtDate(d.dateOfIncident)}</td><td>${esc(d.action||'—')}</td>
-      <td><div class="rowactions">${canEdit()?`<button class="iconbtn" title="HR Case" onclick="openRecordCaseDialog('disciplinary','${d.id}')">${iShield(14)}</button><button class="iconbtn" onclick="openRecordForm('disciplinary','${d.id}')">${iEdit(14)}</button><button class="iconbtn" onclick="deleteRecord('disciplinary','${d.id}')">${iTrash(14)}</button>`:'<span class="small">View only</span>'}</div></td>
-    </tr>`).join('') : `<tr><td colspan="8"><div class="empty"><b>No disciplinary records</b>Add a record to begin tracking violations.</div></td></tr>`}
-    </tbody></table></div>`;
-  document.getElementById('content').innerHTML = html;
+async function renderDisciplinary(){
+  setTitle('Disciplinary History', 'Finalized case outcomes are authoritative; preserved legacy entries remain separated for review.');
+  let history=[];
+  try{history=await loadDisciplinaryHistory();}catch(error){toast('Could not load disciplinary history: '+error.message,true);}
+  if(STATE.view!=='disciplinary')return;
+  const tab=STATE.disciplinaryTab||'verified';
+  const q=normalizeTdaText(STATE.search).toLowerCase();
+  const filter=STATE.disciplinaryFilter||'';
+  const verifiedSource=history.slice().sort((a,b)=>String(b.finalization_date||'').localeCompare(String(a.finalization_date||'')));
+  const legacySource=(DB.disciplinary||[]).slice().sort((a,b)=>String(b.dateOfIncident||'').localeCompare(String(a.dateOfIncident||'')));
+  let rows=tab==='legacy'?legacySource:verifiedSource;
+  if(q){
+    rows=rows.filter(record=>{
+      const values=tab==='legacy'?[record.employeeName,record.employeeId,record.department,record.violation,record.action,record.sourceReason]:[record.employee_name,record.employee_record_id,record.department,disciplinaryHistoryPolicy(record),record.finding,record.disciplinary_action,record.implementation_status];
+      return values.some(value=>String(value||'').toLowerCase().includes(q));
+    });
+  }
+  if(filter)rows=rows.filter(record=>tab==='legacy'?record.department===filter:[record.department,record.status,record.implementation_status].includes(filter));
+  const scope=`disciplinary:${tab}`;
+  const page=paginateRows(rows,STATE,scope,10);
+  const filterOptions=tab==='legacy'?employeeDepartmentNames():uniqueSettingNames([...verifiedSource.map(row=>row.department),...verifiedSource.map(row=>row.implementation_status),...verifiedSource.map(row=>row.status)]);
+  const verifiedTable=`<div class="tablewrap"><table class="data-table" data-server-paginated="true" data-page-scope="${scope}"><thead><tr><th>Employee</th><th>Policy / Finding</th><th>Occurrence</th><th>Final Action</th><th>Finalized</th><th>Implementation</th><th class="actions-head">Case</th></tr></thead><tbody>${page.rows.length?page.rows.map(row=>{const occurrenceLabel=row.confirmed_occurrence?tdaOrdinal(row.confirmed_occurrence-1):'';return `<tr><td><b>${esc(row.employee_name)}</b><div class="cell-secondary mono">${esc(row.employee_record_id)} · ${esc(row.department||'Unassigned')}</div></td><td><b>${esc(disciplinaryHistoryPolicy(row))}</b><div class="cell-secondary">${esc(row.finding)}${row.tda_rule_id?` · ${esc(row.tda_rule_id)}`:''}</div></td><td>${occurrenceLabel?statusBadge(occurrenceLabel,{[occurrenceLabel]:'b-blue'}):'<span class="small">Not policy-counted</span>'}</td><td><b>${esc(row.disciplinary_action)}</b><div class="cell-secondary">${row.effective_date?`Effective ${fmtDate(row.effective_date)}`:'No effective date'}</div></td><td>${fmtDate(row.finalization_date)}<div class="cell-secondary">${esc(row.source_type==='case_generated'?'Generated from approved case':row.source_type)}</div></td><td>${statusBadge(row.implementation_status,{Pending:'b-amber','Not Required':'b-grey','In Progress':'b-blue',Completed:'b-green',Cancelled:'b-grey'})}<div class="cell-secondary">${statusBadge(row.status,{Active:'b-green',Superseded:'b-grey',Reversed:'b-red',Void:'b-red'})}</div></td><td><button class="iconbtn" title="Open source HR case" onclick="openCaseDetails('${row.case_id}')">${iShield(14)}</button></td></tr>`;}).join(''):`<tr><td colspan="7"><div class="empty"><b>${DISCIPLINARY_HISTORY_READY===false?'Phase 25 migration required':'No finalized disciplinary history'}</b>${DISCIPLINARY_HISTORY_READY===false?'Run the Phase 25 disciplinary-history migration to enable authoritative outcomes.':'Approved decisions appear here automatically after their NOD is finalized.'}</div></td></tr>`}</tbody></table></div>`;
+  const legacyTable=`<div class="tablewrap"><table class="data-table" data-server-paginated="true" data-page-scope="${scope}"><thead><tr><th>Employee</th><th>Recorded Matter</th><th>Verification</th><th>Date</th><th>Historical Action</th><th>Source / Reason</th><th class="actions-head">Actions</th></tr></thead><tbody>${page.rows.length?page.rows.map(row=>`<tr><td><b>${esc(row.employeeName)}</b><div class="cell-secondary">${esc(row.department||'Unassigned')}</div></td><td>${esc(row.violation||'—')}</td><td>${statusBadge('Legacy / Unverified',{ 'Legacy / Unverified':'b-amber' })}</td><td>${fmtDate(row.dateOfIncident)}</td><td>${esc(row.action||'—')}</td><td>${esc(row.sourceType||'legacy')}<div class="cell-secondary">${esc(row.sourceReason||row.remarks||'Source not recorded')}</div></td><td><div class="rowactions">${hasPermission('employee_relations.manage')?`<button class="iconbtn" title="Link or review in HR Case" onclick="openRecordCaseDialog('disciplinary','${row.id}')">${iShield(14)}</button><button class="iconbtn" title="Edit legacy record" onclick="openRecordForm('disciplinary','${row.id}')">${iEdit(14)}</button><button class="iconbtn" title="Delete legacy record" onclick="deleteRecord('disciplinary','${row.id}')">${iTrash(14)}</button>`:'<span class="small">View only</span>'}</div></td></tr>`).join(''):'<tr><td colspan="7"><div class="empty"><b>No legacy entries found</b>Preserved JSON-era records will appear here for review and later migration.</div></td></tr>'}</tbody></table></div>`;
+  const html=`
+    <div class="sectionhead"><div><h2>Disciplinary History</h2><p>${verifiedSource.length} verified final outcome${verifiedSource.length===1?'':'s'} · ${legacySource.length} legacy record${legacySource.length===1?'':'s'} awaiting review.</p></div><div class="page-header-actions">${informationNoteButton('disciplinaryLevels')}${tab==='legacy'&&hasPermission('employee_relations.manage')?`<button class="btn btn-primary btn-sm" onclick="openRecordForm('disciplinary')">${iPlus(14)} Add Legacy Record</button>`:''}</div></div>
+    <div class="workspace-tabs history-view-tabs" role="tablist" aria-label="Disciplinary history views"><button type="button" role="tab" aria-selected="${tab==='verified'}" class="${tab==='verified'?'active':''}" onclick="setDisciplinaryHistoryTab('verified')">Verified History <span>${verifiedSource.length}</span></button><button type="button" role="tab" aria-selected="${tab==='legacy'}" class="${tab==='legacy'?'active':''}" onclick="setDisciplinaryHistoryTab('legacy')">Legacy Review <span>${legacySource.length}</span></button></div>
+    <div class="toolbar"><div class="search">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search employee, policy, action, or department…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderDisciplinary)"></div><select onchange="STATE.disciplinaryFilter=this.value;STATE.tablePages={};renderDisciplinary()"><option value="">All ${tab==='legacy'?'departments':'statuses and departments'}</option>${filterOptions.map(value=>`<option value="${esc(value)}" ${filter===value?'selected':''}>${esc(value)}</option>`).join('')}</select><button class="btn btn-ghost btn-sm" onclick="STATE.disciplinaryFilter='';STATE.search='';STATE.tablePages={};renderDisciplinary()">Clear</button><div class="spacer"></div>${canExport()?`<button class="btn btn-ghost btn-sm" onclick="${tab==='legacy'?"exportModuleCSV('disciplinary')":'exportDisciplinaryHistoryCSV()'}">${iDownload(14)} Export</button>`:''}</div>
+    <div class="table-card">${tab==='legacy'?legacyTable:verifiedTable}${rows.length?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${page.meta.start}–${page.meta.end} <span>of ${page.meta.total} ${tab==='legacy'?'legacy':'verified'} records</span></div>${paginationHTML(page.meta,scope,{go:'tablePageGo',size:'tablePageSize'})}</div>`:''}</div>`;
+  document.getElementById('content').innerHTML=html;
+  requestAnimationFrame(()=>enhanceDataTables());
 }
 
 /* ================================================================
@@ -5333,14 +5396,8 @@ function tdaOrdinal(levelIndex){return ['1st','2nd','3rd','4th','5th+'][Math.max
 function tdaRuleRecord(rule){return rule?.catalogId?(DB.offenseCatalog||[]).find(record=>String(record.id)===String(rule.catalogId)):null;}
 function tdaEmployeeOffenseCount(employeeId,employeeName,tdaRuleId,before={}){
   if(!employeeId||!tdaRuleId)return 0;
-  return (DB.disciplinary||[]).filter(record=>
-    !(before.module==='disciplinary'&&String(record.id)===String(before.id))
-    && String(record.employeeId||'')===String(employeeId)
-    && String(record.tdaRule?.catalogId||record.tdaRuleId||'')===String(tdaRuleId)
-    && ['Substantiated','Partially Substantiated'].includes(record.finding)
-    && (record.finalized===true||record.status==='Finalized')
-    && !record.voidedAt&&!record.reversedAt
-  ).length;
+  void employeeName;void before;
+  return qualifyingDisciplinaryHistory(DISCIPLINARY_HISTORY_CACHE,{employeeRecordId:employeeId,tdaRuleId}).length;
 }
 function tdaRuleSnapshot(record,levelIndex,context={}){
   if(!record)return null;
@@ -5450,7 +5507,9 @@ function cvrOffenseSummaryHTML(rec){
     return `<div style="margin-bottom:6px;"><b>${esc(o)}</b> ${statusBadge(lvl.label,{})}<div class="small" style="margin-top:2px;">${esc(cons)}${saved?` · ${esc(saved.tdaType||'TDA')}`:''}</div></div>`;
   }).join('');
 }
-function renderCVR(){
+async function renderCVR(){
+  try{await loadDisciplinaryHistory();}catch(error){console.warn('Could not load disciplinary history for CVR guidance',error);}
+  if(STATE.view!=='cvr')return;
   setTitle('CVR / Violation Reports', "Check or write the offense from an employee's CVR — level and consequence are computed automatically.");
   const q=(STATE.search||'').toLowerCase();
   let rows = DB.cvr.filter(c=> !q || String(c.employeeName||'').toLowerCase().includes(q) || (c.offenses||[]).join(' ').toLowerCase().includes(q) || (c.otherOffense||'').toLowerCase().includes(q));
@@ -5488,7 +5547,8 @@ function renderCVR(){
   </div>`;
   document.getElementById('content').innerHTML = html;
 }
-function openCVRForm(id){
+async function openCVRForm(id){
+  try{await loadDisciplinaryHistory();}catch(error){toast('Could not load verified disciplinary history: '+error.message,true);return;}
   const existing = id? DB.cvr.find(c=>c.id===id): null;
   const checked = existing? (existing.offenses||[]) : [];
   const context=tdaContextForEmployee(existing?.employeeId,existing?.employeeName,existing?.department);
@@ -5641,7 +5701,8 @@ function renderIncidents(){
   </div>`;
   document.getElementById('content').innerHTML = html;
 }
-function openIncidentForm(id){
+async function openIncidentForm(id){
+  try{await loadDisciplinaryHistory();}catch(error){toast('Could not load verified disciplinary history: '+error.message,true);return;}
   const existing = id? DB.incidents.find(i=>i.id===id): null;
   const checked = existing? [...(existing.incidentTypes||[]),existing.otherType].filter(Boolean) : [];
   const employee=DB.employees.find(item=>String(item.id)===String(existing?.employeeId||''));
@@ -6181,29 +6242,46 @@ async function saveEval(employeeId, milestoneKey){
 /* ================================================================
    CONSOLIDATED EMPLOYEE OFFENSE SUMMARY
    ================================================================ */
-function renderOffenseSummary(){
+async function openEmployeeDisciplinaryHistory(employeeName){
+  if(document.getElementById('overlay')?.classList.contains('on'))await closeModal();
+  await go('disciplinary');
+  STATE.disciplinaryTab='verified';STATE.search=employeeName||'';STATE.tablePages={};await renderDisciplinary();
+}
+async function renderOffenseSummary(){
   setTitle('Employee Relations History Review', 'Separate confirmed outcomes, unverified legacy history, and incoming CVR reports without treating allegations as violations.');
-  const q=(STATE.search||'').toLowerCase();
+  let history=[];
+  try{history=await loadDisciplinaryHistory();}catch(error){toast('Could not load disciplinary history: '+error.message,true);}
+  if(STATE.view!=='offenseSummary')return;
+  const q=normalizeTdaText(STATE.search).toLowerCase();
   const map=new Map();
-  function ensure(record){
-    const employee=DB.employees.find(item=>String(item.id)===String(record.employeeId||''))||DB.employees.find(item=>normalizeEmployeeName(item.name)===normalizeEmployeeName(record.employeeName));
-    const key=employee?.id||`legacy:${normalizeEmployeeName(record.employeeName)}`;
-    if(!map.has(key))map.set(key,{employeeId:employee?.id||'',employeeName:employee?.name||record.employeeName||'Unknown employee',department:employee?.department||record.department||'',confirmed:0,legacy:0,reports:0,terms:[]});
+  function ensure(record,{normalized=false}={}){
+    const recordId=normalized?record.employee_record_id:record.employeeId;
+    const recordName=normalized?record.employee_name:record.employeeName;
+    const employee=DB.employees.find(item=>String(item.id)===String(recordId||''))||DB.employees.find(item=>normalizeEmployeeName(item.name)===normalizeEmployeeName(recordName));
+    const key=employee?.id||recordId||`legacy:${normalizeEmployeeName(recordName)}`;
+    if(!map.has(key))map.set(key,{employeeId:employee?.id||recordId||'',employeeName:employee?.name||recordName||'Unknown employee',department:employee?.department||record.department||'',confirmed:0,legacy:0,reports:0,highestOccurrence:0,policies:new Set(),terms:[]});
     return map.get(key);
   }
-  (DB.disciplinary||[]).forEach(record=>{
-    const row=ensure(record);row.terms.push(record.violation||'');
-    const verified=Boolean(record.employeeId&&(record.tdaRule?.catalogId||record.tdaRuleId)&&['Substantiated','Partially Substantiated'].includes(record.finding)&&(record.finalized===true||record.status==='Finalized')&&!record.voidedAt&&!record.reversedAt);
-    if(verified)row.confirmed+=1;else row.legacy+=1;
+  history.forEach(record=>{
+    const qualifying=qualifyingDisciplinaryHistory([record],{employeeRecordId:record.employee_record_id,tdaRuleId:record.tda_rule_id}).length>0;
+    if(!qualifying)return;
+    const row=ensure(record,{normalized:true});row.confirmed+=1;row.highestOccurrence=Math.max(row.highestOccurrence,Number(record.confirmed_occurrence)||0);row.terms.push(disciplinaryHistoryPolicy(record),record.disciplinary_action||'');if(record.tda_rule_id)row.policies.add(record.tda_rule_id);
   });
+  (DB.disciplinary||[]).forEach(record=>{const row=ensure(record);row.terms.push(record.violation||'');row.legacy+=1;});
   (DB.cvr||[]).forEach(record=>{const row=ensure(record);row.reports+=1;row.terms.push(...(record.offenses||[]),record.otherOffense||'');});
   let rows=[...map.values()].sort((a,b)=>a.employeeName.localeCompare(b.employeeName));
   if(q)rows=rows.filter(row=>[row.employeeName,row.department,...row.terms].some(value=>String(value||'').toLowerCase().includes(q)));
+  const filter=STATE.offenseSummaryFilter||'all';
+  if(filter==='confirmed')rows=rows.filter(row=>row.confirmed>0);
+  if(filter==='legacy')rows=rows.filter(row=>row.legacy>0);
+  if(filter==='reports')rows=rows.filter(row=>row.reports>0);
+  const page=paginateRows(rows,STATE,'offense-summary:list',10);
   const html = `
   <div class="sectionhead"><div><h2>Employee Relations History Review</h2><p>${rows.length} employee${rows.length===1?'':'s'} with confirmed, legacy, or reported Employee Relations activity.</p></div><div class="page-header-actions">${informationNoteButton('offenseSummary')}</div></div>
-  <div class="toolbar"><div class="search">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search employee, department, or reported matter…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderOffenseSummary)"></div></div>
-  <div class="tablewrap"><table class="data-table"><thead><tr><th>Employee</th><th>Department</th><th>Confirmed Findings</th><th>Legacy Unverified</th><th>CVR Reports</th><th>Review</th></tr></thead><tbody>${rows.length?rows.map(row=>`<tr><td><b>${esc(row.employeeName)}</b><div class="small mono">${esc(row.employeeId||'Legacy name reference')}</div></td><td>${esc(row.department||'—')}</td><td>${statusBadge(String(row.confirmed),{[String(row.confirmed)]:row.confirmed?'b-green':'b-grey'})}</td><td>${statusBadge(String(row.legacy),{[String(row.legacy)]:row.legacy?'b-amber':'b-grey'})}</td><td>${statusBadge(String(row.reports),{[String(row.reports)]:row.reports?'b-blue':'b-grey'})}</td><td><button class="btn btn-ghost btn-sm" onclick="go('disciplinary')">History</button></td></tr>`).join(''):'<tr><td colspan="6"><div class="empty"><b>No Employee Relations history found</b>CVR reports and legacy records will appear here without being counted as confirmed offenses.</div></td></tr>'}</tbody></table></div>`;
+  <div class="toolbar"><div class="search">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search employee, department, policy, or reported matter…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderOffenseSummary)"></div><select onchange="STATE.offenseSummaryFilter=this.value;STATE.tablePages={};renderOffenseSummary()"><option value="all">All activity</option><option value="confirmed" ${filter==='confirmed'?'selected':''}>With confirmed findings</option><option value="legacy" ${filter==='legacy'?'selected':''}>With legacy records</option><option value="reports" ${filter==='reports'?'selected':''}>With CVR reports</option></select><button class="btn btn-ghost btn-sm" onclick="STATE.offenseSummaryFilter='all';STATE.search='';STATE.tablePages={};renderOffenseSummary()">Clear</button></div>
+  <div class="table-card"><div class="tablewrap"><table class="data-table" data-server-paginated="true" data-page-scope="offense-summary:list"><thead><tr><th>Employee</th><th>Department</th><th>Confirmed Findings</th><th>Highest Confirmed Occurrence</th><th>Legacy Unverified</th><th>CVR Reports</th><th>Review</th></tr></thead><tbody>${page.rows.length?page.rows.map(row=>`<tr><td><b>${esc(row.employeeName)}</b><div class="small mono">${esc(row.employeeId||'Legacy name reference')}</div></td><td>${esc(row.department||'—')}</td><td>${statusBadge(String(row.confirmed),{[String(row.confirmed)]:row.confirmed?'b-green':'b-grey'})}<div class="cell-secondary">${row.policies.size} linked TDA rule${row.policies.size===1?'':'s'}</div></td><td>${row.highestOccurrence?`${tdaOrdinal(row.highestOccurrence-1)} occurrence`:'—'}</td><td>${statusBadge(String(row.legacy),{[String(row.legacy)]:row.legacy?'b-amber':'b-grey'})}</td><td>${statusBadge(String(row.reports),{[String(row.reports)]:row.reports?'b-blue':'b-grey'})}<div class="cell-secondary">Not counted as findings</div></td><td><button class="btn btn-ghost btn-sm" onclick="openEmployeeDisciplinaryHistory(decodeURIComponent('${encodeURIComponent(row.employeeName)}'))">History</button></td></tr>`).join(''):'<tr><td colspan="7"><div class="empty"><b>No Employee Relations history found</b>CVR reports and legacy records remain visible here without being counted as confirmed offenses.</div></td></tr>'}</tbody></table></div>${rows.length?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${page.meta.start}–${page.meta.end} <span>of ${page.meta.total} employees</span></div>${paginationHTML(page.meta,'offense-summary:list',{go:'tablePageGo',size:'tablePageSize'})}</div>`:''}</div>`;
   document.getElementById('content').innerHTML = html;
+  requestAnimationFrame(()=>enhanceDataTables());
 }
 
 /* ================================================================
@@ -6880,7 +6958,7 @@ const MODULES = {
       {key:'status', label:'Status', render:r=>statusBadge(r.status, LEAVE_STATUS_MAP)},
     ],
   },
-  disciplinary:{ title:'Legacy Disciplinary History', subtitle:'Preserved historical entries pending verification or migration from finalized HR Cases.', singular:'Legacy Disciplinary Record', addLabel:'Add Legacy Record',
+  disciplinary:{ title:'Disciplinary History', subtitle:'Preserved legacy entries pending verification or migration from finalized HR Cases.', singular:'Legacy Disciplinary Record', addLabel:'Add Legacy Record',
     searchFields:['employeeName','violation'], sortKey:'dateOfIncident',
     fields:[
       {key:'employeeName', label:'Employee Name', type:'text', required:true},
@@ -6888,13 +6966,16 @@ const MODULES = {
       {key:'violation', label:'Alleged / Recorded Offense', type:'text', required:true, full:true},
       {key:'dateOfIncident', label:'Date of Incident', type:'date', required:true},
       {key:'action', label:'Historical Action Taken', type:'text', full:true},
+      {key:'sourceType', label:'Legacy Source Type', type:'select', options:['legacy','imported','manual_adjustment'], default:()=> 'legacy', required:true},
+      {key:'sourceReason', label:'Source / Reason for Manual Record', type:'textarea', required:true},
       {key:'remarks', label:'Remarks', type:'textarea'},
     ],
     columns:[ // used for CSV export only — table itself is custom-rendered in renderDisciplinary()
       {key:'employeeName', label:'Employee'},
       {key:'department', label:'Department'},
       {key:'violation', label:'Violation'},
-      {key:'offenseLevel', label:'Offense Level', csv:r=>offenseLevelFor(r.employeeName,r.violation,r.id,r.tdaRule)},
+      {key:'verificationStatus', label:'Verification', csv:()=> 'Legacy / Unverified'},
+      {key:'historicalLevel', label:'Historical Recorded Level', csv:r=>r.tdaRule?.offenseLevel||''},
       {key:'dateOfIncident', label:'Date'},
       {key:'action', label:'Action'},
       {key:'remarks', label:'Remarks'},
@@ -8846,11 +8927,11 @@ async function validateCaseStageChange(caseRecord,nextStatus,overrides={}){
   return caseTransitionValidation(nextStatus,caseTransitionContext(caseRecord,links||[],allegations,dueProcess,overrides));
 }
 function caseActivityLabel(a){
-  const labels={created:'Case Created',updated:'Case Updated',status:'Status Changed',linked:'Record Linked',unlinked:'Record Unlinked',note:'Case Note',deadline:'Deadline Updated',assignment:'Assignment Updated',priority:'Priority Updated',policy:'TDA Policy Updated',allegation:'Allegation Updated',finding:'Finding Recorded',nte:'NTE Updated',response:'Employee Response',hearing:'Hearing / Conference',decision:'Decision Updated',approval:'Decision Approval',nod:'NOD Updated'};
+  const labels={created:'Case Created',updated:'Case Updated',status:'Status Changed',linked:'Record Linked',unlinked:'Record Unlinked',note:'Case Note',deadline:'Deadline Updated',assignment:'Assignment Updated',priority:'Priority Updated',policy:'TDA Policy Updated',allegation:'Allegation Updated',finding:'Finding Recorded',nte:'NTE Updated',response:'Employee Response',hearing:'Hearing / Conference',decision:'Decision Updated',approval:'Decision Approval',nod:'NOD Updated',history:'Disciplinary History Generated'};
   return labels[a.activity_type] || a.activity_type || 'Case Activity';
 }
 function caseActivityIcon(a){
-  const m={created:iPlus(12),updated:iEdit(12),status:iShield(12),linked:iDoc(12),unlinked:iTrash(12),note:iDoc(12),deadline:iCal(12),assignment:iUser(12),priority:iShield(12),policy:iShield(12),allegation:iShield(12),finding:iCheck(12),nte:iDoc(12),response:iUser(12),hearing:iCal(12),decision:iEdit(12),approval:iCheck(12),nod:iDoc(12)};
+  const m={created:iPlus(12),updated:iEdit(12),status:iShield(12),linked:iDoc(12),unlinked:iTrash(12),note:iDoc(12),deadline:iCal(12),assignment:iUser(12),priority:iShield(12),policy:iShield(12),allegation:iShield(12),finding:iCheck(12),nte:iDoc(12),response:iUser(12),hearing:iCal(12),decision:iEdit(12),approval:iCheck(12),nod:iDoc(12),history:iShield(12)};
   return m[a.activity_type] || iDoc(12);
 }
 async function addCaseActivity(caseId,activityType,note='',statusFrom=null,statusTo=null,dueDate=null){
@@ -8990,18 +9071,21 @@ async function openCaseDetails(id){
   CASE_WORKFLOW_CONTEXT=null;
   const caseDomainReady=await ensureCaseDomainReady();
   const dueProcessReady=await ensureCaseDueProcessReady();
-  const [{data:caseRec,error:caseError},{data:links,error:linkError},{data:activity,error:activityError},{data:allegations,error:allegationError},dueProcess]=await Promise.all([
+  const historyReady=await ensureDisciplinaryHistoryReady();
+  const [{data:caseRec,error:caseError},{data:links,error:linkError},{data:activity,error:activityError},{data:allegations,error:allegationError},dueProcess,{data:caseHistory,error:historyError}]=await Promise.all([
     supabase.from('hr_cases').select('*').eq('id',id).maybeSingle(),
     supabase.from('hr_case_links').select('case_id,module,record_id,label,linked_at').eq('case_id',id).order('linked_at',{ascending:true}),
     supabase.from('hr_case_activity').select('*').eq('case_id',id).order('created_at',{ascending:false}),
     caseDomainReady?supabase.from('hr_case_allegations').select('*').eq('case_id',id).order('allegation_number',{ascending:true}):Promise.resolve({data:[],error:null}),
     dueProcessReady?loadCaseDueProcess(id).catch(error=>({responses:[],hearings:[],decisions:[],error})):Promise.resolve({responses:[],hearings:[],decisions:[]}),
+    historyReady?supabase.from('hr_disciplinary_history').select('*').eq('case_id',id).order('finalization_date',{ascending:false}):Promise.resolve({data:[],error:null}),
   ]);
   if(caseError||!caseRec){toast('Could not load case details.',true);return;}
   if(linkError){toast('Could not load linked records: '+linkError.message,true);return;}
   if(activityError){toast('Could not load case activity. Please run the Phase 9 SQL first: '+activityError.message,true);return;}
   if(allegationError){toast('Could not load case allegations: '+allegationError.message,true);return;}
   if(dueProcess.error){toast('Could not load due-process records: '+dueProcess.error.message,true);return;}
+  if(historyError){toast('Could not load case disciplinary history: '+historyError.message,true);return;}
   const assigned=DB.users.find(u=>u.id===caseRec.assigned_to);
   const deadline=caseDeadlineInfo(caseRec.due_date,caseRec.status);
   const age=analyticsDaysOpen(caseRec.opened_at,caseRec.closed_at);
@@ -9012,6 +9096,7 @@ async function openCaseDetails(id){
   const governingRuleHTML=governingRule?`<section class="case-tda-policy"><div><span class="eyebrow">Governing TDA rule</span><h4>${esc(governingRule.offense)}</h4><p>${esc(governingRule.tdaType)}${governingRule.offenseNumber?' · '+esc(governingRule.offenseNumber):''} · ${esc(governingRule.category||'Unclassified')}</p></div><div><span>${esc(governingRule.offenseLevel)} offense</span><b>${esc(governingRule.recommendedConsequence)}</b><small>Policy recommendation captured for this case</small></div></section>`:'';
   const caseFile=caseRec.attachment_ref?`<button type="button" class="btn btn-ghost btn-sm" onclick="downloadAttachment('${esc(caseRec.attachment_ref)}','${esc(caseRec.attachment_name||'HR Case File').replace(/'/g,"\\'")}')">${iDownload(13)} ${esc(caseRec.attachment_name||'Open case file')}</button>`:'<span class="small">No primary case file uploaded.</span>';
   const allegationRows=(allegations||[]).map(item=>{const source=item.source_module?`${caseModuleLabel(item.source_module)} · ${item.source_record_id}`:'Direct case allegation';const finding=item.finding||'Pending';return `<article class="case-allegation"><div class="case-allegation-number">${item.allegation_number}</div><div class="case-allegation-body"><div class="case-allegation-head"><b>Allegation ${item.allegation_number}</b>${statusBadge(finding,{Pending:'b-amber',Substantiated:'b-green','Partially Substantiated':'b-blue',Unsubstantiated:'b-grey',Unfounded:'b-grey','Not a Policy Violation':'b-grey',Withdrawn:'b-grey'})}</div><p>${esc(item.description)}</p><div class="case-allegation-meta"><span>${esc(source)}</span>${item.incident_date?`<span>${fmtDate(item.incident_date)}</span>`:''}${item.tda_snapshot?.offense?`<span>${esc(item.tda_snapshot.offense)}</span>`:''}${item.potential_occurrence?`<span>Potential occurrence ${item.potential_occurrence}</span>`:''}</div>${item.finding_reason?`<div class="small">Finding basis: ${esc(item.finding_reason)}</div>`:''}</div>${canEdit()?`<div class="case-allegation-actions"><button class="iconbtn" title="Edit allegation" onclick="openCaseAllegationForm('${id}','${item.id}')">${iEdit(14)}</button>${hasPermission('employee_relations.delete')?`<button class="iconbtn" title="Delete allegation" onclick="deleteCaseAllegation('${id}','${item.id}')">${iTrash(14)}</button>`:''}</div>`:''}</article>`;}).join('');
+  const caseHistoryHTML=(caseHistory||[]).length?`<section class="panel case-history-panel"><div class="panel-heading-row"><div><h3>Finalized Disciplinary History</h3><p>Verified outcomes generated from this case's approved decision and finalized NOD.</p></div><button class="btn btn-ghost btn-sm" onclick="openEmployeeDisciplinaryHistory(decodeURIComponent('${encodeURIComponent(caseRec.employee_name)}'))">Employee History</button></div><div class="case-history-list">${caseHistory.map(row=>`<article class="case-history-item"><div><span class="eyebrow">${row.confirmed_occurrence?`${tdaOrdinal(row.confirmed_occurrence-1)} confirmed occurrence`:'Finalized finding'}</span><b>${esc(disciplinaryHistoryPolicy(row))}</b><small>${esc(row.finding)} · Finalized ${fmtDate(row.finalization_date)}</small></div><div><strong>${esc(row.disciplinary_action)}</strong>${statusBadge(row.implementation_status,{Pending:'b-amber','Not Required':'b-grey','In Progress':'b-blue',Completed:'b-green',Cancelled:'b-grey'})}</div></article>`).join('')}</div></section>`:`<section class="panel case-history-panel"><div class="panel-heading-row"><div><h3>Finalized Disciplinary History</h3><p>${historyReady?'History is created automatically only for substantiated findings after decision approval and NOD finalization.':'Run the Phase 25 migration to enable automatic disciplinary history.'}</p></div></div></section>`;
   openModal(`<div class="modal-head"><div><h3>${esc(caseRec.case_number)}</h3><div class="small">${esc(caseRec.subject||'HR Case File')}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body" data-employee-relations-modal>
     <div class="case-summary"><div class="mini"><div class="k">Employee</div><div class="v">${esc(caseRec.employee_name)}</div></div><div class="mini"><div class="k">Department</div><div class="v">${esc(caseRec.department||'—')}</div></div><div class="mini"><div class="k">Current Stage</div><div class="v">${statusBadge(caseRec.status,CASE_STATUS_MAP)}</div></div><div class="mini"><div class="k">Assigned To</div><div class="v">${esc(assigned?.fullName||'Unassigned')}</div></div></div>
     ${governingRuleHTML}
@@ -9019,6 +9104,7 @@ async function openCaseDetails(id){
     ${caseDueProcessHTML(links||[],allegations||[],dueProcess,dueProcessReady)}
     <section class="panel case-allegations-panel"><div class="panel-heading-row"><div><h3>Reports &amp; Allegations</h3><p>Reported matters remain allegations until an authorized finding is finalized.</p></div>${canEdit()&&caseDomainReady?`<button class="btn btn-ghost btn-sm" onclick="openCaseAllegationForm('${id}')">${iPlus(13)} Add Allegation</button>`:''}</div><div class="case-allegations">${allegationRows||`<div class="empty"><b>No allegations recorded</b>${caseDomainReady?'Link an Incident/CVR or add an allegation before investigation.':'Run the Phase 23 migration to enable normalized allegations.'}</div>`}</div></section>
     ${caseDueProcessWorkspaceHTML(caseRec,dueProcess,dueProcessReady)}
+    ${caseHistoryHTML}
     <div class="case-intel-grid">
       <div class="panel" style="padding:14px;"><div class="dashboard-panel-head"><div><h3>Case Intelligence</h3><div class="desc">Key tracking details for this case.</div></div></div><div class="case-intel-cards"><div class="case-intel-card"><div class="k">Priority</div><div class="v">${casePriorityBadge(caseRec.priority)}</div></div><div class="case-intel-card"><div class="k">Age</div><div class="v">${age} day${age===1?'':'s'}</div></div><div class="case-intel-card"><div class="k">Deadline</div><div class="v"><span class="case-deadline ${deadline.cls}">${esc(deadline.label)}</span><div class="small" style="margin-top:3px;">${caseRec.due_date?fmtDate(caseRec.due_date):'No deadline'}</div></div></div><div class="case-intel-card"><div class="k">Opened</div><div class="v">${fmtDate(caseRec.opened_at)}</div></div><div class="case-intel-card"><div class="k">Updated</div><div class="v">${fmtDate(String(caseRec.updated_at).slice(0,10))}</div></div><div class="case-intel-card"><div class="k">Records</div><div class="v">${links?.length||0}</div></div></div></div>
       <div class="panel" style="padding:14px;"><h3>Internal Case Note</h3><div class="desc">Append a dated note to the case timeline.</div>${canEdit()?`<div class="case-note-box"><textarea id="case-note-input" placeholder="Add investigation notes, follow-up details, reminders, or handover information…"></textarea><button class="btn btn-primary" onclick="addCaseNote('${id}')">Add Note</button></div>`:'<div class="small">Viewer accounts can read case notes but cannot add them.</div>'}</div>
@@ -9034,6 +9120,7 @@ async function openCaseDetails(id){
 }
 async function openCaseAllegationForm(caseId,allegationId=''){
   if(!canEdit()||!(await ensureCaseDomainReady())){toast('Run the Phase 23 Employee Relations migration before managing allegations.',true);return;}
+  try{await loadDisciplinaryHistory();}catch(error){toast('Could not load verified disciplinary history: '+error.message,true);return;}
   const [{data:caseRecord,error:caseError},{data:links,error:linkError},{data:existing,error:allegationError}]=await Promise.all([
     supabase.from('hr_cases').select('*').eq('id',caseId).maybeSingle(),
     supabase.from('hr_case_links').select('module,record_id,label').eq('case_id',caseId).in('module',['incidents','cvr']),
@@ -9279,10 +9366,10 @@ Object.assign(window, {
   refreshTdaRuleSelector, refreshTdaRulePreview, refreshRecordTdaRules, refreshIncidentTdaRules, refreshATDTdaRules, refreshCaseTdaRules, tdaRulePickerOpen, tdaRulePickerInput, tdaRulePickerClose, tdaRulePickerChoose, tdaRulePickerClear, tdaRulePickerKeydown,
   fieldHTML, fmtDate, formatGovernmentIdInput, getEvalRecord, go, handleFileInput, incidentTypeOccurrence, incidentTypeSummaryHTML, filterIncidentClassifications, refreshIncidentClassificationSummary, addIncidentClassification,
   toggleSidebar, closeSidebar, applyReportFilters, exportReportEmployees, exportReportActivity, exportReportATD, exportReportCases,
-  loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
+  loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
   openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, employeeWorkspaceNavigate, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard, dashboardOpenEmployees, dashboardOpenCases,
-  renderDisciplinary, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, toggleEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, openTableViewSettings, saveTableViewPreferences, resetTableViewPreferences, tableViewDragStart, tableViewDragOver, tableViewDrop, tableViewDragEnd, tableViewMove, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
+  renderDisciplinary, setDisciplinaryHistoryTab, exportDisciplinaryHistoryCSV, openEmployeeDisciplinaryHistory, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, toggleEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, openTableViewSettings, saveTableViewPreferences, resetTableViewPreferences, tableViewDragStart, tableViewDragOver, tableViewDrop, tableViewDragEnd, tableViewMove, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, closeNavGroupPanel, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts, actionCenterSetLevel, actionCenterResetFilters, actionCenterPageGo, actionCenterPageSize,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, opsSetTab, opsSelectEmployee, opsOpenSelectedTransaction, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   renderManpowerFulfillment, manpowerSetView, manpowerResetFilters, openManpowerRequestForm, saveManpowerRequest, deleteManpowerRequest, openManpowerRequestDetails, openManpowerRequirementForm, saveManpowerRequirement, openManpowerSlotForm, saveManpowerSlot, manpowerSlotReplacementChanged, exportManpowerFulfillment,

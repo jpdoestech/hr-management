@@ -164,9 +164,10 @@ export function qualifyingDisciplinaryHistory(records = [], { employeeRecordId =
     if (String(record.employee_record_id || '') !== String(employeeRecordId || '')) return false;
     if (String(record.tda_rule_id || '') !== String(tdaRuleId || '')) return false;
     if (!['Substantiated', 'Partially Substantiated'].includes(record.finding)) return false;
-    if (record.voided_at || record.reversed_at || record.status === 'Superseded' || record.status === 'Reversed') return false;
+    if (record.verification_status && record.verification_status !== 'Verified') return false;
+    if (record.voided_at || record.reversed_at || ['Superseded', 'Reversed', 'Void'].includes(record.status)) return false;
     if (cutoff && record.decision_date && new Date(`${record.decision_date}T00:00:00`) < cutoff) return false;
-    return record.finalized === true || record.status === 'Finalized';
+    return Boolean(record.finalization_date) || record.finalized === true || ['Finalized', 'Active'].includes(record.status);
   });
 }
 

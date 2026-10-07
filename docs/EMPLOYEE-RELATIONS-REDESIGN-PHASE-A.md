@@ -92,8 +92,16 @@
 - `tests/core/employee-relations-due-process.test.mjs`
 - Separate response, optional hearing/conference, decision approval, and explicit NOD-finalization records are now implemented without rewriting legacy NTE/NOD data.
 
+### Phase D
+
+- `supabase/phase25-disciplinary-history.sql`
+- `database/migrations/phase25-disciplinary-history.sql`
+- `docs/EMPLOYEE-RELATIONS-PHASE-D.md`
+- `tests/core/employee-relations-history.test.mjs`
+- Finalized qualifying case outcomes now generate normalized disciplinary history idempotently. Progressive occurrence uses stable employee/TDA IDs, while CVRs and preserved legacy rows remain excluded from confirmed counts.
+
 ### Later Phases
 
-- Add implementation and disciplinary-history entities through separately versioned migrations.
+- Add full disciplinary-action implementation tracking through a separately versioned migration.
 - Reclassify legacy memos and disciplinary rows without deleting source data or attachments.
 - Update analytics only after finalized findings and implementation records are authoritative.
