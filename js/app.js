@@ -2277,7 +2277,7 @@ const INFORMATION_NOTES={
   offenseSummary:{title:'Offense summary calculation',body:'This view combines Disciplinary Action and CVR records by employee. Levels and consequences use the same Offense Catalog lookup used by CVR.'},
   userAdministration:{title:'User administration access',body:'Only Administrators can change account roles or profile details. New users register from the login screen and must then be linked to the appropriate employee record.'},
   workflowRule:{title:'Workflow source records',body:'Source records remain the system of record. Approvals and task states coordinate HR work around those records and are retained in the audit trail.'},
-  caseFiles:{title:'HR case files',body:'A case groups related HR records into one trackable matter. Priority and deadlines help HR staff focus follow-ups before opening the full case file.'},
+  caseFiles:{title:'HR case files',body:'A case groups allegations, evidence, notices, decisions, and corrective actions into one trackable matter. Select the applicable TDA rule when the matter concerns an offense. The suggested consequence is policy guidance only; HR must still verify evidence, prior records, due process, and the final decision.'},
   documentCenter:{title:'Document storage',body:"New uploads follow the System Administrator's storage setting. Existing Google Drive and Supabase attachments remain available from this document index."},
   manpowerFulfillment:{title:'Manpower fulfillment definitions',body:'A PRF/request can contain multiple position requirements and individual fulfillment slots. Time to Onboard, Deployment Lead Time, Total Fulfillment Time, deployment variance, and replacement lead time are calculated separately from source dates. Legacy spreadsheet formulas are not reused.'},
   workforceAnalytics:{title:'Workforce metric definitions',body:'Retention is the beginning-of-period employee population still active at period end divided by beginning headcount. Turnover is separations during the period divided by average headcount, where average headcount is beginning plus ending headcount divided by two. The default attrition scope includes Resigned, AWOL, and Separated statuses. Branch and department filters apply to the same population and activity records.'},
@@ -2525,6 +2525,7 @@ async function closeModal(keepUploads=[]){
   document.body.classList.remove('modal-open');
   document.getElementById('modal').innerHTML='';
   MODAL_EDIT_STATE=null;
+  CASE_WORKFLOW_CONTEXT=null;
   if(MODAL_TRIGGER?.isConnected) MODAL_TRIGGER.focus();
   MODAL_TRIGGER=null;
   await deleteStorageObjects(pending);
@@ -2728,7 +2729,7 @@ async function runRowAction(id,index){
 function fieldHTML(f, val){
   const v = val==null?'':val;
   if(f.employeePicker||f.key==='employeeName'||f.key==='employeeReplaced'){
-    return employeePickerHTML({id:`f_${f.key}`,label:f.label,selectedId:f.employeeSelectedId||'',selectedName:v,mode:'name',required:!!f.required,full:!!f.full,autofill:f.key==='employeeName'});
+    return employeePickerHTML({id:`f_${f.key}`,label:f.label,selectedId:f.employeeSelectedId||'',selectedName:v,mode:'name',required:!!f.required,full:!!f.full,autofill:f.key==='employeeName',onSelect:f.onSelect||''});
   }
   if(f.type==='select'){
     const options=typeof f.options==='function'?f.options(v):(f.options||[]);
@@ -3061,6 +3062,7 @@ async function openRecordForm(key, id){
   const fields = cfg.fields.map(f=>{
     const next=f.type==='file'&&existing?{...f,storagePrefix:key,existingData:existing[f.key+'Data']||''}:{...f,storagePrefix:key};
     if(existing&&f.key==='employeeName')next.employeeSelectedId=existing.employeeId||'';
+    if(f.key==='employeeName'&&TDA_CONNECTED_MODULES.has(key))next.onSelect='refreshRecordTdaRules';
     if(existing&&f.key==='employeeReplaced')next.employeeSelectedId=existing.employeeReplacedId||'';
     return next;
   });
@@ -3069,6 +3071,7 @@ async function openRecordForm(key, id){
     <div class="modal-body" ${VIEW_PERMISSION_MODULE[key]==='employee_relations'?'data-employee-relations-modal':''}>
       <div class="formgrid" id="record-form">
         ${fields.map(f=> fieldHTML(f, existing? existing[f.key] : (f.default? f.default() : ''))).join('')}
+        ${TDA_CONNECTED_MODULES.has(key)?tdaRuleSelectorHTML('record',key,existing?.tdaRule||null,DB.employees.find(employee=>String(employee.id)===String(existing?.employeeId||'')),existing?.department||'',id||''):''}
       </div>
       ${cfg.computedNote? `<div class="computed-note">${cfg.computedNote}</div>`:''}
     </div>
@@ -3102,11 +3105,11 @@ async function linkNewRecordToCase(caseId, module, rec){
   return true;
 }
 
-function openWorkflowRecordForm(module, caseId){
+async function openWorkflowRecordForm(module, caseId){
   if(SESSION?.role==='Viewer') return;
   CASE_WORKFLOW_CONTEXT = {caseId, module};
-  openRecordForm(module);
-  supabase.from('hr_cases').select('employee_record_id,employee_name,department,subject').eq('id',caseId).maybeSingle().then(({data,error})=>{
+  await openRecordForm(module);
+  Promise.all([supabase.from('hr_cases').select('employee_record_id,employee_name,department,subject').eq('id',caseId).maybeSingle(),loadCaseTdaRule(caseId)]).then(([{data,error},caseRule])=>{
     if(error||!data) return;
     const deptInput=document.getElementById('f_department');
     employeePickerSet('f_employeeName',data.employee_record_id||data.employee_name||'');
@@ -3124,12 +3127,24 @@ function openWorkflowRecordForm(module, caseId){
     if(module==='nod'){
       const v=document.getElementById('f_relatedOffense'); if(v && !v.value) v.value=data.subject||'';
     }
+    if(caseRule){
+      const ruleSelect=document.getElementById('record_tda_rule');const levelSelect=document.getElementById('record_tda_level');
+      if(ruleSelect)ruleSelect.value=String(caseRule.catalogId);if(levelSelect)levelSelect.value=String(caseRule.levelIndex);refreshTdaRulePreview('record',false);
+      const offenseField={nte:'f_violation',memos:'f_offenseType',nod:'f_relatedOffense'}[module];const actionField={memos:'f_action',nod:'f_finalAction'}[module];
+      if(offenseField&&document.getElementById(offenseField))document.getElementById(offenseField).value=caseRule.offense;
+      if(actionField&&document.getElementById(actionField))document.getElementById(actionField).value=caseRule.recommendedConsequence;
+    }
   });
 }
 
 async function saveRecord(key, id){
   const cfg = MODULES[key];
   const vals = readFields(cfg.fields);
+  if(TDA_CONNECTED_MODULES.has(key)){
+    const tdaRule=readTdaRuleSelection('record');
+    if(tdaRule===false)return;
+    vals.tdaRule=tdaRule;
+  }
   const invalidEmployeeFields=cfg.fields.filter(f=>f.employeePicker||f.key==='employeeName'||f.key==='employeeReplaced').filter(f=>{
     const typed=document.getElementById(`f_${f.key}_search`)?.value.trim();
     return typed&&!employeePickerSelected(`f_${f.key}`);
@@ -3195,6 +3210,9 @@ function exportModuleCSV(key){
     seen.add(column.key);
     cols.push({label:column.label,get:column.csv||(record=>record[column.key])});
   });
+  if(DB[key]?.some(record=>record?.tdaRule)){
+    cols.push({label:'TDA Rule ID',get:record=>record.tdaRule?.catalogId||''},{label:'TDA Offense',get:record=>record.tdaRule?.offense||''},{label:'TDA Offense Level',get:record=>record.tdaRule?.offenseLevel||''},{label:'TDA Recommended Consequence',get:record=>record.tdaRule?.recommendedConsequence||''});
+  }
   ['createdAt','createdByName','updatedAt','updatedByName'].forEach(auditKey=>{
     if(DB[key]?.some(record=>record?.[auditKey])) cols.push({label:({createdAt:'Created At',createdByName:'Created By',updatedAt:'Updated At',updatedByName:'Updated By'})[auditKey],get:record=>record[auditKey]});
   });
@@ -5116,7 +5134,8 @@ function calShift(dir){
 /* ================================================================
    DISCIPLINARY (custom — offense counting)
    ================================================================ */
-function offenseLevelFor(emp, violation, beforeId){
+function offenseLevelFor(emp, violation, beforeId,savedRule=null){
+  if(savedRule?.offenseLevel)return savedRule.offenseLevel;
   const prior = DB.disciplinary.filter(d=> d.employeeName===emp && d.violation===violation && d.id!==beforeId);
   const n = prior.length; // this record will be n+1'th
   return OFFENSE_LEVELS[Math.min(n, OFFENSE_LEVELS.length-1)];
@@ -5144,7 +5163,7 @@ function renderDisciplinary(){
     <tbody>
     ${rows.length? rows.map(d=>`<tr>
       <td><b>${esc(d.employeeName)}</b></td><td>${esc(d.department||'—')}</td><td>${esc(d.violation)}</td>
-      <td>${statusBadge(offenseLevelFor(d.employeeName,d.violation,d.id), {}) }</td>
+      <td>${statusBadge(offenseLevelFor(d.employeeName,d.violation,d.id,d.tdaRule), {}) }${d.tdaRule?`<div class="small">${esc(d.tdaRule.tdaType||'TDA')} · ${esc(d.tdaRule.offenseNumber||'Policy')}</div>`:''}</td>
       <td>${fmtDate(d.dateOfIncident)}</td><td>${esc(d.action||'—')}</td>
       <td><div class="rowactions">${canEdit()?`<button class="iconbtn" title="HR Case" onclick="openRecordCaseDialog('disciplinary','${d.id}')">${iShield(14)}</button><button class="iconbtn" onclick="openRecordForm('disciplinary','${d.id}')">${iEdit(14)}</button><button class="iconbtn" onclick="deleteRecord('disciplinary','${d.id}')">${iTrash(14)}</button>`:'<span class="small">View only</span>'}</div></td>
     </tr>`).join('') : `<tr><td colspan="8"><div class="empty"><b>No disciplinary records</b>Add a record to begin tracking violations.</div></td></tr>`}
@@ -5188,13 +5207,131 @@ function consequenceFor(offenseName, levelIndex,context={}){
   const consequences=[cat.consequence1,cat.consequence2,cat.consequence3,cat.consequence4,cat.consequence5];
   return consequences[Math.min(levelIndex,4)]||cat.consequence5||cat.consequence4||'—';
 }
+const TDA_CONNECTED_MODULES=new Set(['disciplinary','nte','memos','nod']);
+function tdaOrdinal(levelIndex){return ['1st','2nd','3rd','4th','5th+'][Math.max(0,Math.min(Number(levelIndex)||0,4))];}
+function tdaRuleRecord(rule){return rule?.catalogId?(DB.offenseCatalog||[]).find(record=>String(record.id)===String(rule.catalogId)):null;}
+function tdaEmployeeOffenseCount(employeeId,employeeName,offense,before={}){
+  const sameEmployee=record=>employeeId&&record.employeeId?String(record.employeeId)===String(employeeId):normalizeEmployeeName(record.employeeName)===normalizeEmployeeName(employeeName);
+  const sameOffense=value=>normalizeTdaText(value).toLowerCase()===normalizeTdaText(offense).toLowerCase();
+  const disciplinary=(DB.disciplinary||[]).filter(record=>!(before.module==='disciplinary'&&String(record.id)===String(before.id))&&sameEmployee(record)&&sameOffense(record.violation)).length;
+  const cvr=(DB.cvr||[]).filter(record=>!(before.module==='cvr'&&String(record.id)===String(before.id))&&sameEmployee(record)&&[...(record.offenses||[]),record.otherOffense].filter(Boolean).some(sameOffense)).length;
+  return disciplinary+cvr;
+}
+function tdaRuleSnapshot(record,levelIndex,context={}){
+  if(!record)return null;
+  const level=Math.max(0,Math.min(Number(levelIndex)||0,4));
+  const consequences=[record.consequence1,record.consequence2,record.consequence3,record.consequence4,record.consequence5];
+  return {
+    catalogId:record.id,offenseNumber:record.offenseNumber||'',offense:record.offense||'',category:record.category||'',disciplinaryRemarks:record.disciplinaryRemarks||'',
+    tdaType:record.tdaType||'General',levelIndex:level,offenseLevel:tdaOrdinal(level),recommendedConsequence:consequences[level]||record.consequence5||record.consequence4||'—',
+    consequences,scope:tdaScopeLabel(record),capturedAt:new Date().toISOString(),
+  };
+}
+function tdaRuleContext(prefix){
+  const config={case:['case_employee','case_employee_locked','case_department'],record:['f_employeeName','','f_department'],incident:['in_employeeName','','in_department'],atd:['f_employeeName','','f_department']}[prefix]||[];
+  const selected=employeePickerSelected(config[0]);
+  const lockedId=config[1]?document.getElementById(config[1])?.value||'':'';
+  const employee=selected||DB.employees.find(row=>String(row.id)===String(lockedId));
+  const employeeName=employee?.name||document.getElementById(config[0])?.value||'';
+  const department=document.getElementById(config[2])?.value||employee?.department||'';
+  return {employee,employeeId:employee?.id||'',employeeName,department,context:tdaContextForEmployee(employee?.id,employeeName,department)};
+}
+function tdaRuleDisplay(record){
+  if(!record)return '';
+  return `${record.offenseNumber?`${record.offenseNumber} · `:''}${record.offense||'Unnamed offense'}`;
+}
+function tdaRulePickerRecords(prefix){
+  const root=document.getElementById(`${prefix}_tda_policy`);const selectedId=document.getElementById(`${prefix}_tda_rule`)?.value||root?.dataset.selectedRule||'';
+  const {employee,context}=tdaRuleContext(prefix);const records=employee?applicableTdaCatalog(context):[];
+  const saved=(DB.offenseCatalog||[]).find(record=>String(record.id)===String(selectedId));
+  if(saved&&!records.some(record=>String(record.id)===String(saved.id)))records.unshift(saved);
+  return records;
+}
+function tdaRulePickerHTML(prefix,records,selectedId=''){
+  const selected=records.find(record=>String(record.id)===String(selectedId))||(DB.offenseCatalog||[]).find(record=>String(record.id)===String(selectedId));
+  return `<div class="field"><label for="${prefix}_tda_rule_search">Applicable TDA offense</label><div class="tda-picker" id="${prefix}_tda_rule_picker" data-active-index="-1"><input type="hidden" id="${prefix}_tda_rule" value="${esc(selected?.id||'')}"><div class="tda-picker-input">${iSearch(15)}<input id="${prefix}_tda_rule_search" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${prefix}_tda_rule_options" autocomplete="off" spellcheck="false" placeholder="Search offense, code, category, or TDA type…" value="${esc(tdaRuleDisplay(selected))}" onfocus="tdaRulePickerOpen('${prefix}')" oninput="tdaRulePickerInput('${prefix}',this.value)" onkeydown="tdaRulePickerKeydown(event,'${prefix}')"><button type="button" class="tda-picker-clear" title="Clear TDA rule" aria-label="Clear TDA rule" onclick="tdaRulePickerClear('${prefix}')">&times;</button></div><div class="tda-picker-options" id="${prefix}_tda_rule_options" role="listbox" hidden></div></div></div>`;
+}
+function tdaRulePickerMatches(prefix,query=''){
+  const q=normalizeTdaText(query).toLowerCase();
+  return tdaRulePickerRecords(prefix).filter(record=>!q||[
+    record.offenseNumber,record.offense,record.category,record.disciplinaryRemarks,record.tdaType,tdaScopeLabel(record),
+    record.consequence1,record.consequence2,record.consequence3,record.consequence4,record.consequence5,
+  ].some(value=>normalizeTdaText(value).toLowerCase().includes(q))).sort((a,b)=>{
+    const aValues=[a.offenseNumber,a.offense].map(value=>normalizeTdaText(value).toLowerCase());
+    const bValues=[b.offenseNumber,b.offense].map(value=>normalizeTdaText(value).toLowerCase());
+    const aFirst=q&&aValues.some(value=>value.startsWith(q))?0:1;const bFirst=q&&bValues.some(value=>value.startsWith(q))?0:1;
+    return aFirst-bFirst||String(a.offense||'').localeCompare(String(b.offense||''));
+  });
+}
+function tdaRulePickerRender(prefix,query=''){
+  const picker=document.getElementById(`${prefix}_tda_rule_picker`);const options=document.getElementById(`${prefix}_tda_rule_options`);const input=document.getElementById(`${prefix}_tda_rule_search`);if(!picker||!options||!input)return;
+  const records=tdaRulePickerMatches(prefix,query);const visible=String(query||'').trim()?records:records.slice(0,20);picker.dataset.activeIndex='-1';
+  options.innerHTML=visible.length?visible.map((record,index)=>`<button type="button" role="option" data-index="${index}" data-tda-rule-id="${esc(record.id)}" onmousedown="event.preventDefault()" onclick="tdaRulePickerChoose('${prefix}','${esc(record.id)}')"><span class="tda-picker-code">${esc(record.offenseNumber||'TDA')}</span><span><b>${esc(record.offense||'Unnamed offense')}</b><small>${esc(record.category||record.disciplinaryRemarks||'Unclassified')} · ${esc(tdaScopeLabel(record))}</small></span><em>${esc(record.tdaType||'General')}</em></button>`).join(''):`<div class="tda-picker-empty"><b>No applicable TDA rule found</b><span>${tdaRulePickerRecords(prefix).length?'Try another offense, code, category, or TDA type.':'Select an employee first or review the catalog scope.'}</span></div>`;
+  if(records.length>visible.length)options.insertAdjacentHTML('beforeend',`<div class="tda-picker-more">Type to search all ${records.length} applicable policies.</div>`);
+  options.hidden=false;input.setAttribute('aria-expanded','true');
+}
+function tdaRulePickerOpen(prefix){const input=document.getElementById(`${prefix}_tda_rule_search`);if(input)tdaRulePickerRender(prefix,document.getElementById(`${prefix}_tda_rule`)?.value?'':input.value);}
+function tdaRulePickerInput(prefix,value){const hidden=document.getElementById(`${prefix}_tda_rule`);const root=document.getElementById(`${prefix}_tda_policy`);if(!hidden)return;hidden.value='';if(root)root.dataset.selectedRule='';tdaRulePickerRender(prefix,value);refreshTdaRulePreview(prefix,false);}
+function tdaRulePickerClose(prefix){const options=document.getElementById(`${prefix}_tda_rule_options`);const input=document.getElementById(`${prefix}_tda_rule_search`);if(options)options.hidden=true;if(input)input.setAttribute('aria-expanded','false');}
+function tdaRulePickerChoose(prefix,ruleId){
+  const record=(DB.offenseCatalog||[]).find(item=>String(item.id)===String(ruleId));const hidden=document.getElementById(`${prefix}_tda_rule`);const input=document.getElementById(`${prefix}_tda_rule_search`);const root=document.getElementById(`${prefix}_tda_policy`);if(!record||!hidden||!input)return;
+  hidden.value=record.id;input.value=tdaRuleDisplay(record);if(root)root.dataset.selectedRule=record.id;tdaRulePickerClose(prefix);refreshTdaRulePreview(prefix,true);input.focus();
+}
+function tdaRulePickerClear(prefix){const hidden=document.getElementById(`${prefix}_tda_rule`);const input=document.getElementById(`${prefix}_tda_rule_search`);const root=document.getElementById(`${prefix}_tda_policy`);if(hidden)hidden.value='';if(input)input.value='';if(root)root.dataset.selectedRule='';refreshTdaRulePreview(prefix,false);tdaRulePickerRender(prefix,'');input?.focus();}
+function tdaRulePickerKeydown(event,prefix){
+  const picker=document.getElementById(`${prefix}_tda_rule_picker`);const options=document.getElementById(`${prefix}_tda_rule_options`);if(!picker||!options)return;
+  if(event.key==='Escape'){tdaRulePickerClose(prefix);return;}if(options.hidden&&(event.key==='ArrowDown'||event.key==='ArrowUp'))tdaRulePickerOpen(prefix);
+  const buttons=[...options.querySelectorAll('button[data-tda-rule-id]')];if(!buttons.length)return;let index=Number(picker.dataset.activeIndex||-1);
+  if(event.key==='ArrowDown'){event.preventDefault();index=Math.min(buttons.length-1,index+1);}else if(event.key==='ArrowUp'){event.preventDefault();index=Math.max(0,index-1);}else if(event.key==='Enter'&&index>=0){event.preventDefault();tdaRulePickerChoose(prefix,buttons[index].dataset.tdaRuleId);return;}else return;
+  picker.dataset.activeIndex=String(index);buttons.forEach((button,i)=>button.classList.toggle('active',i===index));buttons[index]?.scrollIntoView({block:'nearest'});
+}
+function tdaRulePreviewHTML(rule){
+  if(!rule)return '<div class="tda-rule-empty">Select an employee and an applicable TDA offense to review the approved sanction schedule.</div>';
+  return `<div class="tda-rule-summary"><div><span>Rule</span><b>${esc(rule.tdaType)}${rule.offenseNumber?' · '+esc(rule.offenseNumber):''}</b></div><div><span>Classification</span><b>${esc(rule.category||rule.disciplinaryRemarks||'—')}</b></div><div><span>Selected level</span><b>${esc(rule.offenseLevel)}</b></div><div class="recommended"><span>Recommended consequence</span><b>${esc(rule.recommendedConsequence)}</b></div></div><details><summary>View complete sanction schedule</summary><div class="tda-sanction-grid">${rule.consequences.map((value,index)=>`<div class="${index===rule.levelIndex?'active':''}"><span>${tdaOrdinal(index)}</span><b>${esc(value||'—')}</b></div>`).join('')}</div></details>`;
+}
+function tdaRuleSelectorHTML(prefix,module,existingRule=null,employee=null,department='',beforeId=''){
+  const context=tdaContextForEmployee(employee?.id,employee?.name,department||employee?.department||'');
+  const applicable=employee?applicableTdaCatalog(context):[];
+  const current=tdaRuleRecord(existingRule);
+  if(current&&!applicable.some(record=>String(record.id)===String(current.id)))applicable.unshift(current);
+  const suggested=current?Number(existingRule?.levelIndex)||0:0;
+  const snapshot=current?tdaRuleSnapshot(current,suggested,context):null;
+  return `<section class="tda-rule-card full" id="${prefix}_tda_policy" data-module="${esc(module)}" data-record-id="${esc(beforeId||'')}" data-selected-rule="${esc(existingRule?.catalogId||'')}"><div class="tda-rule-head"><div><span class="eyebrow">Governing policy</span><h4>Table of Disciplinary Action</h4><p>Search and choose the approved rule when this transaction concerns an employee offense.</p></div>${iShield(18)}</div><div class="tda-rule-controls">${tdaRulePickerHTML(prefix,applicable,existingRule?.catalogId||'')}<div class="field"><label>Offense occurrence</label><select id="${prefix}_tda_level" onchange="refreshTdaRulePreview('${prefix}',false)">${[0,1,2,3,4].map(index=>`<option value="${index}" ${index===suggested?'selected':''}>${tdaOrdinal(index)} offense</option>`).join('')}</select></div></div><div id="${prefix}_tda_preview" class="tda-rule-preview">${tdaRulePreviewHTML(snapshot)}</div><div class="tda-rule-footnote">The recommendation supports consistent application of policy. HR must still verify facts, due process, prior records, and applicable law before issuing a decision.</div></section>`;
+}
+function applyTdaRuleToForm(prefix,module,rule){
+  if(!rule)return;
+  const fields={case:[['case_subject',rule.offense]],disciplinary:[['f_violation',rule.offense],['f_action',rule.recommendedConsequence]],nte:[['f_violation',rule.offense]],memos:[['f_offenseType',rule.offense],['f_action',rule.recommendedConsequence]],nod:[['f_relatedOffense',rule.offense],['f_finalAction',rule.recommendedConsequence]],atd:[['f_deductionType',rule.offense]]}[module]||[];
+  fields.forEach(([id,value])=>{const input=document.getElementById(id);if(input&&!input.value.trim())input.value=value||'';});
+}
+function refreshTdaRuleSelector(prefix){
+  const root=document.getElementById(`${prefix}_tda_policy`);const hidden=document.getElementById(`${prefix}_tda_rule`);const input=document.getElementById(`${prefix}_tda_rule_search`);if(!root||!hidden||!input)return;
+  const current=hidden.value||root.dataset.selectedRule||'';const records=tdaRulePickerRecords(prefix);const saved=(DB.offenseCatalog||[]).find(record=>String(record.id)===String(current));
+  const selected=saved&&(records.some(record=>String(record.id)===String(saved.id))||String(saved.id)===String(root.dataset.selectedRule))?saved:null;
+  hidden.value=selected?.id||'';input.value=tdaRuleDisplay(selected);root.dataset.selectedRule=selected?.id||'';tdaRulePickerClose(prefix);refreshTdaRulePreview(prefix,false);
+}
+function refreshTdaRulePreview(prefix,resetLevel=false){
+  const root=document.getElementById(`${prefix}_tda_policy`);const select=document.getElementById(`${prefix}_tda_rule`);const level=document.getElementById(`${prefix}_tda_level`);const preview=document.getElementById(`${prefix}_tda_preview`);if(!root||!select||!level||!preview)return;
+  const record=(DB.offenseCatalog||[]).find(item=>String(item.id)===String(select.value));const info=tdaRuleContext(prefix);
+  if(record&&resetLevel){const prior=tdaEmployeeOffenseCount(info.employeeId,info.employeeName,record.offense,{module:root.dataset.module,id:root.dataset.recordId});level.value=String(Math.min(prior,4));}
+  const rule=record?tdaRuleSnapshot(record,level.value,info.context):null;root.dataset.selectedRule=record?.id||'';preview.innerHTML=tdaRulePreviewHTML(rule);applyTdaRuleToForm(prefix,root.dataset.module,rule);
+}
+function readTdaRuleSelection(prefix){
+  const record=(DB.offenseCatalog||[]).find(item=>String(item.id)===String(document.getElementById(`${prefix}_tda_rule`)?.value||''));if(!record)return null;
+  const info=tdaRuleContext(prefix);if(!tdaRecordApplies(record,info.context)){toast('The selected TDA rule does not apply to this employee, branch, or department.',true);return false;}
+  return tdaRuleSnapshot(record,document.getElementById(`${prefix}_tda_level`)?.value||0,info.context);
+}
+function refreshRecordTdaRules(){refreshTdaRuleSelector('record');}
+function refreshIncidentTdaRules(){const selected=employeePickerSelected('in_employeeName');const department=document.getElementById('in_department');if(selected&&department&&[...department.options].some(option=>option.value===selected.department))department.value=selected.department||'';refreshTdaRuleSelector('incident');}
+function refreshATDTdaRules(){atdFillEmployee();refreshTdaRuleSelector('atd');}
+function refreshCaseTdaRules(){const selected=employeePickerSelected('case_employee');const department=document.getElementById('case_department');if(selected&&department)department.value=selected.department||'';refreshTdaRuleSelector('case');}
 function cvrOffenseSummaryHTML(rec){
   const list = [...(rec.offenses||[]), ...(rec.otherOffense? [rec.otherOffense]:[])];
   if(!list.length) return '<span class="small">—</span>';
   return list.map(o=>{
-    const lvl = cvrOffenseLevel(rec.employeeName, o, rec.id);
-    const cons = consequenceFor(o, lvl.index,tdaContextForEmployee(rec.employeeId,rec.employeeName,rec.department));
-    return `<div style="margin-bottom:6px;"><b>${esc(o)}</b> ${statusBadge(lvl.label,{})}<div class="small" style="margin-top:2px;">${esc(cons)}</div></div>`;
+    const saved=(rec.tdaRules||[]).find(rule=>normalizeTdaText(rule.offense).toLowerCase()===normalizeTdaText(o).toLowerCase());
+    const lvl = saved?{label:saved.offenseLevel,index:saved.levelIndex}:cvrOffenseLevel(rec.employeeName, o, rec.id);
+    const cons = saved?.recommendedConsequence||consequenceFor(o, lvl.index,tdaContextForEmployee(rec.employeeId,rec.employeeName,rec.department));
+    return `<div style="margin-bottom:6px;"><b>${esc(o)}</b> ${statusBadge(lvl.label,{})}<div class="small" style="margin-top:2px;">${esc(cons)}${saved?` · ${esc(saved.tdaType||'TDA')}`:''}</div></div>`;
   }).join('');
 }
 function renderCVR(){
@@ -5283,9 +5420,14 @@ async function saveCVR(id){
   const attachmentData = document.getElementById('f_attachment_data').value;
   if(!employeeName || !department || !dateOfCVR){ toast('Please complete employee, department, and date.'); return; }
   if(!offenses.length && !otherOffense){ toast('Check at least one offense, or write one in.'); return; }
+  const context=tdaContextForEmployee(employeeId,employeeName,department);
+  const tdaRules=offenses.map(offense=>{
+    const catalog=selectApplicableTdaRecord(DB.offenseCatalog,offense,context);const level=cvrOffenseLevel(employeeName,offense,id).index;
+    return tdaRuleSnapshot(catalog,level,context);
+  }).filter(Boolean);
   const rec=id?DB.cvr.find(c=>c.id===id):{id:uid()};
   const oldStoragePaths=recordStoragePaths(id?rec:null);
-  Object.assign(rec,{employeeId,employeeName, department, dateOfCVR, status, offenses, otherOffense, attachment, attachmentData, remarks});
+  Object.assign(rec,{employeeId,employeeName, department, dateOfCVR, status, offenses, otherOffense, attachment, attachmentData, remarks,tdaRules});
   if(!id) DB.cvr.push(rec);
   logAudit(`${id?'Updated':'Added'} CVR for ${employeeName}`); toast(`CVR ${id?'updated.':'added.'}`);
   await saveDB();
@@ -5305,6 +5447,7 @@ function exportCVRCSV(){
     {label:'Employee', get:r=>r.employeeName},{label:'Department', get:r=>r.department},
     {label:'Date', get:r=>r.dateOfCVR},
     {label:'Offenses', get:r=>[...(r.offenses||[]),...(r.otherOffense?[r.otherOffense]:[])].join('; ')},
+    {label:'TDA Rules',get:r=>(r.tdaRules||[]).map(rule=>`${rule.offense} | ${rule.offenseLevel} | ${rule.recommendedConsequence}`).join('; ')},
     {label:'Status', get:r=>r.status},{label:'Remarks', get:r=>r.remarks},
   ]);
   downloadCSV('cvr_export.csv', csv);
@@ -5323,10 +5466,11 @@ function nthLabel(n){ return n===1?'1st time':n===2?'2nd time':n===3?'3rd time':
 function incidentTypeSummaryHTML(rec){
   const list = [...(rec.incidentTypes||[]), ...(rec.otherType? [rec.otherType]:[])];
   if(!list.length) return '<span class="small">—</span>';
-  return list.map(t=>{
+  const entries=list.map(t=>{
     const n = incidentTypeOccurrence(rec.employeeName, t, rec.id);
     return `<div style="margin-bottom:4px;"><b>${esc(t)}</b> ${statusBadge(nthLabel(n),{})}</div>`;
   }).join('');
+  return entries+(rec.tdaRule?`<div class="small"><b>TDA:</b> ${esc(rec.tdaRule.offense)} · ${esc(rec.tdaRule.offenseLevel)} · ${esc(rec.tdaRule.recommendedConsequence)}</div>`:'');
 }
 function renderIncidents(){
   setTitle('Incident Reports', "Check or write the incident type from a printed report — repeat occurrences per employee are counted automatically.");
@@ -5374,8 +5518,8 @@ function openIncidentForm(id){
     <div class="modal-head"><div><h3>${existing?'Edit':'Add'} Incident Report</h3><div class="small">Capture the incident facts, classification, evidence, and follow-up status.</div></div><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body" data-employee-relations-modal>
       <div class="formgrid">
-        ${employeePickerHTML({id:'in_employeeName',label:'Employee Name',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true})}
-        <div class="field"><label>Department *</label><select id="in_department">${employeeDepartmentNames(existing?.department||'').map(d=>`<option ${existing&&existing.department===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+        ${employeePickerHTML({id:'in_employeeName',label:'Employee Name',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true,onSelect:'refreshIncidentTdaRules'})}
+        <div class="field"><label>Department *</label><select id="in_department" onchange="refreshIncidentTdaRules()">${employeeDepartmentNames(existing?.department||'').map(d=>`<option ${existing&&existing.department===d?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
         <div class="field"><label>Date of Incident *</label><input type="date" id="in_date" value="${existing?existing.dateOfIncident:todayISO()}"></div>
         <div class="field"><label>Severity</label><select id="in_severity">${INCIDENT_SEVERITY.map(s=>`<option ${(existing?existing.severity:INCIDENT_SEVERITY[0])===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
         <div class="field full">
@@ -5387,6 +5531,7 @@ function openIncidentForm(id){
         <div class="field full"><label>Other / Additional Type (write-in)</label><input id="in_other" value="${esc((existing&&existing.otherType)||'')}"></div>
         <div class="field full"><label>Description *</label><textarea id="in_description" rows="3">${esc((existing&&existing.description)||'')}</textarea></div>
         <div class="field"><label>Status</label><select id="in_status">${INCIDENT_STATUS.map(s=>`<option ${(existing?existing.status:INCIDENT_STATUS[0])===s?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
+        ${tdaRuleSelectorHTML('incident','incidents',existing?.tdaRule||null,DB.employees.find(employee=>String(employee.id)===String(existing?.employeeId||'')),existing?.department||'',id||'')}
         ${fieldHTML({key:'attachment', label:'Uploaded Incident Report Document', type:'file', full:true, storagePrefix:'incident', existingData:(existing&&existing.attachmentData)||''}, existing?existing.attachment:'')}
         <div class="field full"><label>Remarks</label><textarea id="in_remarks" rows="2">${esc((existing&&existing.remarks)||'')}</textarea></div>
       </div>
@@ -5408,11 +5553,12 @@ async function saveIncident(id){
   const incidentTypes = Array.from(document.querySelectorAll('#modal input[type=checkbox]:checked')).map(el=>el.value);
   const attachment = document.getElementById('f_attachment').value;
   const attachmentData = document.getElementById('f_attachment_data').value;
+  const tdaRule=readTdaRuleSelection('incident');if(tdaRule===false)return;
   if(!employeeName || !department || !dateOfIncident || !description){ toast('Please complete employee, department, date, and description.'); return; }
   if(!incidentTypes.length && !otherType){ toast('Check at least one incident type, or write one in.'); return; }
   const rec=id?DB.incidents.find(i=>i.id===id):{id:uid()};
   const oldStoragePaths=recordStoragePaths(id?rec:null);
-  Object.assign(rec,{employeeId,employeeName, department, dateOfIncident, severity, incidentTypes, otherType, description, status, attachment, attachmentData, remarks});
+  Object.assign(rec,{employeeId,employeeName, department, dateOfIncident, severity, incidentTypes, otherType, description, status, attachment, attachmentData, remarks,tdaRule});
   if(!id) DB.incidents.push(rec);
   logAudit(`${id?'Updated':'Added'} Incident Report for ${employeeName}`); toast(`Incident report ${id?'updated.':'added.'}`);
   await saveDB();
@@ -5432,7 +5578,7 @@ function exportIncidentsCSV(){
     {label:'Employee', get:r=>r.employeeName},{label:'Department', get:r=>r.department},
     {label:'Date', get:r=>r.dateOfIncident},
     {label:'Types', get:r=>[...(r.incidentTypes||[]),...(r.otherType?[r.otherType]:[])].join('; ')},
-    {label:'Severity', get:r=>r.severity},{label:'Description', get:r=>r.description},
+    {label:'Severity', get:r=>r.severity},{label:'Description', get:r=>r.description},{label:'TDA Rule',get:r=>r.tdaRule?`${r.tdaRule.offense} | ${r.tdaRule.offenseLevel} | ${r.tdaRule.recommendedConsequence}`:''},
     {label:'Status', get:r=>r.status},{label:'Remarks', get:r=>r.remarks},
   ]);
   downloadCSV('incidents_export.csv', csv);
@@ -5666,7 +5812,7 @@ function openATDForm(id){
     <div class="modal-head"><h3>${existing?'Edit':'New'} ATD Record</h3><button onclick="closeModal()">&times;</button></div>
     <div class="modal-body">
       <div class="formgrid" id="atd-form">
-        ${employeePickerHTML({id:'f_employeeName',label:'Employee',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true,onSelect:'atdFillEmployee'})}
+        ${employeePickerHTML({id:'f_employeeName',label:'Employee',selectedId:existing?.employeeId||'',selectedName:existing?.employeeName||'',mode:'name',required:true,onSelect:'refreshATDTdaRules'})}
         <div class="field"><label>Department</label><input id="f_department" value="${esc(existing?existing.department:'')}"></div>
         <div class="field"><label>Position</label><input id="f_position" value="${esc(existing?existing.position:'')}"></div>
         <div class="field"><label>ATD Category *</label><select id="f_category" onchange="atdToggleCategory()">
@@ -5682,6 +5828,7 @@ function openATDForm(id){
           ${fieldHTML({key:'quotation', label:'Quotation / SOA Basis', type:'file', storagePrefix:'atd', existingData:existing?existing.quotationData:''}, existing?existing.quotation:'')}
           <div class="field"><label>Statement of Account (SOA) Amount (₱)</label><input type="number" step="0.01" id="f_soaAmount" value="${existing?existing.soaAmount||'':''}"></div>
         </div>
+        <div id="atd-tda-fields" class="full" ${cat==='Charges'?'':'hidden'}>${tdaRuleSelectorHTML('atd','atd',existing?.tdaRule||null,DB.employees.find(employee=>String(employee.id)===String(existing?.employeeId||'')),existing?.department||'',id||'')}</div>
         <div class="field full"><label>Remarks</label><textarea id="f_remarks" rows="2">${esc(existing?existing.remarks:'')}</textarea></div>
       </div>
       <div class="computed-note">Charges (negligence, incidents, damages) require the linked Incident Report and quotation/SOA. Uniform/expense deductions only need the ATD form.</div>
@@ -5691,7 +5838,9 @@ function openATDForm(id){
 }
 function atdToggleCategory(){
   const box=document.getElementById('atd-charges-fields');
-  box.style.display = document.getElementById('f_category').value==='Charges' ? 'contents' : 'none';
+  const charges=document.getElementById('f_category').value==='Charges';
+  box.style.display = charges ? 'contents' : 'none';
+  const policy=document.getElementById('atd-tda-fields');if(policy)policy.hidden=!charges;
 }
 function atdFillEmployee(){
   const name=document.getElementById('f_employeeName').value;
@@ -5705,6 +5854,7 @@ async function saveATDRecord(id){
   const totalAmount=document.getElementById('f_totalAmount').value;
   const atdDate=document.getElementById('f_atdDate').value;
   const deductionType=document.getElementById('f_deductionType').value.trim();
+  const tdaRule=category==='Charges'?readTdaRuleSelection('atd'):null;if(tdaRule===false)return;
   if(!employeeName||!category||!totalAmount||!atdDate||!deductionType){ toast('Please complete all required fields.'); return; }
   const vals = {
     employeeId,employeeName, department:document.getElementById('f_department').value.trim(), position:document.getElementById('f_position').value.trim(),
@@ -5714,7 +5864,7 @@ async function saveATDRecord(id){
     incidentReport:document.getElementById('f_incidentReport').value, incidentReportData:document.getElementById('f_incidentReport_data').value,
     quotation:document.getElementById('f_quotation').value, quotationData:document.getElementById('f_quotation_data').value,
     soaAmount:parseFloat(document.getElementById('f_soaAmount').value)||0,
-    remarks:document.getElementById('f_remarks').value.trim(),
+    remarks:document.getElementById('f_remarks').value.trim(),tdaRule,
   };
   let rec;
   let oldStoragePaths=new Set();
@@ -5836,12 +5986,13 @@ function exportATDCSV(){
   if(!requireExportAccess())return;
   const rows=[];
   DB.atd.forEach(r=>{
-    if(!r.payments || !r.payments.length){ rows.push({employeeName:r.employeeName, department:r.department, category:r.category, deductionType:r.deductionType, totalAmount:r.totalAmount, month:'—', cutoff:'—', amountPaid:0, remaining:atdRemaining(r), status:atdComputeStatus(r)}); return; }
-    r.payments.forEach(p=> rows.push({employeeName:r.employeeName, department:r.department, category:r.category, deductionType:r.deductionType, totalAmount:r.totalAmount, month:p.month, cutoff:p.cutoff, amountPaid:p.amountPaid, remaining:atdRemaining(r), status:atdComputeStatus(r)}) );
+    const tdaRule=r.tdaRule?`${r.tdaRule.offense} | ${r.tdaRule.offenseLevel} | ${r.tdaRule.recommendedConsequence}`:'';
+    if(!r.payments || !r.payments.length){ rows.push({employeeName:r.employeeName, department:r.department, category:r.category, deductionType:r.deductionType,tdaRule,totalAmount:r.totalAmount, month:'—', cutoff:'—', amountPaid:0, remaining:atdRemaining(r), status:atdComputeStatus(r)}); return; }
+    r.payments.forEach(p=> rows.push({employeeName:r.employeeName, department:r.department, category:r.category, deductionType:r.deductionType,tdaRule,totalAmount:r.totalAmount, month:p.month, cutoff:p.cutoff, amountPaid:p.amountPaid, remaining:atdRemaining(r), status:atdComputeStatus(r)}) );
   });
   const csv = toCSV(rows, [
     {label:'Employee', get:r=>r.employeeName},{label:'Department', get:r=>r.department},{label:'Category', get:r=>r.category},
-    {label:'Deduction Type', get:r=>r.deductionType},{label:'Total ATD', get:r=>r.totalAmount},{label:'Month', get:r=>r.month},
+    {label:'Deduction Type', get:r=>r.deductionType},{label:'TDA Rule',get:r=>r.tdaRule},{label:'Total ATD', get:r=>r.totalAmount},{label:'Month', get:r=>r.month},
     {label:'Cut-Off', get:r=>r.cutoff},{label:'Amount Paid (this entry)', get:r=>r.amountPaid},{label:'Remaining Balance', get:r=>r.remaining},{label:'Status', get:r=>r.status},
   ]);
   downloadCSV('atd_monitoring_export.csv', csv);
@@ -6640,7 +6791,7 @@ const MODULES = {
       {key:'employeeName', label:'Employee'},
       {key:'department', label:'Department'},
       {key:'violation', label:'Violation'},
-      {key:'offenseLevel', label:'Offense Level', csv:r=>offenseLevelFor(r.employeeName,r.violation,r.id)},
+      {key:'offenseLevel', label:'Offense Level', csv:r=>offenseLevelFor(r.employeeName,r.violation,r.id,r.tdaRule)},
       {key:'dateOfIncident', label:'Date'},
       {key:'action', label:'Action'},
       {key:'remarks', label:'Remarks'},
@@ -6663,7 +6814,7 @@ const MODULES = {
     columns:[
       {key:'employeeName', label:'Employee', render:r=>`<b>${esc(r.employeeName)}</b>`},
       {key:'department', label:'Department'},
-      {key:'violation', label:'Violation'},
+      {key:'violation', label:'Violation',render:r=>`${esc(r.violation)}${r.tdaRule?`<div class="small">${esc(r.tdaRule.offenseLevel)} · ${esc(r.tdaRule.recommendedConsequence)}</div>`:''}`},
       {key:'dateIssued', label:'Issued', render:r=>fmtDate(r.dateIssued)},
       {key:'dateReceived', label:'Received', render:r=>fmtDate(r.dateReceived)},
       {key:'attachment', label:'Attachment', render:r=>attachCellHTML('nte',r,'attachment'), csv:r=>r.attachment||''},
@@ -6685,7 +6836,7 @@ const MODULES = {
     columns:[
       {key:'employeeName', label:'Employee', render:r=>`<b>${esc(r.employeeName)}</b>`},
       {key:'department', label:'Department'},
-      {key:'offenseType', label:'Offense'},
+      {key:'offenseType', label:'Offense',render:r=>`${esc(r.offenseType)}${r.tdaRule?`<div class="small">${esc(r.tdaRule.offenseLevel)} · ${esc(r.tdaRule.tdaType)}</div>`:''}`},
       {key:'action', label:'Action'},
       {key:'dateOfMemo', label:'Date', render:r=>fmtDate(r.dateOfMemo)},
       {key:'dateReceived', label:'Received', render:r=>fmtDate(r.dateReceived)},
@@ -6707,7 +6858,7 @@ const MODULES = {
     columns:[
       {key:'employeeName', label:'Employee', render:r=>`<b>${esc(r.employeeName)}</b>`},
       {key:'department', label:'Department'},
-      {key:'relatedOffense', label:'Related Offense'},
+      {key:'relatedOffense', label:'Related Offense',render:r=>`${esc(r.relatedOffense)}${r.tdaRule?`<div class="small">${esc(r.tdaRule.offenseLevel)} · Recommended ${esc(r.tdaRule.recommendedConsequence)}</div>`:''}`},
       {key:'dateOfNod', label:'Date of NOD', render:r=>fmtDate(r.dateOfNod)},
       {key:'finalAction', label:'Final Action'},
       {key:'attachment', label:'Attachment', render:r=>attachCellHTML('nod',r,'attachment'), csv:r=>r.attachment||''},
@@ -8181,7 +8332,7 @@ const CASE_STATUS_MAP = {
 const CASE_MODULE_LABELS = {
   employees:'Employee', leaves:'Leave Record', disciplinary:'Disciplinary Action', nte:'Notice to Explain',
   memos:'Memorandum of Offense', nod:'Notice of Decision', oncall:'On-Call / Replacement', transfers:'Department Transfer',
-  cvr:'CVR / Violation Report', incidents:'Incident Report', prf:'Legacy PRF / Replacement', manpowerRequests:'Manpower Request', evaluations:'Probationary Evaluation', atd:'ATD Record'
+  cvr:'CVR / Violation Report', incidents:'Incident Report', offenseCatalog:'TDA Rule', prf:'Legacy PRF / Replacement', manpowerRequests:'Manpower Request', evaluations:'Probationary Evaluation', atd:'ATD Record'
 };
 function caseModuleLabel(module){ return CASE_MODULE_LABELS[module] || module; }
 function caseRecordLabel(module,r){
@@ -8197,6 +8348,7 @@ function caseRecordLabel(module,r){
     case 'transfers': return `${r.employeeName||'Employee'} — ${r.fromDepartment||''} → ${r.toDepartment||''}`;
     case 'cvr': return `${r.employeeName||'Employee'} — ${((r.offenses||[])[0]||r.otherOffense||'CVR / Violation Report')}`;
     case 'incidents': return `${r.employeeName||'Employee'} — ${((r.incidentTypes||[])[0]||r.otherType||'Incident Report')}`;
+    case 'offenseCatalog': return `${r.tdaType||'TDA'}${r.offenseNumber?' '+r.offenseNumber:''} — ${r.offense||'Policy Rule'}`;
     case 'prf': return `${r.employeeName||'Employee'}${r.prfNumber?' — '+r.prfNumber:''}`;
     case 'manpowerRequests': return `${manpowerRequestLabel(r)}${r.clientName?' — '+r.clientName:''}`;
     case 'evaluations': return `${r.milestone||'Probationary Evaluation'}`;
@@ -8207,6 +8359,21 @@ function caseRecordLabel(module,r){
 function caseRecordDate(module,r){
   if(!r) return '';
   return r.dateOfIncident||r.dateOfCVR||r.dateOfApplication||r.atdDate||r.startDate||r.dateRecorded||r.dateHired||r.createdAt||r.completedDate||'';
+}
+function tdaCaseLinkLabel(rule){return rule?`${rule.tdaType}${rule.offenseNumber?' '+rule.offenseNumber:''} · ${rule.offense} · ${rule.offenseLevel} offense · ${rule.recommendedConsequence}`:'';}
+function tdaRuleFromCaseLink(link){
+  if(!link)return null;const record=(DB.offenseCatalog||[]).find(item=>String(item.id)===String(link.record_id));if(!record)return null;
+  const match=String(link.label||'').match(/·\s*(1st|2nd|3rd|4th|5th\+) offense\s*·\s*(.+)$/i);const levels=['1st','2nd','3rd','4th','5th+'];const levelIndex=Math.max(0,levels.findIndex(value=>value.toLowerCase()===String(match?.[1]||'').toLowerCase()));
+  const rule=tdaRuleSnapshot(record,levelIndex);if(match?.[2])rule.recommendedConsequence=match[2].trim();return rule;
+}
+async function loadCaseTdaRule(caseId){
+  const {data,error}=await supabase.from('hr_case_links').select('record_id,label').eq('case_id',caseId).eq('module','offenseCatalog').order('linked_at',{ascending:true}).limit(1).maybeSingle();
+  if(error){console.warn('Could not load the case TDA rule',error);return null;}return tdaRuleFromCaseLink(data);
+}
+async function syncCaseTdaRule(caseId,rule){
+  if(!rule){const {error}=await supabase.from('hr_case_links').delete().eq('case_id',caseId).eq('module','offenseCatalog');if(error)throw error;return;}
+  const {error:upsertError}=await supabase.from('hr_case_links').upsert({case_id:caseId,module:'offenseCatalog',record_id:String(rule.catalogId),label:tdaCaseLinkLabel(rule),linked_by:SESSION?.id||null},{onConflict:'case_id,module,record_id'});if(upsertError)throw upsertError;
+  const {error:deleteError}=await supabase.from('hr_case_links').delete().eq('case_id',caseId).eq('module','offenseCatalog').neq('record_id',String(rule.catalogId));if(deleteError)throw deleteError;
 }
 
 async function openRecordCaseDialog(module,recordId){
@@ -8260,6 +8427,8 @@ async function createCaseFromRecord(module,recordId){
     if(error) throw error;
     const {error:linkError}=await supabase.from('hr_case_links').insert({case_id:data.id,module,record_id:String(recordId),label:subject,linked_by:SESSION?.id||null});
     if(linkError){await supabase.from('hr_cases').delete().eq('id',data.id);throw linkError;}
+    const inheritedRule=rec.tdaRule||(rec.tdaRules||[])[0]||null;
+    if(inheritedRule){await syncCaseTdaRule(data.id,inheritedRule);await addCaseActivity(data.id,'policy',`TDA rule applied: ${tdaCaseLinkLabel(inheritedRule)}.`);}
     logAudit(`Created HR case ${caseNumber} from ${caseModuleLabel(module)}`);
     toast(`HR case ${caseNumber} created and linked.`);
     await openCaseDetails(data.id);
@@ -8307,12 +8476,29 @@ function caseWorkflowSteps(status){
   const idx=Math.max(0,steps.indexOf(status));
   return `<div class="case-progress">${steps.map((st,i)=>`<div class="case-progress-step ${i<=idx?'active':''} ${i===idx?'current':''}"><div class="dot"></div><div class="label">${esc(st)}</div></div>`).join('')}</div>`;
 }
+function caseDueProcessHTML(links=[]){
+  const records=links.map(link=>({link,record:(DB[link.module]||[]).find(row=>String(row.id)===String(link.record_id))}));
+  const hasSource=records.some(({link})=>['incidents','cvr','disciplinary'].includes(link.module));
+  const hasPolicy=records.some(({link})=>link.module==='offenseCatalog');
+  const notices=records.filter(({link})=>link.module==='nte');
+  const hasNotice=notices.length>0;
+  const hasResponse=notices.some(({record})=>String(record?.explanation||'').trim());
+  const hasDecision=records.some(({link})=>link.module==='nod');
+  const steps=[
+    ['Allegation / evidence',hasSource,'Link an incident, CVR, or disciplinary source record.'],
+    ['Governing TDA policy',hasPolicy,'Select the applicable catalog rule and occurrence.'],
+    ['First notice / NTE',hasNotice,'Issue and link a Notice to Explain.'],
+    ['Employee response',hasResponse,'Record the employee explanation or hearing notes.'],
+    ['Decision notice',hasDecision,'Issue and link the final Notice of Decision.'],
+  ];
+  return `<section class="case-due-process"><div class="case-due-process-head"><div><span class="eyebrow">Process readiness</span><h4>Employee relations due-process check</h4><p>Operational guidance only; HR remains responsible for evaluating evidence and legal requirements.</p></div><b>${steps.filter(step=>step[1]).length}/${steps.length}</b></div><div class="case-due-process-list">${steps.map(([label,done,hint])=>`<div class="${done?'done':''}"><span>${done?iCheck(13):iMore(13)}</span><div><b>${esc(label)}</b><small>${done?'Recorded in this case':esc(hint)}</small></div></div>`).join('')}</div></section>`;
+}
 function caseActivityLabel(a){
-  const labels={created:'Case Created',updated:'Case Updated',status:'Status Changed',linked:'Record Linked',unlinked:'Record Unlinked',note:'Case Note',deadline:'Deadline Updated',assignment:'Assignment Updated',priority:'Priority Updated'};
+  const labels={created:'Case Created',updated:'Case Updated',status:'Status Changed',linked:'Record Linked',unlinked:'Record Unlinked',note:'Case Note',deadline:'Deadline Updated',assignment:'Assignment Updated',priority:'Priority Updated',policy:'TDA Policy Updated'};
   return labels[a.activity_type] || a.activity_type || 'Case Activity';
 }
 function caseActivityIcon(a){
-  const m={created:iPlus(12),updated:iEdit(12),status:iShield(12),linked:iDoc(12),unlinked:iTrash(12),note:iDoc(12),deadline:iCal(12),assignment:iUser(12),priority:iShield(12)};
+  const m={created:iPlus(12),updated:iEdit(12),status:iShield(12),linked:iDoc(12),unlinked:iTrash(12),note:iDoc(12),deadline:iCal(12),assignment:iUser(12),priority:iShield(12),policy:iShield(12)};
   return m[a.activity_type] || iDoc(12);
 }
 async function addCaseActivity(caseId,activityType,note='',statusFrom=null,statusTo=null,dueDate=null){
@@ -8352,7 +8538,10 @@ function openCaseForm(id,employeeId=''){
     openCaseFormMarkup(null,employee||null);
     return;
   }
-  supabase.from('hr_cases').select('*').eq('id',id).maybeSingle().then(({data,error})=>{ if(error||!data){toast('Could not load the case for editing.',true);return;} openCaseFormMarkup(data); });
+  Promise.all([
+    supabase.from('hr_cases').select('*').eq('id',id).maybeSingle(),
+    supabase.from('hr_case_links').select('record_id,label').eq('case_id',id).eq('module','offenseCatalog').order('linked_at',{ascending:true}).limit(1).maybeSingle(),
+  ]).then(([caseResult,ruleResult])=>{if(caseResult.error||!caseResult.data){toast('Could not load the case for editing.',true);return;}if(ruleResult.error)console.warn('Could not load the linked TDA rule',ruleResult.error);openCaseFormMarkup({...caseResult.data,tdaRule:tdaRuleFromCaseLink(ruleResult.data)});});
 }
 function caseEmployeeContextHTML(employee){
   if(!employee)return '';
@@ -8368,7 +8557,8 @@ function openCaseFormMarkup(existing,lockedEmployee=null){
   const title=existing?'Edit HR Case':'New HR Case';
   const lockedTrail=lockedEmployee?`<div class="modal-context-breadcrumb" aria-label="Current location"><span>Employee Information</span><span aria-hidden="true">›</span><span>${esc(employeeDisplayName(lockedEmployee))}</span><span aria-hidden="true">›</span><b>${esc(title)}</b></div>`:'';
   openModal(`<div class="modal-head"><div class="modal-head-copy">${lockedTrail}<h3>${esc(title)}</h3><div class="small">Record the case details and supporting document in one workspace.</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body" data-employee-relations-modal><div class="formgrid">
-    ${lockedEmployee?caseEmployeeContextHTML(lockedEmployee):employeePickerHTML({id:'case_employee',label:'Employee',selectedId:existing?.employee_record_id||'',required:true,full:true,autofill:false})}
+    ${lockedEmployee?caseEmployeeContextHTML(lockedEmployee):employeePickerHTML({id:'case_employee',label:'Employee',selectedId:existing?.employee_record_id||'',required:true,full:true,autofill:false,onSelect:'refreshCaseTdaRules'})}
+    <input type="hidden" id="case_department" value="${esc(existing?.department||lockedEmployee?.department||'')}">
     <div class="field"><label>Case Number</label><input value="${esc(existing?.case_number||'Generated on save')}" disabled style="background:var(--paper);"></div>
     <div class="field"><label>Status</label><select id="case_status">${Object.keys(CASE_STATUS_MAP).map(x=>`<option ${existing?.status===x||(!existing&&x==='Open')?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
     <div class="field"><label>Priority</label><select id="case_priority">${['Low','Normal','High','Urgent'].map(x=>`<option ${existing?.priority===x||(!existing&&x==='Normal')?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
@@ -8377,6 +8567,7 @@ function openCaseFormMarkup(existing,lockedEmployee=null){
     <div class="field"><label>Closed Date</label><input type="date" id="case_closed" value="${esc(existing?.closed_at||'')}"></div>
     <div class="field"><label>Assigned To</label><select id="case_assigned"><option value="">Unassigned</option>${assigned.map(u=>`<option value="${esc(u.id)}" ${existing?.assigned_to===u.id?'selected':''}>${esc(u.fullName)} · ${esc(u.role)}</option>`).join('')}</select></div>
     <div class="field full"><label>Subject / Matter</label><input id="case_subject" value="${esc(existing?.subject||'')}" placeholder="e.g. Attendance violation — repeated unauthorized absence"></div>
+    ${tdaRuleSelectorHTML('case','cases',existing?.tdaRule||null,lockedEmployee||DB.employees.find(employee=>String(employee.id)===String(existing?.employee_record_id||'')),existing?.department||lockedEmployee?.department||'',existing?.id||'')}
     ${fieldHTML({key:'caseAttachment',label:'Primary Case File / Supporting Document',type:'file',full:true,storagePrefix:'cases',existingData:existing?.attachment_ref||''},existing?.attachment_name||'')}
     <div class="field full"><label>Remarks</label><textarea id="case_remarks" rows="3" placeholder="Case notes, context, or internal remarks…">${esc(existing?.remarks||'')}</textarea></div>
   </div><div class="computed-note">Case numbers are generated sequentially per calendar year. Priority and due date drive the Action Center and case deadline indicators.</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveCase('${existing?.id||''}')">Save Case</button></div>`);
@@ -8390,6 +8581,7 @@ async function saveCase(id){
   const openedAt=document.getElementById('case_opened').value; const dueDate=document.getElementById('case_due').value||null; const closedAt=document.getElementById('case_closed').value||null;
   const subject=document.getElementById('case_subject').value.trim(); const remarks=document.getElementById('case_remarks').value.trim(); const assignedTo=document.getElementById('case_assigned').value||null;
   const attachmentName=document.getElementById('f_caseAttachment')?.value||''; const attachmentRef=document.getElementById('f_caseAttachment_data')?.value||'';
+  const tdaRule=readTdaRuleSelection('case');if(tdaRule===false)return;
   if(!employeeRecordId||!employeeName||!openedAt){toast('Please select an employee and opened date.');return;}
   if(dueDate&&dueDate<openedAt){toast('Due date cannot be before the opened date.');return;}
   if(closedAt&&closedAt<openedAt){toast('Closed date cannot be before the opened date.');return;}
@@ -8397,8 +8589,11 @@ async function saveCase(id){
   if(dueDate&&closedAt&&closedAt<dueDate&&status!=='Closed'){toast('An open case cannot have a closed date earlier than its due date.');return;}
   try{
     if(id){
+      const beforeRule=await loadCaseTdaRule(id);
       const {data:before,error:beforeError}=await supabase.from('hr_cases').select('status,priority,due_date,assigned_to,remarks,attachment_ref').eq('id',id).maybeSingle(); if(beforeError) throw beforeError;
       const {error}=await supabase.from('hr_cases').update({employee_record_id:employeeRecordId,employee_name:employeeName,department,subject,status,opened_at:openedAt,closed_at:closedAt,assigned_to:assignedTo,priority,due_date:dueDate,updated_by:SESSION?.id||null,remarks,attachment_name:attachmentName||null,attachment_ref:attachmentRef||null}).eq('id',id); if(error) throw error;
+      await syncCaseTdaRule(id,tdaRule);
+      if(tdaCaseLinkLabel(beforeRule)!==tdaCaseLinkLabel(tdaRule))await addCaseActivity(id,'policy',tdaRule?`TDA rule updated: ${tdaCaseLinkLabel(tdaRule)}.`:'Governing TDA rule removed from the case.');
       if(before?.status!==status) await addCaseActivity(id,'status',`Status changed from ${before?.status||'—'} to ${status}.`,before?.status||null,status,dueDate);
       if(before?.priority!==priority) await addCaseActivity(id,'priority',`Priority changed to ${priority}.`,null,null,dueDate);
       if((before?.due_date||null)!==(dueDate||null)) await addCaseActivity(id,'deadline',dueDate?`Case deadline set to ${fmtDate(dueDate)}.`:'Case deadline cleared.',null,null,dueDate);
@@ -8413,7 +8608,9 @@ async function saveCase(id){
     }else{
       const caseNumber=await nextCaseNumber();
       const {data,error}=await supabase.from('hr_cases').insert({case_number:caseNumber,employee_record_id:employeeRecordId,employee_name:employeeName,department,subject,status,opened_at:openedAt,closed_at:closedAt,assigned_to:assignedTo,priority,due_date:dueDate,created_by:SESSION?.id||null,updated_by:SESSION?.id||null,remarks,attachment_name:attachmentName||null,attachment_ref:attachmentRef||null}).select('id').single(); if(error) throw error;
+      await syncCaseTdaRule(data.id,tdaRule);
       await addCaseActivity(data.id,'created',`Case created for ${employeeName}.`,null,status,dueDate);
+      if(tdaRule)await addCaseActivity(data.id,'policy',`TDA rule applied: ${tdaCaseLinkLabel(tdaRule)}.`);
       if(assignedTo){ const ass=DB.users.find(u=>u.id===assignedTo); await addCaseActivity(data.id,'assignment',`Assigned to ${ass?.fullName||'HR staff'}.`); }
       if(dueDate) await addCaseActivity(data.id,'deadline',`Case deadline set to ${fmtDate(dueDate)}.`,null,null,dueDate);
       if(priority!=='Normal') await addCaseActivity(data.id,'priority',`Case priority set to ${priority}.`);
@@ -8443,10 +8640,14 @@ async function openCaseDetails(id){
   const linkRows=(links||[]).map((ln,i)=>{const rec=(DB[ln.module]||[]).find(r=>String(r.id)===String(ln.record_id));const label=ln.label||caseRecordLabel(ln.module,rec);const date=caseRecordDate(ln.module,rec);return `<div class="case-link"><div class="stage">${i+1}</div><div class="body"><div class="title">${esc(caseModuleLabel(ln.module))}</div><div class="meta">${esc(label)}${date?' · '+esc(fmtDate(date)):''} · Linked ${new Date(ln.linked_at).toLocaleString()}</div></div><div class="actions">${canEdit()?`<button class="iconbtn" title="Remove link" onclick="unlinkCaseRecord('${id}','${esc(ln.module)}','${esc(ln.record_id)}')">${iTrash(13)}</button>`:''}</div></div>`;}).join('');
   const activityRows=(activity||[]).map(a=>{const actor=DB.users.find(u=>u.id===a.created_by); return `<div class="case-activity-item"><div class="case-activity-dot">${caseActivityIcon(a)}</div><div class="case-activity-body"><div class="case-activity-head"><div><div class="case-activity-title">${esc(caseActivityLabel(a))}</div><div class="case-activity-meta">${esc(actor?.fullName||'System')} · ${new Date(a.created_at).toLocaleString()}</div></div>${a.status_to?statusBadge(a.status_to,CASE_STATUS_MAP):''}</div>${a.note?`<div class="case-activity-note">${esc(a.note)}</div>`:''}</div></div>`;}).join('');
   const currentStep=['Open','NTE Issued','Memo Issued','For Decision','Resolved','Closed'].includes(caseRec.status)?caseRec.status:'Open';
+  const governingRule=tdaRuleFromCaseLink((links||[]).find(link=>link.module==='offenseCatalog'));
+  const governingRuleHTML=governingRule?`<section class="case-tda-policy"><div><span class="eyebrow">Governing TDA rule</span><h4>${esc(governingRule.offense)}</h4><p>${esc(governingRule.tdaType)}${governingRule.offenseNumber?' · '+esc(governingRule.offenseNumber):''} · ${esc(governingRule.category||'Unclassified')}</p></div><div><span>${esc(governingRule.offenseLevel)} offense</span><b>${esc(governingRule.recommendedConsequence)}</b><small>Policy recommendation captured for this case</small></div></section>`:'';
   const caseFile=caseRec.attachment_ref?`<button type="button" class="btn btn-ghost btn-sm" onclick="downloadAttachment('${esc(caseRec.attachment_ref)}','${esc(caseRec.attachment_name||'HR Case File').replace(/'/g,"\\'")}')">${iDownload(13)} ${esc(caseRec.attachment_name||'Open case file')}</button>`:'<span class="small">No primary case file uploaded.</span>';
   openModal(`<div class="modal-head"><div><h3>${esc(caseRec.case_number)}</h3><div class="small">${esc(caseRec.subject||'HR Case File')}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body" data-employee-relations-modal>
     <div class="case-summary"><div class="mini"><div class="k">Employee</div><div class="v">${esc(caseRec.employee_name)}</div></div><div class="mini"><div class="k">Department</div><div class="v">${esc(caseRec.department||'—')}</div></div><div class="mini"><div class="k">Status</div><div class="v">${statusBadge(caseRec.status,CASE_STATUS_MAP)}</div></div><div class="mini"><div class="k">Assigned To</div><div class="v">${esc(assigned?.fullName||'Unassigned')}</div></div></div>
+    ${governingRuleHTML}
     ${caseWorkflowSteps(currentStep)}
+    ${caseDueProcessHTML(links||[])}
     <div class="case-intel-grid">
       <div class="panel" style="padding:14px;"><div class="dashboard-panel-head"><div><h3>Case Intelligence</h3><div class="desc">Key tracking details for this case.</div></div></div><div class="case-intel-cards"><div class="case-intel-card"><div class="k">Priority</div><div class="v">${casePriorityBadge(caseRec.priority)}</div></div><div class="case-intel-card"><div class="k">Age</div><div class="v">${age} day${age===1?'':'s'}</div></div><div class="case-intel-card"><div class="k">Deadline</div><div class="v"><span class="case-deadline ${deadline.cls}">${esc(deadline.label)}</span><div class="small" style="margin-top:3px;">${caseRec.due_date?fmtDate(caseRec.due_date):'No deadline'}</div></div></div><div class="case-intel-card"><div class="k">Opened</div><div class="v">${fmtDate(caseRec.opened_at)}</div></div><div class="case-intel-card"><div class="k">Updated</div><div class="v">${fmtDate(String(caseRec.updated_at).slice(0,10))}</div></div><div class="case-intel-card"><div class="k">Records</div><div class="v">${links?.length||0}</div></div></div></div>
       <div class="panel" style="padding:14px;"><h3>Internal Case Note</h3><div class="desc">Append a dated note to the case timeline.</div>${canEdit()?`<div class="case-note-box"><textarea id="case-note-input" placeholder="Add investigation notes, follow-up details, reminders, or handover information…"></textarea><button class="btn btn-primary" onclick="addCaseNote('${id}')">Add Note</button></div>`:'<div class="small">Viewer accounts can read case notes but cannot add them.</div>'}</div>
@@ -8464,11 +8665,15 @@ async function openWorkflowATDForm(caseId){
   if(SESSION?.role==='Viewer') return;
   CASE_WORKFLOW_CONTEXT = {caseId, module:'atd'};
   openATDForm();
-  const {data,error}=await supabase.from('hr_cases').select('employee_record_id,employee_name,department,subject').eq('id',caseId).maybeSingle();
+  const [{data,error},caseRule]=await Promise.all([supabase.from('hr_cases').select('employee_record_id,employee_name,department,subject').eq('id',caseId).maybeSingle(),loadCaseTdaRule(caseId)]);
   if(error||!data) return;
   employeePickerSet('f_employeeName',data.employee_record_id||data.employee_name||'');
   const dept=document.getElementById('f_department'); if(dept && !dept.value) dept.value=data.department||'';
   const deduction=document.getElementById('f_deductionType'); if(deduction && !deduction.value && data.subject) deduction.value=data.subject;
+  if(caseRule){
+    const category=document.getElementById('f_category');if(category)category.value='Charges';atdToggleCategory();refreshTdaRuleSelector('atd');
+    const ruleSelect=document.getElementById('atd_tda_rule');const levelSelect=document.getElementById('atd_tda_level');if(ruleSelect)ruleSelect.value=String(caseRule.catalogId);if(levelSelect)levelSelect.value=String(caseRule.levelIndex);refreshTdaRulePreview('atd',false);if(deduction)deduction.value=caseRule.offense;
+  }
 }
 
 async function setCaseWorkflowStatus(caseId,status){
@@ -8593,6 +8798,9 @@ document.addEventListener('click', e=>{
   document.querySelectorAll('.employee-picker').forEach(picker=>{
     if(!picker.contains(e.target)) employeePickerClose(picker.id.replace(/_picker$/,''));
   });
+  document.querySelectorAll('.tda-picker').forEach(picker=>{
+    if(!picker.contains(e.target)) tdaRulePickerClose(picker.id.replace(/_tda_rule_picker$/,''));
+  });
   document.querySelectorAll('.employee-more-menu[open]').forEach(menu=>{if(!menu.contains(e.target))menu.removeAttribute('open');});
 });
 document.addEventListener('keydown', e=>{
@@ -8601,6 +8809,7 @@ document.addEventListener('keydown', e=>{
   closeNavGroupPanel();
   document.querySelectorAll('.employee-more-menu[open]').forEach(menu=>menu.removeAttribute('open'));
   document.querySelectorAll('.employee-picker').forEach(picker=>employeePickerClose(picker.id.replace(/_picker$/,'')));
+  document.querySelectorAll('.tda-picker').forEach(picker=>tdaRulePickerClose(picker.id.replace(/_tda_rule_picker$/,'')));
 });
 window.addEventListener('resize',()=>{
   const panel=document.getElementById('navgroup-popover');
@@ -8642,6 +8851,7 @@ Object.assign(window, {
   downloadATDPayslip, downloadAttachment, downloadCSV, downloadRecordAttachment, enterApp, esc, evalDueDate,
   evalStatusInfo, exportATDCSV, exportCVRCSV, exportEmployeesCSV, exportIncidentsCSV, exportModuleCSV, exportWeeklyCSV, openEmployeeImport, handleEmployeeImportFile, renderEmployeeImportPreview, commitEmployeeImport, downloadEmployeeImportTemplate,
   renderTdaCatalog, openTdaForm, saveTdaRecord, openTdaImport, handleTdaImportFile, renderTdaImportPreview, commitTdaImport, toggleTdaScope, refreshCVROffenseChoices,
+  refreshTdaRuleSelector, refreshTdaRulePreview, refreshRecordTdaRules, refreshIncidentTdaRules, refreshATDTdaRules, refreshCaseTdaRules, tdaRulePickerOpen, tdaRulePickerInput, tdaRulePickerClose, tdaRulePickerChoose, tdaRulePickerClear, tdaRulePickerKeydown,
   fieldHTML, fmtDate, formatGovernmentIdInput, getEvalRecord, go, handleFileInput, incidentTypeOccurrence, incidentTypeSummaryHTML,
   toggleSidebar, closeSidebar, applyReportFilters, exportReportEmployees, exportReportActivity, exportReportATD, exportReportCases,
   loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, offenseLevelFor, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
