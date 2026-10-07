@@ -84,8 +84,16 @@
 - `tests/core/tda-workflow.test.mjs`
 - `scripts/validate.mjs`
 
+### Phase C
+
+- `supabase/phase24-employee-relations-due-process.sql`
+- `database/migrations/phase24-employee-relations-due-process.sql`
+- `docs/EMPLOYEE-RELATIONS-PHASE-C.md`
+- `tests/core/employee-relations-due-process.test.mjs`
+- Separate response, optional hearing/conference, decision approval, and explicit NOD-finalization records are now implemented without rewriting legacy NTE/NOD data.
+
 ### Later Phases
 
-- Add response, hearing, decision, implementation, and disciplinary-history entities through separately versioned migrations.
+- Add implementation and disciplinary-history entities through separately versioned migrations.
 - Reclassify legacy memos and disciplinary rows without deleting source data or attachments.
 - Update analytics only after finalized findings and implementation records are authoritative.

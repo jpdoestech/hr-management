@@ -27,7 +27,8 @@ const required=[
   'database/migrations/phase15-organization-structure.sql','js/core/access-control.js','supabase/phase20-access-control.sql',
   'database/migrations/phase20-access-control.sql','docs/ACCESS-CONTROL-SETUP.md',
   'js/core/employee-relations.js','supabase/phase23-employee-relations-case-foundation.sql',
-  'database/migrations/phase23-employee-relations-case-foundation.sql','docs/EMPLOYEE-RELATIONS-REDESIGN-PHASE-A.md'
+  'database/migrations/phase23-employee-relations-case-foundation.sql','supabase/phase24-employee-relations-due-process.sql',
+  'database/migrations/phase24-employee-relations-due-process.sql','docs/EMPLOYEE-RELATIONS-REDESIGN-PHASE-A.md'
 ];
 const missing=required.filter(f=>!fs.existsSync(path.join(root,f)));
 if(missing.length){
@@ -184,9 +185,21 @@ if(employeeRelationsMigration!==employeeRelationsMigrationCopy || !employeeRelat
   console.error('Employee Relations case-foundation migration copies are missing, incomplete, or out of sync.');
   process.exit(1);
 }
+const dueProcessMigration=fs.readFileSync(path.join(root,'supabase/phase24-employee-relations-due-process.sql'),'utf8');
+const dueProcessMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase24-employee-relations-due-process.sql'),'utf8');
+if(dueProcessMigration!==dueProcessMigrationCopy || !dueProcessMigration.includes('hr_case_responses') || !dueProcessMigration.includes('hr_case_hearings') || !dueProcessMigration.includes('hr_case_decisions') || !dueProcessMigration.includes("current_user_has_permission('employee_relations.approve')")){
+  console.error('Employee Relations due-process migration copies are missing, incomplete, or out of sync.');
+  process.exit(1);
+}
 for(const feature of ['CASE_WORKFLOW_STAGES','caseTransitionValidation','createCaseAllegationFromReport','openCaseAllegationForm','Report / allegation']){
   if(!app.includes(feature)){
     console.error(`Employee Relations case-domain contract is missing: ${feature}`);
+    process.exit(1);
+  }
+}
+for(const feature of ['openCaseResponseForm','openCaseHearingForm','openCaseDecisionForm','saveCaseDecisionReview','finalizationStatus','Approve Decision']){
+  if(!app.includes(feature)){
+    console.error(`Employee Relations due-process contract is missing: ${feature}`);
     process.exit(1);
   }
 }

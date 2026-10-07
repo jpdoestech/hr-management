@@ -27,6 +27,18 @@ export const CASE_TERMINAL_STAGES = [
 
 export const LEGACY_CASE_STAGES = ['Open', 'Memo Issued', 'Resolved'];
 
+export const CASE_RESPONSE_STATUSES = ['Received', 'No Response', 'Withdrawn'];
+export const CASE_HEARING_STATUSES = ['Scheduled', 'Held', 'Cancelled', 'Not Required'];
+export const CASE_DECISION_STATUSES = ['Draft', 'For Approval', 'Approved', 'Returned', 'Superseded', 'Reversed'];
+export const CASE_DECISION_OUTCOMES = [
+  'Substantiated',
+  'Partially Substantiated',
+  'Unsubstantiated',
+  'No Policy Violation',
+  'Administrative Closure',
+];
+export const CASE_NOD_STATUSES = ['Not Prepared', 'Draft', 'Finalized', 'Issued', 'Served'];
+
 const TRANSITIONS = {
   'Reported / Created': ['Under Triage', 'Cancelled', 'Duplicate'],
   'Under Triage': ['Under Investigation', 'Closed - No Violation', 'Closed - Insufficient Evidence', 'Closed - Informal Resolution', 'Cancelled', 'Duplicate'],
@@ -101,6 +113,47 @@ export function caseTransitionValidation(toStatus, context = {}) {
 
 export function isCaseReportSource(module) {
   return module === 'incidents' || module === 'cvr';
+}
+
+export function caseDueProcessReadiness({
+  nteRecords = [],
+  nodRecords = [],
+  allegations = [],
+  responses = [],
+  hearings = [],
+  decisions = [],
+} = {}) {
+  const currentDecision = decisions.find(decision => !['Superseded', 'Reversed'].includes(decision.decision_status)) || null;
+  const activeResponses = responses.filter(response => response.status !== 'Withdrawn');
+  const hearingRequired = activeResponses.some(response => response.hearing_requested === true);
+  const hasHearingRecord = hearings.some(hearing => ['Held', 'Not Required'].includes(hearing.status));
+  const hasResponse = activeResponses.some(response => response.status === 'Received' || response.status === 'No Response');
+  const finalizedNodStates = new Set(['Finalized', 'Issued', 'Served']);
+  const finalFindings = allegations.filter(allegation => allegation.finding && allegation.finding !== 'Pending');
+  return {
+    hasNte: nteRecords.length > 0,
+    hasNteIssueDate: nteRecords.some(record => Boolean(record.dateIssued)),
+    hasResponse,
+    hearingRequired,
+    hasHearingRecord,
+    hearingHandled: !hearingRequired || hasHearingRecord,
+    responseOpportunityHandled: hasResponse && (!hearingRequired || hasHearingRecord),
+    hasPreparedFindings: finalFindings.length > 0,
+    hasFinalFindings: allegations.length > 0 && finalFindings.length === allegations.length,
+    hasApprovedDecision: currentDecision?.decision_status === 'Approved',
+    hasDecisionNotice: nodRecords.some(record => record.dateOfNod && finalizedNodStates.has(record.finalizationStatus)),
+    currentDecision,
+  };
+}
+
+export function caseDecisionValidation(decision = {}, { requireApproval = false } = {}) {
+  const missing = [];
+  if (!String(decision.overall_outcome || '').trim()) missing.push('decision outcome');
+  if (!String(decision.reasoning || '').trim()) missing.push('decision reasoning');
+  if (!String(decision.final_action || '').trim()) missing.push('final action');
+  if (decision.deviation_from_tda && !String(decision.deviation_reason || '').trim()) missing.push('TDA deviation reason');
+  if (requireApproval && !decision.decision_date) missing.push('decision date');
+  return { valid: missing.length === 0, missing };
 }
 
 export function qualifyingDisciplinaryHistory(records = [], { employeeRecordId = '', tdaRuleId = '', asOf = '', lookbackDays = null } = {}) {
