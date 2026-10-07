@@ -100,8 +100,15 @@
 - `tests/core/employee-relations-history.test.mjs`
 - Finalized qualifying case outcomes now generate normalized disciplinary history idempotently. Progressive occurrence uses stable employee/TDA IDs, while CVRs and preserved legacy rows remain excluded from confirmed counts.
 
+### Phase E
+
+- `supabase/phase26-employee-relations-legacy-migration.sql`
+- `database/migrations/phase26-employee-relations-legacy-migration.sql`
+- `docs/EMPLOYEE-RELATIONS-PHASE-E.md`
+- `tests/core/employee-relations-legacy-migration.test.mjs`
+- Existing disciplinary rows now enter a controlled review queue, and existing memoranda are projected as read-only correspondence while original records, links, and attachment references remain intact.
+
 ### Later Phases
 
 - Add full disciplinary-action implementation tracking through a separately versioned migration.
-- Reclassify legacy memos and disciplinary rows without deleting source data or attachments.
 - Update analytics only after finalized findings and implementation records are authoritative.

@@ -91,6 +91,12 @@ begin
   -- Dependency order matters. Each table is optional so the script also works
   -- when only part of the migration set has been installed.
   foreach target_table in array array[
+    'hr_disciplinary_history',
+    'hr_case_correspondence',
+    'hr_case_responses',
+    'hr_case_hearings',
+    'hr_case_decisions',
+    'hr_case_allegations',
     'hr_case_activity',
     'hr_case_links',
     'hr_cases',

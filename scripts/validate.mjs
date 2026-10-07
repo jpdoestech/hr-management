@@ -29,7 +29,8 @@ const required=[
   'js/core/employee-relations.js','supabase/phase23-employee-relations-case-foundation.sql',
   'database/migrations/phase23-employee-relations-case-foundation.sql','supabase/phase24-employee-relations-due-process.sql',
   'database/migrations/phase24-employee-relations-due-process.sql','supabase/phase25-disciplinary-history.sql',
-  'database/migrations/phase25-disciplinary-history.sql','docs/EMPLOYEE-RELATIONS-REDESIGN-PHASE-A.md','docs/EMPLOYEE-RELATIONS-PHASE-D.md'
+  'database/migrations/phase25-disciplinary-history.sql','supabase/phase26-employee-relations-legacy-migration.sql',
+  'database/migrations/phase26-employee-relations-legacy-migration.sql','docs/EMPLOYEE-RELATIONS-REDESIGN-PHASE-A.md','docs/EMPLOYEE-RELATIONS-PHASE-D.md','docs/EMPLOYEE-RELATIONS-PHASE-E.md'
 ];
 const missing=required.filter(f=>!fs.existsSync(path.join(root,f)));
 if(missing.length){
@@ -197,6 +198,18 @@ const disciplinaryHistoryMigrationCopy=fs.readFileSync(path.join(root,'database/
 if(disciplinaryHistoryMigration!==disciplinaryHistoryMigrationCopy || !disciplinaryHistoryMigration.includes('hr_disciplinary_history') || !disciplinaryHistoryMigration.includes('generate_case_disciplinary_history') || !disciplinaryHistoryMigration.includes("current_user_has_permission('employee_relations.view')")){
   console.error('Employee Relations disciplinary-history migration copies are missing, incomplete, or out of sync.');
   process.exit(1);
+}
+const legacyMigration=fs.readFileSync(path.join(root,'supabase/phase26-employee-relations-legacy-migration.sql'),'utf8');
+const legacyMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase26-employee-relations-legacy-migration.sql'),'utf8');
+if(legacyMigration!==legacyMigrationCopy || !legacyMigration.includes('hr_case_correspondence') || !legacyMigration.includes('review_legacy_disciplinary_history') || !legacyMigration.includes('protect_legacy_disciplinary_history')){
+  console.error('Employee Relations legacy-migration copies are missing, incomplete, or out of sync.');
+  process.exit(1);
+}
+for(const feature of ['renderCorrespondence','loadCaseCorrespondence','openLegacyDisciplinaryReview','saveLegacyDisciplinaryReview','exportLegacyDisciplinaryHistoryCSV']){
+  if(!app.includes(feature)){
+    console.error(`Employee Relations Phase E contract is missing: ${feature}`);
+    process.exit(1);
+  }
 }
 for(const feature of ['CASE_WORKFLOW_STAGES','caseTransitionValidation','createCaseAllegationFromReport','openCaseAllegationForm','Report / allegation']){
   if(!app.includes(feature)){
