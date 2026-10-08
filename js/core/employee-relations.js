@@ -112,7 +112,7 @@ export function caseTransitionValidation(toStatus, context = {}) {
 }
 
 export function isCaseReportSource(module) {
-  return module === 'incidents' || module === 'cvr';
+  return module === 'incidents' || module === 'cvr' || module === 'intake';
 }
 
 export function caseDueProcessReadiness({

@@ -44,6 +44,8 @@ Apply `supabase/phase28-employee-relations-validation.sql` after Phase 27. It ad
 
 Apply `supabase/phase29-employee-relations-evidence.sql` after Phase 28. It adds a tenant-scoped case evidence register with provenance, custody, managed attachments, archive status, existing Employee Relations permissions, and record-scope enforcement. It does not move or rewrite existing report and case attachments. See [Employee Relations Hardening: Phase H Evidence Register](EMPLOYEE-RELATIONS-PHASE-H.md).
 
+Apply `supabase/phase30-employee-relations-intake.sql` after Phase 29. It adds a tenant-scoped Reports & Intake queue for complaints, referrals, attendance exceptions, audit findings, and security reports. Existing Incident and CVR records remain unchanged; the migration only expands case-link and allegation-source constraints to support normalized intake. See [Employee Relations Hardening: Phase I Reports and Intake](EMPLOYEE-RELATIONS-PHASE-I.md).
+
 Apply `supabase/phase17-user-export-permissions.sql` before deploying the matching frontend. Viewer, Manager, and Employee profiles default to no export access. A System Administrator can enable export for a specific account from User Management; Administrator and HR Staff roles include export access automatically.
 
 ## Google Drive

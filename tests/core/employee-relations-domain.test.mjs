@@ -28,9 +28,10 @@ test('case transition validation enforces investigation and closure prerequisite
   assert.equal(closed.valid,true);
 });
 
-test('only Incident and CVR are report sources',()=>{
+test('Incident, CVR, and normalized intake are report sources',()=>{
   assert.equal(isCaseReportSource('incidents'),true);
   assert.equal(isCaseReportSource('cvr'),true);
+  assert.equal(isCaseReportSource('intake'),true);
   assert.equal(isCaseReportSource('disciplinary'),false);
   assert.equal(isCaseReportSource('memos'),false);
 });
