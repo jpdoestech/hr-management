@@ -497,6 +497,7 @@ function invalidateEmployeeDirectoryCache(){
   EMPLOYEE_DIRECTORY_PAGE_CACHE.clear();
   EMPLOYEE_DIRECTORY_PENDING.clear();
   EMPLOYEE_DIRECTORY_REQUEST_TOKEN+=1;
+  if(typeof EMPLOYEE_PROFILE_CACHE!=='undefined')EMPLOYEE_PROFILE_CACHE.clear();
 }
 function serverRecordQueryUnavailable(error){
   return ['42883','PGRST202','PGRST205'].includes(error?.code)||/search_hr_records|schema cache|function.*not find/i.test(error?.message||'');
@@ -4133,12 +4134,8 @@ function employeeDirectoryRowsHTML(rows,columns){
   if(!rows.length)return `<tr><td colspan="${columns.length+1}"><div class="empty"><b>No employees found</b><span>${employeeDirectoryHasFilters()?'Try adjusting the search or filters.':'Add an employee to begin building the directory.'}</span>${employeeDirectoryHasFilters()?`<button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="resetEmployeeDirectoryFilters()">Reset search and filters</button>`:''}</div></td></tr>`;
   return rows.map(employee=>`<tr class="employee-directory-row ${String(STATE.employeeSelectedId||'')===String(employee.id)?'selected':''}" data-employee-id="${esc(employee.id)}" tabindex="0" aria-label="Open ${esc(employeeDisplayName(employee))}" onclick="selectEmployeeDirectoryRow('${employee.id}');openEmployeeProfile('${employee.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectEmployeeDirectoryRow('${employee.id}');openEmployeeProfile('${employee.id}')}">
     ${columns.map(column=>`<td data-column="${esc(column.key)}">${column.cell(employee)}</td>`).join('')}
-    <td data-column="actions" onclick="event.stopPropagation()" onkeydown="event.stopPropagation()"><div class="rowactions">
-      <button class="iconbtn" onclick="selectEmployeeDirectoryRow('${employee.id}');openEmployeeProfile('${employee.id}')" title="View employee profile">${iUser(14)}</button>
-      ${canEdit()?`<button class="iconbtn" onclick="selectEmployeeDirectoryRow('${employee.id}');openEmployeeForm('${employee.id}')" title="Edit">${iEdit(14)}</button>
-      <button class="iconbtn" onclick="selectEmployeeDirectoryRow('${employee.id}');openTransferForEmployee('${employee.id}')" title="Record Department Transfer">${iSwap(14)}</button>
-      <button class="iconbtn" onclick="selectEmployeeDirectoryRow('${employee.id}');openEmployeeStatusForm('${employee.id}')" title="Update Employment Status">${iShield(14)}</button>
-      <button class="iconbtn" onclick="deleteEmployee('${employee.id}')" title="Delete">${iTrash(14)}</button>`:''}
+    <td data-column="actions" onclick="event.stopPropagation()" onkeydown="event.stopPropagation()"><div class="rowactions employee-directory-action">
+      <button class="iconbtn" onclick="selectEmployeeDirectoryRow('${employee.id}');openEmployeeProfile('${employee.id}')" title="Open employee workspace" aria-label="Open ${esc(employeeDisplayName(employee))} workspace">${iEdit(14)}</button>
     </div></td>
   </tr>`).join('');
 }
@@ -4199,7 +4196,7 @@ function renderEmployees(){
   const filteredTotal=pageResult.meta.total;
   const {departments:depts,branches,statuses:statusOptions}=employeeDirectoryMetadata();
   const columns=query.columns;
-  const tableMinWidth=columns.reduce((sum,c)=>sum+c.width,0)+92;
+  const tableMinWidth=columns.reduce((sum,c)=>sum+c.width,0)+58;
   setTitle('Employee Information', `${filteredTotal} of ${DB.employees.length} employees · ${depts.length} departments`);
   document.getElementById('content')?.classList.add('employee-directory-content');
 
@@ -4230,7 +4227,7 @@ function renderEmployees(){
       </div>
       <div class="tablewrap employee-directory-tablewrap">
         <table class="data-table employee-directory-table" data-table-key="employees" data-table-tools="external" data-server-paginated="true" data-page-scope="${pageScope}" data-page-handler="serverTablePageSize" data-managed-columns="department,branchReporting,status,classification" style="min-width:${tableMinWidth}px!important">
-          <colgroup>${columns.map(c=>`<col data-column-key="${esc(c.key)}" style="width:${c.width}px">`).join('')}<col data-column-key="actions" style="width:92px"></colgroup>
+          <colgroup>${columns.map(c=>`<col data-column-key="${esc(c.key)}" style="width:${c.width}px">`).join('')}<col data-column-key="actions" style="width:58px"></colgroup>
           <thead><tr>${columns.map(c=>`<th data-column-key="${esc(c.key)}" ${['department','branchReporting','status','classification'].includes(c.key)?'data-column-managed="true"':''}>${esc(c.label)}</th>`).join('')}<th class="actions-head" data-column-key="actions">Actions</th></tr></thead>
           <tbody>${employeeDirectoryRowsHTML(rows,columns)}</tbody>
         </table>
@@ -5237,7 +5234,7 @@ async function exportEmployeesCSV(){
   window.XLSX.writeFile(workbook,`SLSC_Employees_${todayISO()}.xlsx`);toast(`Exported ${DB.employees.length} complete employee records.`);
 }
 
-async function openEmployeeProfile(id){
+async function openEmployeeProfileLegacy(id){
   const emp=DB.employees.find(e=>e.id===id);
   if(!emp){ toast('Employee record could not be found.',true); return; }
   await ensureRecordModules(['leaves','disciplinary','cvr','incidents','nte','memos','nod','atd','transfers','evaluations']);
@@ -5334,6 +5331,198 @@ async function openEmployeeProfile(id){
       ${cases.length?`<div class="profile-list">${cases.slice(0,8).map(c=>`<div class="profile-list-row"><div class="main"><div class="title">${esc(c.case_number)} · ${esc(c.subject||'HR Case')}</div><div class="meta">Opened ${fmtDate(c.opened_at)} · Updated ${fmtDate(String(c.updated_at).slice(0,10))}</div></div><div class="right">${statusBadge(c.status,CASE_STATUS_MAP)}<div style="margin-top:5px;"><button class="btn btn-ghost btn-sm" onclick="openCaseDetails('${c.id}')">Open</button></div></div></div>`).join('')}</div>`:'<div class="empty"><b>No HR cases</b>No central case file is currently associated with this employee.</div>'}
     </div>
   </div><div class="modal-foot employee-workspace-foot"><span class="small">Selected employee: ${esc(employeeDisplayName(emp))}</span><div class="toolbar-spacer"></div><button class="btn btn-ghost" onclick="closeModal()">Back to Directory</button></div>`);
+}
+
+const EMPLOYEE_PROFILE_MODULES=['leaves','disciplinary','cvr','incidents','nte','memos','nod','atd','transfers','evaluations'];
+const EMPLOYEE_PROFILE_CACHE=new Map();
+const EMPLOYEE_PROFILE_CACHE_TTL=120000;
+let EMPLOYEE_PROFILE_REQUEST_TOKEN=0;
+
+function employeeProfileRecordMatches(record,employee){
+  const recordId=String(record?.employeeRecordId||record?.employee_record_id||record?.employeeId||'');
+  if(recordId)return recordId===String(employee.id);
+  return normalizeEmployeeName(record?.employeeName||record?.name)===normalizeEmployeeName(employee.name);
+}
+function employeeProfileSnapshot(employee,cases=[],profileRecords=null){
+  const matching=module=>(profileRecords?.[module]||DB[module]||[]).filter(record=>employeeProfileRecordMatches(record,employee));
+  const leaves=matching('leaves');
+  const discipline=matching('disciplinary');
+  const cvr=matching('cvr');
+  const incidents=matching('incidents');
+  const nte=matching('nte');
+  const memos=matching('memos');
+  const nod=matching('nod');
+  const atd=matching('atd');
+  const transfers=matching('transfers');
+  const evaluations=(profileRecords?.evaluations||DB.evaluations||[]).filter(record=>String(record.employeeId||record.employeeRecordId||'')===String(employee.id));
+  const atdBalance=atd.reduce((sum,record)=>sum+Math.max(0,(Number(record.totalAmount)||0)-atdTotalPaid(record)),0);
+  const activities=[
+    ...leaves.map(record=>({date:record.startDate,type:'Leave',title:record.leaveType||'Leave Record',meta:record.status||''})),
+    ...discipline.map(record=>({date:record.dateOfIncident,type:'Disciplinary',title:record.violation||'Disciplinary Action',meta:record.action||''})),
+    ...cvr.map(record=>({date:record.dateOfCVR,type:'CVR',title:[...(record.offenses||[]),...(record.otherOffense?[record.otherOffense]:[])].join(', ')||'CVR / Violation Report',meta:record.status||''})),
+    ...incidents.map(record=>({date:record.dateOfIncident,type:'Incident',title:[...(record.incidentTypes||[]),...(record.otherType?[record.otherType]:[])].join(', ')||'Incident Report',meta:record.status||''})),
+    ...nte.map(record=>({date:record.dateReceived,type:'NTE',title:record.subject||record.violation||'Notice to Explain',meta:record.status||''})),
+    ...memos.map(record=>({date:record.dateOfMemorandum||record.dateOfMemo||record.dateReceived,type:'Memo',title:record.subject||record.title||'Memorandum of Offense',meta:record.status||''})),
+    ...nod.map(record=>({date:record.dateOfNod,type:'NOD',title:record.subject||record.finalAction||'Notice of Decision',meta:record.finalAction||''})),
+    ...atd.map(record=>({date:record.atdDate,type:'ATD',title:record.deductionType||'ATD Record',meta:record.status||''})),
+    ...transfers.map(record=>({date:record.toDate||record.fromDate,type:'Transfer',title:`${record.fromDepartment||'Unassigned'} to ${record.toDepartment||'Unassigned'}`,meta:'Department Transfer'})),
+    ...cases.map(record=>({date:record.opened_at,type:'HR Case',title:`${record.case_number||'Case'} · ${record.subject||'HR Case'}`,meta:record.status||''})),
+  ].filter(activity=>activity.date).sort((left,right)=>String(right.date).localeCompare(String(left.date))).slice(0,20);
+  return {leaves,discipline,cvr,incidents,nte,memos,nod,atd,transfers,evaluations,cases,activities,atdBalance};
+}
+async function loadEmployeeProfileCases(employee){
+  try{
+    const fields='id,case_number,status,subject,opened_at,updated_at,employee_record_id';
+    const byId=await supabase.from('hr_cases').select(fields).eq('employee_record_id',String(employee.id)).order('updated_at',{ascending:false}).limit(20);
+    if(!byId.error&&byId.data?.length)return byId.data;
+    const byName=await supabase.from('hr_cases').select(fields).ilike('employee_name',employee.name).order('updated_at',{ascending:false}).limit(20);
+    return byName.error?[]:byName.data||[];
+  }catch(error){
+    console.warn('Employee case history could not be loaded.',error);
+    return [];
+  }
+}
+async function loadEmployeeProfileRecords(employee){
+  const recordId=String(employee.id).replace(/[(),]/g,'');
+  const employeeName=String(employee.name||'').replace(/\\/g,'\\\\').replace(/"/g,'\\"');
+  const identityFilter=[
+    `data->>employeeId.eq.${recordId}`,
+    `data->>employeeRecordId.eq.${recordId}`,
+    `data->>employee_record_id.eq.${recordId}`,
+    `data->>employeeName.ilike."${employeeName}"`,
+    `data->>name.ilike."${employeeName}"`,
+  ].join(',');
+  const {data,error}=await measureAsync('employee.profile-records',()=>supabase.from('hr_records').select('module,record_id,data,updated_at').in('module',EMPLOYEE_PROFILE_MODULES).or(identityFilter).order('updated_at',{ascending:false}),{moduleCount:EMPLOYEE_PROFILE_MODULES.length});
+  if(error){
+    console.warn('Scoped employee record query unavailable; using the legacy module cache.',error);
+    await ensureRecordModules(EMPLOYEE_PROFILE_MODULES);
+    return null;
+  }
+  const grouped=Object.fromEntries(EMPLOYEE_PROFILE_MODULES.map(module=>[module,[]]));
+  (data||[]).forEach(row=>{if(grouped[row.module])grouped[row.module].push(recordFromRow(row));});
+  return grouped;
+}
+function employeeProfileLoadingCards(){
+  return `<div class="profile-kpis employee-profile-loading" aria-label="Loading employee activity"><div class="profile-kpi"></div><div class="profile-kpi"></div><div class="profile-kpi"></div><div class="profile-kpi"></div></div>`;
+}
+function employeeProfileSummaryHTML(employee,snapshot){
+  const completion=employeeCompleteness(employee);
+  const activityCards=snapshot?`<div class="profile-kpis">
+    <div class="profile-kpi"><div class="k">HR Cases</div><div class="v">${snapshot.cases.length}</div><div class="s">Linked case files</div></div>
+    <div class="profile-kpi"><div class="k">Leave</div><div class="v">${snapshot.leaves.length}</div><div class="s">Requests on file</div></div>
+    <div class="profile-kpi"><div class="k">ER Records</div><div class="v">${snapshot.discipline.length+snapshot.cvr.length+snapshot.incidents.length}</div><div class="s">Incidents and findings</div></div>
+    <div class="profile-kpi"><div class="k">ATD Balance</div><div class="v">${peso(snapshot.atdBalance)}</div><div class="s">Outstanding amount</div></div>
+  </div>`:employeeProfileLoadingCards();
+  return `<div class="employee-completeness"><div><b>Master data</b><span>${completion}% complete</span></div><div class="bar"><div class="fill" style="width:${completion}%"></div></div><div class="pct">${completion}%</div></div>
+    ${activityCards}
+    <div class="employee-profile-columns">
+      <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Employment</h3><p>Current assignment and status</p></div></div><div class="profile-detail">
+        <div class="item"><div class="label">Employee No.</div><div class="value mono">${esc(employee.employeeNo||'—')}</div></div>
+        <div class="item"><div class="label">PRF Number</div><div class="value">${esc(employee.prfNumber||'—')}</div></div>
+        <div class="item"><div class="label">Position</div><div class="value">${esc(employee.position||'—')}</div></div>
+        <div class="item"><div class="label">Department</div><div class="value">${esc(employee.department||'—')}</div></div>
+        <div class="item"><div class="label">Reporting Branch</div><div class="value">${esc(employee.branchReporting||'Not assigned')}</div></div>
+        <div class="item"><div class="label">Date Hired</div><div class="value">${fmtDate(employee.dateHired)}</div></div>
+        <div class="item"><div class="label">Employment Status</div><div class="value">${esc(employee.status||'—')}</div></div>
+        <div class="item"><div class="label">Effective Date</div><div class="value">${fmtDate(employee.statusDate)}</div></div>
+      </div></section>
+      <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Record snapshot</h3><p>Connected records loaded on demand</p></div></div>${snapshot?`<div class="employee-record-metrics">
+        <div><b>${snapshot.nte.length}</b><span>NTE</span></div><div><b>${snapshot.memos.length}</b><span>Memoranda</span></div><div><b>${snapshot.nod.length}</b><span>NOD</span></div><div><b>${snapshot.evaluations.length}</b><span>Evaluations</span></div><div><b>${snapshot.transfers.length}</b><span>Transfers</span></div><div><b>${snapshot.atd.length}</b><span>ATD</span></div>
+      </div>`:`<div class="employee-profile-inline-loading"><span></span><div><b>Loading connected records</b><small>The employee master data is ready. Activity is loading separately.</small></div></div>`}</section>
+    </div>`;
+}
+function employeeProfilePersonalHTML(employee){
+  return `<div class="employee-profile-columns">
+    <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Personal &amp; contact</h3><p>Employee contact information</p></div></div><div class="profile-detail">
+      <div class="item"><div class="label">Birth Date</div><div class="value">${fmtDate(employee.birthDate)}</div></div><div class="item"><div class="label">Gender</div><div class="value">${esc(employee.gender||'—')}</div></div><div class="item"><div class="label">Civil Status</div><div class="value">${esc(employee.civilStatus||'—')}</div></div><div class="item"><div class="label">Mobile</div><div class="value">${esc(employee.mobileNumber||'—')}</div></div><div class="item full"><div class="label">Email</div><div class="value">${esc(employee.personalEmail||'—')}</div></div>
+    </div></section>
+    <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Emergency contact</h3><p>Primary contact in an emergency</p></div></div><div class="profile-detail">
+      <div class="item"><div class="label">Name</div><div class="value">${esc(employee.emergencyContactName||'—')}</div></div><div class="item"><div class="label">Relationship</div><div class="value">${esc(employee.emergencyContactRelationship||'—')}</div></div><div class="item full"><div class="label">Phone</div><div class="value">${esc(employee.emergencyContactPhone||'—')}</div></div>
+    </div></section>
+    <section class="employee-profile-section full"><div class="employee-profile-section-head"><div><h3>Addresses</h3><p>Home and present locations</p></div></div><div class="profile-detail">
+      <div class="item"><div class="label">Home Address</div><div class="value">${esc(formatPhilippineAddress(employee.homeAddress)||employee.address||'—')}</div></div><div class="item"><div class="label">Present Address</div><div class="value">${esc(formatPhilippineAddress(employee.presentAddress)||employee.presentAddressText||'—')}</div></div>
+    </div></section>
+  </div>`;
+}
+function employeeProfilePayHTML(employee){
+  const allowances=employeeAllowanceEntries(employee);
+  return `<div class="employee-profile-columns">
+    <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Compensation</h3><p>Current rate and allowances</p></div></div><div class="profile-detail"><div class="item"><div class="label">Daily Rate</div><div class="value">${employee.dailyRate!==''&&employee.dailyRate!=null?peso(employee.dailyRate):'—'}</div></div>${allowances.map(item=>`<div class="item"><div class="label">${esc(item.name)}</div><div class="value">${peso(item.amount)}</div></div>`).join('')||'<div class="item"><div class="label">Allowances</div><div class="value">None recorded</div></div>'}<div class="item full"><div class="label">Total Allowances</div><div class="value">${peso(employeeAllowanceTotal(employee))}</div></div></div></section>
+    <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Government IDs</h3><p>Validated statutory identifiers</p></div></div><div class="profile-detail"><div class="item"><div class="label">BIR TIN</div><div class="value mono">${esc(formatGovernmentId('tin',employee.tin)||'—')}</div></div><div class="item"><div class="label">SSS Number</div><div class="value mono">${esc(formatGovernmentId('sss',employee.sssNumber)||'—')}</div></div><div class="item"><div class="label">PhilHealth PIN</div><div class="value mono">${esc(formatGovernmentId('philHealth',employee.philHealthNumber)||'—')}</div></div><div class="item"><div class="label">Pag-IBIG MID</div><div class="value mono">${esc(formatGovernmentId('pagIbig',employee.pagIbigNumber)||'—')}</div></div></div></section>
+    ${employee.remarks?`<section class="employee-profile-section full"><div class="employee-profile-section-head"><div><h3>Remarks</h3></div></div><p class="employee-profile-remarks">${esc(employee.remarks)}</p></section>`:''}
+  </div>`;
+}
+function employeeProfileHistoryHTML(employee,snapshot){
+  if(!snapshot)return `<div class="employee-profile-history-loading"><span></span><h3>Loading employee history</h3><p>The profile remains usable while connected records are retrieved.</p></div>`;
+  const employmentHistory=Array.isArray(employee.employmentHistory)?employee.employmentHistory.slice().reverse().slice(0,12):[];
+  const recordHistory=Array.isArray(employee.recordHistory)?employee.recordHistory.slice().reverse().slice(0,20):[];
+  return `<div class="employee-profile-history">
+    <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Employment history</h3><p>Status and assignment milestones</p></div></div>${employmentHistory.length?`<div class="employee-history">${employmentHistory.map(item=>`<div class="employee-history-row"><div class="dot"></div><div class="date">${fmtDate(item.effectiveDate||String(item.changedAt||'').slice(0,10))}</div><div><div class="title">${esc(item.from||'Initial')} ${item.from?'to ':''}${esc(item.to||'—')}</div><div class="meta">${esc(item.remarks||'No remarks')} · ${esc(item.changedBy||'System')}</div></div><div class="right">${statusBadge(item.to||'—',EMP_STATUS_MAP)}</div></div>`).join('')}</div>`:'<div class="empty"><b>No employment history</b>Status changes will appear here.</div>'}</section>
+    <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Recent HR activity</h3><p>Latest connected employee records</p></div></div>${snapshot.activities.length?`<div class="profile-list">${snapshot.activities.slice(0,12).map(activity=>`<div class="profile-list-row"><div class="main"><div class="title">${esc(activity.type)} · ${esc(activity.title)}</div><div class="meta">${esc(activity.meta||'')}</div></div><div class="right">${fmtDate(String(activity.date).slice(0,10))}</div></div>`).join('')}</div>`:'<div class="empty"><b>No HR activity</b>No connected records are on file.</div>'}</section>
+    <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>HR cases</h3><p>Central case files associated with this employee</p></div></div>${snapshot.cases.length?`<div class="profile-list">${snapshot.cases.slice(0,8).map(record=>`<div class="profile-list-row"><div class="main"><div class="title">${esc(record.case_number)} · ${esc(record.subject||'HR Case')}</div><div class="meta">Opened ${fmtDate(record.opened_at)} · Updated ${fmtDate(String(record.updated_at).slice(0,10))}</div></div><div class="right">${statusBadge(record.status,CASE_STATUS_MAP)}<button class="btn btn-ghost btn-sm" onclick="openCaseDetails('${record.id}')">Open</button></div></div>`).join('')}</div>`:'<div class="empty"><b>No HR cases</b>No central case file is associated with this employee.</div>'}</section>
+    <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Record audit</h3><p>Creation and update history</p></div></div>${recordHistory.length?`<div class="employee-record-history">${recordHistory.map(entry=>`<div><span class="record-history-action">${esc(entry.action||'Updated')}</span><span><b>${esc(entry.by||'System')}</b><small>${esc(entry.detail||'Employee record updated')}</small></span><time>${new Date(entry.at).toLocaleString()}</time></div>`).join('')}</div>`:'<div class="empty"><b>No record audit available</b>Future saved changes will appear here.</div>'}</section>
+  </div>`;
+}
+function employeeProfileTabContent(employee,tab,snapshot){
+  if(tab==='personal')return employeeProfilePersonalHTML(employee);
+  if(tab==='pay')return employeeProfilePayHTML(employee);
+  if(tab==='history')return employeeProfileHistoryHTML(employee,snapshot);
+  return employeeProfileSummaryHTML(employee,snapshot);
+}
+function employeeProfileSetTab(employeeId,tab='summary'){
+  const employee=DB.employees.find(record=>String(record.id)===String(employeeId));
+  const workspace=document.querySelector('.employee-profile-workspace');
+  if(!employee||!workspace||String(workspace.dataset.employeeProfileId)!==String(employeeId))return false;
+  workspace.dataset.activeTab=tab;
+  workspace.querySelectorAll('.employee-profile-tab').forEach(button=>{
+    const active=button.dataset.profileTab===tab;
+    button.classList.toggle('active',active);
+    button.setAttribute('aria-selected',String(active));
+    button.tabIndex=active?0:-1;
+  });
+  const cached=EMPLOYEE_PROFILE_CACHE.get(String(employee.id));
+  const content=workspace.querySelector('.employee-profile-tab-content');
+  if(content)content.innerHTML=employeeProfileTabContent(employee,tab,cached?.snapshot||null);
+  return true;
+}
+function updateEmployeeProfileActivity(employee,snapshot,token){
+  if(token!==EMPLOYEE_PROFILE_REQUEST_TOKEN)return;
+  const workspace=document.querySelector('.employee-profile-workspace');
+  if(!workspace||String(workspace.dataset.employeeProfileId)!==String(employee.id))return;
+  const tab=workspace.dataset.activeTab||'summary';
+  const content=workspace.querySelector('.employee-profile-tab-content');
+  if(content)content.innerHTML=employeeProfileTabContent(employee,tab,snapshot);
+  workspace.classList.remove('loading-activity');
+}
+async function hydrateEmployeeProfile(employee,token){
+  const cached=EMPLOYEE_PROFILE_CACHE.get(String(employee.id));
+  if(cached&&Date.now()-cached.storedAt<EMPLOYEE_PROFILE_CACHE_TTL){updateEmployeeProfileActivity(employee,cached.snapshot,token);return;}
+  try{
+    const [records,cases]=await Promise.all([loadEmployeeProfileRecords(employee),loadEmployeeProfileCases(employee)]);
+    const snapshot=employeeProfileSnapshot(employee,cases,records);
+    EMPLOYEE_PROFILE_CACHE.set(String(employee.id),{snapshot,storedAt:Date.now()});
+    while(EMPLOYEE_PROFILE_CACHE.size>30)EMPLOYEE_PROFILE_CACHE.delete(EMPLOYEE_PROFILE_CACHE.keys().next().value);
+    updateEmployeeProfileActivity(employee,snapshot,token);
+  }catch(error){
+    console.warn('Employee activity could not be loaded.',error);
+    if(token===EMPLOYEE_PROFILE_REQUEST_TOKEN)document.querySelector('.employee-profile-workspace')?.classList.remove('loading-activity');
+  }
+}
+async function openEmployeeProfile(id){
+  const employee=DB.employees.find(record=>String(record.id)===String(id));
+  if(!employee){toast('Employee record could not be found.',true);return;}
+  const token=++EMPLOYEE_PROFILE_REQUEST_TOKEN;
+  selectEmployeeDirectoryRow(employee.id);
+  const cached=EMPLOYEE_PROFILE_CACHE.get(String(employee.id));
+  const snapshot=cached?.snapshot||null;
+  const tabs=[['summary','Overview'],['personal','Personal'],['pay','Pay & IDs'],['history','History']];
+  openEmployeeWorkspaceModal(`${employeeWorkspaceHeader(employee,'Overview')}<div class="modal-body employee-profile-workspace ${snapshot?'':'loading-activity'}" data-employee-profile-id="${esc(employee.id)}" data-active-tab="summary">
+    ${employeeWorkspaceNav(employee,'overview')}
+    <div class="profile-hero employee-profile-hero"><div class="profile-avatar">${esc(opsInitials(employeeDisplayName(employee)))}</div><div class="employee-profile-identity"><div class="profile-title">${esc(employeeDisplayName(employee))}</div><div class="profile-sub">${esc(employee.employeeNo||'—')} · ${esc(employee.position||'—')} · ${esc(employee.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(employee.status,EMP_STATUS_MAP)} ${statusBadge(classify(employee),classify(employee)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}<span>${esc(employeeTenureText(employee))}</span></div></div>${canEdit()?`<button class="btn btn-ghost btn-sm profile-er-action" onclick="openEmployeeOperation('cases','${employee.id}')">${iShield(13)} <span>Report ER Matter</span></button>`:''}</div>
+    <div class="employee-profile-tabs" role="tablist" aria-label="Employee profile details">${tabs.map(([key,label],index)=>`<button type="button" class="employee-profile-tab ${index===0?'active':''}" data-profile-tab="${key}" role="tab" aria-selected="${index===0?'true':'false'}" tabindex="${index===0?'0':'-1'}" onclick="employeeProfileSetTab('${employee.id}','${key}')">${label}</button>`).join('')}</div>
+    <div class="employee-profile-tab-content">${employeeProfileTabContent(employee,'summary',snapshot)}</div>
+  </div><div class="modal-foot employee-workspace-foot"><span class="small">Selected employee: ${esc(employeeDisplayName(employee))}</span><div class="toolbar-spacer"></div><button class="btn btn-ghost" onclick="closeModal()">Back to Directory</button></div>`);
+  requestAnimationFrame(()=>hydrateEmployeeProfile(employee,token));
 }
 
 /* ================================================================
@@ -9991,7 +10180,7 @@ Object.assign(window, {
   fieldHTML, fmtDate, formatGovernmentIdInput, getEvalRecord, go, handleFileInput, incidentTypeOccurrence, incidentTypeSummaryHTML, filterIncidentClassifications, refreshIncidentClassificationSummary, addIncidentClassification,
   toggleSidebar, closeSidebar, applyReportFilters, exportReportEmployees, exportReportActivity, exportReportATD, exportReportCases,
   loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
-  openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, employeeWorkspaceNavigate, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
+  openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, employeeProfileSetTab, employeeWorkspaceNavigate, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard, dashboardOpenEmployees, dashboardOpenCases,
   renderDisciplinary, setDisciplinaryHistoryTab, exportDisciplinaryHistoryCSV, exportLegacyDisciplinaryHistoryCSV, openLegacyDisciplinaryReview, saveLegacyDisciplinaryReview, refreshLegacyReviewContext, legacyReviewActionChanged, openEmployeeDisciplinaryHistory, renderCorrespondence, exportCaseCorrespondenceCSV, downloadCaseCorrespondenceAttachment, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, toggleEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, openTableViewSettings, saveTableViewPreferences, resetTableViewPreferences, tableViewDragStart, tableViewDragOver, tableViewDrop, tableViewDragEnd, tableViewMove, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, closeNavGroupPanel, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts, actionCenterSetLevel, actionCenterResetFilters, actionCenterPageGo, actionCenterPageSize, openActionCenterItem,

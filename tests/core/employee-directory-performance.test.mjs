@@ -61,3 +61,35 @@ test('employee directory defaults to employee name A-Z locally and on the indexe
   assert.match(localSort,/employeeDisplayName\(left\)\.localeCompare\(employeeDisplayName\(right\)/);
   assert.doesNotMatch(localSort,/sort\(\(left,right\)=>String\(right\.employeeNo/);
 });
+
+test('employee rows expose one lightweight workspace action',()=>{
+  const start=source.indexOf('function employeeDirectoryRowsHTML');
+  const end=source.indexOf('function employeeDirectoryHasFilters',start);
+  const rowsRenderer=source.slice(start,end);
+
+  assert.match(rowsRenderer,/employee-directory-action/);
+  assert.match(rowsRenderer,/Open employee workspace/);
+  assert.doesNotMatch(rowsRenderer,/openTransferForEmployee/);
+  assert.doesNotMatch(rowsRenderer,/deleteEmployee/);
+});
+
+test('employee profile paints before related modules are hydrated',()=>{
+  const start=source.indexOf('async function openEmployeeProfile(id)',source.indexOf('const EMPLOYEE_PROFILE_MODULES'));
+  const end=source.indexOf('/* ================================================================',start);
+  const profileRenderer=source.slice(start,end);
+
+  assert.ok(start>0&&end>start,'optimized employee profile should be present');
+  assert.match(profileRenderer,/openEmployeeWorkspaceModal/);
+  assert.match(profileRenderer,/requestAnimationFrame\(\(\)=>hydrateEmployeeProfile/);
+  assert.doesNotMatch(profileRenderer,/await ensureRecordModules/);
+  assert.match(source,/Promise\.all\(\[loadEmployeeProfileRecords\(employee\),loadEmployeeProfileCases\(employee\)\]\)/);
+});
+
+test('employee profile uses stable employee ids and tabbed detail rendering',()=>{
+  assert.match(source,/\.eq\('employee_record_id',String\(employee\.id\)\)/);
+  assert.match(source,/supabase\.from\('hr_records'\)[\s\S]*\.or\(identityFilter\)/);
+  assert.match(source,/await ensureRecordModules\(EMPLOYEE_PROFILE_MODULES\)/);
+  assert.match(source,/function employeeProfileSetTab/);
+  assert.match(source,/\['summary','Overview'\],\['personal','Personal'\],\['pay','Pay & IDs'\],\['history','History'\]/);
+  assert.match(source,/EMPLOYEE_PROFILE_CACHE_TTL/);
+});
