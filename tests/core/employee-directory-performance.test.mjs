@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
 const source=await readFile(new URL('../../js/app.js',import.meta.url),'utf8');
+const enhancer=await readFile(new URL('../../js/core/table-enhancer.js',import.meta.url),'utf8');
 const migration=await readFile(new URL('../../supabase/phase18-employee-directory-performance.sql',import.meta.url),'utf8');
 
 test('employee directory paints cached rows before refreshing from Supabase',()=>{
@@ -114,4 +115,17 @@ test('employee directory follows bounded server pagination and never fetches all
   assert.doesNotMatch(employeeQuery,/requested\.size===ALL_ROWS_SIZE/);
   assert.match(employeePagination,/sizes:\[10,25,50\]/);
   assert.match(source,/data-view-all-disabled="true"/);
+});
+
+test('table enhancer skips unchanged tables and avoids self-triggered reorder churn',()=>{
+  assert.match(enhancer,/sameTableShape\(existing\.shape,initialShape\)\) return/);
+  assert.match(enhancer,/cells\.every\(\(cell,index\)=>cell\.dataset\.tableColumn===order\[index\]\)/);
+  assert.match(enhancer,/if\(!ordered\)order\.forEach/);
+  assert.match(enhancer,/cancelAnimationFrame\(observerFrame\)/);
+});
+
+test('frozen columns cache layout work until structure or viewport changes',()=>{
+  assert.match(enhancer,/const frozenStates=new WeakMap\(\)/);
+  assert.match(enhancer,/previous\?\.signature===signature&&sameTableShape\(previous\.shape,shape\)/);
+  assert.match(enhancer,/applyFrozenColumns\(entry\.table,entry\.layout,true\)/);
 });

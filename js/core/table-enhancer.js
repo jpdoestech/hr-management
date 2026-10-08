@@ -5,8 +5,10 @@ import { compareTableValues, normalizeTableValue, valueMatchesFilter } from './t
 export function installTableEnhancer({getState, getContent, getAdditionalRoots=()=>[], getLayouts=()=>({}), onLayoutChange=()=>{}, openSettings=()=>{}, onViewAll=()=>{}}) {
   const registry=new Map();
   const tableQueries=new Map();
+  const frozenStates=new WeakMap();
   let draggedColumn=null;
   let resizeFrame=0;
+  let observerFrame=0;
   let columnMenu=null;
 
   function tableSignature(table){
@@ -58,12 +60,20 @@ export function installTableEnhancer({getState, getContent, getAdditionalRoots=(
     const movable=columns.filter(column=>!column.locked).map(column=>column.key);
     return {order:reconcileColumnOrder(movable,saved.order),frozen:normalizeFrozenColumns(movable,saved.frozen)};
   }
+  function tableShape(table){
+    const head=table.tHead?.rows?.[0]||null;
+    const body=table.tBodies?.[0]||null;
+    return {head,body,first:body?.rows?.[0]||null,last:body?.rows?.[body.rows.length-1]||null,rowCount:body?.rows?.length||0,columnCount:head?.cells?.length||0};
+  }
+  function sameTableShape(left,right){
+    return Boolean(left&&right&&left.head===right.head&&left.body===right.body&&left.first===right.first&&left.last===right.last&&left.rowCount===right.rowCount&&left.columnCount===right.columnCount);
+  }
   function reorderRow(row,order){
     if(!row||row.cells.length!==order.length) return;
-    order.forEach((key,index)=>{
-      const cell=Array.from(row.cells).find(item=>item.dataset.tableColumn===key);
-      if(cell&&row.cells[index]!==cell) row.appendChild(cell);
-    });
+    const cells=Array.from(row.cells);
+    if(cells.every((cell,index)=>cell.dataset.tableColumn===order[index])) return;
+    const cellsByKey=new Map(cells.map(cell=>[cell.dataset.tableColumn,cell]));
+    order.forEach(key=>{const cell=cellsByKey.get(key);if(cell)row.appendChild(cell);});
   }
   function applyColumnOrder(table,columns,layout){
     const locked=columns.filter(column=>column.locked).map(column=>column.key);
@@ -72,10 +82,9 @@ export function installTableEnhancer({getState, getContent, getAdditionalRoots=(
     Array.from(table.tBodies||[]).forEach(body=>Array.from(body.rows).forEach(row=>reorderRow(row,order)));
     const colgroup=table.querySelector(':scope > colgroup');
     if(colgroup){
-      order.forEach(key=>{
-        const col=Array.from(colgroup.children).find(item=>item.dataset.tableColumn===key);
-        if(col) colgroup.appendChild(col);
-      });
+      const columnsByKey=new Map(Array.from(colgroup.children).map(col=>[col.dataset.tableColumn,col]));
+      const ordered=Array.from(colgroup.children).every((col,index)=>col.dataset.tableColumn===order[index]);
+      if(!ordered)order.forEach(key=>{const col=columnsByKey.get(key);if(col)colgroup.appendChild(col);});
     }
   }
   function clearFrozen(table){
@@ -85,9 +94,13 @@ export function installTableEnhancer({getState, getContent, getAdditionalRoots=(
     });
     table.classList.remove('has-frozen-columns');
   }
-  function applyFrozenColumns(table,layout){
+  function applyFrozenColumns(table,layout,force=false){
+    const shape=tableShape(table);
+    const signature=`${window.matchMedia('(min-width: 721px)').matches?'desktop':'mobile'}|${layout.order.join(',')}|${layout.frozen.join(',')}`;
+    const previous=frozenStates.get(table);
+    if(!force&&previous?.signature===signature&&sameTableShape(previous.shape,shape)) return;
     clearFrozen(table);
-    if(!window.matchMedia('(min-width: 721px)').matches) return;
+    if(!window.matchMedia('(min-width: 721px)').matches){frozenStates.set(table,{signature,shape});return;}
     let left=0;
     const active=layout.order.filter(key=>layout.frozen.includes(key));
     active.forEach((key,index)=>{
@@ -101,6 +114,7 @@ export function installTableEnhancer({getState, getContent, getAdditionalRoots=(
       left+=header.getBoundingClientRect().width;
     });
     table.classList.toggle('has-frozen-columns',active.length>0);
+    frozenStates.set(table,{signature,shape});
   }
   function rowCellValue(row,key){
     const cell=Array.from(row.cells).find(item=>item.dataset.tableColumn===key);
@@ -287,12 +301,16 @@ export function installTableEnhancer({getState, getContent, getAdditionalRoots=(
   }
   function enhanceTableLayout(table,index){
     if(!table.tHead?.rows?.[0]||table.closest('.notification-popover')||table.classList.contains('dashboard-mini-table')) return;
+    const existingKey=table.dataset.enhancerKey;
+    const existing=existingKey?registry.get(existingKey):null;
+    const initialShape=tableShape(table);
+    if(existing?.table===table&&sameTableShape(existing.shape,initialShape)) return;
     const columns=identifyColumns(table);
     if(columns.filter(column=>!column.locked).length<2) return;
     const key=stableTableKey(table,columns,index);
     const layout=layoutFor(key,columns);
     const pageContext=paginationContext(table,index);
-    const entry={key,table,columns,layout,index,pageKey:getTablePageKey(table,index),pageScope:pageContext.scope,viewAll:isTableViewAll(table,index),allowViewAll:table.dataset.viewAllDisabled!=='true',requiresCompleteSet:pageContext.total>pageContext.rowCount};
+    const entry={key,table,columns,layout,index,pageKey:getTablePageKey(table,index),pageScope:pageContext.scope,viewAll:isTableViewAll(table,index),allowViewAll:table.dataset.viewAllDisabled!=='true',requiresCompleteSet:pageContext.total>pageContext.rowCount,shape:initialShape};
     registry.set(key,entry);
     applyColumnOrder(table,columns,layout);
     if(entry.requiresCompleteSet&&!entry.viewAll)tableQueries.delete(key);
@@ -300,6 +318,7 @@ export function installTableEnhancer({getState, getContent, getAdditionalRoots=(
     installHeaderDragging(table,key,columns);
     installHeaderMenus(entry);
     installToolsTrigger(table,key);
+    entry.shape=tableShape(table);
     requestAnimationFrame(()=>applyFrozenColumns(table,layout));
   }
   function applyTablePagination(table,index){
@@ -328,6 +347,8 @@ export function installTableEnhancer({getState, getContent, getAdditionalRoots=(
     const contentTables=Array.from(content.querySelectorAll('.tablewrap table, table.data-table')).filter(table=>!table.classList.contains('dashboard-mini-table')&&!table.closest('.notification-popover'));
     const roots=[content,...getAdditionalRoots()].filter(Boolean);
     const layoutTables=[...new Set(roots.flatMap(root=>Array.from(root.querySelectorAll('.tablewrap table, table.data-table'))))].filter(table=>!table.classList.contains('dashboard-mini-table')&&!table.closest('.notification-popover'));
+    const liveTables=new Set(layoutTables);
+    registry.forEach((entry,key)=>{if(!liveTables.has(entry.table))registry.delete(key);});
     layoutTables.forEach((table,index)=>enhanceTableLayout(table,index));
     contentTables.forEach((table,index)=>applyTablePagination(table,index));
   }
@@ -347,9 +368,9 @@ export function installTableEnhancer({getState, getContent, getAdditionalRoots=(
     const entry=registry.get(key);onLayoutChange(key,null);
     if(entry){entry.layout={order:entry.columns.filter(column=>!column.locked).map(column=>column.key),frozen:[]};applyColumnOrder(entry.table,entry.columns,entry.layout);requestAnimationFrame(()=>applyFrozenColumns(entry.table,entry.layout));}
   }
-  function refreshFrozenColumns(){cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>registry.forEach(entry=>applyFrozenColumns(entry.table,entry.layout)));}
+  function refreshFrozenColumns(){cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>registry.forEach(entry=>applyFrozenColumns(entry.table,entry.layout,true)));}
 
-  const observer=new MutationObserver(()=>requestAnimationFrame(enhanceDataTables));
+  const observer=new MutationObserver(()=>{cancelAnimationFrame(observerFrame);observerFrame=requestAnimationFrame(enhanceDataTables);});
   function start(){[getContent(),...getAdditionalRoots()].filter(Boolean).forEach(root=>{if(!root.__tableObserverStarted){observer.observe(root,{childList:true,subtree:true});root.__tableObserverStarted=true;}});}
   document.addEventListener('click',event=>{if(columnMenu&&!columnMenu.contains(event.target)&&!event.target.closest('.table-column-menu-button'))closeColumnMenu();});
   document.addEventListener('keydown',event=>{if(event.key==='Escape')closeColumnMenu();});
