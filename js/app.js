@@ -9,7 +9,7 @@ import { manpowerRequestSummary, manpowerRequestTotals, requirementSlotCounts, s
 import { measureAsync, recordPerformance, performanceSnapshot } from './core/performance.js?v=20261002-1';
 import { ACCESS_ACTIONS, ACCESS_MODULES, ACCESS_PERMISSION_KEYS, evaluateEffectiveAccess, hasEffectivePermission, legacyPermissions, permissionLabel } from './core/access-control.js?v=20261006-1';
 import { filterTdaRecords, normalizeTdaScope, normalizeTdaText, parseTdaMatrix, selectApplicableTdaRecord, tdaDuplicateKey, tdaRecordApplies, tdaScopeKey } from './core/tda-import.js?v=20261007-2';
-import { CASE_WORKFLOW_STAGES, CASE_TERMINAL_STAGES, LEGACY_CASE_STAGES, CASE_RESPONSE_STATUSES, CASE_HEARING_STATUSES, CASE_DECISION_STATUSES, CASE_DECISION_OUTCOMES, CASE_NOD_STATUSES, canTransitionCase, caseStageOptions, caseTransitionValidation, caseDueProcessReadiness, caseDecisionValidation, caseResponseChronology, caseImplementationReadiness, caseImplementationValidation, caseLifecycleWorkItem, employeeRelationsMetrics, employeeRelationsValidationIssues, isCaseReportSource, isCaseTerminalStage, qualifyingDisciplinaryHistory } from './core/employee-relations.js?v=20261008-2';
+import { CASE_WORKFLOW_STAGES, CASE_TERMINAL_STAGES, LEGACY_CASE_STAGES, CASE_RESPONSE_STATUSES, CASE_HEARING_STATUSES, CASE_DECISION_STATUSES, CASE_DECISION_OUTCOMES, CASE_NOD_STATUSES, canTransitionCase, caseStageOptions, caseTransitionValidation, caseDueProcessReadiness, caseDecisionValidation, caseResponseChronology, caseImplementationReadiness, caseImplementationValidation, caseLifecycleWorkItem, employeeRelationsMetrics, employeeRelationsValidationIssues, employeeRelationsWorkItems, isCaseReportSource, isCaseTerminalStage, qualifyingDisciplinaryHistory } from './core/employee-relations.js?v=20261008-3';
 import { addressComponentHTML, addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom, addressDetailInput, initializeAddressComponents, readAddressComponent } from './address/address-component.js?v=20260930-2';
 import { formatPhilippineAddress, normalizeAddress } from './address/address-models.js?v=20260930-2';
 
@@ -48,6 +48,7 @@ let CASE_MONITORING_READY = null;
 let CASE_EVIDENCE_READY = null;
 let CASE_INTAKE_READY = null;
 let CASE_REVISION_READY = null;
+let EMPLOYEE_RELATIONS_QUEUE_CACHE = {loadedAt:0,data:null};
 let ACCESS_STORE = {roles:[],rolePermissions:[],userRoles:[],overrides:[],scopes:[],assignments:[]};
 const DEFAULT_DEPARTMENT_NAMES = ['LOGISTICS','WAREHOUSE','UTILITY','MAINTENANCE','PRODUCTION','ADMIN','SALES'];
 
@@ -155,6 +156,33 @@ async function ensureCaseRevisionReady(){
     console.warn('Could not verify the Employee Relations revision table',error);CASE_REVISION_READY=false;return false;
   }
   CASE_REVISION_READY=true;return true;
+}
+
+async function loadEmployeeRelationsWorkQueue({force=false}={}){
+  const now=Date.now();
+  if(!force&&EMPLOYEE_RELATIONS_QUEUE_CACHE.data&&now-EMPLOYEE_RELATIONS_QUEUE_CACHE.loadedAt<20000)return EMPLOYEE_RELATIONS_QUEUE_CACHE.data;
+  const [dueProcessReady,monitoringReady,intakeReady]=await Promise.all([
+    ensureCaseDueProcessReady(),ensureCaseMonitoringReady(),ensureCaseIntakeReady(),
+  ]);
+  const [caseResult,intakeResult,decisionResult,hearingResult,implementationResult]=await Promise.all([
+    supabase.from('hr_cases').select('id,case_number,employee_record_id,employee_name,department,subject,status,priority,due_date,opened_at,closed_at,assigned_to,updated_at').order('updated_at',{ascending:false}).limit(1000),
+    intakeReady?supabase.from('hr_case_intake').select('id,intake_number,employee_record_id,employee_name,department,report_type,subject,status,received_at,updated_at').in('status',['Submitted','Under Triage','Needs Information']).order('received_at',{ascending:false}).limit(500):Promise.resolve({data:[],error:null}),
+    dueProcessReady?supabase.from('hr_case_decisions').select('id,case_id,version,decision_status,nod_status,nod_issued_at,nod_served_at,updated_at').order('updated_at',{ascending:false}).limit(1000):Promise.resolve({data:[],error:null}),
+    dueProcessReady?supabase.from('hr_case_hearings').select('id,case_id,hearing_type,status,scheduled_at,updated_at').eq('status','Scheduled').order('scheduled_at',{ascending:true}).limit(500):Promise.resolve({data:[],error:null}),
+    monitoringReady?supabase.from('hr_case_implementations').select('id,case_id,action_type,action_description,status,due_date,updated_at').in('status',['Pending','In Progress']).order('due_date',{ascending:true,nullsFirst:false}).limit(500):Promise.resolve({data:[],error:null}),
+  ]);
+  const error=caseResult.error||intakeResult.error||decisionResult.error||hearingResult.error||implementationResult.error;
+  if(error)throw error;
+  const data={
+    cases:caseResult.data||[],
+    intake:intakeResult.data||[],
+    decisions:decisionResult.data||[],
+    hearings:hearingResult.data||[],
+    implementations:implementationResult.data||[],
+  };
+  data.items=employeeRelationsWorkItems({...data,today:todayISO(),dueSoonDays:3});
+  EMPLOYEE_RELATIONS_QUEUE_CACHE={loadedAt:now,data};
+  return data;
 }
 
 function isMissingDisciplinaryHistory(error){
@@ -1252,32 +1280,18 @@ async function toggleNotificationPanel(ev){
 }
 function goFromNotifications(view){ closeNotificationPanel(); go(view); }
 function notificationLevelRank(level){ return level==='danger'?0:level==='warning'?1:2; }
-function notificationItem(id,level,title,meta,view,recordId=''){ return {id:String(id),level,title,meta,view,recordId}; }
+function notificationItem(id,level,title,meta,view,recordId='',recordKind=''){ return {id:String(id),level,title,meta,view,recordId,recordKind}; }
 async function buildNotificationItems(){
   const today=todayISO();
-  const next3=addDaysISO(today,3);
   const next7=addDaysISO(today,7);
   const next14=addDaysISO(today,14);
   const items=[];
 
-  let cases=[];
+  let employeeRelationsQueue={items:[]};
   try{
-    const {data,error}=await supabase.from('hr_cases').select('id,case_number,employee_name,department,status,opened_at,closed_at,assigned_to,priority,due_date,updated_at').order('updated_at',{ascending:false}).limit(250);
-    if(error) throw error;
-    cases=data||[];
+    employeeRelationsQueue=await loadEmployeeRelationsWorkQueue();
   }catch(e){ console.warn('Notification case query failed',e); }
-
-  const openCases=cases.filter(c=>!caseIsClosedStatus(c.status));
-  openCases.forEach(c=>{
-    const label=c.case_number||'HR Case';
-    if(c.due_date && c.due_date<today) items.push(notificationItem(`case-overdue-${c.id}`,'danger',`${label} is overdue`,`${c.employee_name||'Employee'} · Due ${fmtDate(c.due_date)}${c.priority?' · '+c.priority:''}`,'cases',c.id));
-    else if(c.due_date && c.due_date<=next3) items.push(notificationItem(`case-due-${c.id}`,'warning',`${label} is due soon`,`${c.employee_name||'Employee'} · Due ${fmtDate(c.due_date)}${c.priority?' · '+c.priority:''}`,'cases',c.id));
-    if(c.status==='For Decision') items.push(notificationItem(`case-decision-${c.id}`,'warning',`${label} is ready for decision`,`${c.employee_name||'Employee'}${c.department?' · '+c.department:''}`,'cases',c.id));
-    if(c.assigned_to && SESSION?.id && c.assigned_to===SESSION.id && !caseIsClosedStatus(c.status)){
-      items.push(notificationItem(`case-assigned-${c.id}`,'info',`${label} is assigned to you`,`${c.employee_name||'Employee'} · ${c.status||'Open'}${c.due_date?' · Due '+fmtDate(c.due_date):''}`,'cases',c.id));
-    }
-    if(!c.assigned_to) items.push(notificationItem(`case-unassigned-${c.id}`,'warning',`${label} has no assignee`,`${c.employee_name||'Employee'}${c.department?' · '+c.department:''}`,'cases',c.id));
-  });
+  employeeRelationsQueue.items.forEach(item=>items.push(notificationItem(item.id,item.level,item.title,item.detail,'cases',item.caseId||item.intakeId,item.recordKind)));
 
   DB.leaves.filter(l=>l.status==='Pending').slice(0,8).forEach(l=>items.push(notificationItem(`leave-pending-${l.id}`,'warning',`Leave request pending: ${l.employeeName||'Employee'}`,`${fmtDate(l.startDate)} – ${fmtDate(l.endDate)}${l.department?' · '+l.department:''}`,'leaves')));
   DB.leaves.filter(l=>l.startDate>today && l.startDate<=next7 && l.status!=='Disapproved').slice(0,6).forEach(l=>items.push(notificationItem(`leave-upcoming-${l.id}`,'info',`Upcoming leave: ${l.employeeName||'Employee'}`,`Starts ${fmtDate(l.startDate)}${l.endDate?' · through '+fmtDate(l.endDate):''}`,'leaves')));
@@ -1341,13 +1355,14 @@ async function renderNotificationPanel(){
   }
   list.innerHTML=NOTIFICATION_ITEMS.map(x=>{
     const isUnread=!read.has(String(x.id));
-    return `<div class="notification-item ${x.level} ${isUnread?'unread':''}" onclick="openNotification('${esc(x.id)}','${esc(x.view)}','${esc(x.recordId||'')}')"><span class="n-dot"></span><div class="n-main"><div class="n-title">${esc(x.title)}</div><div class="n-meta">${esc(x.meta)}</div></div>${isUnread?'<span class="n-unread">New</span>':''}</div>`;
+    return `<div class="notification-item ${x.level} ${isUnread?'unread':''}" onclick="openNotification('${esc(x.id)}','${esc(x.view)}','${esc(x.recordId||'')}','${esc(x.recordKind||'')}')"><span class="n-dot"></span><div class="n-main"><div class="n-title">${esc(x.title)}</div><div class="n-meta">${esc(x.meta)}</div></div>${isUnread?'<span class="n-unread">New</span>':''}</div>`;
   }).join('');
 }
-async function openNotification(id,view,recordId){
+async function openNotification(id,view,recordId,recordKind=''){
   markNotificationRead(id);
   updateNotificationBadgeFromItems();
   closeNotificationPanel();
+  if(recordId && view==='cases' && recordKind==='intake'){ STATE.caseWorkspaceTab='intake'; await go('cases'); return; }
   if(recordId && view==='cases'){ await openCaseDetails(recordId); return; }
   if(recordId && view==='workflow'){ openWorkflowTask(recordId); return; }
   go(view);
@@ -1689,18 +1704,12 @@ async function cancelLifecycleChecklist(id){
 }
 
 /* ---------------- Phase 7: Action Center ---------------- */
-function actionCenterItems(caseRows){
+function actionCenterItems(employeeRelationsItems=[]){
   const today=todayISO();
   const next7=addDaysISO(today,7);
   const next14=addDaysISO(today,14);
   const items=[];
-  const activeCases=(caseRows||[]).filter(c=>!caseIsClosedStatus(c.status));
-  activeCases.forEach(c=>{
-    const age=analyticsDaysOpen(c.opened_at,c.closed_at);
-    if(age>=30) items.push({level:'danger',title:`${c.case_number} has been open ${age} days`,detail:`${c.employee_name} · ${c.status}${c.department?' · '+c.department:''}`,meta:['HR Case','30+ days'],view:'cases',id:c.id});
-    if(c.status==='For Decision') items.push({level:'warning',title:`${c.case_number} is ready for decision`,detail:`${c.employee_name}${c.department?' · '+c.department:''}`,meta:['HR Case','For Decision'],view:'cases',id:c.id});
-    if(!c.assigned_to) items.push({level:'warning',title:`${c.case_number} is unassigned`,detail:`${c.employee_name}${c.department?' · '+c.department:''}`,meta:['HR Case','Unassigned'],view:'cases',id:c.id});
-  });
+  employeeRelationsItems.forEach(item=>items.push({level:item.level,title:item.title,detail:item.detail,meta:item.meta||['Employee Relations'],view:'cases',id:item.caseId||item.intakeId,recordKind:item.recordKind||'case'}));
 
   const pendingLeaves=DB.leaves.filter(l=>l.status==='Pending').sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
   pendingLeaves.slice(0,8).forEach(l=>items.push({level:'warning',title:`Leave request pending: ${l.employeeName}`,detail:`${fmtDate(l.startDate)} – ${fmtDate(l.endDate)}${l.department?' · '+l.department:''}`,meta:['Leave','Pending'],view:'leaves'}));
@@ -1725,7 +1734,12 @@ function actionCenterItems(caseRows){
   DB.leaves.filter(l=>l.startDate>today && l.startDate<=next7 && l.status!=='Disapproved').slice(0,8).forEach(l=>items.push({level:'info',title:`Upcoming leave: ${l.employeeName}`,detail:`Starts ${fmtDate(l.startDate)}${l.endDate?' · through '+fmtDate(l.endDate):''}`,meta:['Leave','Next 7 days'],view:'leaves'}));
 
   const rank={danger:0,warning:1,info:2};
-  return items.sort((a,b)=>(rank[a.level]||9)-(rank[b.level]||9) || (a.title||'').localeCompare(b.title||''));
+  return items.sort((a,b)=>(rank[a.level]??9)-(rank[b.level]??9) || (a.title||'').localeCompare(b.title||''));
+}
+async function openActionCenterItem(view,id='',recordKind=''){
+  if(view==='cases'&&recordKind==='intake'){STATE.caseWorkspaceTab='intake';await go('cases');return;}
+  if(view==='cases'&&id){await openCaseDetails(id);return;}
+  go(view);
 }
 function actionCenterCounts(items){
   return {total:items.length,danger:items.filter(x=>x.level==='danger').length,warning:items.filter(x=>x.level==='warning').length,info:items.filter(x=>x.level==='info').length};
@@ -1760,9 +1774,8 @@ async function renderActionCenter(){
   setTitle('Action Center','A prioritized work queue for follow-ups, deadlines, and records needing attention.');
   document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Loading action items…</div></div>';
   try{
-    const {data:caseRows,error}=await supabase.from('hr_cases').select('id,case_number,employee_name,department,status,opened_at,closed_at,assigned_to').order('updated_at',{ascending:false}).limit(250);
-    if(error) throw error;
-    const items=actionCenterItems(caseRows||[]);
+    const employeeRelationsQueue=await loadEmployeeRelationsWorkQueue({force:true});
+    const items=actionCenterItems(employeeRelationsQueue.items);
     const counts=actionCenterCounts(items);
     const q=String(STATE.actionSearch||'').trim().toLowerCase();
     const filtered=items.filter(item=>(STATE.actionLevel==='all'||item.level===STATE.actionLevel)&&(!q||[item.title,item.detail,...(item.meta||[])].some(value=>String(value||'').toLowerCase().includes(q))));
@@ -1782,7 +1795,7 @@ async function renderActionCenter(){
             ${(STATE.actionSearch||STATE.actionLevel!=='all')?`<button class="btn btn-ghost btn-sm" onclick="actionCenterResetFilters()">Reset</button>`:''}
           </div>
           <div class="action-list-scroll"><div class="action-list">
-            ${visible.length?visible.map(x=>`<button type="button" class="action-item ${x.level}" onclick="go('${x.view}')"><span class="flag"></span><span class="body"><span class="title">${esc(x.title)}</span><span class="detail">${esc(x.detail)}</span><span class="meta">${(x.meta||[]).map(m=>`<span>${esc(m)}</span>`).join('')}</span></span><span class="action-arrow" aria-hidden="true">›</span></button>`).join(''):'<div class="action-empty"><b>No work items match this view.</b><div style="margin-top:5px;">Clear the search or choose another urgency.</div></div>'}
+            ${visible.length?visible.map(x=>`<button type="button" class="action-item ${x.level}" onclick="openActionCenterItem('${esc(x.view)}','${esc(x.id||'')}','${esc(x.recordKind||'')}')"><span class="flag"></span><span class="body"><span class="title">${esc(x.title)}</span><span class="detail">${esc(x.detail)}</span><span class="meta">${(x.meta||[]).map(m=>`<span>${esc(m)}</span>`).join('')}</span></span><span class="action-arrow" aria-hidden="true">›</span></button>`).join(''):'<div class="action-empty"><b>No work items match this view.</b><div style="margin-top:5px;">Clear the search or choose another urgency.</div></div>'}
           </div></div>
           <div class="table-pagination-wrap"><div class="table-pagination-meta">${page.meta.start?`${page.meta.start}–${page.meta.end}`:'0'} <span>of ${page.meta.total} work items</span></div>${paginationHTML(page.meta,'action-center:list',{go:'actionCenterPageGo',size:'actionCenterPageSize'})}</div>
         </div>
@@ -1815,23 +1828,17 @@ async function renderActionCenter(){
 
 /* ---------------- Phase 11: HR Operations Workspace ---------------- */
 function opsInitials(name){ return String(name||'').split(/\s+/).map(x=>x[0]||'').slice(0,2).join('').toUpperCase(); }
-function opsOpenItems(){
+async function opsOpenItems(){
   const today=todayISO();
   const next7=addDaysISO(today,7);
   const items=[];
-  const openCases=[];
-  const casePromise=supabase.from('hr_cases').select('id,case_number,employee_name,department,status,priority,due_date,assigned_to,opened_at').order('updated_at',{ascending:false}).limit(250);
-  return casePromise.then(({data,error})=>{
-    if(error) throw error;
-    (data||[]).forEach(c=>{
-      if(caseIsClosedStatus(c.status)) return;
-      openCases.push(c);
-      if(c.assigned_to===SESSION?.id || SESSION?.role==='Administrator'){
-        const age=analyticsDaysOpen(c.opened_at,null);
-        const due=c.due_date?caseDeadlineInfo(c.due_date,c.status):null;
-        items.push({level:age>=30||due?.cls==='overdue'?'danger':'warning',view:'cases',id:c.id,title:`${c.case_number} · ${c.employee_name}`,meta:`${c.status} · ${c.priority||'Normal'}${c.due_date?' · '+(due?.label||''):''}`,right:'HR Case'});
-      }
-    });
+  const employeeRelationsQueue=await loadEmployeeRelationsWorkQueue({force:true});
+  const openCases=employeeRelationsQueue.cases.filter(c=>!caseIsClosedStatus(c.status));
+  employeeRelationsQueue.items.forEach(item=>{
+    const caseRecord=item.caseId?openCases.find(record=>String(record.id)===String(item.caseId)):null;
+    if(item.recordKind==='case'&&SESSION?.role!=='Administrator'&&caseRecord?.assigned_to!==SESSION?.id)return;
+    items.push({level:item.level,view:'cases',id:item.caseId||item.intakeId,recordKind:item.recordKind,title:item.title,meta:item.detail,right:item.workflowType||'Employee Relations'});
+  });
     DB.leaves.filter(l=>l.status==='Pending').slice(0,8).forEach(l=>items.push({level:'warning',view:'leaves',title:`Pending leave · ${l.employeeName}`,meta:`${fmtDate(l.startDate)} – ${fmtDate(l.endDate)}${l.department?' · '+l.department:''}`,right:'Leave'}));
     DB.atd.filter(r=>atdRemaining(r)>0).slice(0,8).forEach(r=>items.push({level:'info',view:'atd',title:`Outstanding ATD · ${r.employeeName}`,meta:`${peso(atdRemaining(r))} remaining${r.deductionType?' · '+r.deductionType:''}`,right:'ATD'}));
     DB.nte.filter(n=>n.status!=='Resolved').slice(0,8).forEach(n=>items.push({level:'warning',view:'nte',title:`NTE follow-up · ${n.employeeName}`,meta:`${n.status||'Open'}${n.dateReceived?' · received '+fmtDate(n.dateReceived):''}`,right:'NTE'}));
@@ -1842,7 +1849,6 @@ function opsOpenItems(){
     }));
     const rank={danger:0,warning:1,info:2};
     return {openCases,items:items.sort((a,b)=>(rank[a.level]??9)-(rank[b.level]??9)).slice(0,18)};
-  });
 }
 function opsPrefill(module,emp){
   if(!emp) return;
@@ -2073,8 +2079,13 @@ function opsOpenSelectedTransaction(){
 
 function opsSetTab(tab){STATE.opsTab=tab==='queues'?'queues':'employee';renderOperationsWorkspace();}
 
-function renderOperationsWorkspace(){
+async function renderOperationsWorkspace(){
   setTitle('HR Operations','Search an employee, open a transaction, or jump to a current HR work queue.');
+  const content=document.getElementById('content');
+  if(content)content.innerHTML='<div class="panel"><div class="desc">Loading current HR operations…</div></div>';
+  let employeeRelationsDue=0;
+  try{employeeRelationsDue=(await loadEmployeeRelationsWorkQueue()).items.length;}catch(error){console.warn('Could not load Employee Relations work queue',error);}
+  if(STATE.view!=='operations')return;
   const selected=DB.employees.find(employee=>String(employee.id)===String(STATE.opsEmployeeId||''))||null;
   const pendingLeaves=DB.leaves.filter(record=>record.status==='Pending').length;
   const openNte=DB.nte.filter(record=>record.status!=='Resolved').length;
@@ -2090,6 +2101,7 @@ function renderOperationsWorkspace(){
   const queues=[
     ['Action Center','All prioritized HR follow-ups',workflowDue+pendingLeaves+openNte,'actionCenter',iShield(18)],
     ['Workflow & Approvals','Tasks waiting for review or decision',workflowDue,'workflow',iCheck(18)],
+    ['Employee Relations','Stage-aware case and intake work',employeeRelationsDue,'cases',iShield(18)],
     ['Pending Leave','Leave requests awaiting action',pendingLeaves,'leaves',iCal(18)],
     ['Open NTE','Notices requiring follow-through',openNte,'nte',iDoc(18)],
     ['Overdue Evaluations','Probationary reviews past due',overdueReviews,'evaluations',iChart(18)],
@@ -2098,7 +2110,7 @@ function renderOperationsWorkspace(){
   ];
   const queuePanel=`<section class="panel ops-lite-panel"><div class="ops-lite-section-head"><div><h2>Work queues</h2><p>Open the source module for review, filtering, and processing.</p></div><button class="btn btn-primary btn-sm" onclick="go('actionCenter')">Open Action Center</button></div><div class="ops-lite-queue-grid">${queues.map(([label,description,count,view,icon])=>`<button type="button" class="ops-lite-queue" onclick="go('${view}')"><span class="ops-lite-queue-icon">${icon}</span><span><b>${label}</b><small>${description}</small></span><strong>${count}</strong><i aria-hidden="true">›</i></button>`).join('')}</div></section>`;
   document.getElementById('content').innerHTML=`<div class="ops-lite-shell">
-    <div class="ops-lite-toolbar"><div class="ops-lite-tabs" role="tablist" aria-label="HR Operations views"><button type="button" role="tab" aria-selected="${tab==='employee'}" class="${tab==='employee'?'active':''}" onclick="opsSetTab('employee')">${iUser(15)} Employee Actions</button><button type="button" role="tab" aria-selected="${tab==='queues'}" class="${tab==='queues'?'active':''}" onclick="opsSetTab('queues')">${iCheck(15)} Work Queues <span>${workflowDue+pendingLeaves+openNte}</span></button></div><div class="ops-lite-links"><button class="btn btn-ghost btn-sm" onclick="go('employees')">Employee Directory</button>${canEdit()?`<button class="btn btn-primary btn-sm" onclick="openEmployeeForm()">${iPlus(14)} Add Employee</button>`:''}</div></div>
+    <div class="ops-lite-toolbar"><div class="ops-lite-tabs" role="tablist" aria-label="HR Operations views"><button type="button" role="tab" aria-selected="${tab==='employee'}" class="${tab==='employee'?'active':''}" onclick="opsSetTab('employee')">${iUser(15)} Employee Actions</button><button type="button" role="tab" aria-selected="${tab==='queues'}" class="${tab==='queues'?'active':''}" onclick="opsSetTab('queues')">${iCheck(15)} Work Queues <span>${workflowDue+pendingLeaves+openNte+employeeRelationsDue}</span></button></div><div class="ops-lite-links"><button class="btn btn-ghost btn-sm" onclick="go('employees')">Employee Directory</button>${canEdit()?`<button class="btn btn-primary btn-sm" onclick="openEmployeeForm()">${iPlus(14)} Add Employee</button>`:''}</div></div>
     ${tab==='employee'?employeePanel:queuePanel}
   </div>`;
 }
@@ -9886,7 +9898,7 @@ Object.assign(window, {
   openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, employeeWorkspaceNavigate, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard, dashboardOpenEmployees, dashboardOpenCases,
   renderDisciplinary, setDisciplinaryHistoryTab, exportDisciplinaryHistoryCSV, exportLegacyDisciplinaryHistoryCSV, openLegacyDisciplinaryReview, saveLegacyDisciplinaryReview, refreshLegacyReviewContext, legacyReviewActionChanged, openEmployeeDisciplinaryHistory, renderCorrespondence, exportCaseCorrespondenceCSV, downloadCaseCorrespondenceAttachment, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, toggleEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, openTableViewSettings, saveTableViewPreferences, resetTableViewPreferences, tableViewDragStart, tableViewDragOver, tableViewDrop, tableViewDragEnd, tableViewMove, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
-  renderLeaveSummary, renderLeaves, renderModuleView, renderNav, closeNavGroupPanel, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts, actionCenterSetLevel, actionCenterResetFilters, actionCenterPageGo, actionCenterPageSize,
+  renderLeaveSummary, renderLeaves, renderModuleView, renderNav, closeNavGroupPanel, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts, actionCenterSetLevel, actionCenterResetFilters, actionCenterPageGo, actionCenterPageSize, openActionCenterItem,
   renderUsers, renderWeeklyReport, renderOperationsWorkspace, opsSetTab, opsSelectEmployee, opsOpenSelectedTransaction, openEmployeeOperation, saveATDPayment, saveATDRecord, saveCVR, saveDB, saveEmployee, saveEmployeeTransfer,
   renderManpowerFulfillment, manpowerSetView, manpowerResetFilters, openManpowerRequestForm, saveManpowerRequest, deleteManpowerRequest, openManpowerRequestDetails, openManpowerRequirementForm, saveManpowerRequirement, openManpowerSlotForm, saveManpowerSlot, manpowerSlotReplacementChanged, exportManpowerFulfillment,
   saveEval, saveIncident, saveRecord, saveSettings, saveUser, saveDepartmentSetting, savePositionSetting, setTitle, shiftDate, statusBadge, storageSettingsChanged, testGoogleDriveConnection, switchAuthTab, switchSettingsTab, syncPositionSelect, syncUserExportControl, toggleCatalogQuickAdd, catalogQuickAddKeydown, saveCatalogQuickAdd, openDepartmentSetting, openPositionSetting, toCSV,

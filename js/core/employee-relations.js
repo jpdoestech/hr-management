@@ -240,6 +240,190 @@ export function caseLifecycleWorkItem(caseRecord = {}, implementations = []) {
   };
 }
 
+function workDate(value = '') {
+  return String(value || '').slice(0, 10);
+}
+
+function daysBetween(from, to) {
+  const start = workDate(from);
+  const end = workDate(to);
+  if (!start || !end) return null;
+  const difference = new Date(`${end}T00:00:00Z`) - new Date(`${start}T00:00:00Z`);
+  return Number.isFinite(difference) ? Math.floor(difference / 86400000) : null;
+}
+
+function workLevel(dueDate, today, dueSoonDays, fallback = 'info') {
+  const remaining = daysBetween(today, dueDate);
+  if (remaining === null) return fallback;
+  if (remaining < 0) return 'danger';
+  if (remaining <= dueSoonDays) return 'warning';
+  return fallback;
+}
+
+export function employeeRelationsWorkItems({
+  cases = [],
+  intake = [],
+  decisions = [],
+  hearings = [],
+  implementations = [],
+  today = '',
+  dueSoonDays = 3,
+} = {}) {
+  const currentDate = workDate(today) || new Date().toISOString().slice(0, 10);
+  const caseById = new Map(cases.map(record => [String(record.id), record]));
+  const items = new Map();
+  const rank = { danger: 0, warning: 1, info: 2 };
+  const add = item => {
+    const key = String(item.key || item.id);
+    const existing = items.get(key);
+    if (!existing || (rank[item.level] ?? 9) < (rank[existing.level] ?? 9) || item.preferred) {
+      items.set(key, { ...item, id: key });
+    }
+  };
+  const caseContext = caseRecord => ({
+    caseId: String(caseRecord?.id || ''),
+    caseNumber: caseRecord?.case_number || 'HR Case',
+    employeeName: caseRecord?.employee_name || 'Employee',
+    department: caseRecord?.department || '',
+    assigneeId: caseRecord?.assigned_to || '',
+    stage: caseRecord?.status || 'Open',
+    view: 'cases',
+    recordKind: 'case',
+  });
+
+  cases.filter(record => !isCaseTerminalStage(record.status)).forEach(caseRecord => {
+    const lifecycle = caseLifecycleWorkItem(caseRecord, implementations);
+    const age = daysBetween(caseRecord.opened_at, currentDate);
+    const dueDate = workDate(lifecycle.dueDate);
+    let level = workLevel(dueDate, currentDate, dueSoonDays, 'info');
+    if (level === 'info' && ['Reported / Created', 'Under Triage', 'NTE Issued', 'Awaiting Employee Response', 'For Findings', 'For Decision', 'Decision Approved', 'NOD Issued', 'For Implementation', 'Implemented'].includes(caseRecord.status)) level = 'warning';
+    if (age !== null && age >= 30) level = 'danger';
+    add({
+      key: `case:${caseRecord.id}:${lifecycle.actionType}`,
+      ...caseContext(caseRecord),
+      level,
+      title: lifecycle.title,
+      detail: [caseRecord.employee_name || 'Employee', caseRecord.status || 'Open', dueDate ? `Due ${dueDate}` : '', age !== null && age >= 30 ? `${age} days open` : ''].filter(Boolean).join(' · '),
+      meta: ['Employee Relations', lifecycle.workflowType, dueDate && dueDate < currentDate ? 'Overdue' : ''].filter(Boolean),
+      workflowType: lifecycle.workflowType,
+      actionType: lifecycle.actionType,
+      dueDate,
+      openedAt: workDate(caseRecord.opened_at),
+    });
+    if (!caseRecord.assigned_to) {
+      add({
+        key: `case:${caseRecord.id}:assignment`,
+        ...caseContext(caseRecord),
+        level: 'warning',
+        title: `Assign an owner — ${caseRecord.case_number || 'HR Case'}`,
+        detail: `${caseRecord.employee_name || 'Employee'} · ${caseRecord.status || 'Open'}`,
+        meta: ['Employee Relations', 'Unassigned'],
+        workflowType: 'Assignment',
+        actionType: 'case_assignment',
+        dueDate: '',
+      });
+    }
+  });
+
+  intake.filter(record => ['Submitted', 'Under Triage', 'Needs Information'].includes(record.status)).forEach(record => {
+    const needsInformation = record.status === 'Needs Information';
+    add({
+      key: `intake:${record.id}:${needsInformation ? 'information' : 'triage'}`,
+      intakeId: String(record.id || ''),
+      employeeName: record.employee_name || 'Employee',
+      department: record.department || '',
+      stage: record.status,
+      view: 'cases',
+      recordKind: 'intake',
+      level: 'warning',
+      title: `${needsInformation ? 'Complete intake information' : 'Triage new report'} — ${record.intake_number || 'Intake'}`,
+      detail: [record.employee_name || 'Employee', record.report_type || 'Report', record.subject || ''].filter(Boolean).join(' · '),
+      meta: ['Employee Relations', needsInformation ? 'Needs Information' : 'Intake'],
+      workflowType: 'Triage',
+      actionType: needsInformation ? 'intake_information' : 'intake_triage',
+      dueDate: '',
+    });
+  });
+
+  hearings.filter(record => record.status === 'Scheduled' && record.scheduled_at).forEach(record => {
+    const caseRecord = caseById.get(String(record.case_id));
+    if (!caseRecord || isCaseTerminalStage(caseRecord.status)) return;
+    const dueDate = workDate(record.scheduled_at);
+    add({
+      key: `case:${record.case_id}:hearing:${record.id}`,
+      ...caseContext(caseRecord),
+      level: workLevel(dueDate, currentDate, dueSoonDays, 'info'),
+      title: `Hearing scheduled — ${caseRecord.case_number || 'HR Case'}`,
+      detail: [caseRecord.employee_name || 'Employee', record.hearing_type || 'Hearing', dueDate].filter(Boolean).join(' · '),
+      meta: ['Employee Relations', dueDate < currentDate ? 'Hearing overdue' : 'Hearing'],
+      workflowType: 'Due Process',
+      actionType: 'case_hearing',
+      dueDate,
+    });
+  });
+
+  decisions.filter(record => !['Superseded', 'Reversed'].includes(record.decision_status)).forEach(record => {
+    const caseRecord = caseById.get(String(record.case_id));
+    if (!caseRecord || isCaseTerminalStage(caseRecord.status)) return;
+    if (record.decision_status === 'For Approval') {
+      add({
+        key: `case:${record.case_id}:case_decision`,
+        ...caseContext(caseRecord),
+        preferred: true,
+        level: 'warning',
+        title: `Decision approval pending — ${caseRecord.case_number || 'HR Case'}`,
+        detail: `${caseRecord.employee_name || 'Employee'} · Decision version ${record.version || 1}`,
+        meta: ['Employee Relations', 'Approval'],
+        workflowType: 'Approval',
+        actionType: 'case_decision',
+        dueDate: workDate(caseRecord.due_date),
+      });
+    }
+    if (record.decision_status !== 'Approved') return;
+    const nodStatus = record.nod_status || 'Not Prepared';
+    if (['Not Prepared', 'Draft', 'Finalized', 'Issued'].includes(nodStatus) && !record.nod_served_at) {
+      const actionType = ['Issued'].includes(nodStatus) ? 'case_nod_service' : 'case_nod_prepare';
+      const verb = nodStatus === 'Issued' ? 'Record NOD service' : nodStatus === 'Finalized' ? 'Issue Notice of Decision' : 'Prepare Notice of Decision';
+      add({
+        key: `case:${record.case_id}:${actionType}`,
+        ...caseContext(caseRecord),
+        preferred: true,
+        level: 'warning',
+        title: `${verb} — ${caseRecord.case_number || 'HR Case'}`,
+        detail: `${caseRecord.employee_name || 'Employee'} · ${nodStatus}`,
+        meta: ['Employee Relations', 'Notice of Decision'],
+        workflowType: 'Due Process',
+        actionType,
+        dueDate: workDate(caseRecord.due_date),
+      });
+    }
+  });
+
+  implementations.filter(record => ['Pending', 'In Progress'].includes(record.status)).forEach(record => {
+    const caseRecord = caseById.get(String(record.case_id));
+    if (!caseRecord || isCaseTerminalStage(caseRecord.status)) return;
+    const dueDate = workDate(record.due_date || caseRecord.due_date);
+    add({
+      key: `case:${record.case_id}:case_implementation`,
+      ...caseContext(caseRecord),
+      preferred: true,
+      level: workLevel(dueDate, currentDate, dueSoonDays, 'warning'),
+      title: `Complete approved action — ${caseRecord.case_number || 'HR Case'}`,
+      detail: [caseRecord.employee_name || 'Employee', record.action_type || record.action_description || 'Implementation', dueDate ? `Due ${dueDate}` : ''].filter(Boolean).join(' · '),
+      meta: ['Employee Relations', 'Implementation'],
+      workflowType: 'Implementation',
+      actionType: 'case_implementation',
+      dueDate,
+    });
+  });
+
+  return [...items.values()].map(({ preferred, key, ...item }) => item).sort((a, b) =>
+    (rank[a.level] ?? 9) - (rank[b.level] ?? 9)
+      || String(a.dueDate || '9999-12-31').localeCompare(String(b.dueDate || '9999-12-31'))
+      || String(a.title || '').localeCompare(String(b.title || ''))
+  );
+}
+
 export function employeeRelationsMetrics({ cases = [], reports = [], allegations = [], decisions = [], history = [], implementations = [], today = '' } = {}) {
   const date = today || new Date().toISOString().slice(0, 10);
   const openCases = cases.filter(record => !isCaseTerminalStage(record.status));
