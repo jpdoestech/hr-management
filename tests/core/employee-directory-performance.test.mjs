@@ -100,3 +100,18 @@ test('employee profile uses stable employee ids and tabbed detail rendering',()=
   assert.match(source,/\['summary','Overview'\],\['personal','Personal'\],\['pay','Pay & IDs'\],\['history','History'\]/);
   assert.match(source,/EMPLOYEE_PROFILE_CACHE_TTL/);
 });
+
+test('employee directory follows bounded server pagination and never fetches all rows',()=>{
+  const queryStart=source.indexOf('async function queryEmployeeDirectoryPage');
+  const queryEnd=source.indexOf('function serverTablePageGo',queryStart);
+  const employeeQuery=source.slice(queryStart,queryEnd);
+  const paginationStart=source.indexOf('function employeeDirectoryPaginationHTML');
+  const paginationEnd=source.indexOf('function applyEmployeeDirectoryPage',paginationStart);
+  const employeePagination=source.slice(paginationStart,paginationEnd);
+
+  assert.match(source,/scope==='records:employees'\?\[10,25,50\]/);
+  assert.match(source,/if\(scope==='records:employees'\)\{[\s\S]*STATE\.tablePageSizes\[scope\]=size;[\s\S]*STATE\.tablePages\[scope\]=\{\.\.\.stored,page,size\}/);
+  assert.doesNotMatch(employeeQuery,/requested\.size===ALL_ROWS_SIZE/);
+  assert.match(employeePagination,/sizes:\[10,25,50\]/);
+  assert.match(source,/data-view-all-disabled="true"/);
+});

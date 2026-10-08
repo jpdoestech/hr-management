@@ -1,4 +1,4 @@
-import { ALL_ROWS_SIZE, paginationHTML, paginationMeta } from './pagination.js?v=20260930-5';
+import { ALL_ROWS_SIZE, paginationHTML, paginationMeta } from './pagination.js?v=20261008-6';
 import { columnKey, moveColumn, normalizeFrozenColumns, reconcileColumnOrder } from './table-layout.js?v=20260930-1';
 import { compareTableValues, normalizeTableValue, valueMatchesFilter } from './table-query.js?v=20261001-1';
 
@@ -181,6 +181,7 @@ export function installTableEnhancer({getState, getContent, getAdditionalRoots=(
   }
   function viewAllRows(entry){
     closeColumnMenu();
+    if(!entry.allowViewAll)return;
     const scope=entry.pageScope;
     const handler=entry.table.dataset.pageHandler||'';
     if(entry.requiresCompleteSet)onViewAll(scope,handler,ALL_ROWS_SIZE);
@@ -205,11 +206,11 @@ export function installTableEnhancer({getState, getContent, getAdditionalRoots=(
     if(column.managed){
       menu.innerHTML=`<div class="table-column-menu-head"><b>${column.label}</b><button type="button" aria-label="Close">×</button></div><div class="table-column-menu-info"><span aria-hidden="true">i</span><p><b>Managed by the filters above</b>This column already has a dedicated page filter, so duplicate sorting, filtering, and View all controls are unavailable here.</p></div>`;
     }else if(entry.requiresCompleteSet&&!entry.viewAll){
-      menu.innerHTML=`<div class="table-column-menu-head"><b>${column.label}</b><button type="button" aria-label="Close">×</button></div><div class="table-column-menu-info"><span aria-hidden="true">i</span><p><b>Load the complete result first</b>Sorting or filtering one database page could hide valid records. Use View all to work with the complete filtered result.</p></div><button type="button" class="table-column-view-all">View all rows</button>`;
-      menu.querySelector('.table-column-view-all').addEventListener('click',()=>viewAllRows(entry));
+      menu.innerHTML=entry.allowViewAll?`<div class="table-column-menu-head"><b>${column.label}</b><button type="button" aria-label="Close">×</button></div><div class="table-column-menu-info"><span aria-hidden="true">i</span><p><b>Load the complete result first</b>Sorting or filtering one database page could hide valid records. Use View all to work with the complete filtered result.</p></div><button type="button" class="table-column-view-all">View all rows</button>`:`<div class="table-column-menu-head"><b>${column.label}</b><button type="button" aria-label="Close">×</button></div><div class="table-column-menu-info"><span aria-hidden="true">i</span><p><b>Use the directory controls</b>Search and filters run against the complete database while this table stays on a fast, bounded page.</p></div>`;
+      menu.querySelector('.table-column-view-all')?.addEventListener('click',()=>viewAllRows(entry));
     }else{
       const values=[...new Set(validDataRows(entry).map(row=>rowCellValue(row,column.key)).filter(Boolean))].sort((a,b)=>compareTableValues(a,b,'asc')).slice(0,8);
-      menu.innerHTML=`<div class="table-column-menu-head"><b>${column.label}</b><button type="button" aria-label="Close">×</button></div><div class="table-column-sort"><button type="button" data-sort="asc" class="${query.sortKey===column.key&&query.direction==='asc'?'active':''}"><b>A → Z</b><span>Sort ascending</span></button><button type="button" data-sort="desc" class="${query.sortKey===column.key&&query.direction==='desc'?'active':''}"><b>Z → A</b><span>Sort descending</span></button></div><label class="table-column-filter-label">Filter this column<input type="search" value="${String(query.filters[column.key]||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" placeholder="Contains text…"></label>${values.length?`<div class="table-column-values"><span>Quick values</span>${values.map(value=>`<button type="button" data-value="${value.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}">${value.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</button>`).join('')}</div>`:''}<div class="table-column-menu-actions"><button type="button" class="table-column-clear">Clear</button><button type="button" class="table-column-apply">Apply filter</button></div>${!entry.viewAll?'<button type="button" class="table-column-view-all">View all rows</button>':''}`;
+      menu.innerHTML=`<div class="table-column-menu-head"><b>${column.label}</b><button type="button" aria-label="Close">×</button></div><div class="table-column-sort"><button type="button" data-sort="asc" class="${query.sortKey===column.key&&query.direction==='asc'?'active':''}"><b>A → Z</b><span>Sort ascending</span></button><button type="button" data-sort="desc" class="${query.sortKey===column.key&&query.direction==='desc'?'active':''}"><b>Z → A</b><span>Sort descending</span></button></div><label class="table-column-filter-label">Filter this column<input type="search" value="${String(query.filters[column.key]||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" placeholder="Contains text…"></label>${values.length?`<div class="table-column-values"><span>Quick values</span>${values.map(value=>`<button type="button" data-value="${value.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}">${value.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</button>`).join('')}</div>`:''}<div class="table-column-menu-actions"><button type="button" class="table-column-clear">Clear</button><button type="button" class="table-column-apply">Apply filter</button></div>${entry.allowViewAll&&!entry.viewAll?'<button type="button" class="table-column-view-all">View all rows</button>':''}`;
       menu.querySelectorAll('[data-sort]').forEach(control=>control.addEventListener('click',()=>{updateTableQuery(entry,column,{sortKey:column.key,direction:control.dataset.sort});closeColumnMenu();}));
       const input=menu.querySelector('input');
       menu.querySelectorAll('[data-value]').forEach(control=>control.addEventListener('click',()=>{input.value=control.dataset.value;input.focus();}));
@@ -291,7 +292,7 @@ export function installTableEnhancer({getState, getContent, getAdditionalRoots=(
     const key=stableTableKey(table,columns,index);
     const layout=layoutFor(key,columns);
     const pageContext=paginationContext(table,index);
-    const entry={key,table,columns,layout,index,pageKey:getTablePageKey(table,index),pageScope:pageContext.scope,viewAll:isTableViewAll(table,index),requiresCompleteSet:pageContext.total>pageContext.rowCount};
+    const entry={key,table,columns,layout,index,pageKey:getTablePageKey(table,index),pageScope:pageContext.scope,viewAll:isTableViewAll(table,index),allowViewAll:table.dataset.viewAllDisabled!=='true',requiresCompleteSet:pageContext.total>pageContext.rowCount};
     registry.set(key,entry);
     applyColumnOrder(table,columns,layout);
     if(entry.requiresCompleteSet&&!entry.viewAll)tableQueries.delete(key);

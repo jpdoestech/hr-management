@@ -36,6 +36,7 @@ export function paginationHTML(meta,scope,handlers={}){
   const key=String(scope).replace(/'/g,"\\'");
   const goFn=handlers.go||'tablePageGo';
   const sizeFn=handlers.size||'tablePageSize';
-  const sizes=[10,25,50,100,ALL_ROWS_SIZE];
+  const requestedSizes=Array.isArray(handlers.sizes)?handlers.sizes.map(Number):[];
+  const sizes=(requestedSizes.length?requestedSizes:[10,25,50,100,ALL_ROWS_SIZE]).filter((size,index,list)=>[10,25,50,100,ALL_ROWS_SIZE].includes(size)&&list.indexOf(size)===index);
   return `<div class="table-pagination"><label class="page-size">Rows per page <select aria-label="Rows per page" onchange="const next=this.value;requestAnimationFrame(()=>${sizeFn}('${key}',next))">${sizes.map(n=>`<option value="${n}" ${meta.size===n?'selected':''}>${n===ALL_ROWS_SIZE?'All':n}</option>`).join('')}</select></label><div class="page-buttons"><button class="page-btn" ${meta.page<=1?'disabled':''} onclick="requestAnimationFrame(()=>${goFn}('${key}',${meta.page-1}))" aria-label="Previous page">‹</button>${pageList(meta).map(p=>p==='…'?`<span class="page-ellipsis">…</span>`:`<button class="page-btn ${p===meta.page?'active':''}" onclick="requestAnimationFrame(()=>${goFn}('${key}',${p}))">${p}</button>`).join('')}<button class="page-btn" ${meta.page>=meta.pages?'disabled':''} onclick="requestAnimationFrame(()=>${goFn}('${key}',${meta.page+1}))" aria-label="Next page">›</button></div></div>`;
 }

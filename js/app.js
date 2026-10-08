@@ -1,7 +1,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '../supabase-config.js';
-import { ALL_ROWS_SIZE, paginationMeta, paginationHTML, paginationReset, paginateRows } from './core/pagination.js?v=20260930-5';
-import { installTableEnhancer } from './core/table-enhancer.js?v=20261001-3';
+import { ALL_ROWS_SIZE, paginationMeta, paginationHTML, paginationReset, paginateRows } from './core/pagination.js?v=20261008-6';
+import { installTableEnhancer } from './core/table-enhancer.js?v=20261008-4';
 import { compactRedundantPageIntros } from './core/content-layout.js?v=20260928-4';
 import { buildRecordChanges, valuesEqual } from './core/record-diff.js?v=20260930-1';
 import { roleCanExport } from './core/export-access.js?v=20260930-1';
@@ -504,10 +504,15 @@ function serverRecordQueryUnavailable(error){
 }
 function requestedPageState(scope,defaultSize=10){
   STATE.tablePages||={};STATE.tablePageSizes||={};
-  const allowed=[10,25,50,100,ALL_ROWS_SIZE];
+  const allowed=scope==='records:employees'?[10,25,50]:[10,25,50,100,ALL_ROWS_SIZE];
   const stored=STATE.tablePages[scope]||{};
   const size=allowed.includes(Number(stored.size))?Number(stored.size):allowed.includes(Number(STATE.tablePageSizes[scope]))?Number(STATE.tablePageSizes[scope]):defaultSize;
-  return {page:Math.max(1,Number(stored.page)||1),size};
+  const page=Math.max(1,Number(stored.page)||1);
+  if(scope==='records:employees'){
+    STATE.tablePageSizes[scope]=size;
+    STATE.tablePages[scope]={...stored,page,size};
+  }
+  return {page,size};
 }
 async function queryRecordPage({module,scope,search='',searchFields=[],filters={},classification='',sortKey='',defaultSize=10}){
   if(!SERVER_RECORD_QUERY_READY)return null;
@@ -553,22 +558,13 @@ async function queryEmployeeDirectoryPage({scope,search='',department='',branch=
     p_probation_days:Number(DB.settings?.probationDays)||180,p_fields:[...new Set(fields.filter(Boolean))],p_offset:offset,p_limit:limit,
   }),{limit});
   let page=requested.page;
-  const batchSize=requested.size===ALL_ROWS_SIZE?100:requested.size;
-  let {data,error}=await run(requested.size===ALL_ROWS_SIZE?0:(page-1)*requested.size,batchSize);
+  let {data,error}=await run((page-1)*requested.size,requested.size);
   if(error){
     if(employeeDirectoryQueryUnavailable(error)){EMPLOYEE_DIRECTORY_QUERY_READY=false;console.info('Indexed employee directory query is unavailable; using the Phase 16 record query until Phase 18 is applied.');return null;}
     throw error;
   }
   data=data||[];
   let total=Number(data?.[0]?.total_count||0);
-  if(requested.size===ALL_ROWS_SIZE&&data.length<total){
-    const batches=[];
-    for(let offset=data.length;offset<total;offset+=batchSize)batches.push(run(offset,batchSize));
-    const results=await Promise.all(batches);
-    const failed=results.find(result=>result.error);
-    if(failed?.error)throw failed.error;
-    data=[...data,...results.flatMap(result=>result.data||[])];
-  }
   const pages=Math.max(1,Math.ceil(total/requested.size));
   if(page>pages){page=pages;({data,error}=await run((page-1)*requested.size,requested.size));if(error)throw error;total=Number(data?.[0]?.total_count||0);}
   STATE.tablePageSizes[scope]=requested.size;
@@ -580,7 +576,8 @@ function serverTablePageGo(scope,page){
   Promise.resolve(RENDERERS[STATE.view]?.()).catch(error=>toast('Could not load that page: '+error.message,true));
 }
 function serverTablePageSize(scope,size){
-  const next=[10,25,50,100,ALL_ROWS_SIZE].includes(Number(size))?Number(size):10;
+  const allowed=scope==='records:employees'?[10,25,50]:[10,25,50,100,ALL_ROWS_SIZE];
+  const next=allowed.includes(Number(size))?Number(size):10;
   STATE.tablePageSizes[scope]=next;STATE.tablePages[scope]={page:1,size:next,signature:'server'};
   Promise.resolve(RENDERERS[STATE.view]?.()).catch(error=>toast('Could not change the page size: '+error.message,true));
 }
@@ -4144,7 +4141,7 @@ function employeeDirectoryHasFilters(){
   return Boolean((STATE.employeeSearch||'').trim()||STATE.employeeDepartmentFilter||STATE.employeeBranchFilter||STATE.employeeStatusFilter||STATE.employeeClassFilter);
 }
 function employeeDirectoryPaginationHTML(pageResult,pageScope){
-  return pageResult.meta.total?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${pageResult.meta.start}–${pageResult.meta.end} <span>of ${pageResult.meta.total} employees</span></div>${paginationHTML(pageResult.meta,pageScope,{go:'serverTablePageGo',size:'serverTablePageSize'})}</div>`:'';
+  return pageResult.meta.total?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${pageResult.meta.start}–${pageResult.meta.end} <span>of ${pageResult.meta.total} employees</span></div>${paginationHTML(pageResult.meta,pageScope,{go:'serverTablePageGo',size:'serverTablePageSize',sizes:[10,25,50]})}</div>`:'';
 }
 function applyEmployeeDirectoryPage(pageResult,signature){
   if(STATE.view!=='employees'||employeeDirectorySignature()!==signature)return;
@@ -4227,7 +4224,7 @@ function renderEmployees(){
         </div>
       </div>
       <div class="tablewrap employee-directory-tablewrap">
-        <table class="data-table employee-directory-table" data-table-key="employees" data-table-tools="external" data-server-paginated="true" data-page-scope="${pageScope}" data-page-handler="serverTablePageSize" data-managed-columns="department,branchReporting,status,classification" style="min-width:${tableMinWidth}px!important">
+        <table class="data-table employee-directory-table" data-table-key="employees" data-table-tools="external" data-server-paginated="true" data-view-all-disabled="true" data-page-scope="${pageScope}" data-page-handler="serverTablePageSize" data-managed-columns="department,branchReporting,status,classification" style="min-width:${tableMinWidth}px!important">
           <colgroup>${columns.map(c=>`<col data-column-key="${esc(c.key)}" style="width:${c.width}px">`).join('')}<col data-column-key="actions" style="width:58px"></colgroup>
           <thead><tr>${columns.map(c=>`<th data-column-key="${esc(c.key)}" ${['department','branchReporting','status','classification'].includes(c.key)?'data-column-managed="true"':''}>${esc(c.label)}</th>`).join('')}<th class="actions-head" data-column-key="actions">Actions</th></tr></thead>
           <tbody>${employeeDirectoryRowsHTML(rows,columns)}</tbody>
