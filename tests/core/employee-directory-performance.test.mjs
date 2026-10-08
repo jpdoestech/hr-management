@@ -43,6 +43,7 @@ test('employee directory uses the projected Phase 18 RPC with a Phase 16 fallbac
   assert.match(source,/p_fields:\[\.\.\.new Set\(fields\.filter\(Boolean\)\)\]/);
   assert.match(source,/pageResult\|\|queryRecordPage/);
   assert.match(source,/employeeDirectoryRequestedFields\(columns\)/);
+  assert.match(source,/return employeeDirectoryProjection\(columns\)/);
 });
 
 test('Phase 18 keeps RLS and adds employee-specific search indexes',()=>{

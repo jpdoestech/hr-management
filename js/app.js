@@ -2,6 +2,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '../supabase-config.js';
 import { ALL_ROWS_SIZE, paginationMeta, paginationHTML, paginationReset, paginateRows } from './core/pagination.js?v=20261008-6';
 import { installTableEnhancer } from './core/table-enhancer.js?v=20261008-5';
+import { employeeDirectoryProjection } from './core/employee-directory.js?v=20261008-1';
 import { compactRedundantPageIntros } from './core/content-layout.js?v=20260928-4';
 import { buildRecordChanges, valuesEqual } from './core/record-diff.js?v=20260930-1';
 import { roleCanExport } from './core/export-access.js?v=20260930-1';
@@ -4091,15 +4092,7 @@ function employeeDirectoryMetadata(){
   return metadata;
 }
 function employeeDirectoryRequestedFields(columns){
-  const fields=new Set(['id','employeeNo','prfNumber','name','lastName','firstName','middleName','dateHired','classOverride']);
-  columns.forEach(column=>{
-    if(column.key==='classification'){fields.add('dateHired');fields.add('classOverride');return;}
-    if(column.key==='address'){fields.add('homeAddress');fields.add('address');return;}
-    if(column.key==='presentAddress'){fields.add('presentAddress');fields.add('presentAddressText');return;}
-    if(column.key==='allowances'||column.key.startsWith('allowance:')){fields.add('allowances');return;}
-    fields.add(column.key);
-  });
-  return [...fields];
+  return employeeDirectoryProjection(columns);
 }
 function employeeDirectoryQueryState(){
   const pageScope='records:employees';
