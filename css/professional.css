@@ -962,6 +962,7 @@ body,input,select,textarea,button,table{font-family:'Plus Jakarta Sans',sans-ser
 .employee-profile-workspace .profile-kpi{min-height:72px;padding:10px;border-radius:7px;}
 .employee-profile-workspace .profile-kpi .k{font-size:8px;letter-spacing:0;}
 .employee-profile-workspace .profile-kpi .v{margin-top:5px;font-size:18px;}
+.employee-profile-workspace .profile-kpi .v.text-value{overflow:hidden;font-size:11px;line-height:1.35;text-overflow:ellipsis;white-space:nowrap;}
 .employee-profile-workspace .profile-kpi .s{font-size:8.5px;}
 .employee-record-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;}
 .employee-record-metrics>div{padding:10px 8px;border:1px solid var(--border);border-radius:6px;background:#FAFAFC;text-align:center;}

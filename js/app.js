@@ -2920,6 +2920,7 @@ function enhanceRowActionMenus(){
     if(group.dataset.menuEnhanced==='true') return;
     const buttons=[...group.querySelectorAll(':scope > button:not([disabled])')];
     if(!buttons.length) return;
+    if(buttons.length===1){group.dataset.menuEnhanced='true';return;}
     const id=`row-actions-${++ROW_ACTION_MENU_ID}`;
     const actions=buttons.map((button,index)=>({
       button,
@@ -4132,10 +4133,10 @@ function localEmployeeDirectoryRows(query){
 }
 function employeeDirectoryRowsHTML(rows,columns){
   if(!rows.length)return `<tr><td colspan="${columns.length+1}"><div class="empty"><b>No employees found</b><span>${employeeDirectoryHasFilters()?'Try adjusting the search or filters.':'Add an employee to begin building the directory.'}</span>${employeeDirectoryHasFilters()?`<button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="resetEmployeeDirectoryFilters()">Reset search and filters</button>`:''}</div></td></tr>`;
-  return rows.map(employee=>`<tr class="employee-directory-row ${String(STATE.employeeSelectedId||'')===String(employee.id)?'selected':''}" data-employee-id="${esc(employee.id)}" tabindex="0" aria-label="Open ${esc(employeeDisplayName(employee))}" onclick="selectEmployeeDirectoryRow('${employee.id}');openEmployeeProfile('${employee.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectEmployeeDirectoryRow('${employee.id}');openEmployeeProfile('${employee.id}')}">
+  return rows.map(employee=>`<tr class="employee-directory-row ${String(STATE.employeeSelectedId||'')===String(employee.id)?'selected':''}" data-employee-id="${esc(employee.id)}" tabindex="0" aria-label="Open ${esc(employeeDisplayName(employee))}" onclick="openEmployeeProfile('${employee.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openEmployeeProfile('${employee.id}')}">
     ${columns.map(column=>`<td data-column="${esc(column.key)}">${column.cell(employee)}</td>`).join('')}
     <td data-column="actions" onclick="event.stopPropagation()" onkeydown="event.stopPropagation()"><div class="rowactions employee-directory-action">
-      <button class="iconbtn" onclick="selectEmployeeDirectoryRow('${employee.id}');openEmployeeProfile('${employee.id}')" title="Open employee workspace" aria-label="Open ${esc(employeeDisplayName(employee))} workspace">${iEdit(14)}</button>
+      <button class="iconbtn" onclick="openEmployeeProfile('${employee.id}')" title="Open employee workspace" aria-label="Open ${esc(employeeDisplayName(employee))} workspace">${iEdit(14)}</button>
     </div></td>
   </tr>`).join('');
 }
@@ -4269,9 +4270,10 @@ async function finishEmployeeTransaction(keepUploads=[]){
 }
 function selectEmployeeDirectoryRow(id){
   STATE.employeeSelectedId=id;
-  document.querySelectorAll('.employee-directory-row').forEach(row=>{
-    row.classList.toggle('selected',String(row.dataset.employeeId)===String(id));
-  });
+  const current=document.querySelector('.employee-directory-row.selected');
+  if(current&&String(current.dataset.employeeId)!==String(id))current.classList.remove('selected');
+  const target=document.querySelector(`.employee-directory-row[data-employee-id="${CSS.escape(String(id))}"]`);
+  target?.classList.add('selected');
 }
 async function renderEmployeeOrigin(){
   if(STATE.view==='operations') return renderOperationsWorkspace();
@@ -5407,12 +5409,12 @@ function employeeProfileLoadingCards(){
 }
 function employeeProfileSummaryHTML(employee,snapshot){
   const completion=employeeCompleteness(employee);
-  const activityCards=snapshot?`<div class="profile-kpis">
-    <div class="profile-kpi"><div class="k">HR Cases</div><div class="v">${snapshot.cases.length}</div><div class="s">Linked case files</div></div>
-    <div class="profile-kpi"><div class="k">Leave</div><div class="v">${snapshot.leaves.length}</div><div class="s">Requests on file</div></div>
-    <div class="profile-kpi"><div class="k">ER Records</div><div class="v">${snapshot.discipline.length+snapshot.cvr.length+snapshot.incidents.length}</div><div class="s">Incidents and findings</div></div>
-    <div class="profile-kpi"><div class="k">ATD Balance</div><div class="v">${peso(snapshot.atdBalance)}</div><div class="s">Outstanding amount</div></div>
-  </div>`:employeeProfileLoadingCards();
+  const activityCards=`<div class="profile-kpis">
+    <div class="profile-kpi"><div class="k">Status</div><div class="v text-value">${esc(employee.status||'—')}</div><div class="s">Current employment state</div></div>
+    <div class="profile-kpi"><div class="k">Classification</div><div class="v text-value">${esc(classify(employee))}</div><div class="s">Current classification</div></div>
+    <div class="profile-kpi"><div class="k">Reporting Branch</div><div class="v text-value">${esc(employee.branchReporting||'—')}</div><div class="s">Assigned workplace</div></div>
+    <div class="profile-kpi"><div class="k">Master Data</div><div class="v">${completion}%</div><div class="s">Profile completion</div></div>
+  </div>`;
   return `<div class="employee-completeness"><div><b>Master data</b><span>${completion}% complete</span></div><div class="bar"><div class="fill" style="width:${completion}%"></div></div><div class="pct">${completion}%</div></div>
     ${activityCards}
     <div class="employee-profile-columns">
@@ -5426,9 +5428,9 @@ function employeeProfileSummaryHTML(employee,snapshot){
         <div class="item"><div class="label">Employment Status</div><div class="value">${esc(employee.status||'—')}</div></div>
         <div class="item"><div class="label">Effective Date</div><div class="value">${fmtDate(employee.statusDate)}</div></div>
       </div></section>
-      <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Record snapshot</h3><p>Connected records loaded on demand</p></div></div>${snapshot?`<div class="employee-record-metrics">
-        <div><b>${snapshot.nte.length}</b><span>NTE</span></div><div><b>${snapshot.memos.length}</b><span>Memoranda</span></div><div><b>${snapshot.nod.length}</b><span>NOD</span></div><div><b>${snapshot.evaluations.length}</b><span>Evaluations</span></div><div><b>${snapshot.transfers.length}</b><span>Transfers</span></div><div><b>${snapshot.atd.length}</b><span>ATD</span></div>
-      </div>`:`<div class="employee-profile-inline-loading"><span></span><div><b>Loading connected records</b><small>The employee master data is ready. Activity is loading separately.</small></div></div>`}</section>
+      <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Assignment</h3><p>Current organizational placement</p></div></div><div class="profile-detail">
+        <div class="item"><div class="label">Department</div><div class="value">${esc(employee.department||'—')}</div></div><div class="item"><div class="label">Position</div><div class="value">${esc(employee.position||'—')}</div></div><div class="item"><div class="label">Reporting Branch</div><div class="value">${esc(employee.branchReporting||'Not assigned')}</div></div><div class="item"><div class="label">Tenure</div><div class="value">${esc(employeeTenureText(employee))}</div></div>
+      </div></section>
     </div>`;
 }
 function employeeProfilePersonalHTML(employee){
@@ -5483,6 +5485,10 @@ function employeeProfileSetTab(employeeId,tab='summary'){
   const cached=EMPLOYEE_PROFILE_CACHE.get(String(employee.id));
   const content=workspace.querySelector('.employee-profile-tab-content');
   if(content)content.innerHTML=employeeProfileTabContent(employee,tab,cached?.snapshot||null);
+  if(tab==='history'&&!cached&&!workspace.dataset.historyLoading){
+    workspace.dataset.historyLoading='true';
+    hydrateEmployeeProfile(employee,EMPLOYEE_PROFILE_REQUEST_TOKEN);
+  }
   return true;
 }
 function updateEmployeeProfileActivity(employee,snapshot,token){
@@ -5505,13 +5511,17 @@ async function hydrateEmployeeProfile(employee,token){
     updateEmployeeProfileActivity(employee,snapshot,token);
   }catch(error){
     console.warn('Employee activity could not be loaded.',error);
-    if(token===EMPLOYEE_PROFILE_REQUEST_TOKEN)document.querySelector('.employee-profile-workspace')?.classList.remove('loading-activity');
+    if(token===EMPLOYEE_PROFILE_REQUEST_TOKEN){
+      const workspace=document.querySelector('.employee-profile-workspace');
+      workspace?.classList.remove('loading-activity');
+      if(workspace)delete workspace.dataset.historyLoading;
+    }
   }
 }
 async function openEmployeeProfile(id){
   const employee=DB.employees.find(record=>String(record.id)===String(id));
   if(!employee){toast('Employee record could not be found.',true);return;}
-  const token=++EMPLOYEE_PROFILE_REQUEST_TOKEN;
+  EMPLOYEE_PROFILE_REQUEST_TOKEN+=1;
   selectEmployeeDirectoryRow(employee.id);
   const cached=EMPLOYEE_PROFILE_CACHE.get(String(employee.id));
   const snapshot=cached?.snapshot||null;
@@ -5522,7 +5532,6 @@ async function openEmployeeProfile(id){
     <div class="employee-profile-tabs" role="tablist" aria-label="Employee profile details">${tabs.map(([key,label],index)=>`<button type="button" class="employee-profile-tab ${index===0?'active':''}" data-profile-tab="${key}" role="tab" aria-selected="${index===0?'true':'false'}" tabindex="${index===0?'0':'-1'}" onclick="employeeProfileSetTab('${employee.id}','${key}')">${label}</button>`).join('')}</div>
     <div class="employee-profile-tab-content">${employeeProfileTabContent(employee,'summary',snapshot)}</div>
   </div><div class="modal-foot employee-workspace-foot"><span class="small">Selected employee: ${esc(employeeDisplayName(employee))}</span><div class="toolbar-spacer"></div><button class="btn btn-ghost" onclick="closeModal()">Back to Directory</button></div>`);
-  requestAnimationFrame(()=>hydrateEmployeeProfile(employee,token));
 }
 
 /* ================================================================

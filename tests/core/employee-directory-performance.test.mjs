@@ -80,9 +80,16 @@ test('employee profile paints before related modules are hydrated',()=>{
 
   assert.ok(start>0&&end>start,'optimized employee profile should be present');
   assert.match(profileRenderer,/openEmployeeWorkspaceModal/);
-  assert.match(profileRenderer,/requestAnimationFrame\(\(\)=>hydrateEmployeeProfile/);
+  assert.doesNotMatch(profileRenderer,/requestAnimationFrame\(\(\)=>hydrateEmployeeProfile/);
   assert.doesNotMatch(profileRenderer,/await ensureRecordModules/);
   assert.match(source,/Promise\.all\(\[loadEmployeeProfileRecords\(employee\),loadEmployeeProfileCases\(employee\)\]\)/);
+  assert.match(source,/if\(tab==='history'&&!cached&&!workspace\.dataset\.historyLoading\)/);
+});
+
+test('single employee row actions remain direct and selection avoids duplicate full scans',()=>{
+  assert.match(source,/if\(buttons\.length===1\)\{group\.dataset\.menuEnhanced='true';return;\}/);
+  assert.match(source,/onclick="openEmployeeProfile\('\$\{employee\.id\}'\)"/);
+  assert.doesNotMatch(source,/onclick="selectEmployeeDirectoryRow\('\$\{employee\.id\}'\);openEmployeeProfile/);
 });
 
 test('employee profile uses stable employee ids and tabbed detail rendering',()=>{
