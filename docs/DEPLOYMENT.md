@@ -48,6 +48,8 @@ Apply `supabase/phase30-employee-relations-intake.sql` after Phase 29. It adds a
 
 Apply `supabase/phase31-employee-relations-revisions.sql` after Phase 30. It adds approval-only case reopening and decision amendment, immutable revision history, synchronized disciplinary-history reversal/supersession, and protection against deleting material HR cases. See [Employee Relations Hardening: Phase J Controlled Revisions](EMPLOYEE-RELATIONS-PHASE-J.md).
 
+Apply `supabase/phase32-employee-relations-confidentiality.sql` after Phase 31. It adds a confidential flag to existing cases without deleting or moving data, introduces stage-specific Employee Relations permissions, adds restrictive RLS to cases and normalized child records, protects case-file downloads, and installs database-side action guards. Administrator and HR Staff system roles receive the new capabilities during migration; custom roles remain opt-in through **Documents & Governance > Access Control**. After running the migration, run the read-only `supabase/verify-phase32-employee-relations-security.sql`, reload the app, and complete the role validation in [Employee Relations Phase L](EMPLOYEE-RELATIONS-PHASE-L.md).
+
 Apply `supabase/phase17-user-export-permissions.sql` before deploying the matching frontend. Viewer, Manager, and Employee profiles default to no export access. A System Administrator can enable export for a specific account from User Management; Administrator and HR Staff roles include export access automatically.
 
 ## Google Drive

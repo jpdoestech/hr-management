@@ -5,9 +5,20 @@ import {
   actionRequiresImplementation,
   caseImplementationReadiness,
   caseLifecycleWorkItem,
+  caseProgressModel,
   employeeRelationsMetrics,
   employeeRelationsWorkItems,
 } from '../../js/core/employee-relations.js';
+
+test('case progress exposes blockers and completes only at a terminal stage',()=>{
+  const active=caseProgressModel({id:'case-1',case_number:'ER-001',status:'Awaiting Employee Response'},{hasSource:true,hasAllegations:true,hasEvidence:true,hasNte:true,hasResponse:false,hearingRequired:false,hearingHandled:true,hasFinalFindings:false,hasApprovedDecision:false,hasDecisionNotice:false},[]);
+  assert.equal(active.current.key,'notice');
+  assert.ok(active.blockers.some(message=>/employee response/i.test(message)));
+  assert.ok(active.percent<100);
+  const closed=caseProgressModel({id:'case-1',case_number:'ER-001',status:'Closed'},{},[]);
+  assert.equal(closed.percent,100);
+  assert.ok(closed.stages.every(stage=>stage.state==='complete'));
+});
 
 const migration=await readFile(new URL('../../supabase/phase27-employee-relations-monitoring.sql',import.meta.url),'utf8');
 const migrationCopy=await readFile(new URL('../../database/migrations/phase27-employee-relations-monitoring.sql',import.meta.url),'utf8');

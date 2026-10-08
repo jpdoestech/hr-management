@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ACCESS_PERMISSION_KEYS,evaluateEffectiveAccess,legacyPermissions} from '../../js/core/access-control.js';
+import {ACCESS_PERMISSION_KEYS,EMPLOYEE_RELATIONS_CAPABILITIES,evaluateEffectiveAccess,legacyPermissions} from '../../js/core/access-control.js';
 
 test('direct deny takes precedence over role and direct grant',()=>{
   const result=evaluateEffectiveAccess({rolePermissions:['employees.update'],directGrants:['employees.update'],directDenies:['employees.update']});
@@ -20,4 +20,17 @@ test('superadmin receives every applicable permission',()=>{
 
 test('legacy employee access is limited to self-service',()=>{
   assert.deepEqual(legacyPermissions('Employee'),['self_service.view','self_service.update']);
+});
+
+test('legacy viewer export remains opt-in',()=>{
+  assert.equal(legacyPermissions('Viewer').some(key=>key.endsWith('.export')),false);
+  assert.ok(legacyPermissions('Viewer',true).includes('analytics.export'));
+});
+
+test('Employee Relations has separate confidential and process-stage capabilities',()=>{
+  const keys=new Set(EMPLOYEE_RELATIONS_CAPABILITIES.map(item=>item.key));
+  assert.ok(keys.has('employee_relations.view_confidential'));
+  assert.ok(keys.has('employee_relations.approve_decision'));
+  assert.ok(keys.has('employee_relations.override_tda_recommendation'));
+  assert.equal(keys.size,18);
 });

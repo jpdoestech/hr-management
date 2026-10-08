@@ -240,6 +240,55 @@ export function caseLifecycleWorkItem(caseRecord = {}, implementations = []) {
   };
 }
 
+const CASE_PROGRESS_PHASES = [
+  {key:'intake',label:'Intake & triage',stages:['Reported / Created','Under Triage']},
+  {key:'investigation',label:'Investigation',stages:['Under Investigation','NTE Preparation']},
+  {key:'notice',label:'Notice & response',stages:['NTE Issued','Awaiting Employee Response','Response Received']},
+  {key:'hearing',label:'Conference',stages:['Hearing / Conference']},
+  {key:'findings',label:'Findings',stages:['For Findings']},
+  {key:'decision',label:'Decision & NOD',stages:['For Decision','Decision Approved','NOD Issued']},
+  {key:'implementation',label:'Implementation & closure',stages:['For Implementation','Implemented',...CASE_TERMINAL_STAGES]},
+];
+
+export function caseProgressModel(caseRecord = {}, readiness = {}, implementations = []) {
+  const normalizedStatus = ({Open:'Reported / Created','Memo Issued':'For Findings',Resolved:'Implemented'})[caseRecord.status] || caseRecord.status || 'Reported / Created';
+  const terminal = isCaseTerminalStage(normalizedStatus);
+  let currentIndex = CASE_PROGRESS_PHASES.findIndex(phase => phase.stages.includes(normalizedStatus));
+  if (currentIndex < 0) currentIndex = 0;
+  const phaseChecks = {
+    intake: Boolean(readiness.hasSource || readiness.hasAllegations),
+    investigation: Boolean(readiness.hasEvidence || currentIndex > 1),
+    notice: Boolean(readiness.hasNte && readiness.hasResponse),
+    hearing: Boolean(readiness.hearingHandled || readiness.hearingRequired === false),
+    findings: Boolean(readiness.hasFinalFindings),
+    decision: Boolean(readiness.hasApprovedDecision && readiness.hasDecisionNotice),
+    implementation: terminal || !implementations.some(record => ['Pending','In Progress'].includes(record.status)),
+  };
+  const stages = CASE_PROGRESS_PHASES.map((phase,index) => ({
+    ...phase,
+    state: terminal || index < currentIndex || (index === currentIndex && phaseChecks[phase.key]) ? 'complete' : index === currentIndex ? 'current' : 'upcoming',
+  }));
+  if (!terminal && stages[currentIndex]) stages[currentIndex].state = 'current';
+  const blockers = [];
+  if (!readiness.hasSource && !readiness.hasAllegations) blockers.push('Add or link the source report and allegation.');
+  if (currentIndex >= 2 && !readiness.hasNte) blockers.push('Issue and link the Notice to Explain.');
+  if (currentIndex >= 2 && readiness.hasNte && !readiness.hasResponse) blockers.push('Record the employee response or documented no-response outcome.');
+  if (readiness.hearingRequired && !readiness.hearingHandled) blockers.push('Complete the requested conference or document why it was not required.');
+  if (currentIndex >= 4 && !readiness.hasFinalFindings) blockers.push('Finalize a finding for every allegation.');
+  if (currentIndex >= 5 && !readiness.hasApprovedDecision) blockers.push('Prepare and approve the case decision.');
+  if (currentIndex >= 5 && readiness.hasApprovedDecision && !readiness.hasDecisionNotice) blockers.push('Finalize, issue, and serve the Notice of Decision.');
+  if (currentIndex >= 6 && implementations.some(record => ['Pending','In Progress'].includes(record.status))) blockers.push('Complete all approved action implementation records.');
+  const completed = stages.filter(stage => stage.state === 'complete').length;
+  return {
+    stages,
+    current: stages[currentIndex],
+    completed,
+    percent: terminal ? 100 : Math.round((completed / stages.length) * 100),
+    blockers,
+    nextAction: caseLifecycleWorkItem(caseRecord, implementations),
+  };
+}
+
 function workDate(value = '') {
   return String(value || '').slice(0, 10);
 }

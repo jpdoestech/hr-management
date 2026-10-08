@@ -45,6 +45,19 @@ test('long shared record forms use responsive classified tabs',()=>{
   assert.match(styles,/@media\(max-width:720px\)[\s\S]*\.modal-form-tabs\{height:calc\(100dvh - 134px\)/);
 });
 
+test('case details use a stable-height, stage-focused command center',()=>{
+  assert.match(source,/modalFormTabsHTML\('case_workspace_tabs'/);
+  assert.match(source,/label:'Overview'/);
+  assert.match(source,/label:'Allegations & Findings'/);
+  assert.match(source,/label:'Investigation'/);
+  assert.match(source,/label:'Notice & Response'/);
+  assert.match(source,/label:'Decision & Action'/);
+  assert.match(source,/label:'Records & Activity'/);
+  assert.match(source,/caseWorkflowSteps\(caseRec,readiness,monitoring\.implementations/);
+  assert.match(styles,/\.relations-modal\.case-modal>\.modal-body\.case-command-center/);
+  assert.match(styles,/\.case-command-center>\.modal-form-tabs\{[^}]*flex:1/);
+});
+
 test('incident entry separates facts, policy, and evidence without editable assignment data',()=>{
   const form=source.slice(source.indexOf('function openIncidentForm'),source.indexOf('async function saveIncident'));
   assert.match(form,/label:'Classification & Facts'/);
