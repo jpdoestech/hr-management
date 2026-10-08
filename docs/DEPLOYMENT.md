@@ -38,6 +38,8 @@ Apply `supabase/phase25-disciplinary-history.sql` after Phase 24. Run the comple
 
 Apply `supabase/phase26-employee-relations-legacy-migration.sql` after Phase 25. Run the complete file once in **Supabase Dashboard > SQL Editor**, then reload the application. Phase 26 projects existing disciplinary rows into a permission-controlled legacy review queue and existing memoranda into read-only case correspondence. Original `hr_records` rows, case links, timestamps, source JSON, and attachment references remain untouched. Automatic employee matching accepts only a valid stable ID or one unique exact normalized name; ambiguous records stay queued for review. See [Employee Relations Redesign: Phase E Legacy Migration](EMPLOYEE-RELATIONS-PHASE-E.md).
 
+Apply `supabase/phase27-employee-relations-monitoring.sql` after Phase 26. It adds tenant-scoped interim-measure and implementation records, protects completed execution, synchronizes linked history status, and powers lifecycle monitoring without modifying existing case evidence or outcomes. See [Employee Relations Redesign: Phase F Monitoring](EMPLOYEE-RELATIONS-PHASE-F.md).
+
 Apply `supabase/phase17-user-export-permissions.sql` before deploying the matching frontend. Viewer, Manager, and Employee profiles default to no export access. A System Administrator can enable export for a specific account from User Management; Administrator and HR Staff roles include export access automatically.
 
 ## Google Drive

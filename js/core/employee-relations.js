@@ -174,3 +174,106 @@ export function qualifyingDisciplinaryHistory(records = [], { employeeRecordId =
 export function nextPotentialOccurrence(records, options) {
   return qualifyingDisciplinaryHistory(records, options).length + 1;
 }
+
+const NO_IMPLEMENTATION_ACTIONS = new Set([
+  '',
+  'none',
+  'no action',
+  'no disciplinary action',
+  'not applicable',
+  'administrative closure',
+]);
+
+export function actionRequiresImplementation(action = '') {
+  return !NO_IMPLEMENTATION_ACTIONS.has(String(action || '').trim().toLowerCase());
+}
+
+export function caseImplementationReadiness({ decisions = [], history = [], implementations = [] } = {}) {
+  const currentDecision = decisions.find(decision => !['Superseded', 'Reversed'].includes(decision.decision_status)) || null;
+  const activeHistory = history.filter(record => !['Superseded', 'Reversed', 'Void'].includes(record.status));
+  const requiredActions = [
+    ...(currentDecision?.decision_status === 'Approved' ? [currentDecision.final_action] : []),
+    ...activeHistory.map(record => record.disciplinary_action),
+  ].filter(actionRequiresImplementation);
+  const activeImplementations = implementations.filter(record => record.status !== 'Cancelled');
+  const openImplementations = activeImplementations.filter(record => ['Pending', 'In Progress'].includes(record.status));
+  const completedImplementations = activeImplementations.filter(record => ['Completed', 'Not Required'].includes(record.status));
+  const requiresImplementation = requiredActions.length > 0;
+  return {
+    requiresImplementation,
+    hasImplementation: !requiresImplementation || (completedImplementations.length > 0 && openImplementations.length === 0),
+    hasOpenImplementationTasks: openImplementations.length > 0 || (requiresImplementation && activeImplementations.length === 0),
+    currentDecision,
+    activeImplementations,
+    openImplementations,
+  };
+}
+
+const CASE_STAGE_WORK = {
+  'Reported / Created': ['Triage new report', 'Triage', 'case_triage'],
+  'Under Triage': ['Complete case triage', 'Triage', 'case_triage'],
+  'Under Investigation': ['Complete investigation', 'Investigation', 'case_investigation'],
+  'NTE Preparation': ['Prepare Notice to Explain', 'Due Process', 'case_nte_prepare'],
+  'NTE Issued': ['Record NTE service', 'Due Process', 'case_nte_service'],
+  'Awaiting Employee Response': ['Monitor employee response', 'Due Process', 'case_response'],
+  'Response Received': ['Review employee response', 'Due Process', 'case_response_review'],
+  'Hearing / Conference': ['Complete hearing or conference', 'Due Process', 'case_hearing'],
+  'For Findings': ['Prepare case findings', 'Finding', 'case_findings'],
+  'For Decision': ['Review and approve decision', 'Approval', 'case_decision'],
+  'Decision Approved': ['Prepare Notice of Decision', 'Due Process', 'case_nod_prepare'],
+  'NOD Issued': ['Record NOD service', 'Due Process', 'case_nod_service'],
+  'For Implementation': ['Complete approved action', 'Implementation', 'case_implementation'],
+  Implemented: ['Review case for closure', 'Closure', 'case_closure'],
+};
+
+export function caseLifecycleWorkItem(caseRecord = {}, implementations = []) {
+  if (isCaseTerminalStage(caseRecord.status)) return { closed: true, title: `Case closed — ${caseRecord.case_number || 'HR Case'}`, workflowType: 'Closure', actionType: 'none', dueDate: caseRecord.closed_at || '' };
+  const [verb, workflowType, actionType] = CASE_STAGE_WORK[caseRecord.status] || ['Review case', 'Review', 'case_review'];
+  const openImplementation = implementations.find(record => record.case_id === caseRecord.id && ['Pending', 'In Progress'].includes(record.status));
+  return {
+    closed: false,
+    title: `${verb} — ${caseRecord.case_number || 'HR Case'}`,
+    workflowType,
+    actionType,
+    dueDate: openImplementation?.due_date || caseRecord.due_date || '',
+    description: caseRecord.subject || `Advance the case from ${caseRecord.status || 'its current stage'}.`,
+  };
+}
+
+export function employeeRelationsMetrics({ cases = [], reports = [], allegations = [], decisions = [], history = [], implementations = [], today = '' } = {}) {
+  const date = today || new Date().toISOString().slice(0, 10);
+  const openCases = cases.filter(record => !isCaseTerminalStage(record.status));
+  const closedCases = cases.filter(record => isCaseTerminalStage(record.status));
+  const qualifyingHistory = history.filter(record => ['Substantiated', 'Partially Substantiated'].includes(record.finding)
+    && (!record.verification_status || record.verification_status === 'Verified')
+    && !['Superseded', 'Reversed', 'Void'].includes(record.status));
+  const resolvedDays = closedCases.map(record => {
+    if (!record.opened_at || !record.closed_at) return null;
+    return Math.max(0, Math.round((new Date(`${record.closed_at}T00:00:00`) - new Date(`${record.opened_at}T00:00:00`)) / 86400000));
+  }).filter(Number.isFinite);
+  const outcomeCounts = {};
+  decisions.filter(record => record.decision_status === 'Approved').forEach(record => {
+    const outcome = record.overall_outcome || 'Unspecified';
+    outcomeCounts[outcome] = (outcomeCounts[outcome] || 0) + 1;
+  });
+  return {
+    reportedAllegations: reports.length,
+    openCases: openCases.length,
+    awaitingTriage: openCases.filter(record => ['Reported / Created', 'Under Triage'].includes(record.status)).length,
+    awaitingResponse: openCases.filter(record => record.status === 'Awaiting Employee Response').length,
+    underInvestigation: openCases.filter(record => ['Under Investigation', 'NTE Preparation', 'NTE Issued', 'Response Received', 'Hearing / Conference'].includes(record.status)).length,
+    awaitingFindings: openCases.filter(record => record.status === 'For Findings').length,
+    awaitingDecision: openCases.filter(record => record.status === 'For Decision').length,
+    awaitingImplementation: implementations.filter(record => ['Pending', 'In Progress'].includes(record.status)).length,
+    overdue: openCases.filter(record => record.due_date && record.due_date < date).length
+      + implementations.filter(record => ['Pending', 'In Progress'].includes(record.status) && record.due_date && record.due_date < date).length,
+    olderThan30Days: openCases.filter(record => record.opened_at && Math.floor((new Date(`${date}T00:00:00`) - new Date(`${record.opened_at}T00:00:00`)) / 86400000) > 30).length,
+    averageResolutionDays: resolvedDays.length ? Math.round(resolvedDays.reduce((sum, value) => sum + value, 0) / resolvedDays.length * 10) / 10 : 0,
+    confirmedViolations: qualifyingHistory.length,
+    repeatConfirmedOffenses: qualifyingHistory.filter(record => Number(record.confirmed_occurrence) > 1).length,
+    tdaDeviations: decisions.filter(record => record.decision_status === 'Approved' && record.deviation_from_tda).length,
+    reversedDecisions: decisions.filter(record => ['Reversed', 'Superseded'].includes(record.decision_status)).length,
+    pendingFindings: allegations.filter(record => !record.finding || record.finding === 'Pending').length,
+    outcomeCounts,
+  };
+}
