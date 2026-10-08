@@ -15,16 +15,16 @@
 - Incident, CVR, NTE, Memorandum, NOD, and Disciplinary Action data are persisted as `hr_records` modules.
 - HR Cases use dedicated `hr_cases`, `hr_case_links`, and `hr_case_activity` tables.
 - Attachments are retained either as managed Supabase Storage references or Google Drive references. HR Cases store a primary attachment in `attachment_name` and `attachment_ref`.
-- `js/core/access-control.js` and `supabase/phase20-access-control.sql` provide effective permissions and direct grants/denies.
+- `js/core/access-control.js` and `supabase/migrations/0017_access_control.sql` provide effective permissions and direct grants/denies.
 
 ### Database and Security
 
-- `supabase/phase3b-case-workflow.sql` introduced the original case and link tables.
-- `supabase/phase9-case-intelligence.sql` added priority, deadlines, and append-only case activity.
-- `supabase/phase10-self-service.sql` restricted case visibility to HR roles, legacy viewers, and assigned managers.
-- `supabase/phase19-tenant-scale-foundation.sql` added tenant identifiers, restrictive tenant RLS, and tenant-write triggers.
-- `supabase/phase20-access-control.sql` added permission-aware `hr_records` policies and tenant-aware effective access.
-- `supabase/phase22-hr-case-attachments.sql` added primary case attachment fields.
+- `supabase/migrations/0004_case_workflow.sql` introduced the original case and link tables.
+- `supabase/migrations/0006_case_intelligence.sql` added priority, deadlines, and append-only case activity.
+- `supabase/migrations/0007_self_service.sql` restricted case visibility to HR roles, legacy viewers, and assigned managers.
+- `supabase/migrations/0016_tenant_scale_foundation.sql` added tenant identifiers, restrictive tenant RLS, and tenant-write triggers.
+- `supabase/migrations/0017_access_control.sql` added permission-aware `hr_records` policies and tenant-aware effective access.
+- `supabase/migrations/0019_hr_case_attachments.sql` added primary case attachment fields.
 
 ## Current Relationships
 
@@ -77,8 +77,7 @@
 - `js/core/employee-relations.js`
 - `js/app.js`
 - `css/professional.css`
-- `supabase/phase23-employee-relations-case-foundation.sql`
-- `database/migrations/phase23-employee-relations-case-foundation.sql`
+- `supabase/migrations/0020_employee_relations_case_foundation.sql`
 - `tests/core/employee-relations-domain.test.mjs`
 - `tests/core/employee-relations-modal.test.mjs`
 - `tests/core/tda-workflow.test.mjs`
@@ -86,34 +85,26 @@
 
 ### Phase C
 
-- `supabase/phase24-employee-relations-due-process.sql`
-- `database/migrations/phase24-employee-relations-due-process.sql`
+- `supabase/migrations/0021_employee_relations_due_process.sql`
 - `docs/EMPLOYEE-RELATIONS-PHASE-C.md`
 - `tests/core/employee-relations-due-process.test.mjs`
 - Separate response, optional hearing/conference, decision approval, and explicit NOD-finalization records are now implemented without rewriting legacy NTE/NOD data.
 
 ### Phase D
 
-- `supabase/phase25-disciplinary-history.sql`
-- `database/migrations/phase25-disciplinary-history.sql`
+- `supabase/migrations/0022_disciplinary_history.sql`
 - `docs/EMPLOYEE-RELATIONS-PHASE-D.md`
 - `tests/core/employee-relations-history.test.mjs`
 - Finalized qualifying case outcomes now generate normalized disciplinary history idempotently. Progressive occurrence uses stable employee/TDA IDs, while CVRs and preserved legacy rows remain excluded from confirmed counts.
 
 ### Phase E
 
-- `supabase/phase26-employee-relations-legacy-migration.sql`
-- `database/migrations/phase26-employee-relations-legacy-migration.sql`
-- `supabase/phase27-employee-relations-monitoring.sql`
-- `database/migrations/phase27-employee-relations-monitoring.sql`
-- `supabase/phase28-employee-relations-validation.sql`
-- `database/migrations/phase28-employee-relations-validation.sql`
-- `supabase/phase29-employee-relations-evidence.sql`
-- `database/migrations/phase29-employee-relations-evidence.sql`
-- `supabase/phase30-employee-relations-intake.sql`
-- `database/migrations/phase30-employee-relations-intake.sql`
-- `supabase/phase31-employee-relations-revisions.sql`
-- `database/migrations/phase31-employee-relations-revisions.sql`
+- `supabase/migrations/0023_employee_relations_legacy_migration.sql`
+- `supabase/migrations/0024_employee_relations_monitoring.sql`
+- `supabase/migrations/0025_employee_relations_validation.sql`
+- `supabase/migrations/0026_employee_relations_evidence.sql`
+- `supabase/migrations/0027_employee_relations_intake.sql`
+- `supabase/migrations/0028_employee_relations_revisions.sql`
 
 Phase F adds normalized interim measures and final-action implementation records, stage-aligned work items, case monitoring filters, and Employee Relations analytics. See `docs/EMPLOYEE-RELATIONS-PHASE-F.md` for deployment and data-safety notes.
 

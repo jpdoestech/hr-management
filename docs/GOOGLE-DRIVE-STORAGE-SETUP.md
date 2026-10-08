@@ -4,13 +4,11 @@ This guide configures Google Drive as the destination for new HRIS uploads. Only
 
 ## 1. Apply the Required Supabase Migration
 
-1. Sign in to the Supabase dashboard and open the HRIS project.
-2. Select **SQL Editor** and click **New query**.
-3. Open `supabase/phase14-admin-storage-settings.sql` from this repository.
-4. Copy the complete SQL file into the query editor.
-5. Click **Run** and confirm that it finishes successfully.
+1. Confirm GitHub Actions has completed **Deploy Supabase migrations** successfully.
+2. Verify that migration `0011_admin_storage_settings.sql` is recorded in the project's migration history.
+3. Reload the HRIS before changing the storage provider.
 
-Run only the Phase 14 migration. Do not rerun the complete schema on an existing database.
+Do not paste or rerun historical migrations in SQL Editor on an existing database.
 
 ## 2. Create the Drive Root Folder
 

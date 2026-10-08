@@ -4,11 +4,10 @@ Phase J adds an approval-only workflow for reopening terminal HR cases and amend
 
 ## Required setup
 
-1. Confirm migrations through Phase 30 are installed.
-2. Open **Supabase Dashboard > SQL Editor**.
-3. Run `supabase/phase31-employee-relations-revisions.sql` in full.
-4. Reload the HRIS.
-5. Open an HR Case and use **Reopen / Amend** when authorized.
+1. Confirm migrations through `0027_employee_relations_intake.sql` are installed.
+2. Allow **Deploy Supabase migrations** to apply `0028_employee_relations_revisions.sql`.
+3. Confirm the GitHub Actions run succeeds, then reload the HRIS.
+4. Open an HR Case and use **Reopen / Amend** when authorized.
 
 ## Behavior
 

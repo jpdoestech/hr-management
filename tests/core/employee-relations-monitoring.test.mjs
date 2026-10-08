@@ -20,8 +20,7 @@ test('case progress exposes blockers and completes only at a terminal stage',()=
   assert.ok(closed.stages.every(stage=>stage.state==='complete'));
 });
 
-const migration=await readFile(new URL('../../supabase/phase27-employee-relations-monitoring.sql',import.meta.url),'utf8');
-const migrationCopy=await readFile(new URL('../../database/migrations/phase27-employee-relations-monitoring.sql',import.meta.url),'utf8');
+const migration=await readFile(new URL('../../supabase/migrations/0024_employee_relations_monitoring.sql',import.meta.url),'utf8');
 const app=await readFile(new URL('../../js/app.js',import.meta.url),'utf8');
 
 test('implementation readiness requires completed operational work for an approved action',()=>{
@@ -106,8 +105,7 @@ test('analytics never count reports as confirmed violations',()=>{
   assert.equal(metrics.awaitingTriage,1);
 });
 
-test('Phase 27 migration is additive, scoped, protected, and mirrored exactly',()=>{
-  assert.equal(migration,migrationCopy);
+test('Phase 27 migration is additive, scoped, protected, and transaction-wrapped',()=>{
   assert.match(migration,/create table if not exists public\.hr_case_interim_measures/);
   assert.match(migration,/create table if not exists public\.hr_case_implementations/);
   assert.match(migration,/Temporary safeguards during an Employee Relations case/);

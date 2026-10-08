@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 
 const source=await readFile(new URL('../../js/app.js',import.meta.url),'utf8');
 const enhancer=await readFile(new URL('../../js/core/table-enhancer.js',import.meta.url),'utf8');
-const migration=await readFile(new URL('../../supabase/phase18-employee-directory-performance.sql',import.meta.url),'utf8');
+const migration=await readFile(new URL('../../supabase/migrations/0015_employee_directory_performance.sql',import.meta.url),'utf8');
 
 test('employee directory paints cached rows before refreshing from Supabase',()=>{
   const start=source.indexOf('function renderEmployees(){');

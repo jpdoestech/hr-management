@@ -1,5 +1,5 @@
 -- SCPA HR Management — Authentication fix for GitHub Pages / Vercel
--- Run this AFTER supabase/schema.sql in the Supabase SQL Editor.
+-- Applied after 0001_initial_schema.sql by the Supabase CLI.
 -- This fixes username login without exposing the profiles table to anonymous users.
 
 create or replace function public.get_login_email_by_username(p_username text)

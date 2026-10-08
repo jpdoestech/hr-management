@@ -10,8 +10,10 @@ This is the structured static build of the SCPA HR Management & Disciplinary Das
 - `js/app.js` — application runtime and feature integration
 - `js/core/pagination.js` — reusable pagination helpers
 - `supabase-config.js` — Supabase URL and publishable frontend key
-- `database/migrations/` — existing SQL migrations carried forward
+- `supabase/migrations/` — authoritative ordered Supabase CLI migrations
 - `docs/` — architecture and deployment notes
+
+Database portability notes for a possible standalone PostgreSQL deployment are in [`docs/DATABASE-PORTABILITY.md`](docs/DATABASE-PORTABILITY.md).
 
 ## Deployment
 
@@ -27,7 +29,7 @@ Import the repository as a static site. No build command is required. `vercel.js
 
 The application uses the public Supabase publishable key. Do not replace it with a service-role or secret key in browser code.
 
-For a new deployment, apply the numbered SQL migrations in order. Existing deployments should continue through `supabase/phase32-employee-relations-confidentiality.sql`. Phase 15 adds restricted organization-structure management; Phase 16 adds RLS-aware server-side record queries; Phase 17 makes export unavailable to Viewer, Manager, and Employee accounts unless an Administrator enables it for that specific profile; Phase 18 adds indexed employee-directory search and projected responses; Phase 19 adds lazy workspace loading, tenant-scoped settings, restrictive tenant RLS, tenant-aware storage paths, and performance instrumentation; Phase 20 adds tenant-aware RBAC, effective-access explanations, and email-owned account security; Phase 21 indexes and applies the default Employee Information name order from A to Z; Phase 22 adds managed primary-file references to HR cases; Phase 23 adds controlled case stages, allegations/findings, and permission-aware policies; Phase 24 adds responses, hearings, decision approval, and NOD metadata; Phase 25 adds finalized disciplinary history and stable-ID occurrence; Phase 26 adds controlled legacy review and correspondence projection; Phase 27 adds interim measures, implementation tracking, work queues, and analytics; Phase 28 adds chronology guardrails and exception reporting; Phase 29 adds the structured evidence register; Phase 30 adds a Reports & Intake queue; Phase 31 adds approval-only case reopening, versioned decision amendment, and material-record deletion protection; Phase 32 adds confidential-record RLS and process-stage capabilities. Phase K then unifies stage-aware Employee Relations reminders across Notifications, Action Center, and HR Operations without another migration or stored-task duplicate; see [`docs/EMPLOYEE-RELATIONS-PHASE-K.md`](docs/EMPLOYEE-RELATIONS-PHASE-K.md). The final command-center and security deployment notes are in [`docs/EMPLOYEE-RELATIONS-PHASE-L.md`](docs/EMPLOYEE-RELATIONS-PHASE-L.md).
+For a new deployment, GitHub Actions applies the ordered files in `supabase/migrations/`. Existing databases that already received the legacy Phase SQL files must use the one-time baseline procedure in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) before automatic migration deployment is enabled. Destructive reset utilities and read-only security checks are intentionally excluded from the migration chain.
 
 The scoped Table of Disciplinary Action workbook workflow is documented in [`docs/TDA-CATALOG-IMPORT.md`](docs/TDA-CATALOG-IMPORT.md).
 

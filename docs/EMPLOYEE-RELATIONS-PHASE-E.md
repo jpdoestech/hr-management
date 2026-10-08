@@ -4,13 +4,12 @@ Phase E provides a controlled migration and review path for existing disciplinar
 
 ## Deployment
 
-1. Confirm Phases 23, 24, and 25 have been applied successfully.
+1. Confirm migrations through `0022_disciplinary_history.sql` have been applied successfully.
 2. Back up the Supabase database before any production migration.
-3. Open **Supabase Dashboard > SQL Editor**.
-4. Run the complete `supabase/phase26-employee-relations-legacy-migration.sql` file.
-5. Confirm the transaction commits successfully, then reload the application.
-6. Open **Employee Relations > Disciplinary History > Legacy Review** and inspect unmatched or ambiguous records.
-7. Open **Employee Relations > Legacy Memoranda** and confirm dates, attachments, and case links are present.
+3. Allow **Deploy Supabase migrations** to apply `0023_employee_relations_legacy_migration.sql`.
+4. Confirm the GitHub Actions run succeeds, then reload the application.
+5. Open **Employee Relations > Disciplinary History > Legacy Review** and inspect unmatched or ambiguous records.
+6. Open **Employee Relations > Legacy Memoranda** and confirm dates, attachments, and case links are present.
 
 The migration is idempotent and can be run again after a failed deployment. The matching and projection functions update the same normalized row by tenant, source module, and source record ID.
 

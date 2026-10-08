@@ -11,7 +11,7 @@ import {
   qualifyingDisciplinaryHistory,
 } from '../../js/core/employee-relations.js';
 
-const migration=await readFile(new URL('../../supabase/phase23-employee-relations-case-foundation.sql',import.meta.url),'utf8');
+const migration=await readFile(new URL('../../supabase/migrations/0020_employee_relations_case_foundation.sql',import.meta.url),'utf8');
 
 test('case workflow removes the mandatory memo stage and restricts transitions',()=>{
   assert.equal(CASE_WORKFLOW_STAGES.includes('Memo Issued'),false);

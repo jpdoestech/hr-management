@@ -4,11 +4,10 @@ Phase C extends the Phase 23 HR Case foundation without replacing existing Emplo
 
 ## Deployment
 
-1. Confirm Phases 19, 20, 22, and 23 have been applied.
-2. Open **Supabase Dashboard > SQL Editor**.
-3. Run the complete `supabase/phase24-employee-relations-due-process.sql` file.
-4. Confirm the query commits successfully, then reload the deployed application.
-5. Open **Employee Relations > HR Cases** and verify the **Response, Hearing & Decision** workspace is available.
+1. Confirm migrations through `0020_employee_relations_case_foundation.sql` have been applied.
+2. Allow **Deploy Supabase migrations** to apply `0021_employee_relations_due_process.sql`.
+3. Confirm the GitHub Actions run succeeds, then reload the deployed application.
+4. Open **Employee Relations > HR Cases** and verify the **Response, Hearing & Decision** workspace is available.
 
 ## New Records
 

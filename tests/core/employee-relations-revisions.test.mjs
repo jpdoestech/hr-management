@@ -2,12 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
-const migration=await readFile(new URL('../../supabase/phase31-employee-relations-revisions.sql',import.meta.url),'utf8');
-const migrationCopy=await readFile(new URL('../../database/migrations/phase31-employee-relations-revisions.sql',import.meta.url),'utf8');
+const migration=await readFile(new URL('../../supabase/migrations/0028_employee_relations_revisions.sql',import.meta.url),'utf8');
 const app=await readFile(new URL('../../js/app.js',import.meta.url),'utf8');
 
-test('Phase 31 is additive, mirrored, scoped, and approval protected',()=>{
-  assert.equal(migration,migrationCopy);
+test('Phase 31 is additive, transaction-wrapped, scoped, and approval protected',()=>{
   assert.match(migration,/create table if not exists public\.hr_case_revisions/);
   assert.match(migration,/create or replace function public\.controlled_case_revision/);
   assert.match(migration,/current_user_has_permission\('employee_relations\.approve'\)/);

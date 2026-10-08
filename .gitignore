@@ -5,6 +5,9 @@ Thumbs.db
 !.env.example
 node_modules/
 .vercel/
+.supabase/
+supabase/.branches/
+supabase/.temp/
 .ver/*
 dist/
 .gs_backend/*

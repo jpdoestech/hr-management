@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {caseDecisionNoticeValidation,caseImplementationValidation,caseResponseChronology,caseTransitionValidation,employeeRelationsValidationIssues} from '../../js/core/employee-relations.js';
 
-const migration=await readFile(new URL('../../supabase/phase28-employee-relations-validation.sql',import.meta.url),'utf8');
-const migrationCopy=await readFile(new URL('../../database/migrations/phase28-employee-relations-validation.sql',import.meta.url),'utf8');
+const migration=await readFile(new URL('../../supabase/migrations/0025_employee_relations_validation.sql',import.meta.url),'utf8');
 
 test('response chronology rejects a response received before the linked NTE',()=>{
   assert.equal(caseResponseChronology({receivedAt:'2026-10-07T08:00:00Z',nteIssueDates:['2026-10-08']}).valid,false);
@@ -38,8 +37,7 @@ test('data-quality validation flags legacy exceptions without changing source re
   for(const title of ['HR case has no stable employee ID','Confirmed finding has no TDA rule','Decision notice chronology is invalid','Closed case has unfinished implementation','Implementation record is invalid'])assert.ok(titles.includes(title));
 });
 
-test('Phase 28 is additive, mirrored, and installs all chronology triggers',()=>{
-  assert.equal(migration,migrationCopy);
+test('Phase 28 is additive, transaction-wrapped, and installs all chronology triggers',()=>{
   for(const name of ['validate_case_decision_notice_timeline','validate_case_response_timeline','validate_case_implementation_timeline'])assert.match(migration,new RegExp(name));
   assert.match(migration,/Existing rows are preserved/);
   assert.doesNotMatch(migration,/\btruncate\b/i);

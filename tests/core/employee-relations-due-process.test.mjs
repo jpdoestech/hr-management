@@ -69,7 +69,7 @@ test('decision validation separates the TDA recommendation from final action',()
 });
 
 test('Phase 24 migration is additive, tenant-scoped, and approval guarded',async()=>{
-  const migration=await readFile(new URL('../../supabase/phase24-employee-relations-due-process.sql',import.meta.url),'utf8');
+  const migration=await readFile(new URL('../../supabase/migrations/0021_employee_relations_due_process.sql',import.meta.url),'utf8');
   for(const table of ['hr_case_responses','hr_case_hearings','hr_case_decisions']){
     assert.match(migration,new RegExp(`create table if not exists public\\.${table}`));
   }

@@ -5,9 +5,9 @@ Phase F adds monitoring, implementation tracking, lifecycle work queues, and man
 ## Required setup
 
 1. Deploy the application files from this release.
-2. Open **Supabase Dashboard > SQL Editor**.
-3. Run `supabase/phase27-employee-relations-monitoring.sql` in full after Phase 26.
-4. Confirm the query commits successfully.
+2. Confirm migrations through `0023_employee_relations_legacy_migration.sql` are applied.
+3. Allow **Deploy Supabase migrations** to apply `0024_employee_relations_monitoring.sql`.
+4. Confirm the GitHub Actions run succeeds.
 5. Reload the HRIS and open **Employee Relations > HR Cases**.
 6. Open a case to verify **Safeguards & Implementation** is available.
 

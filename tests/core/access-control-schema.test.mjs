@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
-const sql=await readFile(new URL('../../supabase/phase20-access-control.sql',import.meta.url),'utf8');
+const sql=await readFile(new URL('../../supabase/migrations/0017_access_control.sql',import.meta.url),'utf8');
 const app=await readFile(new URL('../../js/app.js',import.meta.url),'utf8');
 const html=await readFile(new URL('../../index.html',import.meta.url),'utf8');
 

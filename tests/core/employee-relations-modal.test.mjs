@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 
 const source=await readFile(new URL('../../js/app.js',import.meta.url),'utf8');
 const styles=await readFile(new URL('../../css/professional.css',import.meta.url),'utf8');
-const migration=await readFile(new URL('../../supabase/phase22-hr-case-attachments.sql',import.meta.url),'utf8');
+const migration=await readFile(new URL('../../supabase/migrations/0019_hr_case_attachments.sql',import.meta.url),'utf8');
 
 test('profile-originated HR cases retain the selected employee',()=>{
   assert.match(source,/openCaseIntakeForm\('',emp\.id\)/);

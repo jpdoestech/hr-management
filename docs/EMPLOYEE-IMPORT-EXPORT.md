@@ -27,7 +27,7 @@ The template is generated from the current settings, so its department reference
 12. Review every validation result. The system does not save partial imports; all errors must be corrected first.
 13. Review any yellow possible-duplicate warnings, then confirm the import.
 
-The importer validates required fields, dates, allowed department and status values, email and phone formats, government ID formats, and duplicate employee numbers. Similar employee names are warnings and require an explicit confirmation.
+The importer validates required fields, dates, allowed department and status values, email and phone formats, government ID formats, and duplicate employee numbers. Employee numbers use a six-digit numeric sequence in the canonical form `EMP-000001`; a blank value generates the next number, while a numeric or legacy value is normalized during validation. Similar employee names are warnings and require an explicit confirmation.
 
 ## Export employees
 

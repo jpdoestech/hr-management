@@ -2,12 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
-const migration=await readFile(new URL('../../supabase/phase32-employee-relations-confidentiality.sql',import.meta.url),'utf8');
-const migrationCopy=await readFile(new URL('../../database/migrations/phase32-employee-relations-confidentiality.sql',import.meta.url),'utf8');
+const migration=await readFile(new URL('../../supabase/migrations/0029_employee_relations_confidentiality.sql',import.meta.url),'utf8');
 const app=await readFile(new URL('../../js/app.js',import.meta.url),'utf8');
 
-test('Phase 32 is mirrored, additive, and protects confidential case data',()=>{
-  assert.equal(migration,migrationCopy);
+test('Phase 32 is transaction-wrapped, additive, and protects confidential case data',()=>{
   assert.match(migration,/add column if not exists confidential boolean not null default true/);
   assert.match(migration,/employee_relations\.view_confidential/);
   assert.match(migration,/current_user_can_access_er_case/);

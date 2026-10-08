@@ -3,6 +3,35 @@ import path from 'node:path';
 import {paginationHTML,paginationMeta} from '../js/core/pagination.js';
 
 const root=process.cwd();
+const migrationFiles={
+  'phase10-self-service.sql':'0007_self_service.sql',
+  'phase11-lifecycle-checklists.sql':'0008_lifecycle_checklists.sql',
+  'phase12-user-preferences.sql':'0009_user_preferences.sql',
+  'phase13-onboarding.sql':'0010_onboarding_access.sql',
+  'phase14-admin-storage-settings.sql':'0011_admin_storage_settings.sql',
+  'phase15-organization-structure.sql':'0012_organization_structure.sql',
+  'phase20-access-control.sql':'0017_access_control.sql',
+  'phase23-employee-relations-case-foundation.sql':'0020_employee_relations_case_foundation.sql',
+  'phase24-employee-relations-due-process.sql':'0021_employee_relations_due_process.sql',
+  'phase25-disciplinary-history.sql':'0022_disciplinary_history.sql',
+  'phase26-employee-relations-legacy-migration.sql':'0023_employee_relations_legacy_migration.sql',
+  'phase27-employee-relations-monitoring.sql':'0024_employee_relations_monitoring.sql',
+  'phase28-employee-relations-validation.sql':'0025_employee_relations_validation.sql',
+  'phase29-employee-relations-evidence.sql':'0026_employee_relations_evidence.sql',
+  'phase30-employee-relations-intake.sql':'0027_employee_relations_intake.sql',
+  'phase31-employee-relations-revisions.sql':'0028_employee_relations_revisions.sql',
+};
+const orderedMigrations=[
+  '0001_initial_schema.sql','0002_username_auth_lookup.sql','0003_role_permissions.sql','0004_case_workflow.sql','0005_attachment_lifecycle.sql','0006_case_intelligence.sql',
+  '0007_self_service.sql','0008_lifecycle_checklists.sql','0009_user_preferences.sql','0010_onboarding_access.sql','0011_admin_storage_settings.sql','0012_organization_structure.sql',
+  '0013_server_record_pagination.sql','0014_user_export_permissions.sql','0015_employee_directory_performance.sql','0016_tenant_scale_foundation.sql','0017_access_control.sql',
+  '0018_employee_name_sort.sql','0019_hr_case_attachments.sql','0020_employee_relations_case_foundation.sql','0021_employee_relations_due_process.sql','0022_disciplinary_history.sql',
+  '0023_employee_relations_legacy_migration.sql','0024_employee_relations_monitoring.sql','0025_employee_relations_validation.sql','0026_employee_relations_evidence.sql',
+  '0027_employee_relations_intake.sql','0028_employee_relations_revisions.sql','0029_employee_relations_confidentiality.sql',
+  '0030_employee_number_six_digits.sql',
+];
+const migrationPath=name=>path.join(root,'supabase','migrations',migrationFiles[name]||name);
+const readMigration=name=>fs.readFileSync(migrationPath(name),'utf8');
 function existsWithExactCase(filePath){
   const relative=path.relative(root,filePath);
   if(!relative || relative.startsWith('..') || path.isAbsolute(relative)) return false;
@@ -18,30 +47,32 @@ const required=[
   'index.html','css/app.css','css/professional.css','js/app.js','js/vendor/xlsx.full.min.js','js/vendor/SHEETJS-LICENSE.txt',
   'js/address/address-component.js','js/address/address-index.js','js/address/address-models.js','js/address/address-validation.js',
   'assets/data/philippine-address/regions.json','assets/data/philippine-address/provinces.json','assets/data/philippine-address/cities.json',
-  'js/core/pagination.js','js/core/table-enhancer.js','js/core/content-layout.js','supabase-config.js',
-  'supabase/phase10-self-service.sql','supabase/phase11-lifecycle-checklists.sql',
-  'database/migrations/phase11-lifecycle-checklists.sql','supabase/phase12-user-preferences.sql',
-  'database/migrations/phase12-user-preferences.sql','supabase/phase13-onboarding.sql',
-  'database/migrations/phase13-onboarding.sql','supabase/phase14-admin-storage-settings.sql',
-  'database/migrations/phase14-admin-storage-settings.sql','supabase/phase15-organization-structure.sql',
-  'database/migrations/phase15-organization-structure.sql','js/core/access-control.js','supabase/phase20-access-control.sql',
-  'database/migrations/phase20-access-control.sql','docs/ACCESS-CONTROL-SETUP.md',
-  'js/core/employee-relations.js','supabase/phase23-employee-relations-case-foundation.sql',
-  'database/migrations/phase23-employee-relations-case-foundation.sql','supabase/phase24-employee-relations-due-process.sql',
-  'database/migrations/phase24-employee-relations-due-process.sql','supabase/phase25-disciplinary-history.sql',
-  'database/migrations/phase25-disciplinary-history.sql','supabase/phase26-employee-relations-legacy-migration.sql',
-  'database/migrations/phase26-employee-relations-legacy-migration.sql','supabase/phase27-employee-relations-monitoring.sql',
-  'database/migrations/phase27-employee-relations-monitoring.sql','supabase/phase28-employee-relations-validation.sql',
-  'database/migrations/phase28-employee-relations-validation.sql','supabase/phase29-employee-relations-evidence.sql',
-  'database/migrations/phase29-employee-relations-evidence.sql','supabase/phase30-employee-relations-intake.sql',
-  'database/migrations/phase30-employee-relations-intake.sql','supabase/phase31-employee-relations-revisions.sql',
-  'database/migrations/phase31-employee-relations-revisions.sql','docs/EMPLOYEE-RELATIONS-REDESIGN-PHASE-A.md',
+  'js/core/pagination.js','js/core/table-enhancer.js','js/core/content-layout.js','js/core/employee-number.js','supabase-config.js','supabase/config.toml','supabase/README.md','.github/workflows/supabase.yml',
+  ...orderedMigrations.map(name=>`supabase/migrations/${name}`),
+  'supabase/maintenance/reset_hr_data_preserve_users.sql','supabase/verification/verify_employee_relations_security.sql',
+  'js/core/access-control.js','docs/ACCESS-CONTROL-SETUP.md','docs/DATABASE-PORTABILITY.md','js/core/employee-relations.js','docs/EMPLOYEE-RELATIONS-REDESIGN-PHASE-A.md',
   'docs/EMPLOYEE-RELATIONS-PHASE-D.md','docs/EMPLOYEE-RELATIONS-PHASE-E.md','docs/EMPLOYEE-RELATIONS-PHASE-F.md','docs/EMPLOYEE-RELATIONS-PHASE-G.md','docs/EMPLOYEE-RELATIONS-PHASE-H.md','docs/EMPLOYEE-RELATIONS-PHASE-I.md','docs/EMPLOYEE-RELATIONS-PHASE-J.md'
 ];
 const missing=required.filter(f=>!fs.existsSync(path.join(root,f)));
 if(missing.length){
   console.error('Missing required files:', missing.join(', '));
   process.exit(1);
+}
+const actualMigrations=fs.readdirSync(path.join(root,'supabase','migrations')).filter(name=>name.endsWith('.sql')).sort();
+if(JSON.stringify(actualMigrations)!==JSON.stringify(orderedMigrations)){
+  console.error('Supabase migration history is missing, duplicated, or out of order.');
+  process.exit(1);
+}
+if(actualMigrations.some(name=>!/^[0-9]{4}_[a-z0-9_]+\.sql$/.test(name))){
+  console.error('Supabase migrations must use the numeric CLI filename format.');
+  process.exit(1);
+}
+const deployWorkflow=fs.readFileSync(path.join(root,'.github/workflows/supabase.yml'),'utf8');
+for(const contract of ['supabase db push','baseline_existing_database','SUPABASE_MIGRATIONS_BASELINED','SUPABASE_ACCESS_TOKEN','SUPABASE_PROJECT_REF','SUPABASE_DB_PASSWORD']){
+  if(!deployWorkflow.includes(contract)){
+    console.error(`Supabase deployment workflow is incomplete: ${contract}`);
+    process.exit(1);
+  }
 }
 const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
 for(const attr of ['href','src']){
@@ -67,13 +98,13 @@ if(app.includes('SUPABASE_ANON_KEY')){
   process.exit(1);
 }
 for(const feature of ['renderSelfService','renderTeamApprovals','submit_hr_service_request','review_hr_service_request']){
-  const source=feature.endsWith('_request')?fs.readFileSync(path.join(root,'supabase/phase10-self-service.sql'),'utf8'):app;
+  const source=feature.endsWith('_request')?readMigration('phase10-self-service.sql'):app;
   if(!source.includes(feature)){
     console.error(`Self-service feature contract is missing: ${feature}`);
     process.exit(1);
   }
 }
-const lifecycleMigration=fs.readFileSync(path.join(root,'supabase/phase11-lifecycle-checklists.sql'),'utf8');
+const lifecycleMigration=readMigration('phase11-lifecycle-checklists.sql');
 for(const feature of ['renderLifecycleChecklists','saveLifecycleChecklistItem','lifecycleChecklistPendingCount']){
   if(!app.includes(feature)){
     console.error(`Lifecycle checklist feature contract is missing: ${feature}`);
@@ -84,21 +115,14 @@ if(!lifecycleMigration.includes('update_lifecycle_checklist_item')||!lifecycleMi
   console.error('Lifecycle checklist database contract is missing.');
   process.exit(1);
 }
-const lifecycleMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase11-lifecycle-checklists.sql'),'utf8');
-if(lifecycleMigration!==lifecycleMigrationCopy){
-  console.error('Lifecycle checklist migration copies are out of sync.');
+const preferencesMigration=readMigration('phase12-user-preferences.sql');
+if(!preferencesMigration.includes('hr_user_preferences')){
+  console.error('User preference migration is incomplete.');
   process.exit(1);
 }
-const preferencesMigration=fs.readFileSync(path.join(root,'supabase/phase12-user-preferences.sql'),'utf8');
-const preferencesMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase12-user-preferences.sql'),'utf8');
-if(preferencesMigration!==preferencesMigrationCopy || !preferencesMigration.includes('hr_user_preferences')){
-  console.error('User preference migration copies are missing or out of sync.');
-  process.exit(1);
-}
-const selfServiceMigration=fs.readFileSync(path.join(root,'supabase/phase10-self-service.sql'),'utf8');
-const selfServiceMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase10-self-service.sql'),'utf8');
-if(selfServiceMigration!==selfServiceMigrationCopy || !selfServiceMigration.includes("'homeAddress','presentAddress','presentAddressText'")){
-  console.error('Self-service address migration copies are missing or out of sync.');
+const selfServiceMigration=readMigration('phase10-self-service.sql');
+if(!selfServiceMigration.includes("'homeAddress','presentAddress','presentAddressText'")){
+  console.error('Self-service address migration is incomplete.');
   process.exit(1);
 }
 for(const feature of ['openEmployeeColumnManager','persistUserPreferences','DB.employees.push(rec)','PRF Number']){
@@ -163,52 +187,44 @@ if(!app.includes("trigger.innerHTML=iEdit(15)")){
   console.error('Consolidated table actions must use the pencil icon trigger.');
   process.exit(1);
 }
-const onboardingMigration=fs.readFileSync(path.join(root,'supabase/phase13-onboarding.sql'),'utf8');
-const onboardingMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase13-onboarding.sql'),'utf8');
-if(onboardingMigration!==onboardingMigrationCopy || !onboardingMigration.includes("module <> 'onboardingCandidates'")){
-  console.error('Onboarding access migration copies are missing or out of sync.');
+const onboardingMigration=readMigration('phase13-onboarding.sql');
+if(!onboardingMigration.includes("module <> 'onboardingCandidates'")){
+  console.error('Onboarding access migration is incomplete.');
   process.exit(1);
 }
-const storageSettingsMigration=fs.readFileSync(path.join(root,'supabase/phase14-admin-storage-settings.sql'),'utf8');
-const storageSettingsMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase14-admin-storage-settings.sql'),'utf8');
-if(storageSettingsMigration!==storageSettingsMigrationCopy || !storageSettingsMigration.includes("current_profile_role() = 'Administrator'")){
-  console.error('Admin-only storage settings migration copies are missing or out of sync.');
+const storageSettingsMigration=readMigration('phase14-admin-storage-settings.sql');
+if(!storageSettingsMigration.includes("current_profile_role() = 'Administrator'")){
+  console.error('Admin-only storage settings migration is incomplete.');
   process.exit(1);
 }
-const organizationMigration=fs.readFileSync(path.join(root,'supabase/phase15-organization-structure.sql'),'utf8');
-const organizationMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase15-organization-structure.sql'),'utf8');
-if(organizationMigration!==organizationMigrationCopy || !organizationMigration.includes("current_profile_role() not in ('Administrator', 'HR Staff')") || !organizationMigration.includes("grant execute on function public.save_organization_structure")){
-  console.error('Delegated Organization Structure migration copies are missing, unsafe, or out of sync.');
+const organizationMigration=readMigration('phase15-organization-structure.sql');
+if(!organizationMigration.includes("current_profile_role() not in ('Administrator', 'HR Staff')") || !organizationMigration.includes("grant execute on function public.save_organization_structure")){
+  console.error('Delegated Organization Structure migration is incomplete or unsafe.');
   process.exit(1);
 }
-const accessMigration=fs.readFileSync(path.join(root,'supabase/phase20-access-control.sql'),'utf8');
-const accessMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase20-access-control.sql'),'utf8');
-if(accessMigration!==accessMigrationCopy || !accessMigration.includes('get_effective_access') || !accessMigration.includes('current_user_has_permission')){
-  console.error('Access Control migration copies are missing, incomplete, or out of sync.');
+const accessMigration=readMigration('phase20-access-control.sql');
+if(!accessMigration.includes('get_effective_access') || !accessMigration.includes('current_user_has_permission')){
+  console.error('Access Control migration is incomplete.');
   process.exit(1);
 }
-const employeeRelationsMigration=fs.readFileSync(path.join(root,'supabase/phase23-employee-relations-case-foundation.sql'),'utf8');
-const employeeRelationsMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase23-employee-relations-case-foundation.sql'),'utf8');
-if(employeeRelationsMigration!==employeeRelationsMigrationCopy || !employeeRelationsMigration.includes('hr_case_allegations') || !employeeRelationsMigration.includes("current_user_has_permission('employee_relations.view')")){
-  console.error('Employee Relations case-foundation migration copies are missing, incomplete, or out of sync.');
+const employeeRelationsMigration=readMigration('phase23-employee-relations-case-foundation.sql');
+if(!employeeRelationsMigration.includes('hr_case_allegations') || !employeeRelationsMigration.includes("current_user_has_permission('employee_relations.view')")){
+  console.error('Employee Relations case-foundation migration is incomplete.');
   process.exit(1);
 }
-const dueProcessMigration=fs.readFileSync(path.join(root,'supabase/phase24-employee-relations-due-process.sql'),'utf8');
-const dueProcessMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase24-employee-relations-due-process.sql'),'utf8');
-if(dueProcessMigration!==dueProcessMigrationCopy || !dueProcessMigration.includes('hr_case_responses') || !dueProcessMigration.includes('hr_case_hearings') || !dueProcessMigration.includes('hr_case_decisions') || !dueProcessMigration.includes("current_user_has_permission('employee_relations.approve')")){
-  console.error('Employee Relations due-process migration copies are missing, incomplete, or out of sync.');
+const dueProcessMigration=readMigration('phase24-employee-relations-due-process.sql');
+if(!dueProcessMigration.includes('hr_case_responses') || !dueProcessMigration.includes('hr_case_hearings') || !dueProcessMigration.includes('hr_case_decisions') || !dueProcessMigration.includes("current_user_has_permission('employee_relations.approve')")){
+  console.error('Employee Relations due-process migration is incomplete.');
   process.exit(1);
 }
-const disciplinaryHistoryMigration=fs.readFileSync(path.join(root,'supabase/phase25-disciplinary-history.sql'),'utf8');
-const disciplinaryHistoryMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase25-disciplinary-history.sql'),'utf8');
-if(disciplinaryHistoryMigration!==disciplinaryHistoryMigrationCopy || !disciplinaryHistoryMigration.includes('hr_disciplinary_history') || !disciplinaryHistoryMigration.includes('generate_case_disciplinary_history') || !disciplinaryHistoryMigration.includes("current_user_has_permission('employee_relations.view')")){
-  console.error('Employee Relations disciplinary-history migration copies are missing, incomplete, or out of sync.');
+const disciplinaryHistoryMigration=readMigration('phase25-disciplinary-history.sql');
+if(!disciplinaryHistoryMigration.includes('hr_disciplinary_history') || !disciplinaryHistoryMigration.includes('generate_case_disciplinary_history') || !disciplinaryHistoryMigration.includes("current_user_has_permission('employee_relations.view')")){
+  console.error('Employee Relations disciplinary-history migration is incomplete.');
   process.exit(1);
 }
-const legacyMigration=fs.readFileSync(path.join(root,'supabase/phase26-employee-relations-legacy-migration.sql'),'utf8');
-const legacyMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/phase26-employee-relations-legacy-migration.sql'),'utf8');
-if(legacyMigration!==legacyMigrationCopy || !legacyMigration.includes('hr_case_correspondence') || !legacyMigration.includes('review_legacy_disciplinary_history') || !legacyMigration.includes('protect_legacy_disciplinary_history')){
-  console.error('Employee Relations legacy-migration copies are missing, incomplete, or out of sync.');
+const legacyMigration=readMigration('phase26-employee-relations-legacy-migration.sql');
+if(!legacyMigration.includes('hr_case_correspondence') || !legacyMigration.includes('review_legacy_disciplinary_history') || !legacyMigration.includes('protect_legacy_disciplinary_history')){
+  console.error('Employee Relations legacy migration is incomplete.');
   process.exit(1);
 }
 for(const migrationFile of [
@@ -222,10 +238,9 @@ for(const migrationFile of [
   'phase30-employee-relations-intake.sql',
   'phase31-employee-relations-revisions.sql',
 ]){
-  const source=fs.readFileSync(path.join(root,'supabase',migrationFile),'utf8');
-  const mirror=fs.readFileSync(path.join(root,'database/migrations',migrationFile),'utf8');
-  if(source!==mirror || !/^\s*begin;/i.test(source) || !/commit;\s*$/i.test(source)){
-    console.error(`Employee Relations migration is not transaction-wrapped or mirrored: ${migrationFile}`);
+  const source=readMigration(migrationFile);
+  if(!/^\s*begin;/i.test(source) || !/commit;\s*$/i.test(source)){
+    console.error(`Employee Relations migration is not transaction-wrapped: ${migrationFile}`);
     process.exit(1);
   }
   if(/\btruncate\b/i.test(source) || /\bdrop\s+table\b/i.test(source) || /\bdelete\s+from\s+public\.hr_/i.test(source)){
@@ -233,28 +248,28 @@ for(const migrationFile of [
     process.exit(1);
   }
 }
-const validationMigration=fs.readFileSync(path.join(root,'supabase/phase28-employee-relations-validation.sql'),'utf8');
+const validationMigration=readMigration('phase28-employee-relations-validation.sql');
 for(const safeguard of ['validate_case_decision_notice_timeline','validate_case_response_timeline','validate_case_implementation_timeline']){
   if(!validationMigration.includes(safeguard)){
     console.error(`Employee Relations validation safeguard is missing: ${safeguard}`);
     process.exit(1);
   }
 }
-const evidenceMigration=fs.readFileSync(path.join(root,'supabase/phase29-employee-relations-evidence.sql'),'utf8');
+const evidenceMigration=readMigration('phase29-employee-relations-evidence.sql');
 for(const safeguard of ['hr_case_evidence','protect_case_evidence_identity',"current_user_has_permission('employee_relations.view')",'current_user_scope_allows']){
   if(!evidenceMigration.includes(safeguard)){
     console.error(`Employee Relations evidence safeguard is missing: ${safeguard}`);
     process.exit(1);
   }
 }
-const intakeMigration=fs.readFileSync(path.join(root,'supabase/phase30-employee-relations-intake.sql'),'utf8');
+const intakeMigration=readMigration('phase30-employee-relations-intake.sql');
 for(const safeguard of ['hr_case_intake','validate_case_intake_link',"source_module in ('incidents','cvr','intake')","current_user_has_permission('employee_relations.view')",'current_user_scope_allows']){
   if(!intakeMigration.includes(safeguard)){
     console.error(`Employee Relations intake safeguard is missing: ${safeguard}`);
     process.exit(1);
   }
 }
-const revisionMigration=fs.readFileSync(path.join(root,'supabase/phase31-employee-relations-revisions.sql'),'utf8');
+const revisionMigration=readMigration('phase31-employee-relations-revisions.sql');
 for(const safeguard of ['hr_case_revisions','controlled_case_revision','prevent_material_hr_case_delete','preserve_amended_history_occurrence',"current_user_has_permission('employee_relations.approve')",'replacement_decision_id']){
   if(!revisionMigration.includes(safeguard)){
     console.error(`Employee Relations controlled-revision safeguard is missing: ${safeguard}`);
@@ -346,10 +361,9 @@ if(/const\s+DEPT_OPTIONS\s*=/.test(app)){
   console.error('Departments must come from administrator-managed settings, not a fixed option list.');
   process.exit(1);
 }
-const resetSql=fs.readFileSync(path.join(root,'supabase/reset-hr-data-preserve-users.sql'),'utf8');
-const resetSqlCopy=fs.readFileSync(path.join(root,'database/reset-hr-data-preserve-users.sql'),'utf8');
-if(resetSql!==resetSqlCopy || !resetSql.includes('update public.profiles') || resetSql.includes('delete from public.profiles') || resetSql.includes('delete from auth.users')){
-  console.error('User-preserving HR data reset scripts are missing, unsafe, or out of sync.');
+const resetSql=fs.readFileSync(path.join(root,'supabase/maintenance/reset_hr_data_preserve_users.sql'),'utf8');
+if(!resetSql.includes('update public.profiles') || resetSql.includes('delete from public.profiles') || resetSql.includes('delete from auth.users')){
+  console.error('User-preserving HR data reset script is missing or unsafe.');
   process.exit(1);
 }
 if(!resetSql.includes("where bucket_id = 'hr-documents'") || resetSql.includes('delete from storage.objects')){

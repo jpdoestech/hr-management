@@ -4,11 +4,10 @@ Phase D makes finalized, substantiated HR Case outcomes the authoritative source
 
 ## Deployment
 
-1. Confirm `supabase/phase24-employee-relations-due-process.sql` has been applied.
-2. Open **Supabase Dashboard > SQL Editor**.
-3. Run the complete `supabase/phase25-disciplinary-history.sql` file.
-4. Confirm the transaction commits successfully, then reload the deployed application.
-5. Open **Employee Relations > Disciplinary History** and verify the **Verified History** and **Legacy Review** tabs.
+1. Confirm `0021_employee_relations_due_process.sql` has been applied.
+2. Allow **Deploy Supabase migrations** to apply `0022_disciplinary_history.sql`.
+3. Confirm the GitHub Actions run succeeds, then reload the deployed application.
+4. Open **Employee Relations > Disciplinary History** and verify the **Verified History** and **Legacy Review** tabs.
 
 The migration safely backfills any qualifying Phase 24 decisions that were already approved and had a finalized, issued, or served NOD. Oldest decisions are processed first. Re-running the generator preserves existing occurrence numbers and does not duplicate history rows.
 

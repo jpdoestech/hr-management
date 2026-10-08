@@ -28,10 +28,10 @@ The progress indicator is operational guidance. It does not automatically decide
 
 ## Deploy
 
-1. Confirm Phases 23 through 31 were already applied.
-2. Open **Supabase Dashboard > SQL Editor**.
-3. Run the complete `supabase/phase32-employee-relations-confidentiality.sql` file once.
-4. Run `supabase/verify-phase32-employee-relations-security.sql`. This verification file is read-only.
+1. Confirm migrations through `0028_employee_relations_revisions.sql` were already applied.
+2. Allow **Deploy Supabase migrations** to apply `0029_employee_relations_confidentiality.sql`.
+3. Confirm the GitHub Actions run succeeds.
+4. Run `supabase/verification/verify_employee_relations_security.sql` only when a read-only deployment audit is required.
 5. Confirm the verification result shows 18 Employee Relations capability rows, the confidentiality policies, and the permission triggers.
 6. Reload the deployed application.
 7. Open **Documents & Governance > Access Control** and review custom roles. Administrator and HR Staff receive all new capabilities automatically; custom roles receive none unless explicitly granted.

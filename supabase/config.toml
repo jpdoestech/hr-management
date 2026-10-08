@@ -1,0 +1,21 @@
+project_id = "hr-management"
+
+[api]
+enabled = true
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+major_version = 17
+
+[auth]
+enabled = true
+site_url = "https://slsc-eis.vercel.app"
+additional_redirect_urls = [
+  "https://slsc-eis.vercel.app",
+  "http://127.0.0.1:4173",
+  "http://localhost:4173",
+  "http://127.0.0.1:5173",
+  "http://localhost:5173"
+]

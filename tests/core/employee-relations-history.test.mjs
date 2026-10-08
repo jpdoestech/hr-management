@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {qualifyingDisciplinaryHistory,nextPotentialOccurrence} from '../../js/core/employee-relations.js';
 
-const migration=await readFile(new URL('../../supabase/phase25-disciplinary-history.sql',import.meta.url),'utf8');
-const migrationCopy=await readFile(new URL('../../database/migrations/phase25-disciplinary-history.sql',import.meta.url),'utf8');
+const migration=await readFile(new URL('../../supabase/migrations/0022_disciplinary_history.sql',import.meta.url),'utf8');
 const app=await readFile(new URL('../../js/app.js',import.meta.url),'utf8');
 
 test('progressive occurrence includes only active verified finalized findings',()=>{
@@ -22,7 +21,6 @@ test('progressive occurrence includes only active verified finalized findings',(
 });
 
 test('Phase 25 migration is additive, tenant-scoped, protected, and idempotent',()=>{
-  assert.equal(migration,migrationCopy);
   assert.match(migration,/create table if not exists public\.hr_disciplinary_history/);
   assert.match(migration,/unique \(tenant_id,case_id,decision_id,allegation_id\)/);
   assert.match(migration,/create or replace function public\.generate_case_disciplinary_history/);

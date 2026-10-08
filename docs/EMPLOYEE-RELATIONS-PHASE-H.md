@@ -5,11 +5,10 @@ Phase H closes the structured investigation gap identified after the Phase G acc
 ## Required setup
 
 1. Deploy the application files from this release.
-2. Confirm migrations through Phase 28 have already been applied.
-3. Open **Supabase Dashboard > SQL Editor**.
-4. Run `supabase/phase29-employee-relations-evidence.sql` in full.
-5. Reload the HRIS.
-6. Open an HR Case and use **Investigation Evidence**.
+2. Confirm migrations through `0025_employee_relations_validation.sql` have already been applied.
+3. Allow **Deploy Supabase migrations** to apply `0026_employee_relations_evidence.sql`.
+4. Confirm the GitHub Actions run succeeds, then reload the HRIS.
+5. Open an HR Case and use **Investigation Evidence**.
 
 ## Behavior
 
@@ -22,4 +21,4 @@ Phase H closes the structured investigation gap identified after the Phase G acc
 
 ## Data safety
 
-The migration is additive, transaction-wrapped, tenant-scoped, protected by the existing Employee Relations permissions and record scopes, and mirrored in `database/migrations/`. It performs no update, delete, or backfill against production case records.
+The migration is additive, transaction-wrapped, tenant-scoped, protected by the existing Employee Relations permissions and record scopes, and maintained as one authoritative Supabase migration. It performs no update, delete, or backfill against production case records.

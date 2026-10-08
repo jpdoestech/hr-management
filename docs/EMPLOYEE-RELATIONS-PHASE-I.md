@@ -5,11 +5,10 @@ Phase I adds a generalized Reports & Intake queue for Employee Relations matters
 ## Required setup
 
 1. Deploy the application files from this release.
-2. Confirm migrations through Phase 29 have already been applied.
-3. Open **Supabase Dashboard > SQL Editor**.
-4. Run `supabase/phase30-employee-relations-intake.sql` in full.
-5. Reload the HRIS.
-6. Open **Employee Relations > HR Cases > Reports & Intake**.
+2. Confirm migrations through `0026_employee_relations_evidence.sql` have already been applied.
+3. Allow **Deploy Supabase migrations** to apply `0027_employee_relations_intake.sql`.
+4. Confirm the GitHub Actions run succeeds, then reload the HRIS.
+5. Open **Employee Relations > HR Cases > Reports & Intake**.
 
 ## Supported intake
 

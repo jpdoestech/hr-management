@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {isCaseReportSource} from '../../js/core/employee-relations.js';
 
-const migration=await readFile(new URL('../../supabase/phase30-employee-relations-intake.sql',import.meta.url),'utf8');
-const migrationCopy=await readFile(new URL('../../database/migrations/phase30-employee-relations-intake.sql',import.meta.url),'utf8');
+const migration=await readFile(new URL('../../supabase/migrations/0027_employee_relations_intake.sql',import.meta.url),'utf8');
 const app=await readFile(new URL('../../js/app.js',import.meta.url),'utf8');
 
 test('general intake is an allegation source but never a confirmed outcome',()=>{
@@ -13,8 +12,7 @@ test('general intake is an allegation source but never a confirmed outcome',()=>
   assert.match(app,/creates an allegation, not a confirmed violation/i);
 });
 
-test('Phase 30 is additive, mirrored, tenant scoped, and permission protected',()=>{
-  assert.equal(migration,migrationCopy);
+test('Phase 30 is additive, transaction-wrapped, tenant scoped, and permission protected',()=>{
   assert.match(migration,/create table if not exists public\.hr_case_intake/);
   assert.match(migration,/validate_case_intake_link/);
   assert.match(migration,/source_module in \('incidents','cvr','intake'\)/);

@@ -4,8 +4,8 @@ import {readFile} from 'node:fs/promises';
 import {measureAsync,performanceSnapshot,recordPerformance} from '../../js/core/performance.js';
 
 const source=await readFile(new URL('../../js/app.js',import.meta.url),'utf8');
-const migration=await readFile(new URL('../../supabase/phase19-tenant-scale-foundation.sql',import.meta.url),'utf8');
-const resetScript=await readFile(new URL('../../supabase/reset-hr-data-preserve-users.sql',import.meta.url),'utf8');
+const migration=await readFile(new URL('../../supabase/migrations/0016_tenant_scale_foundation.sql',import.meta.url),'utf8');
+const resetScript=await readFile(new URL('../../supabase/maintenance/reset_hr_data_preserve_users.sql',import.meta.url),'utf8');
 
 test('authentication loads a bounded bootstrap module set',()=>{
   assert.match(source,/const BOOTSTRAP_RECORD_MODULES = \[/);

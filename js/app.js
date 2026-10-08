@@ -3,6 +3,7 @@ import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '../supabase-config.js';
 import { ALL_ROWS_SIZE, paginationMeta, paginationHTML, paginationReset, paginateRows } from './core/pagination.js?v=20261008-6';
 import { installTableEnhancer } from './core/table-enhancer.js?v=20261008-5';
 import { employeeDirectoryProjection } from './core/employee-directory.js?v=20261008-1';
+import { isValidEmployeeNumber, nextEmployeeNumber, normalizeEmployeeNumber } from './core/employee-number.js?v=20261008-1';
 import { compactRedundantPageIntros } from './core/content-layout.js?v=20260928-4';
 import { buildRecordChanges, valuesEqual } from './core/record-diff.js?v=20260930-1';
 import { roleCanExport } from './core/export-access.js?v=20260930-1';
@@ -968,16 +969,18 @@ function seedDB(){
     audit:[{ts:new Date().toISOString(), user:'System', action:'Seeded initial demo data'}]
   };
 }
-function nextEmployeeNumber(list){
-  const nums=(list||[]).map(e=>{ const m=String(e.employeeNo||'').match(/^EMP-(\d+)$/i); return m?parseInt(m[1],10):0; });
-  const next=(Math.max(0,...nums)+1);
-  return 'EMP-'+String(next).padStart(4,'0');
-}
 function normalizeEmployeeMasterData(){
   let changed=false;
   const used=new Set();
   (DB.employees||[]).forEach(e=>{
-    if(!e.employeeNo || used.has(String(e.employeeNo).toUpperCase())){ e.employeeNo=nextEmployeeNumber(DB.employees.filter(x=>x!==e && x.employeeNo)); changed=true; }
+    const normalizedNumber=normalizeEmployeeNumber(e.employeeNo);
+    if(!isValidEmployeeNumber(normalizedNumber)||used.has(normalizedNumber)){
+      e.employeeNo=nextEmployeeNumber(DB.employees.filter(x=>x!==e && x.employeeNo));
+      changed=true;
+    } else if(e.employeeNo!==normalizedNumber){
+      e.employeeNo=normalizedNumber;
+      changed=true;
+    }
     used.add(String(e.employeeNo).toUpperCase());
     ['birthDate','civilStatus','mobileNumber','personalEmail','address','remarks','branchReporting','tin','sssNumber','philHealthNumber','pagIbigNumber','emergencyContactName','emergencyContactRelationship','emergencyContactPhone'].forEach(k=>{ if(e[k]===undefined){ e[k]=''; changed=true; } });
     if(e.dailyRate===undefined){e.dailyRate='';changed=true;}
@@ -1121,7 +1124,7 @@ async function doLogin(ev){
   let email=login;
   if(!login.includes('@')){
     const {data,error}=await supabase.rpc('get_login_email_by_username',{p_username:login.toLowerCase()});
-    if(error){ authErr('Username lookup failed. Please use your email address or run supabase/fix-auth.sql.'); return false; }
+    if(error){ authErr('Username lookup failed. Please use your email address or ask the administrator to deploy pending database migrations.'); return false; }
     if(!data){ authErr('Username not found.'); return false; }
     email=data;
   }
@@ -1430,7 +1433,7 @@ async function refreshServiceRequests(){
   renderNav();
 }
 function selfServiceSetupNotice(){
-  if(!SELF_SERVICE_READY) return `<div class="notice"><b>Self-service setup required.</b> Run <span class="mono">supabase/phase10-self-service.sql</span> in the Supabase SQL Editor, then reload this page.</div>`;
+  if(!SELF_SERVICE_READY) return `<div class="notice"><b>Self-service setup required.</b> Ask the administrator to deploy pending Supabase migrations, then reload this page.</div>`;
   if(!SESSION?.employeeRecordId) return `<div class="self-service-empty"><div class="self-service-empty-icon">${iUser(22)}</div><h2>Your account needs an employee link</h2><p>An Administrator must connect this login to your employee master record before personal information and requests can be displayed.</p></div>`;
   return '';
 }
@@ -1540,7 +1543,7 @@ function renderTeamApprovals(){
   setTitle('Requests & Approvals','Review employee self-service transactions.');
   const content=document.getElementById('content');
   if(!canReviewServiceRequests()){content.innerHTML='<div class="notice"><b>Access restricted.</b> This workspace is available to Managers and HR personnel.</div>';return;}
-  if(!SELF_SERVICE_READY){content.innerHTML=`<div class="notice"><b>Self-service setup required.</b> Run <span class="mono">supabase/phase10-self-service.sql</span> in the Supabase SQL Editor, then reload this page.</div>`;return;}
+  if(!SELF_SERVICE_READY){content.innerHTML=`<div class="notice"><b>Self-service setup required.</b> Ask the administrator to deploy pending Supabase migrations, then reload this page.</div>`;return;}
   const q=String(STATE.serviceApprovalSearch||'').trim().toLowerCase();
   const status=STATE.serviceApprovalStatus;
   const all=DB.serviceRequests||[];
@@ -4359,7 +4362,7 @@ const EMP_FIELDS = [
   {key:'classOverride', label:'Classification', type:'select', options:['Auto','Probationary','Regular'], required:true},
 ];
 const EMPLOYEE_IMPORT_COLUMNS = [
-  {header:'Employee No.',key:'employeeNo',note:'Optional. Leave blank to generate the next employee number.'},
+  {header:'Employee No.',key:'employeeNo',note:'Optional. Use EMP- followed by 6 digits (for example EMP-000001), or leave blank to generate the next number.'},
   {header:'PRF Number',key:'prfNumber',note:'Optional and may be shared by employees hired under the same PRF.'},
   {header:'Last Name',key:'lastName',required:true},
   {header:'First Name',key:'firstName',required:true},
@@ -4509,6 +4512,10 @@ function validateEmployeeImportRow(values,rowNumber,accepted){
   if(vals.remarks.length>1000) errors.push('Remarks cannot exceed 1,000 characters');
   [employeeImportPhoneError(vals.mobileNumber,'Mobile Number'),employeeImportPhoneError(vals.emergencyContactPhone,'Emergency Contact Phone'),validateGovernmentIds(vals)].filter(Boolean).forEach(error=>errors.push(error));
   if(!vals.employeeNo) vals.employeeNo=nextEmployeeNumber([...DB.employees,...accepted]);
+  else {
+    vals.employeeNo=normalizeEmployeeNumber(vals.employeeNo);
+    if(!isValidEmployeeNumber(vals.employeeNo)) errors.push('Employee No. must use EMP- followed by exactly 6 digits (for example EMP-000001)');
+  }
   const duplicateNumber=[...DB.employees,...accepted].find(employee=>String(employee.employeeNo||'').toUpperCase()===String(vals.employeeNo).toUpperCase());
   if(duplicateNumber) errors.push(`Employee No. ${vals.employeeNo} already exists`);
   vals.name=formatEmployeeName(vals);
@@ -8569,7 +8576,7 @@ async function renderUsers(){
   await loadAccessControlData();
   const content=document.getElementById('content');
   if(!ACCESS_CONTROL_READY){
-    content.innerHTML=`<div class="access-shell"><div class="notice warning"><b>Access Control setup required.</b> Run <span class="mono">supabase/phase20-access-control.sql</span> in the Supabase SQL Editor, then reload. Existing User Management remains protected until setup is complete.</div></div>`;
+    content.innerHTML=`<div class="access-shell"><div class="notice warning"><b>Access Control setup required.</b> Ask the administrator to deploy pending Supabase migrations, then reload. Existing User Management remains protected until setup is complete.</div></div>`;
     return;
   }
   const canManage=hasPermission('access_control.manage');
@@ -9580,7 +9587,7 @@ function caseSetWorkspaceTab(tab){
 }
 async function renderCaseIntake(ready=CASE_INTAKE_READY===true){
   setTitle('Reports & Intake','Triage complaints, referrals, exceptions, audit findings, and security reports before creating a formal HR case.');
-  if(!ready){document.getElementById('content').innerHTML=`${caseWorkspaceTabsHTML('intake',false)}<div class="notice warning"><b>Reports &amp; Intake requires setup.</b> Run <span class="mono">supabase/phase30-employee-relations-intake.sql</span>. Existing Incident Reports and CVRs remain available and unchanged.</div>`;return;}
+  if(!ready){document.getElementById('content').innerHTML=`${caseWorkspaceTabsHTML('intake',false)}<div class="notice warning"><b>Reports &amp; Intake requires setup.</b> Ask the administrator to deploy pending Supabase migrations. Existing Incident Reports and CVRs remain available and unchanged.</div>`;return;}
   let query=supabase.from('hr_case_intake').select('*').order('received_at',{ascending:false}).order('created_at',{ascending:false});
   if(STATE.intakeStatus)query=query.eq('status',STATE.intakeStatus);
   const {data,error}=await query;if(error){document.getElementById('content').innerHTML=`${caseWorkspaceTabsHTML('intake',true)}<div class="notice"><b>Could not load Reports &amp; Intake.</b> ${esc(error.message)}</div>`;return;}
@@ -9763,7 +9770,7 @@ async function saveCase(id){
       if(!returned){await closeModal(attachmentRef?[attachmentRef]:[]);await openCaseDetails(data.id);}
     }
   }catch(e){
-    const schemaHint=/attachment_(?:name|ref)|schema cache|PGRST204|42703/i.test(`${e.code||''} ${e.message||''}`)?' Run supabase/phase22-hr-case-attachments.sql, then reload the app.':'';
+    const schemaHint=/attachment_(?:name|ref)|schema cache|PGRST204|42703/i.test(`${e.code||''} ${e.message||''}`)?' Deploy pending Supabase migrations, then reload the app.':'';
     toast('Could not save HR case: '+e.message+schemaHint,true);
   }
 }

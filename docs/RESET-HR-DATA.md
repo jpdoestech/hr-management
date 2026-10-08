@@ -46,10 +46,10 @@ SQL cannot remove files from Google Drive.
 2. Close every open HRIS browser tab and installed-app window.
 3. Open **Supabase Dashboard > SQL Editor**.
 4. Create a new query.
-5. Open `supabase/reset-hr-data-preserve-users.sql`.
+5. Open `supabase/maintenance/reset_hr_data_preserve_users.sql`.
 6. Copy the complete script into the SQL Editor.
 
-The current reset script requires `supabase/phase19-tenant-scale-foundation.sql` and resets only the default SLSC tenant. Profiles, users, settings, preferences, and any future tenant's records remain untouched.
+The current reset script requires `supabase/migrations/0016_tenant_scale_foundation.sql` and resets only the default SLSC tenant. Profiles, users, settings, preferences, and any future tenant's records remain untouched.
 7. Review the preserved and deleted tables listed at the top of the script.
 8. Click **Run** and accept the destructive-operation warning.
 

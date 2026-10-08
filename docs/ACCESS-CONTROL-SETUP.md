@@ -3,11 +3,9 @@
 ## 1. Apply the database migration
 
 1. Back up the Supabase project.
-2. Confirm `supabase/phase19-tenant-scale-foundation.sql` has already been applied.
-3. Open **Supabase Dashboard > SQL Editor**.
-4. Paste the complete contents of `supabase/phase20-access-control.sql`.
-5. Select **Run** once.
-6. Confirm the query completes without an error, then reload the application.
+2. Confirm migration `0016_tenant_scale_foundation.sql` has already been applied.
+3. Commit `0017_access_control.sql` under `supabase/migrations/` and allow **Deploy Supabase migrations** to complete.
+4. Confirm the GitHub Actions run succeeds, then reload the application.
 
 The migration is additive. It preserves users and HR records, marks existing Administrator profiles as superadmins, creates tenant-scoped roles and assignments, and backfills every profile into its matching system role.
 

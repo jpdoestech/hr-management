@@ -5,11 +5,10 @@ Phase G completes the specification with validation and regression coverage. It 
 ## Required setup
 
 1. Deploy the application files from this release.
-2. Confirm migrations through Phase 27 have already been applied.
-3. Open **Supabase Dashboard > SQL Editor**.
-4. Run `supabase/phase28-employee-relations-validation.sql` in full.
-5. Reload the HRIS.
-6. Open **Documents & Governance > Data Quality** and run the scan.
+2. Confirm migrations through `0024_employee_relations_monitoring.sql` have already been applied.
+3. Allow **Deploy Supabase migrations** to apply `0025_employee_relations_validation.sql`.
+4. Confirm the GitHub Actions run succeeds, then reload the HRIS.
+5. Open **Documents & Governance > Data Quality** and run the scan.
 
 ## Validation added
 

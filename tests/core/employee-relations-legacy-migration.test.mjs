@@ -2,13 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 
-const migration=await readFile(new URL('../../supabase/phase26-employee-relations-legacy-migration.sql',import.meta.url),'utf8');
-const migrationCopy=await readFile(new URL('../../database/migrations/phase26-employee-relations-legacy-migration.sql',import.meta.url),'utf8');
+const migration=await readFile(new URL('../../supabase/migrations/0023_employee_relations_legacy_migration.sql',import.meta.url),'utf8');
 const app=await readFile(new URL('../../js/app.js',import.meta.url),'utf8');
-const reset=await readFile(new URL('../../supabase/reset-hr-data-preserve-users.sql',import.meta.url),'utf8');
+const reset=await readFile(new URL('../../supabase/maintenance/reset_hr_data_preserve_users.sql',import.meta.url),'utf8');
 
 test('Phase 26 migration is additive, idempotent, and preserves legacy sources',()=>{
-  assert.equal(migration,migrationCopy);
   assert.match(migration,/create table if not exists public\.hr_case_correspondence/);
   assert.match(migration,/add column if not exists source_snapshot jsonb/);
   assert.match(migration,/on conflict \(tenant_id,source_module,source_record_id\)/);
