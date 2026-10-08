@@ -40,6 +40,8 @@ Apply `supabase/phase26-employee-relations-legacy-migration.sql` after Phase 25.
 
 Apply `supabase/phase27-employee-relations-monitoring.sql` after Phase 26. It adds tenant-scoped interim-measure and implementation records, protects completed execution, synchronizes linked history status, and powers lifecycle monitoring without modifying existing case evidence or outcomes. See [Employee Relations Redesign: Phase F Monitoring](EMPLOYEE-RELATIONS-PHASE-F.md).
 
+Apply `supabase/phase28-employee-relations-validation.sql` after Phase 27. It adds chronology guardrails for employee responses, Notices of Decision, and final-action implementation. The migration does not rewrite existing rows; review legacy exceptions from **Documents & Governance > Data Quality** after deployment. See [Employee Relations Redesign: Phase G Validation](EMPLOYEE-RELATIONS-PHASE-G.md).
+
 Apply `supabase/phase17-user-export-permissions.sql` before deploying the matching frontend. Viewer, Manager, and Employee profiles default to no export access. A System Administrator can enable export for a specific account from User Management; Administrator and HR Staff roles include export access automatically.
 
 ## Google Drive

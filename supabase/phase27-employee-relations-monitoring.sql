@@ -13,7 +13,7 @@ create table if not exists public.hr_case_interim_measures (
   start_date date,
   review_or_end_date date,
   status text not null default 'Planned' check (status in ('Planned','Active','Under Review','Lifted','Completed','Cancelled')),
-  authorization text,
+  authorization_details text,
   pay_treatment text,
   review_notes text,
   attachment_name text,

@@ -56,6 +56,8 @@ test('Phase 27 migration is additive, scoped, protected, and mirrored exactly',(
   assert.match(migration,/Temporary safeguards during an Employee Relations case/);
   assert.match(migration,/protect_completed_case_implementation/);
   assert.match(migration,/sync_case_implementation_history/);
+  assert.match(migration,/authorization_details text/);
+  assert.doesNotMatch(migration,/^\s*authorization\s+text/im);
   assert.match(migration,/current_user_scope_allows/);
   assert.match(migration,/current_user_has_permission\('employee_relations\.view'\)/);
   assert.doesNotMatch(migration,/\btruncate\b/i);

@@ -30,7 +30,10 @@ const required=[
   'database/migrations/phase23-employee-relations-case-foundation.sql','supabase/phase24-employee-relations-due-process.sql',
   'database/migrations/phase24-employee-relations-due-process.sql','supabase/phase25-disciplinary-history.sql',
   'database/migrations/phase25-disciplinary-history.sql','supabase/phase26-employee-relations-legacy-migration.sql',
-  'database/migrations/phase26-employee-relations-legacy-migration.sql','docs/EMPLOYEE-RELATIONS-REDESIGN-PHASE-A.md','docs/EMPLOYEE-RELATIONS-PHASE-D.md','docs/EMPLOYEE-RELATIONS-PHASE-E.md'
+  'database/migrations/phase26-employee-relations-legacy-migration.sql','supabase/phase27-employee-relations-monitoring.sql',
+  'database/migrations/phase27-employee-relations-monitoring.sql','supabase/phase28-employee-relations-validation.sql',
+  'database/migrations/phase28-employee-relations-validation.sql','docs/EMPLOYEE-RELATIONS-REDESIGN-PHASE-A.md',
+  'docs/EMPLOYEE-RELATIONS-PHASE-D.md','docs/EMPLOYEE-RELATIONS-PHASE-E.md','docs/EMPLOYEE-RELATIONS-PHASE-F.md','docs/EMPLOYEE-RELATIONS-PHASE-G.md'
 ];
 const missing=required.filter(f=>!fs.existsSync(path.join(root,f)));
 if(missing.length){
@@ -204,6 +207,32 @@ const legacyMigrationCopy=fs.readFileSync(path.join(root,'database/migrations/ph
 if(legacyMigration!==legacyMigrationCopy || !legacyMigration.includes('hr_case_correspondence') || !legacyMigration.includes('review_legacy_disciplinary_history') || !legacyMigration.includes('protect_legacy_disciplinary_history')){
   console.error('Employee Relations legacy-migration copies are missing, incomplete, or out of sync.');
   process.exit(1);
+}
+for(const migrationFile of [
+  'phase23-employee-relations-case-foundation.sql',
+  'phase24-employee-relations-due-process.sql',
+  'phase25-disciplinary-history.sql',
+  'phase26-employee-relations-legacy-migration.sql',
+  'phase27-employee-relations-monitoring.sql',
+  'phase28-employee-relations-validation.sql',
+]){
+  const source=fs.readFileSync(path.join(root,'supabase',migrationFile),'utf8');
+  const mirror=fs.readFileSync(path.join(root,'database/migrations',migrationFile),'utf8');
+  if(source!==mirror || !/^\s*begin;/i.test(source) || !/commit;\s*$/i.test(source)){
+    console.error(`Employee Relations migration is not transaction-wrapped or mirrored: ${migrationFile}`);
+    process.exit(1);
+  }
+  if(/\btruncate\b/i.test(source) || /\bdrop\s+table\b/i.test(source) || /\bdelete\s+from\s+public\.hr_/i.test(source)){
+    console.error(`Employee Relations migration contains a destructive data operation: ${migrationFile}`);
+    process.exit(1);
+  }
+}
+const validationMigration=fs.readFileSync(path.join(root,'supabase/phase28-employee-relations-validation.sql'),'utf8');
+for(const safeguard of ['validate_case_decision_notice_timeline','validate_case_response_timeline','validate_case_implementation_timeline']){
+  if(!validationMigration.includes(safeguard)){
+    console.error(`Employee Relations validation safeguard is missing: ${safeguard}`);
+    process.exit(1);
+  }
 }
 for(const feature of ['renderCorrespondence','loadCaseCorrespondence','openLegacyDisciplinaryReview','saveLegacyDisciplinaryReview','exportLegacyDisciplinaryHistoryCSV']){
   if(!app.includes(feature)){

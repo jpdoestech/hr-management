@@ -277,3 +277,96 @@ export function employeeRelationsMetrics({ cases = [], reports = [], allegations
     outcomeCounts,
   };
 }
+
+function dateOnly(value = '') {
+  return String(value || '').slice(0, 10);
+}
+
+export function caseResponseChronology({ receivedAt = '', nteIssueDates = [] } = {}) {
+  const received = dateOnly(receivedAt);
+  const issues = nteIssueDates.map(dateOnly).filter(Boolean).sort();
+  if (!received || !issues.length) return { valid: true, earliestNteIssueDate: issues[0] || '', message: '' };
+  const valid = received >= issues[0];
+  return { valid, earliestNteIssueDate: issues[0], message: valid ? '' : 'Employee response cannot be received before the linked NTE issue date.' };
+}
+
+export function caseDecisionNoticeValidation(decision = {}) {
+  const missing = [];
+  const status = decision.nod_status || 'Not Prepared';
+  const formal = ['Finalized', 'Issued', 'Served'].includes(status);
+  if (formal && decision.decision_status !== 'Approved') missing.push('an approved decision before NOD finalization');
+  if (['Issued', 'Served'].includes(status) && !decision.nod_issued_at) missing.push('an NOD issue date');
+  if (status === 'Served' && !decision.nod_served_at) missing.push('an NOD service date');
+  if (decision.nod_issued_at && decision.decision_date && dateOnly(decision.nod_issued_at) < dateOnly(decision.decision_date)) missing.push('an NOD issue date on or after the decision date');
+  if (decision.nod_served_at && decision.nod_issued_at && dateOnly(decision.nod_served_at) < dateOnly(decision.nod_issued_at)) missing.push('an NOD service date on or after the issue date');
+  return { valid: missing.length === 0, missing };
+}
+
+export function caseImplementationValidation(record = {}, { decisionDate = '', historyFinalizationDate = '' } = {}) {
+  const missing = [];
+  const baseline = dateOnly(decisionDate || historyFinalizationDate);
+  if (record.action_type !== 'No Action Required' && !record.decision_id && !record.history_id) missing.push('an approved decision or finalized history link');
+  if (record.status === 'Completed' && !record.completion_date) missing.push('a completion date');
+  if (record.status === 'Not Required' && record.action_type !== 'No Action Required') missing.push('the No Action Required action type');
+  if (record.suspension_start && record.suspension_end && dateOnly(record.suspension_end) < dateOnly(record.suspension_start)) missing.push('a suspension end date on or after its start date');
+  if (baseline) {
+    for (const [field, label] of [['issued_date', 'issued date'], ['effective_date', 'effective date'], ['suspension_start', 'suspension start'], ['completion_date', 'completion date']]) {
+      if (record[field] && dateOnly(record[field]) < baseline) missing.push(`${label} on or after ${decisionDate ? 'the decision date' : 'history finalization'}`);
+    }
+  }
+  return { valid: missing.length === 0, missing, baseline };
+}
+
+export function employeeRelationsValidationIssues({ cases = [], allegations = [], decisions = [], responses = [], history = [], implementations = [], links = [], nteRecords = [] } = {}) {
+  const issues = [];
+  const add = (id, severity, title, detail, caseId = '') => issues.push({ id, severity, title, detail, caseId });
+  const casesById = new Map(cases.map(record => [String(record.id), record]));
+  const nteById = new Map(nteRecords.map(record => [String(record.id), record]));
+  const nteDatesByCase = new Map();
+  links.filter(link => link.module === 'nte').forEach(link => {
+    const date = nteById.get(String(link.record_id))?.dateIssued;
+    if (date) nteDatesByCase.set(String(link.case_id), [...(nteDatesByCase.get(String(link.case_id)) || []), date]);
+  });
+  cases.forEach(record => {
+    const caseId = String(record.id || '');
+    if (!String(record.employee_record_id || '').trim()) add(`case-stable-id:${caseId}`, 'warning', 'HR case has no stable employee ID', `${record.case_number || 'Case'} relies on a name-only employee reference.`, caseId);
+    const caseDecisions = decisions.filter(item => String(item.case_id) === caseId);
+    const caseHistory = history.filter(item => String(item.case_id) === caseId);
+    const caseImplementations = implementations.filter(item => String(item.case_id) === caseId);
+    const readiness = caseImplementationReadiness({ decisions: caseDecisions, history: caseHistory, implementations: caseImplementations });
+    if (isCaseTerminalStage(record.status) && readiness.hasOpenImplementationTasks) add(`case-open-implementation:${caseId}`, 'error', 'Closed case has unfinished implementation', `${record.case_number || 'Case'} is closed while required final-action work remains open.`, caseId);
+  });
+  decisions.forEach(record => {
+    const caseId = String(record.case_id || '');
+    const findings = allegations.filter(item => String(item.case_id) === caseId);
+    if (record.decision_status === 'Approved' && (!findings.length || findings.some(item => !item.finding || item.finding === 'Pending'))) add(`decision-findings:${record.id}`, 'error', 'Approved decision has incomplete findings', 'Every allegation must have a final finding before approval.', caseId);
+    const notice = caseDecisionNoticeValidation(record);
+    if (!notice.valid) add(`decision-nod:${record.id}`, 'error', 'Decision notice chronology is invalid', notice.missing.join('; '), caseId);
+  });
+  responses.forEach(record => {
+    const caseId = String(record.case_id || '');
+    const chronology = caseResponseChronology({ receivedAt: record.received_at, nteIssueDates: nteDatesByCase.get(caseId) || [] });
+    if (!chronology.valid) add(`response-chronology:${record.id}`, 'error', 'Employee response predates the NTE', chronology.message, caseId);
+  });
+  allegations.forEach(record => {
+    if (['Substantiated', 'Partially Substantiated'].includes(record.finding) && !record.tda_rule_id) add(`finding-policy:${record.id}`, 'warning', 'Confirmed finding has no TDA rule', 'Verify and document that no applicable TDA catalog rule exists before finalizing the action.', String(record.case_id || ''));
+  });
+  const historyKeys = new Set();
+  history.forEach(record => {
+    const caseId = String(record.case_id || '');
+    if (record.source_type === 'case_generated' && (!record.employee_record_id || !record.case_id || !record.decision_id || !record.allegation_id || !record.finalization_date)) add(`history-source:${record.id}`, 'error', 'Disciplinary history is missing source metadata', 'Case-generated history requires stable employee, case, decision, allegation, and finalization references.', caseId);
+    if (record.confirmed_occurrence && !record.tda_rule_id) add(`history-policy:${record.id}`, 'error', 'Confirmed occurrence has no TDA rule', 'A policy-counted occurrence requires a stable TDA rule ID.', caseId);
+    if (record.source_type === 'case_generated') {
+      const key = [record.tenant_id, record.case_id, record.decision_id, record.allegation_id].join('|');
+      if (historyKeys.has(key)) add(`history-duplicate:${record.id}`, 'error', 'Duplicate case-generated disciplinary history', 'The same case decision and allegation generated more than one history record.', caseId);
+      historyKeys.add(key);
+    }
+  });
+  const decisionsById = new Map(decisions.map(record => [String(record.id), record]));
+  const historyById = new Map(history.map(record => [String(record.id), record]));
+  implementations.forEach(record => {
+    const validation = caseImplementationValidation(record, { decisionDate: decisionsById.get(String(record.decision_id || ''))?.decision_date, historyFinalizationDate: historyById.get(String(record.history_id || ''))?.finalization_date });
+    if (!validation.valid) add(`implementation:${record.id}`, 'error', 'Implementation record is invalid', validation.missing.join('; '), String(record.case_id || ''));
+  });
+  return issues.filter(issue => !issue.caseId || casesById.has(issue.caseId));
+}

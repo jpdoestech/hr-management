@@ -106,8 +106,12 @@
 - `database/migrations/phase26-employee-relations-legacy-migration.sql`
 - `supabase/phase27-employee-relations-monitoring.sql`
 - `database/migrations/phase27-employee-relations-monitoring.sql`
+- `supabase/phase28-employee-relations-validation.sql`
+- `database/migrations/phase28-employee-relations-validation.sql`
 
 Phase F adds normalized interim measures and final-action implementation records, stage-aligned work items, case monitoring filters, and Employee Relations analytics. See `docs/EMPLOYEE-RELATIONS-PHASE-F.md` for deployment and data-safety notes.
+
+Phase G adds future-write chronology guardrails and a non-destructive Data Quality scan for legacy workflow exceptions. See `docs/EMPLOYEE-RELATIONS-PHASE-G.md` for deployment and validation coverage.
 - `docs/EMPLOYEE-RELATIONS-PHASE-E.md`
 - `tests/core/employee-relations-legacy-migration.test.mjs`
 - Existing disciplinary rows now enter a controlled review queue, and existing memoranda are projected as read-only correspondence while original records, links, and attachment references remain intact.

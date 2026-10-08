@@ -9,7 +9,7 @@ import { manpowerRequestSummary, manpowerRequestTotals, requirementSlotCounts, s
 import { measureAsync, recordPerformance, performanceSnapshot } from './core/performance.js?v=20261002-1';
 import { ACCESS_ACTIONS, ACCESS_MODULES, ACCESS_PERMISSION_KEYS, evaluateEffectiveAccess, hasEffectivePermission, legacyPermissions, permissionLabel } from './core/access-control.js?v=20261006-1';
 import { filterTdaRecords, normalizeTdaScope, normalizeTdaText, parseTdaMatrix, selectApplicableTdaRecord, tdaDuplicateKey, tdaRecordApplies, tdaScopeKey } from './core/tda-import.js?v=20261007-2';
-import { CASE_WORKFLOW_STAGES, CASE_TERMINAL_STAGES, LEGACY_CASE_STAGES, CASE_RESPONSE_STATUSES, CASE_HEARING_STATUSES, CASE_DECISION_STATUSES, CASE_DECISION_OUTCOMES, CASE_NOD_STATUSES, canTransitionCase, caseStageOptions, caseTransitionValidation, caseDueProcessReadiness, caseDecisionValidation, caseImplementationReadiness, caseLifecycleWorkItem, employeeRelationsMetrics, isCaseReportSource, isCaseTerminalStage, qualifyingDisciplinaryHistory } from './core/employee-relations.js?v=20261007-4';
+import { CASE_WORKFLOW_STAGES, CASE_TERMINAL_STAGES, LEGACY_CASE_STAGES, CASE_RESPONSE_STATUSES, CASE_HEARING_STATUSES, CASE_DECISION_STATUSES, CASE_DECISION_OUTCOMES, CASE_NOD_STATUSES, canTransitionCase, caseStageOptions, caseTransitionValidation, caseDueProcessReadiness, caseDecisionValidation, caseResponseChronology, caseImplementationReadiness, caseImplementationValidation, caseLifecycleWorkItem, employeeRelationsMetrics, employeeRelationsValidationIssues, isCaseReportSource, isCaseTerminalStage, qualifyingDisciplinaryHistory } from './core/employee-relations.js?v=20261008-1';
 import { addressComponentHTML, addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom, addressDetailInput, initializeAddressComponents, readAddressComponent } from './address/address-component.js?v=20260930-2';
 import { formatPhilippineAddress, normalizeAddress } from './address/address-models.js?v=20260930-2';
 
@@ -3361,6 +3361,8 @@ async function saveRecord(key, id){
   if(invalidEmployeeFields.length){revealModalField(document.getElementById(`f_${invalidEmployeeFields[0].key}_search`));toast('Select '+invalidEmployeeFields.map(f=>f.label).join(', ')+' from the employee results.',true);return;}
   const missing = cfg.fields.filter(f=>f.required && !vals[f.key]);
   if(missing.length){revealModalField(document.getElementById(`f_${missing[0].key}`)||document.getElementById(`f_${missing[0].key}_search`));toast('Please complete: '+missing.map(f=>f.label).join(', ')); return; }
+  const workflowContext = CASE_WORKFLOW_CONTEXT?.module===key ? {...CASE_WORKFLOW_CONTEXT} : null;
+  const workflowCaseId = workflowContext?.caseId||null;
   if(key==='nte'){
     if(vals.dateReceived&&vals.dateIssued&&vals.dateReceived<vals.dateIssued){revealModalField(document.getElementById('f_dateReceived'));toast('NTE served/received date cannot be before its issue date.',true);return;}
     if(vals.responseDeadline&&vals.dateIssued&&vals.responseDeadline<vals.dateIssued){revealModalField(document.getElementById('f_responseDeadline'));toast('Response deadline cannot be before the NTE issue date.',true);return;}
@@ -3368,11 +3370,15 @@ async function saveRecord(key, id){
   if(key==='nod'){
     if(vals.dateReceived&&vals.dateOfNod&&vals.dateReceived<vals.dateOfNod){revealModalField(document.getElementById('f_dateReceived'));toast('NOD served/received date cannot be before its issue date.',true);return;}
     if(vals.finalizationStatus==='Served'&&!vals.dateReceived){revealModalField(document.getElementById('f_dateReceived'));toast('Enter the served/received date before marking the NOD as Served.',true);return;}
+    if(workflowContext?.decisionId){
+      const {data:decision,error:decisionError}=await supabase.from('hr_case_decisions').select('decision_status,decision_date').eq('id',workflowContext.decisionId).eq('case_id',workflowCaseId).maybeSingle();
+      if(decisionError||!decision){toast('Could not verify the approved decision before saving the NOD.',true);return;}
+      const noticeValidation=caseDecisionNoticeValidation({decision_status:decision.decision_status,decision_date:decision.decision_date,nod_status:vals.finalizationStatus,nod_issued_at:vals.dateOfNod,nod_served_at:vals.dateReceived});
+      if(!noticeValidation.valid){revealModalField(document.getElementById('f_dateOfNod'));toast(`Could not save NOD. Required: ${noticeValidation.missing.join('; ')}.`,true);return;}
+    }
   }
   let rec;
   let oldStoragePaths=new Set();
-  const workflowContext = CASE_WORKFLOW_CONTEXT?.module===key ? {...CASE_WORKFLOW_CONTEXT} : null;
-  const workflowCaseId = workflowContext?.caseId||null;
   if(id){
     rec = DB[key].find(r=>r.id===id);
     oldStoragePaths=recordStoragePaths(rec);
@@ -7902,7 +7908,7 @@ function qualityEmployeeMatches(ref){
   return DB.employees.find(e=>raw && String(e.id)===raw) || DB.employees.find(e=>name && [e.name,employeeDisplayName(e)].some(value=>normalizeEmployeeName(value)===name)) || null;
 }
 function qualityDateInvalid(value){ return !!value && /^\d{4}-\d{2}-\d{2}$/.test(String(value).slice(0,10))===false; }
-function qualityIssues(caseRows=[]){
+function qualityIssues(caseRows=[],employeeRelationsData={}){
   const issues=[];
   const add=(...args)=>issues.push(qualityIssue(...args));
   const employees=DB.employees||[];
@@ -7996,6 +8002,8 @@ function qualityIssues(caseRows=[]){
     if(c.opened_at && c.closed_at && String(c.opened_at)>String(c.closed_at)) add(`case:dates:${c.id||i}`,'error','cases','HR case dates are inconsistent',`${c.case_number||'Case'} has a closed date before its opened date.`,`openCaseDetails('${c.id}')`,['HR Cases','Timeline']);
   });
 
+  employeeRelationsValidationIssues({cases:caseRows,...employeeRelationsData}).forEach(issue=>add(issue.id,issue.severity,'cases',issue.title,issue.detail,issue.caseId?`openCaseDetails('${issue.caseId}')`:"go('cases')",['Employee Relations','Validation']));
+
   return issues.sort((a,b)=>qualitySeverityRank(a.severity)-qualitySeverityRank(b.severity) || a.title.localeCompare(b.title));
 }
 function dataQualityIssueCount(){
@@ -8020,9 +8028,19 @@ async function renderDataQuality(){
   setTitle('Data Quality & Governance','Identify incomplete, inconsistent, duplicated, or disconnected HR records before they become workflow problems.');
   document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Running data quality scan…</div></div>';
   try{
-    const {data:caseRows,error}=await supabase.from('hr_cases').select('id,case_number,employee_name,department,status,opened_at,closed_at,updated_at').order('updated_at',{ascending:false}).limit(1000);
-    if(error) throw error;
-    const issues=qualityIssues(caseRows||[]); QUALITY_CACHE.issues=issues;
+    const domainReady=await ensureCaseDomainReady(),dueProcessReady=await ensureCaseDueProcessReady(),monitoringReady=await ensureCaseMonitoringReady(),historyReady=await ensureDisciplinaryHistoryReady();
+    const [caseResult,allegationResult,decisionResult,responseResult,linkResult,monitoring,history]=await Promise.all([
+      supabase.from('hr_cases').select('id,case_number,employee_record_id,employee_name,department,status,outcome,opened_at,closed_at,updated_at').order('updated_at',{ascending:false}).limit(1000),
+      domainReady?supabase.from('hr_case_allegations').select('id,case_id,finding,tda_rule_id,status'):Promise.resolve({data:[],error:null}),
+      dueProcessReady?supabase.from('hr_case_decisions').select('id,case_id,decision_status,decision_date,final_action,nod_status,nod_issued_at,nod_served_at'):Promise.resolve({data:[],error:null}),
+      dueProcessReady?supabase.from('hr_case_responses').select('id,case_id,status,received_at'):Promise.resolve({data:[],error:null}),
+      supabase.from('hr_case_links').select('case_id,module,record_id').eq('module','nte'),
+      monitoringReady?loadCaseMonitoring():Promise.resolve({implementations:[]}),
+      historyReady?loadDisciplinaryHistory():Promise.resolve([]),
+    ]);
+    const error=caseResult.error||allegationResult.error||decisionResult.error||responseResult.error||linkResult.error;if(error)throw error;
+    const caseRows=caseResult.data||[];
+    const issues=qualityIssues(caseRows,{allegations:allegationResult.data||[],decisions:decisionResult.data||[],responses:responseResult.data||[],history:history||[],implementations:monitoring.implementations||[],links:linkResult.data||[],nteRecords:DB.nte||[]}); QUALITY_CACHE.issues=issues;
     const visible=qualityFilteredIssues(issues).slice(0,120);
     const errors=issues.filter(x=>x.severity==='error').length;
     const warnings=issues.filter(x=>x.severity==='warning').length;
@@ -9030,7 +9048,8 @@ async function saveCaseResponse(caseId,responseId=''){
     const {data:nteLinks,error:nteLinkError}=await supabase.from('hr_case_links').select('record_id').eq('case_id',caseId).eq('module','nte');
     if(nteLinkError){toast('Could not validate the response against the linked NTE: '+nteLinkError.message,true);return;}
     const issueDates=(nteLinks||[]).map(link=>(DB.nte||[]).find(item=>String(item.id)===String(link.record_id))?.dateIssued).filter(Boolean).sort();
-    if(issueDates.length&&receivedValue.slice(0,10)<issueDates[0]){switchModalFormTab('case_response_tabs','response');toast('Employee response cannot be received before the linked NTE issue date.',true);return;}
+    const chronology=caseResponseChronology({receivedAt:receivedValue,nteIssueDates:issueDates});
+    if(!chronology.valid){switchModalFormTab('case_response_tabs','response');toast(chronology.message,true);return;}
   }
   const payload={case_id:caseId,response_type:responseType,status,received_at:receivedValue?new Date(receivedValue).toISOString():null,written_explanation:writtenExplanation||null,evidence_summary:(document.getElementById('case_response_evidence')?.value||'').trim()||null,witnesses_identified:(document.getElementById('case_response_witnesses')?.value||'').trim()||null,hearing_requested:document.getElementById('case_response_hearing')?.value==='true',hr_notes:(document.getElementById('case_response_notes')?.value||'').trim()||null,attachment_name:attachmentName||null,attachment_ref:attachmentRef||null,updated_by:SESSION?.id||null};
   try{
@@ -9317,7 +9336,7 @@ async function openCaseInterimMeasureForm(caseId,measureId=''){
     measureId?supabase.from('hr_case_interim_measures').select('*').eq('id',measureId).eq('case_id',caseId).maybeSingle():Promise.resolve({data:null,error:null}),
   ]);
   if(caseError||recordError||!caseRecord){toast('Could not load the interim measure.',true);return;}
-  const overview=`<div class="formgrid"><div class="field"><label>Measure *</label><select id="interim_type">${['Preventive Suspension','Temporary Reassignment','Site Restriction','Administrative Leave','No Interim Measure','Other'].map(value=>`<option ${existing?.measure_type===value?'selected':''}>${value}</option>`).join('')}</select></div><div class="field"><label>Status *</label><select id="interim_status">${['Planned','Active','Under Review','Lifted','Completed','Cancelled'].map(value=>`<option ${existing?.status===value?'selected':''}>${value}</option>`).join('')}</select></div><div class="field"><label>Start Date</label><input id="interim_start" type="date" value="${esc(existing?.start_date||'')}"></div><div class="field"><label>Review / End Date</label><input id="interim_end" type="date" value="${esc(existing?.review_or_end_date||'')}"></div><div class="field full"><label>Reason *</label><textarea id="interim_reason" rows="4" placeholder="Document the legitimate operational or safety basis.">${esc(existing?.reason||'')}</textarea></div><div class="field"><label>Authorization</label><input id="interim_authorization" value="${esc(existing?.authorization||'')}" placeholder="Approver or reference"></div><div class="field"><label>Pay Treatment</label><input id="interim_pay" value="${esc(existing?.pay_treatment||'')}" placeholder="e.g. With pay"></div></div><div class="computed-note">An interim measure is a temporary safeguard. It does not establish a violation and is never counted as disciplinary history.</div>`;
+  const overview=`<div class="formgrid"><div class="field"><label>Measure *</label><select id="interim_type">${['Preventive Suspension','Temporary Reassignment','Site Restriction','Administrative Leave','No Interim Measure','Other'].map(value=>`<option ${existing?.measure_type===value?'selected':''}>${value}</option>`).join('')}</select></div><div class="field"><label>Status *</label><select id="interim_status">${['Planned','Active','Under Review','Lifted','Completed','Cancelled'].map(value=>`<option ${existing?.status===value?'selected':''}>${value}</option>`).join('')}</select></div><div class="field"><label>Start Date</label><input id="interim_start" type="date" value="${esc(existing?.start_date||'')}"></div><div class="field"><label>Review / End Date</label><input id="interim_end" type="date" value="${esc(existing?.review_or_end_date||'')}"></div><div class="field full"><label>Reason *</label><textarea id="interim_reason" rows="4" placeholder="Document the legitimate operational or safety basis.">${esc(existing?.reason||'')}</textarea></div><div class="field"><label>Authorization</label><input id="interim_authorization" value="${esc(existing?.authorization_details||'')}" placeholder="Approver or reference"></div><div class="field"><label>Pay Treatment</label><input id="interim_pay" value="${esc(existing?.pay_treatment||'')}" placeholder="e.g. With pay"></div></div><div class="computed-note">An interim measure is a temporary safeguard. It does not establish a violation and is never counted as disciplinary history.</div>`;
   const evidence=`<div class="formgrid">${fieldHTML({key:'interimAttachment',label:'Supporting Document',type:'file',full:true,storagePrefix:'cases'},existing?.attachment_name||'')}<div class="field full"><label>Review Notes</label><textarea id="interim_notes" rows="5">${esc(existing?.review_notes||'')}</textarea></div></div>`;
   openModal(`<div class="modal-head"><div class="modal-head-copy"><div class="modal-context-breadcrumb"><span>Employee Relations</span><span>›</span><span>${esc(caseRecord.case_number)}</span><span>›</span><b>${measureId?'Edit':'Add'} Interim Measure</b></div><h3>${measureId?'Edit':'Add'} Interim Measure</h3><div class="small">${esc(caseRecord.employee_name)} · ${esc(caseRecord.department||'Unassigned')}</div></div><button onclick="openCaseDetails('${caseId}')">&times;</button></div><div class="modal-body" data-employee-relations-modal>${modalFormTabsHTML('case_interim_tabs',[{id:'overview',label:'Measure',content:overview},{id:'evidence',label:'Evidence & Notes',content:evidence}])}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="openCaseDetails('${caseId}')">Cancel</button><button class="btn btn-primary" onclick="saveCaseInterimMeasure('${caseId}','${measureId}')">Save Measure</button></div>`);
 }
@@ -9325,7 +9344,7 @@ async function saveCaseInterimMeasure(caseId,measureId=''){
   const reason=(document.getElementById('interim_reason')?.value||'').trim(),start=document.getElementById('interim_start')?.value||null,end=document.getElementById('interim_end')?.value||null;
   if(!reason){revealModalField(document.getElementById('interim_reason'));toast('Enter the reason for the interim measure.',true);return;}
   if(start&&end&&end<start){revealModalField(document.getElementById('interim_end'));toast('Review or end date cannot be before the start date.',true);return;}
-  const payload={case_id:caseId,measure_type:document.getElementById('interim_type').value,status:document.getElementById('interim_status').value,reason,start_date:start,review_or_end_date:end,authorization:(document.getElementById('interim_authorization').value||'').trim()||null,pay_treatment:(document.getElementById('interim_pay').value||'').trim()||null,review_notes:(document.getElementById('interim_notes')?.value||'').trim()||null,attachment_name:document.getElementById('f_interimAttachment')?.value||null,attachment_ref:document.getElementById('f_interimAttachment_data')?.value||null,updated_by:SESSION.id};
+  const payload={case_id:caseId,measure_type:document.getElementById('interim_type').value,status:document.getElementById('interim_status').value,reason,start_date:start,review_or_end_date:end,authorization_details:(document.getElementById('interim_authorization').value||'').trim()||null,pay_treatment:(document.getElementById('interim_pay').value||'').trim()||null,review_notes:(document.getElementById('interim_notes')?.value||'').trim()||null,attachment_name:document.getElementById('f_interimAttachment')?.value||null,attachment_ref:document.getElementById('f_interimAttachment_data')?.value||null,updated_by:SESSION.id};
   try{let result;if(measureId)result=await supabase.from('hr_case_interim_measures').update(payload).eq('id',measureId).eq('case_id',caseId);else result=await supabase.from('hr_case_interim_measures').insert({...payload,created_by:SESSION.id});if(result.error)throw result.error;ANALYTICS_ER_CACHE=null;await addCaseActivity(caseId,'interim',measureId?'Interim measure updated.':'Interim measure added.');logAudit(measureId?'Updated a case interim measure':'Added a case interim measure');toast('Interim measure saved.');await openCaseDetails(caseId);}catch(error){toast('Could not save interim measure: '+error.message,true);}
 }
 async function openCaseImplementationForm(caseId,implementationId=''){
@@ -9350,7 +9369,16 @@ async function saveCaseImplementation(caseId,implementationId=''){
   if(status==='Not Required'&&actionType!=='No Action Required'){toast('Use No Action Required when implementation is marked not required.',true);return;}
   if(start&&end&&end<start){revealModalField(document.getElementById('implementation_suspension_end'));toast('Suspension end cannot be before its start date.',true);return;}
   const payload={case_id:caseId,decision_id:document.getElementById('implementation_decision').value||null,history_id:document.getElementById('implementation_history').value||null,action_type:actionType,action_description:description,status,due_date:document.getElementById('implementation_due').value||null,issued_date:document.getElementById('implementation_issued').value||null,effective_date:document.getElementById('implementation_effective').value||null,acknowledgement_status:document.getElementById('implementation_ack').value,suspension_start:start,suspension_end:end,suspension_days:document.getElementById('implementation_days').value===''?null:Number(document.getElementById('implementation_days').value),payroll_notified:document.getElementById('implementation_payroll').checked,schedule_handling:(document.getElementById('implementation_schedule').value||'').trim()||null,return_to_work_date:document.getElementById('implementation_return').value||null,employee_status_updated:document.getElementById('implementation_employee_status').checked,clearance_reference:(document.getElementById('implementation_clearance').value||'').trim()||null,final_pay_reference:(document.getElementById('implementation_final_pay').value||'').trim()||null,completion_date:completionDate,completion_notes:(document.getElementById('implementation_notes')?.value||'').trim()||null,attachment_name:document.getElementById('f_implementationAttachment')?.value||null,attachment_ref:document.getElementById('f_implementationAttachment_data')?.value||null,updated_by:SESSION.id};
-  try{let result;if(implementationId)result=await supabase.from('hr_case_implementations').update(payload).eq('id',implementationId).eq('case_id',caseId);else result=await supabase.from('hr_case_implementations').insert({...payload,created_by:SESSION.id});if(result.error)throw result.error;invalidateDisciplinaryHistory();ANALYTICS_ER_CACHE=null;await addCaseActivity(caseId,'implementation',`Implementation ${status.toLowerCase()}: ${description}`);logAudit(implementationId?'Updated case implementation':'Added case implementation');toast('Implementation saved.');await openCaseDetails(caseId);}catch(error){toast('Could not save implementation: '+error.message,true);}
+  try{
+    const [decisionResult,historyResult]=await Promise.all([
+      payload.decision_id?supabase.from('hr_case_decisions').select('decision_date').eq('id',payload.decision_id).eq('case_id',caseId).maybeSingle():Promise.resolve({data:null,error:null}),
+      payload.history_id?supabase.from('hr_disciplinary_history').select('finalization_date').eq('id',payload.history_id).eq('case_id',caseId).maybeSingle():Promise.resolve({data:null,error:null}),
+    ]);
+    if(decisionResult.error)throw decisionResult.error;if(historyResult.error)throw historyResult.error;
+    const validation=caseImplementationValidation(payload,{decisionDate:decisionResult.data?.decision_date||'',historyFinalizationDate:historyResult.data?.finalization_date||''});
+    if(!validation.valid){toast(`Could not save implementation. Required: ${validation.missing.join('; ')}.`,true);return;}
+    let result;if(implementationId)result=await supabase.from('hr_case_implementations').update(payload).eq('id',implementationId).eq('case_id',caseId);else result=await supabase.from('hr_case_implementations').insert({...payload,created_by:SESSION.id});if(result.error)throw result.error;invalidateDisciplinaryHistory();ANALYTICS_ER_CACHE=null;await addCaseActivity(caseId,'implementation',`Implementation ${status.toLowerCase()}: ${description}`);logAudit(implementationId?'Updated case implementation':'Added case implementation');toast('Implementation saved.');await openCaseDetails(caseId);
+  }catch(error){toast('Could not save implementation: '+error.message,true);}
 }
 async function openCaseDetails(id){
   CASE_WORKFLOW_CONTEXT=null;
