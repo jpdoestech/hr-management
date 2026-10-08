@@ -42,6 +42,8 @@ Apply `supabase/phase27-employee-relations-monitoring.sql` after Phase 26. It ad
 
 Apply `supabase/phase28-employee-relations-validation.sql` after Phase 27. It adds chronology guardrails for employee responses, Notices of Decision, and final-action implementation. The migration does not rewrite existing rows; review legacy exceptions from **Documents & Governance > Data Quality** after deployment. See [Employee Relations Redesign: Phase G Validation](EMPLOYEE-RELATIONS-PHASE-G.md).
 
+Apply `supabase/phase29-employee-relations-evidence.sql` after Phase 28. It adds a tenant-scoped case evidence register with provenance, custody, managed attachments, archive status, existing Employee Relations permissions, and record-scope enforcement. It does not move or rewrite existing report and case attachments. See [Employee Relations Hardening: Phase H Evidence Register](EMPLOYEE-RELATIONS-PHASE-H.md).
+
 Apply `supabase/phase17-user-export-permissions.sql` before deploying the matching frontend. Viewer, Manager, and Employee profiles default to no export access. A System Administrator can enable export for a specific account from User Management; Administrator and HR Staff roles include export access automatically.
 
 ## Google Drive

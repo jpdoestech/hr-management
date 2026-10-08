@@ -32,8 +32,9 @@ const required=[
   'database/migrations/phase25-disciplinary-history.sql','supabase/phase26-employee-relations-legacy-migration.sql',
   'database/migrations/phase26-employee-relations-legacy-migration.sql','supabase/phase27-employee-relations-monitoring.sql',
   'database/migrations/phase27-employee-relations-monitoring.sql','supabase/phase28-employee-relations-validation.sql',
-  'database/migrations/phase28-employee-relations-validation.sql','docs/EMPLOYEE-RELATIONS-REDESIGN-PHASE-A.md',
-  'docs/EMPLOYEE-RELATIONS-PHASE-D.md','docs/EMPLOYEE-RELATIONS-PHASE-E.md','docs/EMPLOYEE-RELATIONS-PHASE-F.md','docs/EMPLOYEE-RELATIONS-PHASE-G.md'
+  'database/migrations/phase28-employee-relations-validation.sql','supabase/phase29-employee-relations-evidence.sql',
+  'database/migrations/phase29-employee-relations-evidence.sql','docs/EMPLOYEE-RELATIONS-REDESIGN-PHASE-A.md',
+  'docs/EMPLOYEE-RELATIONS-PHASE-D.md','docs/EMPLOYEE-RELATIONS-PHASE-E.md','docs/EMPLOYEE-RELATIONS-PHASE-F.md','docs/EMPLOYEE-RELATIONS-PHASE-G.md','docs/EMPLOYEE-RELATIONS-PHASE-H.md'
 ];
 const missing=required.filter(f=>!fs.existsSync(path.join(root,f)));
 if(missing.length){
@@ -215,6 +216,7 @@ for(const migrationFile of [
   'phase26-employee-relations-legacy-migration.sql',
   'phase27-employee-relations-monitoring.sql',
   'phase28-employee-relations-validation.sql',
+  'phase29-employee-relations-evidence.sql',
 ]){
   const source=fs.readFileSync(path.join(root,'supabase',migrationFile),'utf8');
   const mirror=fs.readFileSync(path.join(root,'database/migrations',migrationFile),'utf8');
@@ -231,6 +233,13 @@ const validationMigration=fs.readFileSync(path.join(root,'supabase/phase28-emplo
 for(const safeguard of ['validate_case_decision_notice_timeline','validate_case_response_timeline','validate_case_implementation_timeline']){
   if(!validationMigration.includes(safeguard)){
     console.error(`Employee Relations validation safeguard is missing: ${safeguard}`);
+    process.exit(1);
+  }
+}
+const evidenceMigration=fs.readFileSync(path.join(root,'supabase/phase29-employee-relations-evidence.sql'),'utf8');
+for(const safeguard of ['hr_case_evidence','protect_case_evidence_identity',"current_user_has_permission('employee_relations.view')",'current_user_scope_allows']){
+  if(!evidenceMigration.includes(safeguard)){
+    console.error(`Employee Relations evidence safeguard is missing: ${safeguard}`);
     process.exit(1);
   }
 }

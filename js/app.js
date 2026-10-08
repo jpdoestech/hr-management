@@ -45,6 +45,7 @@ let CASE_CORRESPONDENCE_READY = null;
 let CASE_CORRESPONDENCE_LOADED = false;
 let CASE_CORRESPONDENCE_CACHE = [];
 let CASE_MONITORING_READY = null;
+let CASE_EVIDENCE_READY = null;
 let ACCESS_STORE = {roles:[],rolePermissions:[],userRoles:[],overrides:[],scopes:[],assignments:[]};
 const DEFAULT_DEPARTMENT_NAMES = ['LOGISTICS','WAREHOUSE','UTILITY','MAINTENANCE','PRODUCTION','ADMIN','SALES'];
 
@@ -107,6 +108,25 @@ async function loadCaseMonitoring(caseId=''){
   const [interimResult,implementationResult]=await Promise.all([interimQuery,implementationQuery]);
   const error=interimResult.error||implementationResult.error;if(error)throw error;
   return {interimMeasures:interimResult.data||[],implementations:implementationResult.data||[]};
+}
+
+function isMissingCaseEvidence(error){
+  return ['42P01','PGRST205','PGRST204'].includes(error?.code) || /hr_case_evidence/i.test(error?.message||'')&&/not find|does not exist|schema cache/i.test(error?.message||'');
+}
+async function ensureCaseEvidenceReady(){
+  if(CASE_EVIDENCE_READY!==null)return CASE_EVIDENCE_READY;
+  const {error}=await supabase.from('hr_case_evidence').select('id').limit(1);
+  if(error){
+    if(isMissingCaseEvidence(error)){CASE_EVIDENCE_READY=false;return false;}
+    console.warn('Could not verify the Employee Relations evidence table',error);CASE_EVIDENCE_READY=false;return false;
+  }
+  CASE_EVIDENCE_READY=true;return true;
+}
+async function loadCaseEvidence(caseId){
+  if(!(await ensureCaseEvidenceReady()))return [];
+  const {data,error}=await supabase.from('hr_case_evidence').select('*').eq('case_id',caseId).order('status',{ascending:true}).order('evidence_at',{ascending:false,nullsFirst:false}).order('created_at',{ascending:false});
+  if(error)throw error;
+  return data||[];
 }
 
 function isMissingDisciplinaryHistory(error){
@@ -9380,13 +9400,49 @@ async function saveCaseImplementation(caseId,implementationId=''){
     let result;if(implementationId)result=await supabase.from('hr_case_implementations').update(payload).eq('id',implementationId).eq('case_id',caseId);else result=await supabase.from('hr_case_implementations').insert({...payload,created_by:SESSION.id});if(result.error)throw result.error;invalidateDisciplinaryHistory();ANALYTICS_ER_CACHE=null;await addCaseActivity(caseId,'implementation',`Implementation ${status.toLowerCase()}: ${description}`);logAudit(implementationId?'Updated case implementation':'Added case implementation');toast('Implementation saved.');await openCaseDetails(caseId);
   }catch(error){toast('Could not save implementation: '+error.message,true);}
 }
+function caseEvidenceWorkspaceHTML(caseRecord,evidence,ready){
+  if(!ready)return `<section class="panel case-evidence-panel"><div class="panel-heading-row"><div><h3>Investigation Evidence</h3><p>Run the Phase 29 migration to enable the structured evidence register.</p></div></div><div class="notice warning"><b>Compatibility mode:</b> Existing report and case attachments remain available in their original records.</div></section>`;
+  const active=evidence.filter(item=>item.status!=='Archived'),archived=evidence.filter(item=>item.status==='Archived');
+  const rows=evidence.map(item=>`<article class="case-evidence-row ${item.status==='Archived'?'archived':''}"><div class="case-evidence-icon">${iDoc(15)}</div><div><div class="case-evidence-title"><b>${esc(item.title)}</b>${statusBadge(item.status,{Active:'b-green',Archived:'b-grey'})}</div><span>${esc(item.evidence_type)}${item.source_or_provider?' · '+esc(item.source_or_provider):''}${item.evidence_at?' · '+new Date(item.evidence_at).toLocaleString():''}</span>${item.description?`<p>${esc(item.description)}</p>`:''}<small>${item.collected_by?`Collected by ${esc(item.collected_by)}`:''}${item.custodian?`${item.collected_by?' · ':''}Custodian: ${esc(item.custodian)}`:''}${item.external_reference?`${item.collected_by||item.custodian?' · ':''}Ref: ${esc(item.external_reference)}`:''}</small>${caseManagedAttachmentHTML(item.attachment_name,item.attachment_ref)}</div>${canEdit()?`<button class="iconbtn" title="Edit evidence" onclick="openCaseEvidenceForm('${caseRecord.id}','${item.id}')">${iEdit(14)}</button>`:''}</article>`).join('');
+  return `<section class="panel case-evidence-panel"><div class="panel-heading-row"><div><h3>Investigation Evidence</h3><p>${active.length} active item${active.length===1?'':'s'}${archived.length?` · ${archived.length} archived`:''}. Reports remain allegations; evidence supports investigation and findings.</p></div>${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="openCaseEvidenceForm('${caseRecord.id}')">${iPlus(13)} Add Evidence</button>`:''}</div><div class="case-evidence-list">${rows||'<div class="empty"><b>No evidence registered</b>Add statements, records, photos, message references, policy documents, or other investigation material.</div>'}</div></section>`;
+}
+async function openCaseEvidenceForm(caseId,evidenceId=''){
+  if(!canEdit()||!(await ensureCaseEvidenceReady())){toast('Run the Phase 29 evidence migration before managing investigation evidence.',true);return;}
+  CASE_WORKFLOW_CONTEXT={caseId,module:'case-evidence'};
+  const [caseResult,evidenceResult]=await Promise.all([
+    supabase.from('hr_cases').select('case_number,employee_name,department').eq('id',caseId).maybeSingle(),
+    evidenceId?supabase.from('hr_case_evidence').select('*').eq('id',evidenceId).eq('case_id',caseId).maybeSingle():Promise.resolve({data:null,error:null}),
+  ]);
+  if(caseResult.error||evidenceResult.error||!caseResult.data){toast('Could not load the evidence form.',true);return;}
+  const item=evidenceResult.data;
+  const details=`<div class="formgrid"><div class="field"><label>Evidence Type *</label><select id="case_evidence_type">${['Document','Employee Statement','Witness Statement','Interview Notes','Attendance / Time Record','Photo','CCTV Reference','Email / Message','Client Report','Policy Document','Other'].map(value=>`<option value="${value}" ${item?.evidence_type===value?'selected':''}>${value}</option>`).join('')}</select></div><div class="field"><label>Status *</label><select id="case_evidence_status"><option value="Active" ${item?.status!=='Archived'?'selected':''}>Active</option><option value="Archived" ${item?.status==='Archived'?'selected':''}>Archived</option></select></div><div class="field full"><label>Title *</label><input id="case_evidence_title" maxlength="240" value="${esc(item?.title||'')}" placeholder="Clear, factual evidence title"></div><div class="field"><label>Evidence Date / Time</label><input type="datetime-local" id="case_evidence_at" value="${esc(dateTimeLocalValue(item?.evidence_at))}"></div><div class="field"><label>Source / Provider</label><input id="case_evidence_source" maxlength="240" value="${esc(item?.source_or_provider||'')}" placeholder="Person, client, system, or location"></div><div class="field full"><label>Description</label><textarea id="case_evidence_description" rows="5" maxlength="12000" placeholder="Describe relevance and context without stating an unverified conclusion.">${esc(item?.description||'')}</textarea></div></div>`;
+  const custody=`<div class="formgrid"><div class="field"><label>Collected Date / Time</label><input type="datetime-local" id="case_evidence_collected_at" value="${esc(dateTimeLocalValue(item?.collected_at))}"></div><div class="field"><label>Collected By</label><input id="case_evidence_collected_by" maxlength="240" value="${esc(item?.collected_by||'')}"></div><div class="field"><label>Current Custodian</label><input id="case_evidence_custodian" maxlength="240" value="${esc(item?.custodian||'')}"></div><div class="field"><label>External Reference</label><input id="case_evidence_reference" maxlength="500" value="${esc(item?.external_reference||'')}" placeholder="Document number, URL, drive reference, or physical location"></div>${fieldHTML({key:'caseEvidenceAttachment',label:'Evidence Attachment',type:'file',full:true,storagePrefix:'cases',existingData:item?.attachment_ref||''},item?.attachment_name||'')}</div><div class="computed-note">Archiving preserves the evidence record and attachment reference. It does not delete the source material.</div>`;
+  openModal(`<div class="modal-head"><div class="modal-head-copy"><div class="modal-context-breadcrumb"><span>Employee Relations</span><span aria-hidden="true">›</span><span>${esc(caseResult.data.case_number)}</span><span aria-hidden="true">›</span><b>${evidenceId?'Edit':'Add'} Evidence</b></div><h3>${evidenceId?'Edit Investigation Evidence':'Add Investigation Evidence'}</h3><div class="small">${esc(caseResult.data.employee_name)} · ${esc(caseResult.data.department||'Unassigned')}</div></div><button onclick="openCaseDetails('${caseId}')">&times;</button></div><div class="modal-body" data-employee-relations-modal>${modalFormTabsHTML('case_evidence_tabs',[{id:'details',label:'Evidence',content:details},{id:'custody',label:'File & Custody',content:custody}])}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="openCaseDetails('${caseId}')">Cancel</button><button class="btn btn-primary" onclick="saveCaseEvidence('${caseId}','${evidenceId}')">Save Evidence</button></div>`);
+}
+async function saveCaseEvidence(caseId,evidenceId=''){
+  if(!canEdit())return;
+  const title=(document.getElementById('case_evidence_title')?.value||'').trim();
+  if(!title){switchModalFormTab('case_evidence_tabs','details');revealModalField(document.getElementById('case_evidence_title'));toast('Enter an evidence title.',true);return;}
+  const attachmentName=document.getElementById('f_caseEvidenceAttachment')?.value||'';
+  const attachmentRef=document.getElementById('f_caseEvidenceAttachment_data')?.value||'';
+  const evidenceAt=document.getElementById('case_evidence_at')?.value||'',collectedAt=document.getElementById('case_evidence_collected_at')?.value||'';
+  const payload={case_id:caseId,evidence_type:document.getElementById('case_evidence_type').value,title,description:(document.getElementById('case_evidence_description')?.value||'').trim()||null,source_or_provider:(document.getElementById('case_evidence_source')?.value||'').trim()||null,evidence_at:evidenceAt?new Date(evidenceAt).toISOString():null,collected_at:collectedAt?new Date(collectedAt).toISOString():null,collected_by:(document.getElementById('case_evidence_collected_by')?.value||'').trim()||null,custodian:(document.getElementById('case_evidence_custodian')?.value||'').trim()||null,external_reference:(document.getElementById('case_evidence_reference')?.value||'').trim()||null,status:document.getElementById('case_evidence_status').value,attachment_name:attachmentName||null,attachment_ref:attachmentRef||null,updated_by:SESSION?.id||null};
+  try{
+    let oldRef='';
+    if(evidenceId){const {data:before}=await supabase.from('hr_case_evidence').select('attachment_ref').eq('id',evidenceId).eq('case_id',caseId).maybeSingle();oldRef=before?.attachment_ref||'';const {error}=await supabase.from('hr_case_evidence').update(payload).eq('id',evidenceId).eq('case_id',caseId);if(error)throw error;}
+    else{const {error}=await supabase.from('hr_case_evidence').insert({...payload,created_by:SESSION?.id||null});if(error)throw error;}
+    rememberCommittedRecordFiles({caseEvidenceAttachmentData:attachmentRef});if(oldRef&&oldRef!==attachmentRef)await deleteStorageObjects([oldRef]);
+    await addCaseActivity(caseId,'evidence',`${evidenceId?'Evidence updated':'Evidence registered'}: ${title}${payload.status==='Archived'?' (archived)':''}.`);logAudit(evidenceId?'Updated case evidence':'Registered case evidence');toast('Evidence saved.');await openCaseDetails(caseId);
+  }catch(error){toast('Could not save evidence: '+error.message,true);}
+}
 async function openCaseDetails(id){
   CASE_WORKFLOW_CONTEXT=null;
   const caseDomainReady=await ensureCaseDomainReady();
   const dueProcessReady=await ensureCaseDueProcessReady();
   const historyReady=await ensureDisciplinaryHistoryReady();
   const monitoringReady=await ensureCaseMonitoringReady();
-  const [{data:caseRec,error:caseError},{data:links,error:linkError},{data:activity,error:activityError},{data:allegations,error:allegationError},dueProcess,{data:caseHistory,error:historyError},monitoring]=await Promise.all([
+  const evidenceReady=await ensureCaseEvidenceReady();
+  const [{data:caseRec,error:caseError},{data:links,error:linkError},{data:activity,error:activityError},{data:allegations,error:allegationError},dueProcess,{data:caseHistory,error:historyError},monitoring,evidenceResult]=await Promise.all([
     supabase.from('hr_cases').select('*').eq('id',id).maybeSingle(),
     supabase.from('hr_case_links').select('case_id,module,record_id,label,linked_at').eq('case_id',id).order('linked_at',{ascending:true}),
     supabase.from('hr_case_activity').select('*').eq('case_id',id).order('created_at',{ascending:false}),
@@ -9394,6 +9450,7 @@ async function openCaseDetails(id){
     dueProcessReady?loadCaseDueProcess(id).catch(error=>({responses:[],hearings:[],decisions:[],error})):Promise.resolve({responses:[],hearings:[],decisions:[]}),
     historyReady?supabase.from('hr_disciplinary_history').select('*').eq('case_id',id).order('finalization_date',{ascending:false}):Promise.resolve({data:[],error:null}),
     monitoringReady?loadCaseMonitoring(id).catch(error=>({interimMeasures:[],implementations:[],error})):Promise.resolve({interimMeasures:[],implementations:[]}),
+    evidenceReady?loadCaseEvidence(id).then(data=>({data,error:null})).catch(error=>({data:[],error})):Promise.resolve({data:[],error:null}),
   ]);
   if(caseError||!caseRec){toast('Could not load case details.',true);return;}
   if(linkError){toast('Could not load linked records: '+linkError.message,true);return;}
@@ -9402,6 +9459,7 @@ async function openCaseDetails(id){
   if(dueProcess.error){toast('Could not load due-process records: '+dueProcess.error.message,true);return;}
   if(historyError){toast('Could not load case disciplinary history: '+historyError.message,true);return;}
   if(monitoring.error){toast('Could not load case monitoring records: '+monitoring.error.message,true);return;}
+  if(evidenceResult.error){toast('Could not load case evidence: '+evidenceResult.error.message,true);return;}
   const assigned=DB.users.find(u=>u.id===caseRec.assigned_to);
   const deadline=caseDeadlineInfo(caseRec.due_date,caseRec.status);
   const age=analyticsDaysOpen(caseRec.opened_at,caseRec.closed_at);
@@ -9419,6 +9477,7 @@ async function openCaseDetails(id){
     ${caseWorkflowSteps(currentStep)}
     ${caseDueProcessHTML(links||[],allegations||[],dueProcess,dueProcessReady)}
     <section class="panel case-allegations-panel"><div class="panel-heading-row"><div><h3>Reports &amp; Allegations</h3><p>Reported matters remain allegations until an authorized finding is finalized.</p></div>${canEdit()&&caseDomainReady?`<button class="btn btn-ghost btn-sm" onclick="openCaseAllegationForm('${id}')">${iPlus(13)} Add Allegation</button>`:''}</div><div class="case-allegations">${allegationRows||`<div class="empty"><b>No allegations recorded</b>${caseDomainReady?'Link an Incident/CVR or add an allegation before investigation.':'Run the Phase 23 migration to enable normalized allegations.'}</div>`}</div></section>
+    ${caseEvidenceWorkspaceHTML(caseRec,evidenceResult.data||[],evidenceReady)}
     ${caseDueProcessWorkspaceHTML(caseRec,dueProcess,dueProcessReady)}
     ${caseMonitoringWorkspaceHTML(caseRec,monitoring,caseHistory||[],dueProcess.decisions||[],monitoringReady)}
     ${caseHistoryHTML}
@@ -9668,7 +9727,7 @@ Object.assign(window, {
   STATE,
   performanceSnapshot,
   addDaysISO, atdComputeStatus, atdFillEmployee, atdPayslipCellHTML, atdRemaining, atdToggleCategory, atdTotalPaid,
-  addCaseActivity, addCaseNote, caseActivityIcon, caseActivityLabel, caseDeadlineInfo, casePriorityBadge, caseWorkflowSteps, caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, deleteCaseAllegation, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseAllegationForm, openCaseDetails, openCaseForm, openCaseLinkForm, openCaseResponseForm, saveCaseResponse, openCaseHearingForm, saveCaseHearing, openCaseDecisionForm, saveCaseDecision, openCaseDecisionReview, saveCaseDecisionReview, openCaseInterimMeasureForm, saveCaseInterimMeasure, openCaseImplementationForm, saveCaseImplementation, openCaseLinkedRecord, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, cancelRecordForm, populateCaseRecordOptions, renderCases, saveCase, saveCaseAllegation, setCaseWorkflowStatus, buildNotificationItems, closeNotificationPanel, markAllNotificationsRead, openNotification, goFromNotifications, refreshNotificationBadge, renderNotificationPanel, toggleNotificationPanel, analyticsApplyFilters, analyticsSetPreset, exportAnalyticsSnapshot,
+  addCaseActivity, addCaseNote, caseActivityIcon, caseActivityLabel, caseDeadlineInfo, casePriorityBadge, caseWorkflowSteps, caseModuleLabel, caseRecordLabel, createCaseFromRecord, deleteCase, deleteCaseAllegation, linkCaseRecord, linkNewRecordToCase, linkRecordToExistingCase, openCaseAllegationForm, openCaseDetails, openCaseForm, openCaseLinkForm, openCaseResponseForm, saveCaseResponse, openCaseHearingForm, saveCaseHearing, openCaseDecisionForm, saveCaseDecision, openCaseDecisionReview, saveCaseDecisionReview, openCaseInterimMeasureForm, saveCaseInterimMeasure, openCaseImplementationForm, saveCaseImplementation, openCaseEvidenceForm, saveCaseEvidence, openCaseLinkedRecord, openRecordCaseDialog, openWorkflowATDForm, openWorkflowRecordForm, cancelRecordForm, populateCaseRecordOptions, renderCases, saveCase, saveCaseAllegation, setCaseWorkflowStatus, buildNotificationItems, closeNotificationPanel, markAllNotificationsRead, openNotification, goFromNotifications, refreshNotificationBadge, renderNotificationPanel, toggleNotificationPanel, analyticsApplyFilters, analyticsSetPreset, exportAnalyticsSnapshot,
   renderSelfService, renderTeamApprovals, openProfileChangeRequest, saveProfileChangeRequest, openLeaveRequest, saveLeaveRequest, cancelSelfServiceRequest, openServiceRequestReview, reviewServiceRequest, dashboardSetTab, weeklySetTab, automationSetTab, analyticsSetTab,
   renderLifecycleChecklists, openLifecycleChecklistForm, saveLifecycleChecklist, openLifecycleChecklist, openLifecycleChecklistItem, returnToLifecycleChecklist, saveLifecycleChecklistItem, cancelLifecycleChecklist, lifecycleTemplateChanged,
   workflowSyncTasks, workflowPendingCount, workflowFindTask, workflowOpenSource, workflowSaveTaskNote, saveWorkflowTaskNote, workflowAssignTask, workflowSaveAssignment, workflowCompleteTask, workflowDecideTask, openWorkflowTask, openWorkflowCreateForm, saveWorkflowManualTask, renderWorkflowCenter, workflowActionButtons, workflowPriorityBadge, workflowDueText, workflowPageGo, workflowPageSize, workflowSetQuickFilter, workflowResetFilters, automationPageGo, automationPageSize,
