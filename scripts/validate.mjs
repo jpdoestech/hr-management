@@ -34,8 +34,9 @@ const required=[
   'database/migrations/phase27-employee-relations-monitoring.sql','supabase/phase28-employee-relations-validation.sql',
   'database/migrations/phase28-employee-relations-validation.sql','supabase/phase29-employee-relations-evidence.sql',
   'database/migrations/phase29-employee-relations-evidence.sql','supabase/phase30-employee-relations-intake.sql',
-  'database/migrations/phase30-employee-relations-intake.sql','docs/EMPLOYEE-RELATIONS-REDESIGN-PHASE-A.md',
-  'docs/EMPLOYEE-RELATIONS-PHASE-D.md','docs/EMPLOYEE-RELATIONS-PHASE-E.md','docs/EMPLOYEE-RELATIONS-PHASE-F.md','docs/EMPLOYEE-RELATIONS-PHASE-G.md','docs/EMPLOYEE-RELATIONS-PHASE-H.md','docs/EMPLOYEE-RELATIONS-PHASE-I.md'
+  'database/migrations/phase30-employee-relations-intake.sql','supabase/phase31-employee-relations-revisions.sql',
+  'database/migrations/phase31-employee-relations-revisions.sql','docs/EMPLOYEE-RELATIONS-REDESIGN-PHASE-A.md',
+  'docs/EMPLOYEE-RELATIONS-PHASE-D.md','docs/EMPLOYEE-RELATIONS-PHASE-E.md','docs/EMPLOYEE-RELATIONS-PHASE-F.md','docs/EMPLOYEE-RELATIONS-PHASE-G.md','docs/EMPLOYEE-RELATIONS-PHASE-H.md','docs/EMPLOYEE-RELATIONS-PHASE-I.md','docs/EMPLOYEE-RELATIONS-PHASE-J.md'
 ];
 const missing=required.filter(f=>!fs.existsSync(path.join(root,f)));
 if(missing.length){
@@ -219,6 +220,7 @@ for(const migrationFile of [
   'phase28-employee-relations-validation.sql',
   'phase29-employee-relations-evidence.sql',
   'phase30-employee-relations-intake.sql',
+  'phase31-employee-relations-revisions.sql',
 ]){
   const source=fs.readFileSync(path.join(root,'supabase',migrationFile),'utf8');
   const mirror=fs.readFileSync(path.join(root,'database/migrations',migrationFile),'utf8');
@@ -249,6 +251,13 @@ const intakeMigration=fs.readFileSync(path.join(root,'supabase/phase30-employee-
 for(const safeguard of ['hr_case_intake','validate_case_intake_link',"source_module in ('incidents','cvr','intake')","current_user_has_permission('employee_relations.view')",'current_user_scope_allows']){
   if(!intakeMigration.includes(safeguard)){
     console.error(`Employee Relations intake safeguard is missing: ${safeguard}`);
+    process.exit(1);
+  }
+}
+const revisionMigration=fs.readFileSync(path.join(root,'supabase/phase31-employee-relations-revisions.sql'),'utf8');
+for(const safeguard of ['hr_case_revisions','controlled_case_revision','prevent_material_hr_case_delete','preserve_amended_history_occurrence',"current_user_has_permission('employee_relations.approve')",'replacement_decision_id']){
+  if(!revisionMigration.includes(safeguard)){
+    console.error(`Employee Relations controlled-revision safeguard is missing: ${safeguard}`);
     process.exit(1);
   }
 }

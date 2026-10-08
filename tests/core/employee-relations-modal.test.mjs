@@ -40,6 +40,9 @@ test('long shared record forms use responsive classified tabs',()=>{
   assert.match(source,/modalFormTabsHTML\('record_form_tabs'/);
   assert.match(styles,/\.modal-form-tablist/);
   assert.match(styles,/\.modal-form-panel\[hidden\]/);
+  assert.match(styles,/\.modal-form-tabs\{[^}]*height:min\(620px,calc\(100dvh - 162px\)\)/);
+  assert.match(styles,/\.modal-form-panels\{[^}]*scrollbar-gutter:stable/);
+  assert.match(styles,/@media\(max-width:720px\)[\s\S]*\.modal-form-tabs\{height:calc\(100dvh - 134px\)/);
 });
 
 test('incident entry separates facts, policy, and evidence without editable assignment data',()=>{

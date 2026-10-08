@@ -1658,11 +1658,11 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
 .case-employee-context small{margin-top:2px;color:var(--muted);font-size:9px;line-height:1.35;overflow-wrap:anywhere;}
 .case-primary-file{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);}
 .case-primary-file>span{color:var(--muted);font-size:9px;font-weight:800;text-transform:uppercase;}
-.modal-form-tabs{display:flex;min-height:420px;max-height:calc(100dvh - 162px);flex-direction:column;background:#fff;}
+.modal-form-tabs{display:flex;height:min(620px,calc(100dvh - 162px));min-height:min(420px,calc(100dvh - 162px));max-height:calc(100dvh - 162px);flex-direction:column;background:#fff;}
 .modal-form-tablist{display:flex;align-items:center;gap:2px;flex:none;overflow-x:auto;padding:0 16px;border-bottom:1px solid var(--border);background:#F8F9FB;scrollbar-width:thin;}
 .modal-form-tablist button{min-height:43px;padding:0 13px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font-size:10px;font-weight:750;white-space:nowrap;cursor:pointer;}
 .modal-form-tablist button:hover{color:var(--text);background:#F1F2F6;}.modal-form-tablist button.active{border-bottom-color:var(--accent);background:#fff;color:var(--accent);}
-.modal-form-panels{min-height:0;flex:1;overflow:auto;}
+.modal-form-panels{min-height:0;flex:1;overflow:auto;scrollbar-gutter:stable;}
 .modal-form-panel{padding:17px 18px 20px;}.modal-form-panel[hidden]{display:none;}.modal-form-panel>.formgrid{gap:13px 14px;}
 .modal-form-panel>.tda-rule-card{margin:0;}
 .field input[readonly],.field input[aria-readonly="true"]{background:#F4F6F8;color:#536075;font-weight:700;cursor:default;}
@@ -1692,6 +1692,6 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
   .case-employee-context>.badge{grid-column:2;justify-self:start;}
   .case-primary-file{align-items:flex-start;flex-direction:column;}
   .case-primary-file .btn{width:100%;white-space:normal;overflow-wrap:anywhere;}
-  .modal-form-tabs{min-height:0;max-height:calc(100dvh - 134px);}.modal-form-tablist{padding:0 8px}.modal-form-tablist button{min-height:40px;padding:0 10px;font-size:9px}.modal-form-panel{padding:13px 12px 16px}.incident-classification-options{grid-template-columns:1fr 1fr}.tda-picker-options{width:100%;max-height:42vh;}
+  .modal-form-tabs{height:calc(100dvh - 134px);min-height:0;max-height:calc(100dvh - 134px);}.modal-form-tablist{padding:0 8px}.modal-form-tablist button{min-height:40px;padding:0 10px;font-size:9px}.modal-form-panel{padding:13px 12px 16px}.incident-classification-options{grid-template-columns:1fr 1fr}.tda-picker-options{width:100%;max-height:42vh;}
 }
 @media(max-width:420px){.incident-classification-options{grid-template-columns:1fr}.incident-classification-search .btn{padding:0 8px;font-size:0}.incident-classification-search .btn svg{margin:0}.tda-picker-options{width:100%;}}
