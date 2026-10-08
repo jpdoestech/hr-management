@@ -87,6 +87,7 @@ export function caseTransitionValidation(toStatus, context = {}) {
   }
   if (toStatus === 'NTE Issued') {
     if (!context.hasAllegation) missing.push('at least one allegation');
+    if (context.policyRequired && !context.hasPolicy) missing.push('a governing TDA / policy rule');
     if (!context.hasNte) missing.push('a linked Notice to Explain');
     if (!context.hasNteIssueDate) missing.push('an NTE issue date');
   }
@@ -242,7 +243,7 @@ export function caseLifecycleWorkItem(caseRecord = {}, implementations = []) {
 
 const CASE_PROGRESS_PHASES = [
   {key:'intake',label:'Intake & triage',stages:['Reported / Created','Under Triage']},
-  {key:'investigation',label:'Investigation',stages:['Under Investigation','NTE Preparation']},
+  {key:'investigation',label:'Investigation & policy',stages:['Under Investigation','NTE Preparation']},
   {key:'notice',label:'Notice & response',stages:['NTE Issued','Awaiting Employee Response','Response Received']},
   {key:'hearing',label:'Conference',stages:['Hearing / Conference']},
   {key:'findings',label:'Findings',stages:['For Findings']},

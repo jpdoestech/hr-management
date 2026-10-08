@@ -7,11 +7,24 @@ const styles=await readFile(new URL('../../css/professional.css',import.meta.url
 const migration=await readFile(new URL('../../supabase/phase22-hr-case-attachments.sql',import.meta.url),'utf8');
 
 test('profile-originated HR cases retain the selected employee',()=>{
-  assert.match(source,/openCaseForm\('',emp\.id\)/);
+  assert.match(source,/openCaseIntakeForm\('',emp\.id\)/);
+  assert.match(source,/id="intake_employee_locked"/);
   assert.match(source,/id="case_employee_locked"/);
   assert.match(source,/employeePickerSelected\('case_employee'\)\|\|DB\.employees\.find/);
   assert.match(source,/const title=existing\?'Edit HR Case':'New HR Case'/);
   assert.match(source,/Employee Information[\s\S]*employeeDisplayName\(lockedEmployee\)/);
+});
+
+test('Employee Relations uses intake-first navigation and stage-guided actions',()=>{
+  assert.match(source,/1\. Intake &amp; Triggers/);
+  assert.match(source,/2\. Active Case Files/);
+  assert.match(source,/3\. History &amp; Ledger/);
+  assert.match(source,/function employeeRelationsProcessHTML\(/);
+  assert.match(source,/function caseGuidedActionsHTML\(/);
+  assert.match(source,/Start with a report or intake record/);
+  assert.match(source,/Validate &amp; Advance/);
+  assert.match(styles,/\.er-process-map\{/);
+  assert.match(styles,/\.case-guided-actions\{/);
 });
 
 test('HR cases support managed primary file uploads and cleanup',()=>{

@@ -28,6 +28,14 @@ test('case transition validation enforces investigation and closure prerequisite
   assert.equal(closed.valid,true);
 });
 
+test('issuing an NTE for an alleged offense requires the governing policy and first notice',()=>{
+  const missing=caseTransitionValidation('NTE Issued',{hasAllegation:true,policyRequired:true,hasPolicy:false,hasNte:false,hasNteIssueDate:false});
+  assert.equal(missing.valid,false);
+  assert.deepEqual(missing.missing,['a governing TDA / policy rule','a linked Notice to Explain','an NTE issue date']);
+  const complete=caseTransitionValidation('NTE Issued',{hasAllegation:true,policyRequired:true,hasPolicy:true,hasNte:true,hasNteIssueDate:true});
+  assert.equal(complete.valid,true);
+});
+
 test('Incident, CVR, and normalized intake are report sources',()=>{
   assert.equal(isCaseReportSource('incidents'),true);
   assert.equal(isCaseReportSource('cvr'),true);

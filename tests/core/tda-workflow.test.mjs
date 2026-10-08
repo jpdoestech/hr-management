@@ -44,6 +44,15 @@ test('HR cases link their governing TDA rule and inherit it into workflow record
   assert.match(source,/Governing TDA rule/);
 });
 
+test('authorized HR users can add a missing scoped TDA rule without abandoning the case',()=>{
+  assert.match(source,/function openInlineTdaRuleEditor\(targetPrefix\)/);
+  assert.match(source,/hasErCapability\('manage_tda','manage'\)/);
+  assert.match(source,/function saveInlineTdaRule\(targetPrefix\)/);
+  assert.match(source,/Save &amp; Select Rule/);
+  assert.match(source,/tdaRulePickerChoose\(targetPrefix,record\.id\)/);
+  assert.match(styles,/\.tda-inline-editor\{/);
+});
+
 test('TDA recommendation is presented as policy guidance, not an automatic decision',()=>{
   assert.match(source,/HR must still verify facts, due process, prior records, and applicable law before issuing a decision/);
   assert.match(styles,/\.tda-rule-card\{/);
