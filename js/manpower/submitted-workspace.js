@@ -5,9 +5,10 @@ function bounds(page,size){
   return [(page-1)*size,page*size-1];
 }
 function checked(result){if(result.error)throw result.error;return result;}
-export async function loadSubmittedRequests(client,{page=1,size=10,search='',branch=''}={}){
+export async function loadSubmittedRequests(client,{page=1,size=10,search='',branch='',state=''}={}){
   let query=client.from('hr_manpower_requests').select('id,prf_number,branch_reporting,date_requested,target_date,updated_at,state',{count:'exact'})
-    .eq('state','Open').order('updated_at',{ascending:false}).order('id').range(...bounds(page,size));
+    .in('state',['Open','Closed','Cancelled']).order('updated_at',{ascending:false}).order('id').range(...bounds(page,size));
+  if(['Open','Closed','Cancelled'].includes(state))query=query.eq('state',state);
   if(search.trim())query=query.ilike('prf_number',`%${search.trim().replace(/[\\%_]/g,'\\$&')}%`);
   if(branch)query=query.eq('branch_reporting',branch);
   return checked(await query);
@@ -15,12 +16,15 @@ export async function loadSubmittedRequests(client,{page=1,size=10,search='',bra
 export async function loadSubmittedRequest(client,id){
   const result=checked(await client.from('hr_manpower_requests')
     .select('id,prf_number,branch_reporting,requested_by,date_requested,target_date,priority,remarks,state,revision,submitted_at,hr_manpower_clients(name)')
-    .eq('id',id).eq('state','Open').single());
+    .eq('id',id).in('state',['Open','Closed','Cancelled']).single());
   return result.data;
 }
 export async function loadSubmittedRows(client,id,kind,{page=1,size=10}={}){
   let query;
-  if(kind==='amendments')query=client.from('hr_manpower_quantity_amendments')
+  if(kind==='lifecycle')query=client.from('hr_manpower_lifecycle_history')
+    .select('operation,previous_state,current_state,request_revision,reason',{count:'exact'})
+    .eq('request_id',id).order('request_revision',{ascending:false});
+  else if(kind==='amendments')query=client.from('hr_manpower_quantity_amendments')
     .select('line_id,previous_authorized,current_authorized,request_revision,reason,hr_manpower_lines!inner(request_id,ordinal,department,position)',{count:'exact'})
     .eq('hr_manpower_lines.request_id',id).order('request_revision',{ascending:false}).order('line_id');
   else if(kind==='history')query=client.from('hr_manpower_quantity_history')
@@ -39,6 +43,11 @@ export function submittedHeaderHTML(request,formatDate){
   return `<section class="manpower-submitted-header" aria-label="Request summary"><dl>${fields.map(([label,value])=>`<div><dt>${escape(label)}</dt><dd>${escape(value??'')}</dd></div>`).join('')}</dl>${request.remarks?`<p class="manpower-submitted-remarks">${escape(request.remarks)}</p>`:''}</section>`;
 }
 export function submittedTableHTML(rows,kind,formatDate,headerTarget=''){
+  if(kind==='lifecycle'){
+    const labels={CancelLine:'Line cancellation',Close:'Request closed',Cancel:'Request cancelled',Reopen:'Request reopened'};
+    const body=rows.map(row=>`<tr><td>${escape(row.request_revision)}</td><td>${escape(labels[row.operation]||row.operation)}</td><td>${escape(row.previous_state)}</td><td>${escape(row.current_state)}</td><td><details><summary>Lifecycle reason</summary><p class="manpower-submitted-remarks">${escape(row.reason)}</p></details></td></tr>`).join('');
+    return `<div class="tablewrap" tabindex="0" role="region" aria-label="Request lifecycle records"><table class="data-table" data-server-paginated="true" data-table-tools="external"><caption class="sr-only">Request lifecycle history</caption><thead><tr>${['Revision','Operation','Previous State','Current State','Reason'].map(label=>`<th scope="col">${label}</th>`).join('')}</tr></thead><tbody>${body||'<tr><td colspan="5"><div class="empty">No lifecycle changes recorded.</div></td></tr>'}</tbody></table></div>`;
+  }
   if(kind==='amendments'){
     const body=rows.map(row=>`<tr><td>${escape(row.hr_manpower_lines?.ordinal==null?row.line_id:'Line '+(row.hr_manpower_lines.ordinal+1))}<div>${escape(row.hr_manpower_lines?.department)} / ${escape(row.hr_manpower_lines?.position)}</div></td><td>${escape(row.previous_authorized)}</td><td>${escape(row.current_authorized)}</td><td>${escape(row.request_revision)}</td><td><details><summary>Amendment reason</summary><p class="manpower-submitted-remarks">${escape(row.reason)}</p></details></td></tr>`).join('');
     return `<div class="tablewrap" tabindex="0" role="region" aria-label="Quantity amendment records"><table class="data-table" data-server-paginated="true" data-table-tools="external"><caption class="sr-only">Quantity amendments</caption><thead><tr>${['Department / Position','Previous','Authorized','Revision','Reason'].map(label=>`<th scope="col">${label}</th>`).join('')}</tr></thead><tbody>${body||'<tr><td colspan="5"><div class="empty">No quantity amendments recorded.</div></td></tr>'}</tbody></table></div>`;

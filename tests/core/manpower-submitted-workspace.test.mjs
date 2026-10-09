@@ -7,13 +7,13 @@ import {loadSubmittedRequests,loadSubmittedRequest,loadSubmittedRows,submittedLi
 const app=readFileSync(new URL('../../js/app.js',import.meta.url),'utf8');
 function clientFixture(result={data:[],count:0}){
   const calls=[];const query={};
-  for(const name of ['select','eq','order','range','ilike','single'])query[name]=(...args)=>{calls.push([name,...args]);return query;};
+  for(const name of ['select','eq','in','order','range','ilike','single'])query[name]=(...args)=>{calls.push([name,...args]);return query;};
   query.then=resolve=>Promise.resolve(resolve(result));
   return {calls,client:{from:table=>{calls.push(['from',table]);return query;}}};
 }
 test('submitted list is database-filtered, bounded and excludes nested lines',async()=>{
   const {client,calls}=clientFixture();await loadSubmittedRequests(client,{page:2,size:25,search:'PRF_%',branch:'Davao'});
-  assert.ok(calls.some(call=>call[0]==='eq'&&call[1]==='state'&&call[2]==='Open'));
+  assert.deepEqual(calls.find(call=>call[0]==='in'),['in','state',['Open','Closed','Cancelled']]);
   assert.ok(calls.some(call=>call[0]==='eq'&&call[1]==='branch_reporting'&&call[2]==='Davao'));
   assert.deepEqual(calls.find(call=>call[0]==='range'),['range',25,49]);
   assert.deepEqual(calls.find(call=>call[0]==='ilike'),['ilike','prf_number','%PRF\\_\\%%']);
@@ -21,8 +21,30 @@ test('submitted list is database-filtered, bounded and excludes nested lines',as
 });
 test('request detail requires submitted state and does not fetch all requisition lines',async()=>{
   const {client,calls}=clientFixture({data:{id:'request'}});assert.equal((await loadSubmittedRequest(client,'request')).id,'request');
-  assert.ok(calls.some(call=>call[0]==='eq'&&call[1]==='state'&&call[2]==='Open'));
+  assert.deepEqual(calls.find(call=>call[0]==='in'),['in','state',['Open','Closed','Cancelled']]);
   assert.doesNotMatch(calls.find(call=>call[0]==='select')[1],/hr_manpower_lines/);
+});
+test('submitted state filter is optional, bounded to known submitted states and applied in database',async()=>{
+  const filtered=clientFixture();await loadSubmittedRequests(filtered.client,{state:'Cancelled',page:2,size:10});
+  assert.deepEqual(filtered.calls.find(call=>call[0]==='eq'),['eq','state','Cancelled']);
+  assert.deepEqual(filtered.calls.find(call=>call[0]==='range'),['range',10,19]);
+  const unknown=clientFixture();await loadSubmittedRequests(unknown.client,{state:'Draft'});
+  assert.ok(!unknown.calls.some(call=>call[0]==='eq'&&call[1]==='state'));
+});
+test('lifecycle history is request-filtered and bounded without loading audit or line payloads',async()=>{
+  const {client,calls}=clientFixture();await loadSubmittedRows(client,'request','lifecycle',{page:2,size:25});
+  assert.deepEqual(calls[0],['from','hr_manpower_lifecycle_history']);
+  assert.deepEqual(calls.find(call=>call[0]==='eq'),['eq','request_id','request']);
+  assert.deepEqual(calls.find(call=>call[0]==='range'),['range',25,49]);
+  assert.doesNotMatch(calls.find(call=>call[0]==='select')[1],/\*|line_changes|audit_id/);
+  assert.deepEqual(calls.find(call=>call[0]==='order'),['order','request_revision',{ascending:false}]);
+});
+test('lifecycle records show explicit state transitions and escaped keyboard-accessible reasons',()=>{
+  const html=submittedTableHTML([{request_revision:9,operation:'Close',previous_state:'Open',current_state:'Closed',reason:'<script>bad</script>'}],'lifecycle',value=>value);
+  assert.match(html,/Request closed/);assert.match(html,/Open/);assert.match(html,/Closed/);
+  assert.match(html,/&lt;script&gt;/);assert.match(html,/<details><summary>Lifecycle reason/);
+  assert.match(html,/tabindex="0"/);assert.match(html,/scope="col"/);assert.doesNotMatch(html,/<script>|onclick=|undefined|NaN/);
+  assert.match(submittedTableHTML([],'lifecycle',value=>value),/No lifecycle changes recorded/);
 });
 test('lines and history have separate bounded queries and request-linked history filtering',async()=>{
   const lines=clientFixture();await loadSubmittedRows(lines.client,'request','lines',{page:3,size:10});
@@ -53,6 +75,7 @@ test('backend failures are propagated rather than displayed as empty success',as
   await assert.rejects(()=>loadSubmittedRequests(client),error=>error.code==='42P01');
   await assert.rejects(()=>loadSubmittedRows(client,'request','history'),error=>error.code==='42P01');
   await assert.rejects(()=>loadSubmittedRows(client,'request','amendments'),error=>error.code==='42P01');
+  await assert.rejects(()=>loadSubmittedRows(client,'request','lifecycle'),error=>error.code==='42P01');
 });
 test('read-only views escape data, disclose details and use the header target fallback',()=>{
   const row={id:'request',ordinal:0,prf_number:'<script>',department:'Production',position:'Operator',original_requested:1000,current_authorized:1000,cancelled_unfilled:0,purpose:'<script>',demand_type:'Replacement'};
@@ -73,6 +96,15 @@ test('missing amendment storage explains the limitation without claiming an empt
   const {context}=controllerFixture();const html=context.manpowerSubmittedErrorHTML({code:'42P01'},'renderManpowerSubmittedDetails','amendments');
   assert.match(html,/Quantity amendments unavailable/);assert.match(html,/Requisition lines and submission history remain available/);
   assert.match(html,/role="alert"/);assert.doesNotMatch(html,/No quantity amendments recorded/);
+});
+test('missing lifecycle storage preserves sibling navigation and does not claim empty history',()=>{
+  const {context}=controllerFixture();const html=context.manpowerSubmittedErrorHTML({code:'42P01'},'renderManpowerSubmittedDetails','lifecycle');
+  assert.match(html,/Lifecycle history unavailable/);assert.match(html,/Requisition lines, submission history and amendments remain available/);
+  assert.match(html,/role="alert"/);assert.doesNotMatch(html,/No lifecycle changes recorded/);
+  context.renderManpowerSubmittedDetails=()=>{};context.manpowerSubmittedSetTab('lifecycle');
+  assert.equal(context.STATE.manpowerSubmittedTab,'lifecycle');
+  context.manpowerSubmittedSetTab('invalid');assert.equal(context.STATE.manpowerSubmittedTab,'lifecycle');
+  assert.match(app,/data-submitted-tab="lifecycle"/);
 });
 test('late responses cannot overwrite a newer submitted list',async()=>{
   const {context,pending,host}=controllerFixture();const first=context.renderManpowerSubmitted(),second=context.renderManpowerSubmitted();
