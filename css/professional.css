@@ -1799,3 +1799,17 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
 .attendance-toolbar+.analytics-kpis{grid-template-columns:repeat(5,minmax(0,1fr))}
 @media(max-width:900px){.attendance-toolbar+.analytics-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:720px){.attendance-toolbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.attendance-toolbar .searchbox{grid-column:1/-1;min-width:0}.attendance-toolbar>input,.attendance-toolbar>select{width:100%;min-width:0}.attendance-toolbar+.analytics-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.attendance-toolbar+.analytics-kpis .s{overflow-wrap:anywhere}}
+.manpower-draft-editor{min-width:0;display:grid;gap:16px;}
+.manpower-draft-header,.manpower-draft-requisitions{min-width:0;}
+.manpower-draft-editor h3{font-size:16px;margin:0 0 12px;}
+.manpower-draft-header .settings-form-grid{grid-template-columns:repeat(4,minmax(0,1fr));}
+.manpower-draft-editor .field{min-width:0;margin-bottom:0;}
+.manpower-draft-line{min-width:0;margin:0 0 12px;padding:12px;border:1px solid var(--border);border-radius:6px;}
+.manpower-draft-line legend{font-size:12px;padding:0 6px;font-weight:600;}
+.manpower-draft-line-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end;}
+.manpower-draft-line .rowactions{flex-wrap:wrap;gap:6px;}
+.manpower-draft-editor input,.manpower-draft-editor select{height:36px;font-size:13px;}
+.manpower-draft-editor textarea,.manpower-draft-editor label{font-size:13px;}
+.manpower-draft-footer{position:sticky;bottom:0;z-index:3;display:flex;justify-content:flex-end;gap:8px;padding:12px 0;background:var(--bg,#fff);border-top:1px solid var(--border);}
+@media(max-width:1000px){.manpower-draft-header .settings-form-grid,.manpower-draft-line-fields{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:520px){.manpower-draft-header .settings-form-grid,.manpower-draft-line-fields{grid-template-columns:minmax(0,1fr);}.manpower-draft-footer .btn{flex:1;}.manpower-draft-line input,.manpower-draft-line select{width:100%;}.manpower-draft-editor .settings-section-head{flex-wrap:wrap;}}
