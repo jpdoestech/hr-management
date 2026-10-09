@@ -6,7 +6,7 @@ export const AGE_BANDS=[
   {label:'Senior Workforce',low:51,high:61},
   {label:'Retirement Eligible',low:61,high:Infinity},
 ];
-export const EXIT_STATUSES=['Resigned','AWOL','Separated','Returned to Agency'];
+export const EXIT_STATUSES=['Separated'];
 export const EXIT_CLASSIFICATIONS=['Voluntary','Involuntary','Unconfirmed / Under Review','End of Assignment'];
 export const WORKFORCE_FACTORS=['Compensation / Benefits','Career Development','Workload / Schedule','Management / Workplace','Health / Medical','Family / Personal','Transport / Location','Attendance / Conduct','Contract / Assignment End','Retirement','Other','Unknown / Not Disclosed'];
 export const ATTENDANCE_STATUSES=['Present','Absent','Approved Leave','Rest Day / Holiday'];

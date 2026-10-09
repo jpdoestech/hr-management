@@ -25,7 +25,7 @@ The Attendance permission matrix supports View, Create, Update, Delete, Export a
 
 ## Reasons for leaving
 
-Employee editing, Employment Status and Lifecycle Event forms capture Leaving Classification, Primary Leaving Factor and Reason for Leaving. A new departure requires these details. AWOL can use Unconfirmed / Under Review; the system does not infer a disciplinary finding from absence. Status history preserves the submitted details. Employee imports and exports include the same fields.
+Employee editing, Employment Status and Lifecycle Event forms capture Leaving Classification, Primary Leaving Factor and Reason for Leaving. A new separation requires these details. AWOL pending review is Inactive, not a departure or automatic disciplinary finding. Status history preserves the submitted details. Employee imports and exports include the same fields. See [Employment Model](EMPLOYMENT-MODEL.md) for the separate contract type, operational status and dependent reason.
 
 ## Deployment
 

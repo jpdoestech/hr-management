@@ -1,10 +1,11 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '../supabase-config.js';
 import { ALL_ROWS_SIZE, paginationMeta, paginationHTML, paginationReset, paginateRows } from './core/pagination.js?v=20261008-6';
-import { installTableEnhancer } from './core/table-enhancer.js?v=20261008-5';
-import { employeeDirectoryProjection } from './core/employee-directory.js?v=20261008-1';
+import { installTableEnhancer } from './core/table-enhancer.js?v=20261009-2';
+import { employeeDirectoryProjection } from './core/employee-directory.js?v=20261009-2';
 import { isValidEmployeeNumber, nextEmployeeNumber, normalizeEmployeeNumber } from './core/employee-number.js?v=20261008-1';
-import { workforceAgeMix, validateAttendance, fillRateSummary, EXIT_STATUSES, EXIT_CLASSIFICATIONS, WORKFORCE_FACTORS, ATTENDANCE_STATUSES, ABSENCE_CLASSIFICATIONS } from './core/workforce-metrics.js?v=20261009-1';
+import { workforceAgeMix, validateAttendance, fillRateSummary, EXIT_CLASSIFICATIONS, WORKFORCE_FACTORS, ATTENDANCE_STATUSES, ABSENCE_CLASSIFICATIONS } from './core/workforce-metrics.js?v=20261009-2';
+import {EMPLOYMENT_TYPES,EMPLOYMENT_STATUSES,STATUS_REASONS,REVIEW_TYPE,canonicalEmploymentType,normalizeEmployment,employmentValidation,isSeparated,isEmployed} from './core/employment.js?v=20261009-2';
 import { compactRedundantPageIntros } from './core/content-layout.js?v=20260928-4';
 import { buildRecordChanges, valuesEqual } from './core/record-diff.js?v=20260930-1';
 import { roleCanExport } from './core/export-access.js?v=20260930-1';
@@ -370,7 +371,7 @@ async function loadDB(){
   BOOTSTRAP_RECORD_MODULES.forEach(module=>LOADED_RECORD_MODULES.add(module));
   (rows||[]).forEach(r=>{
     if(!RECORD_MODULES.includes(r.module))return;
-    const record={...(r.data||{})};
+    const record=r.module==='employees'?normalizeEmployment(r.data||{}):{...(r.data||{})};
     delete record._dataResetAt;
     (empty[r.module]||(empty[r.module]=[])).push(record);
   });
@@ -424,7 +425,7 @@ function ensureRecordModules(modules){
     const {data:rows,error}=await measureAsync('records.lazy-load',()=>supabase.from('hr_records').select('module,record_id,data,updated_at').in('module',missing).order('updated_at',{ascending:true}),{moduleCount:missing.length});
     if(error)throw error;
     missing.forEach(module=>{DB[module]=[];});
-    (rows||[]).forEach(row=>{if(missing.includes(row.module))DB[row.module].push(recordFromRow(row));});
+    (rows||[]).forEach(row=>{if(missing.includes(row.module))DB[row.module].push(row.module==='employees'?normalizeEmployment(recordFromRow(row)):recordFromRow(row));});
     if(!DB_SNAPSHOT)DB_SNAPSHOT=blankDB();
     missing.forEach(module=>{
       LOADED_RECORD_MODULES.add(module);
@@ -832,7 +833,7 @@ function attachPreviewHTML(key,name,path){
   return `<div class="attach-preview">${iDoc(14)}<span class="mono" style="font-size:12px;">${esc(name)}</span>${path?`<span class="attachment-provider">${provider==='google-drive'?'Drive':'Supabase'}</span><button type="button" class="iconbtn" title="Open file" onclick="downloadAttachment('${esc(path)}','${esc(name).replace(/'/g,"\\'")}')">${iDownload(13)}</button>`:''}<button type="button" class="iconbtn" title="Remove" onclick="clearFileField('${key}')">${iTrash(13)}</button></div>`;
 }
 
-const EMP_STATUS = ['Active','AWOL','Resigned','Transferred to Another Department','Separated','Returned to Agency','Newly Hired'];
+const EMP_STATUS = EMPLOYMENT_STATUSES;
 const LEAVE_TYPES = ['Vacation Leave','Sick Leave','Emergency Leave','Maternity Leave','Paternity Leave','Bereavement Leave','Others'];
 const LEAVE_STATUS = ['Pending','Approved','Ongoing','Completed','Disapproved'];
 const NTE_STATUS = ['Pending Explanation','Explanation Submitted','Under Review','Resolved'];
@@ -995,6 +996,7 @@ function normalizeEmployeeMasterData(){
     if(e.address!==formattedHome){e.address=formattedHome;changed=true;}
     const nameParts=splitEmployeeName(e);
     ['lastName','firstName','middleName'].forEach(key=>{if(e[key]===undefined){e[key]=nameParts[key]||'';changed=true;}});
+    Object.assign(e,normalizeEmployment(e));
     if(!Array.isArray(e.employmentHistory)){
       e.employmentHistory=[{type:'Employment Status',from:'',to:e.status||'Newly Hired',effectiveDate:e.statusDate||e.dateHired||'',remarks:'Initial employee record',changedAt:new Date().toISOString(),changedBy:'System'}];
       changed=true;
@@ -1311,7 +1313,7 @@ async function buildNotificationItems(){
   DB.leaves.filter(l=>l.status==='Pending').slice(0,8).forEach(l=>items.push(notificationItem(`leave-pending-${l.id}`,'warning',`Leave request pending: ${l.employeeName||'Employee'}`,`${fmtDate(l.startDate)} – ${fmtDate(l.endDate)}${l.department?' · '+l.department:''}`,'leaves')));
   DB.leaves.filter(l=>l.startDate>today && l.startDate<=next7 && l.status!=='Disapproved').slice(0,6).forEach(l=>items.push(notificationItem(`leave-upcoming-${l.id}`,'info',`Upcoming leave: ${l.employeeName||'Employee'}`,`Starts ${fmtDate(l.startDate)}${l.endDate?' · through '+fmtDate(l.endDate):''}`,'leaves')));
 
-  DB.employees.filter(e=>classify(e)==='Probationary' && e.dateHired).forEach(e=>EVAL_MILESTONES.forEach(m=>{
+  DB.employees.filter(e=>isEmployed(e)&&classify(e)==='Probationary' && e.dateHired).forEach(e=>EVAL_MILESTONES.forEach(m=>{
     const st=evalStatusInfo(e,m);
     if(st.label==='Overdue') items.push(notificationItem(`eval-overdue-${e.id}-${m.key}`,'danger',`Overdue evaluation: ${employeeDisplayName(e)}`,`${m.label} · Due ${fmtDate(st.due)}`,'evaluations'));
     else if(st.label==='Due Soon' && st.due<=next14) items.push(notificationItem(`eval-due-${e.id}-${m.key}`,'warning',`Evaluation due soon: ${employeeDisplayName(e)}`,`${m.label} · Due ${fmtDate(st.due)}`,'evaluations'));
@@ -1462,10 +1464,10 @@ function renderSelfService(){
       <div class="portal-kpis"><div><span>Open requests</span><b>${pending}</b><small>Awaiting review</small></div><div><span>Approved requests</span><b>${approved}</b><small>All-time approvals</small></div><div><span>Employment status</span><b class="portal-kpi-text">${esc(employee.status||'—')}</b><small>${esc(classify(employee))}</small></div><div><span>Next approved leave</span><b class="portal-kpi-text">${nextLeave?fmtDate(nextLeave.startDate):'None scheduled'}</b><small>${nextLeave?esc(nextLeave.leaveType):'No upcoming leave'}</small></div></div>
       <div class="portal-grid">
         <section class="panel portal-profile"><div class="portal-section-head"><div><h2>My employment profile</h2><p>Employment fields are maintained by HR. Personal corrections can be submitted for approval.</p></div><button class="btn btn-ghost btn-sm" onclick="openProfileChangeRequest()">Request correction</button></div>
-          <div class="portal-identity"><div class="portal-avatar">${esc(employeeDisplayName(employee).split(/[\s,]+/).filter(Boolean).map(part=>part[0]).slice(0,2).join('').toUpperCase()||'E')}</div><div><h3>${esc(employeeDisplayName(employee))}</h3><p>${esc(employee.employeeNo||'—')} · ${esc(employee.position||'—')}</p><div>${statusBadge(employee.status||'—',EMP_STATUS_MAP)} ${statusBadge(classify(employee),{'Regular':'b-green','Probationary':'b-amber'})}</div></div></div>
-          <dl class="portal-details"><div><dt>Employee number</dt><dd class="mono">${esc(employee.employeeNo||'—')}</dd></div><div><dt>PRF number</dt><dd>${esc(employee.prfNumber||'Not provided')}</dd></div><div><dt>Department</dt><dd>${esc(employee.department||'—')}</dd></div><div><dt>Reporting branch</dt><dd>${esc(employee.branchReporting||'Not assigned')}</dd></div><div><dt>Date hired</dt><dd>${fmtDate(employee.dateHired)}</dd></div><div><dt>Classification</dt><dd>${esc(classify(employee))}</dd></div></dl>
+          <div class="portal-identity"><div class="portal-avatar">${esc(employeeDisplayName(employee).split(/[\s,]+/).filter(Boolean).map(part=>part[0]).slice(0,2).join('').toUpperCase()||'E')}</div><div><h3>${esc(employeeDisplayName(employee))}</h3><p>${esc(employee.employeeNo||'—')} · ${esc(employee.position||'—')}</p><div>${statusBadge(employee.status||'—',EMP_STATUS_MAP)} ${statusBadge(classify(employee),{'Regular / Permanent':'b-green','Probationary':'b-amber'})}</div></div></div>
+          <dl class="portal-details"><div><dt>Employee number</dt><dd class="mono">${esc(employee.employeeNo||'—')}</dd></div><div><dt>PRF number</dt><dd>${esc(employee.prfNumber||'Not provided')}</dd></div><div><dt>Department</dt><dd>${esc(employee.department||'—')}</dd></div><div><dt>Reporting branch</dt><dd>${esc(employee.branchReporting||'Not assigned')}</dd></div><div><dt>Date hired</dt><dd>${fmtDate(employee.dateHired)}</dd></div><div><dt>Employment type</dt><dd>${esc(classify(employee))}</dd></div></dl>
         </section>
-        <section class="panel portal-guide"><div class="portal-section-head"><div><h2>Request center</h2><p>Choose the transaction that matches what you need.</p></div></div><button class="portal-action" onclick="openLeaveRequest()"><span>${iCal(18)}</span><div><b>File a leave request</b><small>Send dates, leave type, and reason for review.</small></div><strong>›</strong></button><button class="portal-action" onclick="openProfileChangeRequest()"><span>${iUser(18)}</span><div><b>Correct personal information</b><small>Update contact, address, or emergency details.</small></div><strong>›</strong></button><div class="portal-security-note">Employment status, position, department, and classification remain HR-controlled fields.</div></section>
+        <section class="panel portal-guide"><div class="portal-section-head"><div><h2>Request center</h2><p>Choose the transaction that matches what you need.</p></div></div><button class="portal-action" onclick="openLeaveRequest()"><span>${iCal(18)}</span><div><b>File a leave request</b><small>Send dates, leave type, and reason for review.</small></div><strong>›</strong></button><button class="portal-action" onclick="openProfileChangeRequest()"><span>${iUser(18)}</span><div><b>Correct personal information</b><small>Update contact, address, or emergency details.</small></div><strong>›</strong></button><div class="portal-security-note">Employment type, status, reason, position, and department remain HR-controlled fields.</div></section>
       </div>
       <section class="panel portal-record" aria-labelledby="portal-record-title">
         <div class="portal-section-head"><div><h2 id="portal-record-title">My employee record</h2><p>Your complete employee master data. Disciplinary, case, NTE, and other confidential HR records are not shown here.</p></div><button class="btn btn-ghost btn-sm" onclick="openProfileChangeRequest()">Request correction</button></div>
@@ -1474,8 +1476,8 @@ function renderSelfService(){
             <div><dt>Employee number</dt><dd class="mono">${esc(employee.employeeNo||'—')}</dd></div><div><dt>PRF number</dt><dd>${esc(employee.prfNumber||'Not provided')}</dd></div>
             <div><dt>Position</dt><dd>${esc(employee.position||'Not assigned')}</dd></div><div><dt>Department</dt><dd>${esc(employee.department||'Not assigned')}</dd></div>
             <div><dt>Reporting branch</dt><dd>${esc(employee.branchReporting||'Not assigned')}</dd></div><div><dt>Date hired</dt><dd>${fmtDate(employee.dateHired)}</dd></div>
-            <div><dt>Employment status</dt><dd>${esc(employee.status||'—')}</dd></div><div><dt>Status effective date</dt><dd>${employee.statusDate?fmtDate(employee.statusDate):'Not provided'}</dd></div>
-            <div><dt>Classification</dt><dd>${esc(classify(employee))}</dd></div>
+            <div><dt>Employment status</dt><dd>${esc(employee.status||'—')}</dd></div><div><dt>Status reason</dt><dd>${esc(employee.statusReason||'—')}</dd></div><div><dt>Status effective date</dt><dd>${employee.statusDate?fmtDate(employee.statusDate):'Not provided'}</dd></div>
+            <div><dt>Employment type</dt><dd>${esc(classify(employee))}</dd></div>
             <div class="wide"><dt>Employee record remarks</dt><dd>${esc(employee.remarks||'No remarks recorded')}</dd></div>
           </dl></section>
           <section class="portal-record-group"><h3>Personal and contact information</h3><dl class="portal-record-details">
@@ -1735,7 +1737,7 @@ function actionCenterItems(employeeRelationsItems=[]){
   });
 
   const evalItems=[];
-  DB.employees.filter(e=>classify(e)==='Probationary' && e.dateHired).forEach(e=>EVAL_MILESTONES.forEach(m=>{
+  DB.employees.filter(e=>isEmployed(e)&&classify(e)==='Probationary' && e.dateHired).forEach(e=>EVAL_MILESTONES.forEach(m=>{
     const st=evalStatusInfo(e,m);
     if(st.label==='Overdue') evalItems.push({level:'danger',title:`Overdue evaluation: ${employeeDisplayName(e)}`,detail:`${m.label||m.key||m} due ${fmtDate(st.due)}`,meta:['Evaluation','Overdue'],view:'evaluations'});
     else if(st.label==='Due Soon' && st.due<=next14) evalItems.push({level:'warning',title:`Evaluation due soon: ${employeeDisplayName(e)}`,detail:`${m.label||m.key||m} due ${fmtDate(st.due)}`,meta:['Evaluation','Due soon'],view:'evaluations'});
@@ -1857,7 +1859,7 @@ async function opsOpenItems(){
     DB.leaves.filter(l=>l.status==='Pending').slice(0,8).forEach(l=>items.push({level:'warning',view:'leaves',title:`Pending leave · ${l.employeeName}`,meta:`${fmtDate(l.startDate)} – ${fmtDate(l.endDate)}${l.department?' · '+l.department:''}`,right:'Leave'}));
     DB.atd.filter(r=>atdRemaining(r)>0).slice(0,8).forEach(r=>items.push({level:'info',view:'atd',title:`Outstanding ATD · ${r.employeeName}`,meta:`${peso(atdRemaining(r))} remaining${r.deductionType?' · '+r.deductionType:''}`,right:'ATD'}));
     DB.nte.filter(n=>n.status!=='Resolved').slice(0,8).forEach(n=>items.push({level:'warning',view:'nte',title:`NTE follow-up · ${n.employeeName}`,meta:`${n.status||'Open'}${n.dateReceived?' · received '+fmtDate(n.dateReceived):''}`,right:'NTE'}));
-    DB.employees.filter(e=>classify(e)==='Probationary' && e.dateHired).forEach(e=>EVAL_MILESTONES.forEach(m=>{
+    DB.employees.filter(e=>isEmployed(e)&&classify(e)==='Probationary' && e.dateHired).forEach(e=>EVAL_MILESTONES.forEach(m=>{
       const st=evalStatusInfo(e,m);
       if(st.label==='Overdue') items.push({level:'danger',view:'evaluations',title:`Overdue evaluation · ${employeeDisplayName(e)}`,meta:`${m.label} due ${fmtDate(st.due)}`,right:'Evaluation'});
       else if(st.label==='Due Soon' && st.due<=next7) items.push({level:'warning',view:'evaluations',title:`Evaluation due · ${employeeDisplayName(e)}`,meta:`${m.label} due ${fmtDate(st.due)}`,right:'Evaluation'});
@@ -1928,7 +1930,7 @@ async function renderOperationsWorkspaceLegacy(){
   const q=String(STATE.opsEmployeeSearch||'').trim().toLowerCase();
   const depts=[...new Set(allEmployees.map(e=>e.department).filter(Boolean))].sort();
   const statusOptions=[...new Set(allEmployees.map(e=>e.status).filter(Boolean))].sort();
-  const classOptions=['Probationary','Regular'];
+  const classOptions=[...EMPLOYMENT_TYPES,REVIEW_TYPE];
   const filteredEmployees=allEmployees.filter(e=>{
     const hay=[e.employeeNo,e.name,e.position,e.department,e.mobileNumber,e.personalEmail].map(v=>String(v||'').toLowerCase());
     return (!q||hay.some(v=>v.includes(q))) && (!STATE.opsEmployeeDept||e.department===STATE.opsEmployeeDept) && (!STATE.opsEmployeeStatus||e.status===STATE.opsEmployeeStatus) && (!STATE.opsEmployeeClass||classify(e)===STATE.opsEmployeeClass);
@@ -2012,7 +2014,7 @@ async function renderOperationsWorkspaceLegacy(){
       const empCases=openCases.filter(c=>String(c.employee_record_id||'')===String(e.id)||normalizeEmployeeName(c.employee_name)===normalizeEmployeeName(e.name)).length;
       const leaveCount=DB.leaves.filter(l=>normalizeEmployeeName(l.employeeName)===normalizeEmployeeName(e.name)&&l.status==='Pending').length;
       const issueCount=opsRecordForEmployee('nte',e).filter(n=>n.status!=='Resolved').length + opsRecordForEmployee('incidents',e).filter(i=>!['Resolved','Closed'].includes(i.status)).length;
-      return `<tr class="ops-directory-row ${String(e.id)===String(selected?.id)?'selected':''}" onclick="STATE.opsEmployeeId='${e.id}';STATE.opsHistorySearch='';STATE.tablePages={};renderOperationsWorkspace()"><td><div class="cell-identity"><span class="avatar-sm">${esc(opsInitials(employeeDisplayName(e)))}</span><div><b>${esc(employeeDisplayName(e))}</b><div class="muted">${esc(e.employeeNo||'—')}</div></div></div></td><td>${esc(e.position||'—')}</td><td>${esc(e.department||'—')}</td><td>${statusBadge(e.status,EMP_STATUS_MAP)}</td><td>${statusBadge(classify(e),classify(e)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</td><td>${empCases||leaveCount||issueCount?`<span class="count-chip">${empCases+leaveCount+issueCount} attention</span>`:'<span class="muted">Clear</span>'}</td><td><button class="iconbtn" title="Open workspace" onclick="event.stopPropagation();STATE.opsEmployeeId='${e.id}';renderOperationsWorkspace()">›</button></td></tr>`;
+      return `<tr class="ops-directory-row ${String(e.id)===String(selected?.id)?'selected':''}" onclick="STATE.opsEmployeeId='${e.id}';STATE.opsHistorySearch='';STATE.tablePages={};renderOperationsWorkspace()"><td><div class="cell-identity"><span class="avatar-sm">${esc(opsInitials(employeeDisplayName(e)))}</span><div><b>${esc(employeeDisplayName(e))}</b><div class="muted">${esc(e.employeeNo||'—')}</div></div></div></td><td>${esc(e.position||'—')}</td><td>${esc(e.department||'—')}</td><td>${statusBadge(e.status,EMP_STATUS_MAP)}</td><td>${statusBadge(classify(e),classify(e)==='Regular / Permanent'?{'Regular / Permanent':'b-green'}:{'Probationary':'b-amber'})}</td><td>${empCases||leaveCount||issueCount?`<span class="count-chip">${empCases+leaveCount+issueCount} attention</span>`:'<span class="muted">Clear</span>'}</td><td><button class="iconbtn" title="Open workspace" onclick="event.stopPropagation();STATE.opsEmployeeId='${e.id}';renderOperationsWorkspace()">›</button></td></tr>`;
     }).join('');
     const workRows=filteredHistory.slice(0,200).map(x=>{
       const safeView=String(x.view||'').replace(/'/g,"\\'");
@@ -2042,7 +2044,7 @@ async function renderOperationsWorkspaceLegacy(){
             <div class="searchbox ops-searchbox">${iSearch(16)}<input id="ops-employee-search" data-search-key="opsEmployeeSearch" type="search" autocomplete="off" placeholder="Search employee, ID, position, department, contact…" value="${esc(STATE.opsEmployeeSearch||'')}" oninput="queueSearchRender(this,'opsEmployeeSearch',renderOperationsWorkspace)" onkeydown="if(event.key==='Enter'){event.preventDefault();queueSearchRender(this,'opsEmployeeSearch',renderOperationsWorkspace,0)}" aria-label="Search employees"></div>
             <select class="filter-select" onchange="STATE.opsEmployeeDept=this.value;STATE.tablePages={};renderOperationsWorkspace()"><option value="">All Departments</option>${depts.map(d=>`<option value="${esc(d)}" ${STATE.opsEmployeeDept===d?'selected':''}>${esc(d)}</option>`).join('')}</select>
             <select class="filter-select" onchange="STATE.opsEmployeeStatus=this.value;STATE.tablePages={};renderOperationsWorkspace()"><option value="">All Statuses</option>${statusOptions.map(v=>`<option value="${esc(v)}" ${STATE.opsEmployeeStatus===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
-            <select class="filter-select" onchange="STATE.opsEmployeeClass=this.value;STATE.tablePages={};renderOperationsWorkspace()"><option value="">All Classifications</option>${classOptions.map(v=>`<option value="${v}" ${STATE.opsEmployeeClass===v?'selected':''}>${v}</option>`).join('')}</select>
+            <select class="filter-select" onchange="STATE.opsEmployeeClass=this.value;STATE.tablePages={};renderOperationsWorkspace()"><option value="">All Employment Types</option>${classOptions.map(v=>`<option value="${v}" ${STATE.opsEmployeeClass===v?'selected':''}>${v}</option>`).join('')}</select>
             <button class="btn btn-primary btn-sm" onclick="queueSearchRender(document.getElementById('ops-employee-search'),'opsEmployeeSearch',renderOperationsWorkspace,0)">${iSearch(14)} Search</button>${q||STATE.opsEmployeeDept||STATE.opsEmployeeStatus||STATE.opsEmployeeClass?`<button class="btn btn-ghost btn-sm" onclick="cancelSearchRender('opsEmployeeSearch');STATE.opsEmployeeSearch='';STATE.opsEmployeeDept='';STATE.opsEmployeeStatus='';STATE.opsEmployeeClass='';STATE.tablePages={};renderOperationsWorkspace()">Clear</button>`:''}
           </div>
           <div class="table-card ops-directory-card"><div class="table-card-head"><div class="table-meta"><b>${filteredEmployees.length}</b> employees <span class="table-meta-muted">${opsActions} selected-work items require attention${selected?' for this employee':''}</span></div><button class="btn btn-ghost btn-sm" onclick="STATE.opsEmployeeSearch='';STATE.opsEmployeeDept='';STATE.opsEmployeeStatus='';STATE.opsEmployeeClass='';STATE.tablePages={};renderOperationsWorkspace()">Reset View</button></div><div class="tablewrap"><table class="data-table" id="ops-directory-table"><thead><tr><th>Employee</th><th>Position</th><th>Department</th><th>Status</th><th>Class</th><th>Attention</th><th class="actions-head">Open</th></tr></thead><tbody>${dirRows||`<tr><td colspan="7"><div class="empty"><b>No employees found</b><span>Adjust your search or filters.</span></div></td></tr>`}</tbody></table></div></div>
@@ -2054,7 +2056,7 @@ async function renderOperationsWorkspaceLegacy(){
       </div>
       <section class="panel ops-selected-panel">
         ${selected?`<div class="ops-selected-head"><div class="cell-identity"><span class="avatar-lg">${esc(opsInitials(selected.name))}</span><div><div class="eyebrow">Selected employee</div><h2>${esc(selected.name)}</h2><p>${esc(selected.employeeNo||'—')} · ${esc(selected.position||'—')} · ${esc(selected.department||'Unassigned')} · ${esc(employeeTenureText(selected))}</p><div class="ops-identity-contact">${selected.mobileNumber?`<span>${esc(selected.mobileNumber)}</span>`:''}${selected.personalEmail?`<span>${esc(selected.personalEmail)}</span>`:''}${selected.dateHired?`<span>Hired ${fmtDate(selected.dateHired)}</span>`:''}</div></div></div><div class="page-header-actions"><button class="btn btn-primary" onclick="openEmployeeProfile('${selected.id}')">${iUser(15)} Employee 360</button>${canEdit()?`<button class="btn btn-ghost" onclick="openEmployeeForm('${selected.id}')">${iEdit(14)} Edit Employee</button>`:''}</div></div>`:'<div class="empty"><b>No employee selected</b><span>Select an employee above to begin.</span></div>'}
-        ${selected?`<div class="ops-detail-kpis"><div><span>Status</span><b>${statusBadge(selected.status,EMP_STATUS_MAP)}</b></div><div><span>Classification</span><b>${statusBadge(currentClass,currentClass==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</b></div><div><span>Master Data</span><b>${completion}%</b><small>Profile completeness</small></div><div><span>Open Cases</span><b>${selectedCasesOpen.length}</b><small>${selectedCasesAll.length} total cases</small></div><div><span>Open Relations</span><b>${selectedIncidents.filter(x=>!['Resolved','Closed'].includes(x.status)).length+selectedNte.filter(x=>x.status!=='Resolved').length}</b><small>Incident + NTE</small></div><div><span>Documents</span><b>${selectedDocs.length}</b><small>${selectedDocs.filter(d=>d.expirationDate&&d.expirationDate<=addDaysISO(todayISO(),30)).length} need review</small></div><div><span>ATD</span><b>${peso(atdBalance)}</b><small>Outstanding</small></div><div><span>Activity</span><b>${history.length}</b><small>Connected records</small></div></div>
+        ${selected?`<div class="ops-detail-kpis"><div><span>Status</span><b>${statusBadge(selected.status,EMP_STATUS_MAP)}</b></div><div><span>Employment type</span><b>${statusBadge(currentClass,currentClass==='Regular / Permanent'?{'Regular / Permanent':'b-green'}:{'Probationary':'b-amber'})}</b></div><div><span>Master Data</span><b>${completion}%</b><small>Profile completeness</small></div><div><span>Open Cases</span><b>${selectedCasesOpen.length}</b><small>${selectedCasesAll.length} total cases</small></div><div><span>Open Relations</span><b>${selectedIncidents.filter(x=>!['Resolved','Closed'].includes(x.status)).length+selectedNte.filter(x=>x.status!=='Resolved').length}</b><small>Incident + NTE</small></div><div><span>Documents</span><b>${selectedDocs.length}</b><small>${selectedDocs.filter(d=>d.expirationDate&&d.expirationDate<=addDaysISO(todayISO(),30)).length} need review</small></div><div><span>ATD</span><b>${peso(atdBalance)}</b><small>Outstanding</small></div><div><span>Activity</span><b>${history.length}</b><small>Connected records</small></div></div>
           <div class="ops-health"><div class="health-bar"><span style="width:${Math.min(100,Math.max(0,completion))}%"></span></div><div><b>Master-data completeness</b><span>${completion}% populated</span></div>${nextMilestone?`<div><b>Next milestone</b><span>${esc(nextMilestone.label)}${nextMilestone.date?' · '+fmtDate(nextMilestone.date):''}</span></div>`:'<div><b>Lifecycle</b><span>No pending milestone</span></div>'}</div>
           <div class="ops-section-block">${actionHtml}</div>`:''}
       </section>
@@ -2068,7 +2070,7 @@ function opsEmployeeContextHTML(employee){
   if(!employee)return `<div class="ops-lite-empty"><span>${iUser(20)}</span><div><b>No employee selected</b><p>Type a name or employee number above, then choose a result to open employee-specific actions.</p></div></div>`;
   const completion=employeeCompleteness(employee);
   return `<div class="ops-lite-selected">
-    <div class="ops-lite-identity"><span class="avatar-lg">${esc(opsInitials(employeeDisplayName(employee)))}</span><div><span class="eyebrow">Selected employee</span><h2>${esc(employeeDisplayName(employee))}</h2><p>${esc(employee.employeeNo||'—')} · ${esc(employee.position||'No position')} · ${esc(employee.department||'Unassigned')}</p><div class="ops-lite-badges">${statusBadge(employee.status||'—',EMP_STATUS_MAP)} ${statusBadge(classify(employee),classify(employee)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div></div></div>
+    <div class="ops-lite-identity"><span class="avatar-lg">${esc(opsInitials(employeeDisplayName(employee)))}</span><div><span class="eyebrow">Selected employee</span><h2>${esc(employeeDisplayName(employee))}</h2><p>${esc(employee.employeeNo||'—')} · ${esc(employee.position||'No position')} · ${esc(employee.department||'Unassigned')}</p><div class="ops-lite-badges">${statusBadge(employee.status||'—',EMP_STATUS_MAP)} ${statusBadge(classify(employee),classify(employee)==='Regular / Permanent'?{'Regular / Permanent':'b-green'}:{'Probationary':'b-amber'})}</div></div></div>
     <dl class="ops-lite-facts"><div><dt>Reporting branch</dt><dd>${esc(employee.branchReporting||'Not assigned')}</dd></div><div><dt>Date hired</dt><dd>${employee.dateHired?fmtDate(employee.dateHired):'Not provided'}</dd></div><div><dt>Contact</dt><dd>${esc(employee.mobileNumber||employee.personalEmail||'Not provided')}</dd></div><div><dt>Profile completion</dt><dd>${completion}%</dd></div></dl>
     <div class="ops-lite-controls">
       <button class="btn btn-primary" type="button" onclick="openEmployeeProfile('${employee.id}')">${iUser(15)} View Profile</button>
@@ -2518,11 +2520,12 @@ function openModuleInformation(module){
 
 /* ---------------- classification ---------------- */
 function classify(emp){
-  if(emp.classOverride && emp.classOverride!=='Auto') return emp.classOverride;
-  if(!emp.dateHired) return '—';
-  const hired = new Date(emp.dateHired+'T00:00:00');
-  const days = Math.floor((Date.now()-hired.getTime())/86400000);
-  return days >= (DB.settings.probationDays||180) ? 'Regular' : 'Probationary';
+  return normalizeEmployment(emp).employmentType;
+}
+function syncEmployeeStatusReason(id,status){
+  const input=document.getElementById(id);if(!input)return;
+  const value=input.value;
+  input.innerHTML=STATUS_REASONS[status].map(reason=>`<option value="${esc(reason)}" ${reason===value?'selected':''}>${esc(reason)}</option>`).join('');
 }
 
 /* ---------------- CSV export ---------------- */
@@ -3085,7 +3088,7 @@ async function renderDashboard({skipFetch=false}={}){
     const male=emps.filter(e=>e.gender==='Male').length;
     const female=emps.filter(e=>e.gender==='Female').length;
     const probationary=emps.filter(e=>classify(e)==='Probationary').length;
-    const regular=emps.filter(e=>classify(e)==='Regular').length;
+    const regular=emps.filter(e=>classify(e)==='Regular / Permanent').length;
     const onLeaveToday=DB.leaves.filter(l=>l.startDate<=today && l.endDate>=today && l.status!=='Disapproved').length;
     const upcomingLeaves=DB.leaves.filter(l=>l.startDate>today && l.startDate<=next30 && l.status!=='Disapproved').sort((a,b)=>a.startDate.localeCompare(b.startDate));
     const activeOnCall=DB.oncall.filter(o=>o.status==='Active').length;
@@ -3094,7 +3097,7 @@ async function renderDashboard({skipFetch=false}={}){
     const atdOpen=DB.atd.filter(r=>atdRemaining(r)>0).length;
     const evalOverdue=[];
     const evalDueSoon=[];
-    emps.filter(e=>classify(e)==='Probationary' && e.dateHired).forEach(e=>EVAL_MILESTONES.forEach(m=>{
+    emps.filter(e=>isEmployed(e)&&classify(e)==='Probationary' && e.dateHired).forEach(e=>EVAL_MILESTONES.forEach(m=>{
       const st=evalStatusInfo(e,m);
       if(st.label==='Overdue') evalOverdue.push({employee:e,milestone:m,due:st.due});
       else if(st.label==='Due Soon') evalDueSoon.push({employee:e,milestone:m,due:st.due});
@@ -3203,8 +3206,8 @@ async function renderDashboard({skipFetch=false}={}){
           </div>
           <div style="height:1px;background:var(--line);margin:8px 0 12px;"></div>
           <div class="grid cols-2" style="gap:10px;">
-            <button type="button" class="metric-card metric-card-link" onclick="dashboardOpenEmployees('Regular')"><span class="k">Regular</span><span class="v">${regular}</span><span class="s">Classified by threshold</span></button>
-            <button type="button" class="metric-card metric-card-link" onclick="dashboardOpenEmployees('Probationary')"><span class="k">Probationary</span><span class="v">${probationary}</span><span class="s">Within probation period</span></button>
+            ${[...EMPLOYMENT_TYPES,REVIEW_TYPE].map(type=>`<button type="button" class="metric-card metric-card-link" onclick="dashboardOpenEmployees('${esc(type)}')"><span class="k">${esc(type)}</span><span class="v">${emps.filter(e=>classify(e)===type).length}</span><span class="s">Recorded contract type</span></button>`).join('')}
+
           </div>
         </div>
       </div>
@@ -3662,7 +3665,7 @@ function statusBadge(val, map){
   const cls = (map&&map[val]) || 'b-grey';
   return `<span class="badge ${cls}"><span class="dot"></span>${esc(val||'—')}</span>`;
 }
-const EMP_STATUS_MAP = {'Active':'b-green','AWOL':'b-red','Resigned':'b-grey','Transferred to Another Department':'b-blue','Separated':'b-red','Returned to Agency':'b-amber','Newly Hired':'b-blue'};
+const EMP_STATUS_MAP = {'Active':'b-green','Inactive':'b-amber','Separated':'b-red'};
 const LEAVE_STATUS_MAP = {'Pending':'b-amber','Approved':'b-blue','Ongoing':'b-green','Completed':'b-grey','Disapproved':'b-red'};
 const NTE_STATUS_MAP = {'Pending Explanation':'b-amber','Explanation Submitted':'b-blue','Under Review':'b-blue','Resolved':'b-green'};
 const ONCALL_STATUS_MAP = {'Active':'b-green','Completed':'b-grey','Cancelled':'b-red'};
@@ -3672,17 +3675,19 @@ const ONCALL_STATUS_MAP = {'Active':'b-green','Completed':'b-grey','Cancelled':'
    ================================================================ */
 const LIFECYCLE_EVENT_TYPES = [
   'Onboarding Completed','Probation Started','30-Day Review','90-Day Review','Regularization',
-  'Promotion / Position Change','Return to Work','Resignation','Separation','AWOL / Leave of Absence',
-  'Rehire / Return to Agency','Other'
+  'Promotion / Position Change','Return to Work','Resignation','Separation','AWOL (Pending Review)','Leave of Absence',
+  'Rehire','Return to Agency','Other'
 ];
 const LIFECYCLE_EVENT_STATUS = {
-  'Resignation':'Resigned',
+  'Resignation':'Separated',
   'Separation':'Separated',
-  'AWOL / Leave of Absence':'AWOL',
+  'AWOL (Pending Review)':'Inactive',
+  'Leave of Absence':'Inactive',
   'Return to Work':'Active',
-  'Rehire / Return to Agency':'Returned to Agency',
-  'Regularization':'Active'
+  'Rehire':'Active',
+  'Return to Agency':'Inactive'
 };
+const LIFECYCLE_EVENT_REASON={'Resignation':'Resigned','Separation':'Other / Review Required','AWOL (Pending Review)':'AWOL (Pending Review)','Leave of Absence':'On Leave','Return to Work':'Reinstated','Rehire':'Rehired','Return to Agency':'Returned to Agency'};
 function lifecycleInitials(emp){ return (emp?.name||'Employee').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
 function lifecycleDaysSince(dateStr){ if(!dateStr) return null; const d=new Date(dateStr+'T00:00:00'); if(isNaN(d)) return null; return Math.max(0,Math.floor((new Date()-d)/86400000)); }
 function lifecycleMilestoneStatus(emp, milestone){
@@ -3695,9 +3700,9 @@ function lifecycleMilestoneStatus(emp, milestone){
 }
 function lifecycleNextMilestone(emp){
   if(!emp?.dateHired) return null;
-  if(['Resigned','Separated'].includes(emp.status)) return {label:emp.status,date:emp.statusDate||'',state:'Complete'};
-  if(emp.status==='Returned to Agency') return {label:'Returned to Agency',date:emp.statusDate||'',state:'Complete'};
-  if(classify(emp)!=='Probationary') return {label:'Regularized',date:emp.statusDate||'',state:'Complete'};
+  if(emp.status!=='Active') return {label:emp.statusReason||emp.status,date:emp.statusDate||'',state:'Complete'};
+
+  if(classify(emp)!=='Probationary') return {label:classify(emp),date:'',state:'Complete'};
   for(const m of EVAL_MILESTONES){
     const st=lifecycleMilestoneStatus(emp,m);
     if(st.label!=='Completed') return {label:m.label,date:st.due,state:st.label};
@@ -3745,12 +3750,12 @@ function lifecycleEventTypeChanged(){
   const wrap=document.getElementById('lc_position_wrap');
   if(wrap) wrap.style.display=type==='Promotion / Position Change'?'block':'none';
   const preview=document.getElementById('lc_preview');
-  if(preview && type==='Regularization') preview.textContent='This event will mark the employee as Active and set Classification to Regular.';
-  else if(preview && type==='Resignation') preview.textContent='This event will set Employment Status to Resigned.';
+  if(preview && type==='Regularization') preview.textContent='This event records Regular / Permanent employment type without changing operational status.';
+  else if(preview && type==='Resignation') preview.textContent='This event records Separated with Status Reason Resigned.';
   else if(preview && type==='Separation') preview.textContent='This event will set Employment Status to Separated.';
-  else if(preview && type==='AWOL / Leave of Absence') preview.textContent='This event will set Employment Status to AWOL. Record any separate leave documentation in Leave Tracker.';
+  else if(preview && type==='AWOL (Pending Review)') preview.textContent='This event records Inactive / AWOL (Pending Review), not a confirmed separation.';
   else if(preview && type==='Return to Work') preview.textContent='This event will set Employment Status to Active.';
-  else if(preview && type==='Rehire / Return to Agency') preview.textContent='This event will set Employment Status to Returned to Agency.';
+  else if(preview && type==='Return to Agency') preview.textContent='This event records Inactive / Returned to Agency pending an assignment; it does not infer termination.';
 }
 function lifecycleEmployeePreview(){
   const id=document.getElementById('lc_employee')?.value; const emp=DB.employees.find(e=>e.id===id); const preview=document.getElementById('lc_preview');
@@ -3775,17 +3780,18 @@ async function saveEmployeeLifecycleEvent(){
   const fromStatus=emp.status||''; const fromPosition=emp.position||''; const fromDepartment=emp.department||'';
   let toStatus=fromStatus; let toPosition=fromPosition;
   if(LIFECYCLE_EVENT_STATUS[eventType]) toStatus=LIFECYCLE_EVENT_STATUS[eventType];
-  if(EXIT_STATUSES.includes(toStatus)){
+  if(toStatus==='Separated'){
     const exitClassification=document.getElementById('lc_exit_class').value,exitFactor=document.getElementById('lc_exit_factor').value,exitReason=document.getElementById('lc_exit_reason').value.trim();
     if(!exitClassification||!exitFactor||!exitReason){toast('Enter the leaving classification, primary factor, and reason.',true);return;}
     Object.assign(emp,{exitClassification,exitFactor,exitReason});
   }
-  if(eventType==='Regularization'){ emp.classOverride='Regular'; }
+  if(eventType==='Regularization'){ emp.employmentType='Regular / Permanent';emp.employmentTypeNeedsReview=false;emp.regularizationDate=effectiveDate; }
+  if(eventType==='Probation Started'){emp.employmentType='Probationary';emp.employmentTypeNeedsReview=false;}
   if(eventType==='Promotion / Position Change'){ emp.position=newPosition; toPosition=newPosition; }
-  if(toStatus!==fromStatus){ emp.status=toStatus; emp.statusDate=effectiveDate; }
+  if(LIFECYCLE_EVENT_STATUS[eventType]){emp.status=toStatus;emp.statusReason=LIFECYCLE_EVENT_REASON[eventType];emp.statusDate=effectiveDate;}
   if(!Array.isArray(emp.employmentHistory)) emp.employmentHistory=[];
   emp.employmentHistory.push({
-    type:'Lifecycle Event',eventType,from:fromStatus,to:emp.status||fromStatus,fromPosition,toPosition,fromDepartment,toDepartment:emp.department||fromDepartment,
+    type:'Lifecycle Event',eventType,from:fromStatus,to:emp.status||fromStatus,statusReason:emp.statusReason,employmentType:emp.employmentType,fromPosition,toPosition,fromDepartment,toDepartment:emp.department||fromDepartment,
     effectiveDate,remarks,exitClassification:emp.exitClassification||'',exitFactor:emp.exitFactor||'',exitReason:emp.exitReason||'',changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'
   });
   appendEmployeeRecordHistory(emp,'Lifecycle',eventType);
@@ -3804,27 +3810,27 @@ function renderEmployeeLifecycle(){
   const employees=(DB.employees||[]).filter(e=>{
     const hay=[e.employeeNo,e.name,e.position,e.department,e.status].map(v=>String(v||'').toLowerCase());
     const searchOk=!q||hay.some(v=>v.includes(q));
-    const filterOk=!f||(f==='Probationary' ? classify(e)==='Probationary' : f==='Regular' ? classify(e)==='Regular' : e.status===f);
+    const filterOk=!f||classify(e)===f||e.status===f;
     return searchOk&&filterOk;
   }).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   const ninetyAgo=addDaysISO(todayISO(),-90);
   const recentHires=DB.employees.filter(e=>e.dateHired>=ninetyAgo&&e.dateHired<=todayISO()).length;
   const probationary=DB.employees.filter(e=>classify(e)==='Probationary').length;
-  const regular=DB.employees.filter(e=>classify(e)==='Regular').length;
-  const separations=DB.employees.filter(e=>['Resigned','Separated'].includes(e.status)&&String(e.statusDate||'')>=ninetyAgo).length;
+  const regular=DB.employees.filter(e=>classify(e)==='Regular / Permanent').length;
+  const separations=DB.employees.filter(e=>isSeparated(e)&&String(e.statusDate||'')>=ninetyAgo).length;
   const transfers90=DB.transfers.filter(t=>String(t.toDate||'')>=ninetyAgo&&String(t.toDate||'')<=todayISO()).length;
-  const overdue=DB.employees.filter(e=>classify(e)==='Probationary'&&EVAL_MILESTONES.some(m=>evalStatusInfo(e,m).label==='Overdue')).length;
+  const overdue=DB.employees.filter(e=>isEmployed(e)&&classify(e)==='Probationary'&&EVAL_MILESTONES.some(m=>evalStatusInfo(e,m).label==='Overdue')).length;
   const events=lifecycleRecentEvents(10);
-  const probationRows=DB.employees.filter(e=>classify(e)==='Probationary'&&e.dateHired).slice().sort((a,b)=>{
+  const probationRows=DB.employees.filter(e=>isEmployed(e)&&classify(e)==='Probationary'&&e.dateHired).slice().sort((a,b)=>{
     const an=lifecycleNextMilestone(a)?.date||'9999', bn=lifecycleNextMilestone(b)?.date||'9999'; return an.localeCompare(bn);
   }).slice(0,8);
-  const filterOptions=['Probationary','Regular',...EMP_STATUS];
+  const filterOptions=[...EMPLOYMENT_TYPES,REVIEW_TYPE,...EMP_STATUS];
   document.getElementById('content').innerHTML=`
     <div class="sectionhead"><div><h2>Employment Lifecycle</h2><p>${employees.length} of ${DB.employees.length} employees shown. Record actual milestones and employment events without changing the underlying HR case history.</p></div>${canEdit()?`<button class="btn btn-brass" onclick="openEmployeeLifecycleEventForm()">${iPlus(15)} Record Lifecycle Event</button>`:''}</div>
     <div class="lifecycle-kpis">
       <div class="lifecycle-kpi" style="--accent:var(--ink)"><div class="k">Workforce</div><div class="v">${DB.employees.length}</div><div class="s">Total employees</div></div>
       <div class="lifecycle-kpi" style="--accent:var(--amber)"><div class="k">Probationary</div><div class="v">${probationary}</div><div class="s">Currently in probation</div></div>
-      <div class="lifecycle-kpi" style="--accent:var(--forest)"><div class="k">Regular</div><div class="v">${regular}</div><div class="s">Regular classification</div></div>
+      <div class="lifecycle-kpi" style="--accent:var(--forest)"><div class="k">Regular</div><div class="v">${regular}</div><div class="s">Recorded regular contracts</div></div>
       <div class="lifecycle-kpi" style="--accent:var(--brass)"><div class="k">New Hires · 90d</div><div class="v">${recentHires}</div><div class="s">Date Hired</div></div>
       <div class="lifecycle-kpi" style="--accent:var(--ink)"><div class="k">Transfers · 90d</div><div class="v">${transfers90}</div><div class="s">Recorded movements</div></div>
       <div class="lifecycle-kpi" style="--accent:${overdue?'var(--rust)':'var(--forest)'}"><div class="k">Overdue Reviews</div><div class="v">${overdue}</div><div class="s">Probation milestones</div></div>
@@ -3844,8 +3850,8 @@ function renderEmployeeLifecycle(){
       </div>
     </div>
     <div class="panel"><div class="dashboard-panel-head"><div><h3>Employee Lifecycle Directory</h3><div class="desc">One operational view of current employment state, tenure, and next milestone.</div></div><div class="small">${separations} recent separation(s) in the last 90 days</div></div>
-      <div class="tablewrap"><table class="data-table"><thead><tr><th>Employee</th><th>Department</th><th>Status</th><th>Classification</th><th>Date Hired</th><th>Tenure</th><th>Next Milestone</th><th style="text-align:right;">Actions</th></tr></thead><tbody>
-      ${employees.length?employees.map(e=>{const n=lifecycleNextMilestone(e);return `<tr><td><b>${esc(e.employeeNo||'—')}</b><div>${esc(employeeDisplayName(e))}</div><div class="small">${esc(e.position||'—')}</div></td><td>${esc(e.department||'—')}</td><td>${statusBadge(e.status,EMP_STATUS_MAP)}</td><td>${statusBadge(classify(e),classify(e)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</td><td>${fmtDate(e.dateHired)}</td><td>${esc(employeeTenureText(e))}</td><td>${n?`${esc(n.label)}${n.date?`<div class="small">${fmtDate(n.date)}</div>`:''}`:'—'}</td><td><div class="rowactions"><button class="iconbtn" title="Profile" onclick="openEmployeeProfile('${e.id}')">${iUser(14)}</button>${canEdit()?`<button class="iconbtn" title="Lifecycle Event" onclick="openEmployeeLifecycleEventForm('${e.id}')">${iPlus(14)}</button>`:''}</div></td></tr>`;}).join(''):`<tr><td colspan="8"><div class="empty"><b>No employees found</b>Try a different search or lifecycle filter.</div></td></tr>`}
+      <div class="tablewrap"><table class="data-table"><thead><tr><th>Employee</th><th>Department</th><th>Status</th><th>Employment Type</th><th>Date Hired</th><th>Tenure</th><th>Next Milestone</th><th style="text-align:right;">Actions</th></tr></thead><tbody>
+      ${employees.length?employees.map(e=>{const n=lifecycleNextMilestone(e);return `<tr><td><b>${esc(e.employeeNo||'—')}</b><div>${esc(employeeDisplayName(e))}</div><div class="small">${esc(e.position||'—')}</div></td><td>${esc(e.department||'—')}</td><td>${statusBadge(e.status,EMP_STATUS_MAP)}</td><td>${statusBadge(classify(e),classify(e)==='Regular / Permanent'?{'Regular / Permanent':'b-green'}:{'Probationary':'b-amber'})}</td><td>${fmtDate(e.dateHired)}</td><td>${esc(employeeTenureText(e))}</td><td>${n?`${esc(n.label)}${n.date?`<div class="small">${fmtDate(n.date)}</div>`:''}`:'—'}</td><td><div class="rowactions"><button class="iconbtn" title="Profile" onclick="openEmployeeProfile('${e.id}')">${iUser(14)}</button>${canEdit()?`<button class="iconbtn" title="Lifecycle Event" onclick="openEmployeeLifecycleEventForm('${e.id}')">${iPlus(14)}</button>`:''}</div></td></tr>`;}).join(''):`<tr><td colspan="8"><div class="empty"><b>No employees found</b>Try a different search or lifecycle filter.</div></td></tr>`}
       </tbody></table></div>
     </div>`;
 }
@@ -3886,7 +3892,7 @@ const ONBOARDING_EVALUATION_FIELDS=[
 const ONBOARDING_OFFER_FIELDS=[
   {key:'prfNumber',label:'PRF Number (optional)',type:'text'},
   {key:'proposedStartDate',label:'Proposed Start Date',type:'date'},
-  {key:'employmentType',label:'Employment Type',type:'select',options:['Probationary','Regular','Project-based','Fixed-term','Part-time']},
+  {key:'employmentType',label:'Employment Type',type:'select',options:EMPLOYMENT_TYPES},
   {key:'offeredSalary',label:'Offered Monthly Salary',type:'number'},
   {key:'tin',label:'BIR TIN',type:'text',format:'tin'},
   {key:'sssNumber',label:'SSS Number',type:'text',format:'sss'},
@@ -4024,9 +4030,10 @@ function openOnboardingDetails(id){
 function openOnboardingHire(id){
   const candidate=DB.onboardingCandidates.find(row=>row.id===id);if(!candidate)return;
   const blockers=onboardingHireBlockers(candidate);
-  openEmployeeWorkspaceModal(`<div class="modal-head"><div><h3>Convert to Employee</h3><div class="small">${esc(candidateDisplayName(candidate))}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="onboarding-convert-summary"><div><span>Employee No.</span><b>${esc(nextEmployeeNumber(DB.employees))}</b></div><div><span>PRF Number</span><b>${esc(candidate.prfNumber||'—')}</b></div><div><span>Position</span><b>${esc(candidate.positionApplied||'—')}</b></div><div><span>Start Date</span><b>${fmtDate(candidate.proposedStartDate)}</b></div></div><section class="onboarding-form-section"><div class="onboarding-form-heading"><h4>Assignment &amp; Compensation</h4><p>Set the employee's reporting branch before activation.</p></div><div class="formgrid"><div class="field"><label>Branch Reporting *</label><select id="oh_branch"><option value="">Select branch</option>${employeeBranchLocations().map(branch=>`<option value="${esc(branch)}">${esc(branch)}</option>`).join('')}</select></div><div class="field"><label>Daily Rate</label><div class="money-input"><span>₱</span><input id="oh_daily_rate" type="number" min="0" step="0.01"></div></div>${employeeAllowanceFieldsHTML(null)}</div></section><div class="employee-address-stack onboarding-hire-addresses">${addressComponentHTML({prefix:'hire_home',label:'Home Address',value:candidate.homeAddress||candidate.address})}${addressComponentHTML({prefix:'hire_present',label:'Present Address',value:candidate.presentAddress||candidate.address,showCopy:true,copyFromPrefix:'hire_home'})}</div>${blockers.length?`<div class="notice"><b>Not ready to convert.</b> Complete: ${esc(blockers.join(', '))}.</div>`:`<div class="notice notice-soft"><b>Ready:</b> This creates an active employee master record and preserves this applicant history.</div>`}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ghost" onclick="openOnboardingForm('${candidate.id}')">Edit Applicant</button><button class="btn btn-primary" data-confirm-change="true" ${blockers.length?'disabled':''} onclick="convertOnboardingCandidate('${candidate.id}')">Create Employee</button></div>`);
+  openEmployeeWorkspaceModal(`<div class="modal-head"><div><h3>Convert to Employee</h3><div class="small">${esc(candidateDisplayName(candidate))}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="onboarding-convert-summary"><div><span>Employee No.</span><b>${esc(nextEmployeeNumber(DB.employees))}</b></div><div><span>PRF Number</span><b>${esc(candidate.prfNumber||'—')}</b></div><div><span>Position</span><b>${esc(candidate.positionApplied||'—')}</b></div><div><span>Start Date</span><b>${fmtDate(candidate.proposedStartDate)}</b></div></div><section class="onboarding-form-section"><div class="onboarding-form-heading"><h4>Assignment &amp; Compensation</h4><p>Set the employee's reporting branch before activation.</p></div><div class="formgrid"><div class="field"><label>Employment Type *</label><select id="oh_employment_type"><option value="">Select employment type</option>${EMPLOYMENT_TYPES.map(type=>`<option ${type===canonicalEmploymentType(candidate.employmentType)?'selected':''}>${esc(type)}</option>`).join('')}</select></div><div class="field"><label>Branch Reporting *</label><select id="oh_branch"><option value="">Select branch</option>${employeeBranchLocations().map(branch=>`<option value="${esc(branch)}">${esc(branch)}</option>`).join('')}</select></div><div class="field"><label>Daily Rate</label><div class="money-input"><span>₱</span><input id="oh_daily_rate" type="number" min="0" step="0.01"></div></div>${employeeAllowanceFieldsHTML(null)}</div></section><div class="employee-address-stack onboarding-hire-addresses">${addressComponentHTML({prefix:'hire_home',label:'Home Address',value:candidate.homeAddress||candidate.address})}${addressComponentHTML({prefix:'hire_present',label:'Present Address',value:candidate.presentAddress||candidate.address,showCopy:true,copyFromPrefix:'hire_home'})}</div>${blockers.length?`<div class="notice"><b>Not ready to convert.</b> Complete: ${esc(blockers.join(', '))}.</div>`:`<div class="notice notice-soft"><b>Ready:</b> This creates an active employee master record and preserves this applicant history.</div>`}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ghost" onclick="openOnboardingForm('${candidate.id}')">Edit Applicant</button><button class="btn btn-primary" data-confirm-change="true" ${blockers.length?'disabled':''} onclick="convertOnboardingCandidate('${candidate.id}')">Create Employee</button></div>`);
 }
 async function convertOnboardingCandidate(id){
+  if(!EMPLOYMENT_TYPES.includes(document.getElementById('oh_employment_type')?.value)){toast('Select an Employment Type based on the hiring contract.',true);return;}
   const candidate=DB.onboardingCandidates.find(row=>row.id===id);if(!candidate)return;
   const blockers=onboardingHireBlockers(candidate);if(blockers.length){toast('Complete hiring requirements before conversion: '+blockers.join(', '),true);return;}
   if(candidate.employeeRecordId||DB.employees.some(employee=>employee.sourceCandidateId===candidate.id)){toast('This applicant has already been converted.',true);return;}
@@ -4042,7 +4049,7 @@ async function convertOnboardingCandidate(id){
   const createdByName=SESSION?.fullName||'System';
   const linkedSlots=(DB.manpowerSlots||[]).filter(slot=>String(slot.candidateId||'')===String(candidate.id));
   const linkedRequest=linkedSlots.length?manpowerRequestById(linkedSlots[0].requestId):null;
-  const employee={id:uid(),employeeNo:nextEmployeeNumber(DB.employees),prfNumber:candidate.prfNumber||linkedRequest?.prfNumber||'',lastName:candidate.lastName,firstName:candidate.firstName,middleName:candidate.middleName,name:formatEmployeeName(candidate),position:candidate.positionApplied,department:candidate.department,branchReporting,dailyRate:dailyRateRaw===''?'':Math.round(Number(dailyRateRaw)*100)/100,allowances,dateHired:candidate.proposedStartDate,birthDate:candidate.birthDate,gender:candidate.gender,civilStatus:candidate.civilStatus||'',status:'Newly Hired',statusDate:candidate.proposedStartDate,mobileNumber:candidate.mobileNumber||'',personalEmail:candidate.personalEmail||'',homeAddress:homeResult.address,presentAddress:presentResult.address,address:formatPhilippineAddress(homeResult.address),presentAddressText:formatPhilippineAddress(presentResult.address),tin:candidate.tin||'',sssNumber:candidate.sssNumber||'',philHealthNumber:candidate.philHealthNumber||'',pagIbigNumber:candidate.pagIbigNumber||'',emergencyContactName:'',emergencyContactRelationship:'',emergencyContactPhone:'',classOverride:'Auto',sourceCandidateId:candidate.id,createdAt,createdBy:SESSION?.id||null,createdByName,updatedAt:createdAt,updatedBy:SESSION?.id||null,updatedByName:createdByName,recordHistory:[{action:'Created',at:createdAt,by:createdByName,byId:SESSION?.id||null,detail:'Converted from Onboarding & Applicants'}],employmentHistory:[{type:'Employment Status',from:'Applicant',to:'Newly Hired',effectiveDate:candidate.proposedStartDate,remarks:'Converted from Onboarding & Applicants',changedAt:createdAt,changedBy:createdByName}]};
+  const employee={id:uid(),employeeNo:nextEmployeeNumber(DB.employees),prfNumber:candidate.prfNumber||linkedRequest?.prfNumber||'',lastName:candidate.lastName,firstName:candidate.firstName,middleName:candidate.middleName,name:formatEmployeeName(candidate),position:candidate.positionApplied,department:candidate.department,branchReporting,dailyRate:dailyRateRaw===''?'':Math.round(Number(dailyRateRaw)*100)/100,allowances,dateHired:candidate.proposedStartDate,birthDate:candidate.birthDate,gender:candidate.gender,civilStatus:candidate.civilStatus||'',status:'Active',statusReason:'Active / Normal',employmentType:document.getElementById('oh_employment_type').value,statusDate:'',mobileNumber:candidate.mobileNumber||'',personalEmail:candidate.personalEmail||'',homeAddress:homeResult.address,presentAddress:presentResult.address,address:formatPhilippineAddress(homeResult.address),presentAddressText:formatPhilippineAddress(presentResult.address),tin:candidate.tin||'',sssNumber:candidate.sssNumber||'',philHealthNumber:candidate.philHealthNumber||'',pagIbigNumber:candidate.pagIbigNumber||'',emergencyContactName:'',emergencyContactRelationship:'',emergencyContactPhone:'',classOverride:'Auto',sourceCandidateId:candidate.id,createdAt,createdBy:SESSION?.id||null,createdByName,updatedAt:createdAt,updatedBy:SESSION?.id||null,updatedByName:createdByName,recordHistory:[{action:'Created',at:createdAt,by:createdByName,byId:SESSION?.id||null,detail:'Converted from Onboarding & Applicants'}],employmentHistory:[{type:'Hiring',from:'Applicant',to:'Active',statusReason:'Active / Normal',employmentType:document.getElementById('oh_employment_type').value,effectiveDate:candidate.proposedStartDate,remarks:'Converted from Onboarding & Applicants',changedAt:createdAt,changedBy:createdByName}]};
   const original=JSON.parse(JSON.stringify(candidate));
   const originalSlots=linkedSlots.map(slot=>({slot,data:JSON.parse(JSON.stringify(slot))}));
   DB.employees.push(employee);Object.assign(candidate,{stage:'Hired',employeeRecordId:employee.id,hiredAt:new Date().toISOString(),updatedAt:new Date().toISOString()});linkedSlots.forEach(slot=>{slot.employeeId=employee.id;if(['Open','Sourcing','Candidate Identified'].includes(slot.status))slot.status='For Onboarding';slot.updatedAt=createdAt;slot.updatedBy=SESSION?.id||null;});
@@ -4084,7 +4091,8 @@ const EMPLOYEE_COLUMN_DEFS = [
   {key:'dateHired',label:'Date Hired',default:true,width:112,cell:e=>fmtDate(e.dateHired)},
   {key:'gender',label:'Gender',default:false,width:86,cell:e=>esc(e.gender||'—')},
   {key:'status',label:'Status',default:true,width:142,cell:e=>statusBadge(e.status,EMP_STATUS_MAP)},
-  {key:'classification',label:'Classification',default:true,width:124,cell:e=>statusBadge(classify(e),classify(e)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})},
+  {key:'statusReason',label:'Status Reason',default:false,width:180,cell:e=>esc(e.statusReason||'—')},
+  {key:'classification',label:'Employment Type',default:true,width:124,cell:e=>statusBadge(classify(e),classify(e)==='Regular / Permanent'?{'Regular / Permanent':'b-green'}:{'Probationary':'b-amber'})},
   {key:'mobileNumber',label:'Mobile Number',default:false,width:132,cell:e=>esc(e.mobileNumber||'—')},
   {key:'personalEmail',label:'Contact Email',default:false,width:210,cell:e=>esc(e.personalEmail||'—')},
   {key:'address',label:'Home Address',default:false,width:250,cell:e=>esc(formatPhilippineAddress(e.homeAddress)||e.address||'—')},
@@ -4310,7 +4318,7 @@ function renderEmployees(){
           <select aria-label="Filter employees by department" onchange="STATE.employeeDepartmentFilter=this.value; renderEmployees()"><option value="">Department</option>${depts.map(d=>`<option value="${esc(d)}" ${deptFilter===d?'selected':''}>${esc(d)}</option>`).join('')}</select>
           <select aria-label="Filter employees by reporting branch" onchange="STATE.employeeBranchFilter=this.value; renderEmployees()"><option value="">Branch</option>${branches.map(branch=>`<option value="${esc(branch)}" ${branchFilter===branch?'selected':''}>${esc(branch)}</option>`).join('')}</select>
           <select aria-label="Filter employees by employment status" onchange="STATE.employeeStatusFilter=this.value; renderEmployees()"><option value="">Status</option>${statusOptions.map(v=>`<option value="${esc(v)}" ${statusFilter===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
-          <select aria-label="Filter employees by classification" onchange="STATE.employeeClassFilter=this.value; renderEmployees()"><option value="">Classification</option><option value="Probationary" ${classFilter==='Probationary'?'selected':''}>Probationary</option><option value="Regular" ${classFilter==='Regular'?'selected':''}>Regular</option></select>
+          <select aria-label="Filter employees by employment type" onchange="STATE.employeeClassFilter=this.value; renderEmployees()"><option value="">Employment Type</option>${[...EMPLOYMENT_TYPES,REVIEW_TYPE].map(type=>`<option value="${esc(type)}" ${classFilter===type?'selected':''}>${esc(type)}</option>`).join('')}</select>
         </div>
         <div class="employee-toolbar-actions">
           ${hasFilters?`<button class="btn btn-ghost btn-sm employee-reset" onclick="resetEmployeeDirectoryFilters()">Clear</button>`:''}
@@ -4453,8 +4461,10 @@ const EMP_FIELDS = [
   {key:'birthDate', label:'Birth Date', type:'date'},
   {key:'gender', label:'Gender', type:'select', options:['Male','Female'], required:true},
   {key:'civilStatus', label:'Civil Status', type:'select', options:['Single','Married','Widowed','Separated','Other',''], required:false},
-  {key:'status', label:'Employment Status', type:'select', options:EMP_STATUS, required:true},
-  {key:'statusDate', label:'Status Effective Date (resignation/AWOL/separation/etc.)', type:'date'},
+  {key:'status', label:'Employment Status', type:'select', options:EMP_STATUS, required:true, onchange:"syncEmployeeStatusReason('f_statusReason',this.value)"},
+  {key:'statusReason',label:'Status Reason',type:'select',options:()=>STATUS_REASONS.Active,required:true},
+  {key:'statusDate', label:'Status Effective Date (optional for Active)', type:'date'},
+  {key:'employmentType',label:'Employment Type',type:'select',options:EMPLOYMENT_TYPES,placeholder:'Select employment type',required:true},
   {key:'exitClassification',label:'Leaving Classification',type:'select',options:['',...EXIT_CLASSIFICATIONS]},
   {key:'exitFactor',label:'Primary Leaving Factor',type:'select',options:['',...WORKFORCE_FACTORS]},
   {key:'exitReason',label:'Reason for Leaving',type:'textarea',maxLength:1000},
@@ -4468,7 +4478,7 @@ const EMP_FIELDS = [
   {key:'emergencyContactName', label:'Emergency Contact Name', type:'text'},
   {key:'emergencyContactRelationship', label:'Emergency Contact Relationship', type:'text'},
   {key:'emergencyContactPhone', label:'Emergency Contact Phone', type:'tel'},
-  {key:'classOverride', label:'Classification', type:'select', options:['Auto','Probationary','Regular'], required:true},
+
 ];
 const EMPLOYEE_IMPORT_COLUMNS = [
   {header:'Employee No.',key:'employeeNo',note:'Optional. Use EMP- followed by 6 digits (for example EMP-000001), or leave blank to generate the next number.'},
@@ -4496,7 +4506,8 @@ const EMPLOYEE_IMPORT_COLUMNS = [
   {header:'Emergency Contact Name',key:'emergencyContactName'},
   {header:'Emergency Contact Relationship',key:'emergencyContactRelationship'},
   {header:'Emergency Contact Phone',key:'emergencyContactPhone'},
-  {header:'Classification Override',key:'classOverride',options:['Auto','Probationary','Regular'],default:'Auto'},
+  {header:'Employment Type',key:'employmentType',required:true,options:EMPLOYMENT_TYPES},
+  {header:'Status Reason',key:'statusReason',note:'Must match Employment Status; blank defaults to Active / Normal only for Active.'},
   {header:'BIR TIN',key:'tin'},
   {header:'SSS Number',key:'sssNumber'},
   {header:'PhilHealth PIN',key:'philHealthNumber'},
@@ -4520,11 +4531,11 @@ function employeeAllowanceSummary(employee){
 const EMPLOYEE_IMPORT_HEADER_ALIASES = {
   employeenumber:'employeeNo',employeeno:'employeeNo',prf:'prfNumber',prfnumber:'prfNumber',
   lastname:'lastName',firstname:'firstName',middlename:'middleName',datehired:'dateHired',birthdate:'birthDate',
-  employmentstatus:'status',statuseffectivedate:'statusDate',mobilenumber:'mobileNumber',mobile:'mobileNumber',
+  employmenttype:'employmentType',tenuretype:'employmentType',statusreason:'statusReason',substatus:'statusReason',systemstatus:'status',classificationoverride:'employmentType',employmentstatus:'status',statuseffectivedate:'statusDate',mobilenumber:'mobileNumber',mobile:'mobileNumber',
   personalemail:'personalEmail',email:'personalEmail',homeaddress:'address',address:'address',
   emergencycontact:'emergencyContactName',emergencycontactname:'emergencyContactName',
   emergencycontactrelationship:'emergencyContactRelationship',relationship:'emergencyContactRelationship',
-  emergencycontactphone:'emergencyContactPhone',classification:'classOverride',classificationoverride:'classOverride',
+  emergencycontactphone:'emergencyContactPhone',classification:'employmentType',
   birtin:'tin',tin:'tin',sss:'sssNumber',sssnumber:'sssNumber',philhealth:'philHealthNumber',philhealthpin:'philHealthNumber',
   pagibig:'pagIbigNumber',pagibigmid:'pagIbigNumber'
 };
@@ -4601,6 +4612,7 @@ function validateEmployeeImportRow(values,rowNumber,accepted){
         value=Number.isFinite(amount)&&amount>=0?Math.round(amount*100)/100:'';
       }
     } else value=String(value??'').trim();
+    if(column.key==='employmentType')value=canonicalEmploymentType(value)||value;
     if(!value&&column.default) value=column.default;
     if(value&&column.options){
       const allowed=importAllowedValue(value,column.options);
@@ -4619,10 +4631,12 @@ function validateEmployeeImportRow(values,rowNumber,accepted){
   }
   if(vals.dateHired&&vals.dateHired>todayISO()) errors.push('Date Hired cannot be in the future');
   if(vals.birthDate&&vals.birthDate>todayISO()) errors.push('Birth Date cannot be in the future');
-  if(vals.statusDate&&vals.dateHired&&vals.statusDate<vals.dateHired) errors.push('Status Effective Date cannot be before Date Hired');
+  if(vals.status==='Active'&&!vals.statusReason)vals.statusReason='Active / Normal';
+  vals.employmentType=canonicalEmploymentType(vals.employmentType)||vals.employmentType;
+  const employmentError=employmentValidation(vals);if(employmentError)errors.push(employmentError);
   if(vals.personalEmail&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vals.personalEmail)) errors.push('Personal Email is invalid');
   if(vals.remarks.length>1000) errors.push('Remarks cannot exceed 1,000 characters');
-  if(EXIT_STATUSES.includes(vals.status)&&(!vals.exitClassification||!vals.exitFactor||!vals.exitReason))errors.push('Leaving statuses require a classification, primary factor, and reason');
+  if(vals.status==='Separated'&&(!vals.exitClassification||!vals.exitFactor||!vals.exitReason))errors.push('Leaving statuses require a classification, primary factor, and reason');
   if(vals.exitReason.length>1000)errors.push('Reason for Leaving cannot exceed 1,000 characters');
   [employeeImportPhoneError(vals.mobileNumber,'Mobile Number'),employeeImportPhoneError(vals.emergencyContactPhone,'Emergency Contact Phone'),validateGovernmentIds(vals)].filter(Boolean).forEach(error=>errors.push(error));
   if(!vals.employeeNo) vals.employeeNo=nextEmployeeNumber([...DB.employees,...accepted]);
@@ -4885,7 +4899,7 @@ async function commitEmployeeImport(){
     employee.presentAddress=normalizeAddress(null,employee.address||'');
     employee.presentAddressText=employee.address||'';
     employee.recordHistory.push({action:'Imported',at:now,by:actorName,byId:SESSION?.id||null,detail:`Employee record imported from ${EMPLOYEE_IMPORT_PREVIEW.fileName}`});
-    employee.employmentHistory.push({type:'Employment Status',from:'',to:employee.status,effectiveDate:employee.statusDate||employee.dateHired,remarks:'Initial employee record imported from Excel',exitClassification:employee.exitClassification||'',exitFactor:employee.exitFactor||'',exitReason:employee.exitReason||'',changedAt:now,changedBy:actorName});
+    employee.employmentHistory.push({type:'Hiring',from:'',to:employee.status,statusReason:employee.statusReason,employmentType:employee.employmentType,effectiveDate:employee.dateHired,remarks:'Initial employee record imported from Excel',exitClassification:employee.exitClassification||'',exitFactor:employee.exitFactor||'',exitReason:employee.exitReason||'',changedAt:now,changedBy:actorName});
     DB.employees.push(employee);added.push(employee);
   });
   if(!(await saveDB())){DB.employees=DB.employees.filter(employee=>!added.includes(employee));return;}
@@ -4900,9 +4914,9 @@ function downloadEmployeeImportTemplate(){
   const employeeSheet=window.XLSX.utils.aoa_to_sheet([headers]);
   employeeSheet['!cols']=columns.map(column=>({wch:Math.max(15,column.header.length+3)}));
   employeeSheet['!autofilter']={ref:`A1:${window.XLSX.utils.encode_col(headers.length-1)}1`};
-  const instructions=[['SLSC Employee Import Template'],['Instructions'],['1. Enter one employee per row in the Employees sheet.'],['2. Do not rename or remove required columns.'],['3. Leave Employee No. blank to generate the next available number.'],['4. Dates may use YYYY-MM-DD or MM/DD/YYYY.'],['5. PRF Number and government IDs are optional.'],['6. Branch Reporting must match an Administrator-configured branch.'],['7. Home Address accepts a complete free-text address and is imported into Street / House / Unit details. Select its official Region through Barangay when the employee is next edited.'],['8. Import validates the entire workbook before saving any employee.'],[],['Column','Required','Allowed values / guidance'],...columns.map(column=>[column.header,column.required?'Yes':'No',column.options?.join(' | ')||column.note||''])];
+  const instructions=[['SLSC Employee Import Template'],['Instructions'],['1. Enter one employee per row in the Employees sheet.'],['2. Do not rename or remove required columns.'],['3. Leave Employee No. blank to generate the next available number.'],['4. Dates may use YYYY-MM-DD or MM/DD/YYYY.'],['5. PRF Number and government IDs are optional.'],['6. Branch Reporting must match an Administrator-configured branch.'],['7. Home Address accepts a complete free-text address and is imported into Street / House / Unit details. Select its official Region through Barangay when the employee is next edited.'],['8. Import validates the entire workbook before saving any employee.'],['9. Employment Type is required and must reflect the actual contract; service length is not used to infer it.'],['10. Leave Status Effective Date blank for Active unless a real status event occurred. Inactive and Separated require it and a matching Status Reason.'],[],['Column','Required','Allowed values / guidance'],...columns.map(column=>[column.header,column.required?'Yes':'No',column.options?.join(' | ')||column.note||''])];
   const instructionSheet=window.XLSX.utils.aoa_to_sheet(instructions);instructionSheet['!cols']=[{wch:34},{wch:12},{wch:95}];
-  const reference=[['Field','Allowed values'],['Department',employeeDepartmentNames().join(' | ')],['Position',positionCatalog().filter(item=>item.active).map(item=>`${item.name} (${item.department})`).join(' | ')||'Configure positions in Settings'],['Branch Reporting',employeeBranchLocations().join(' | ')],['Allowance Types',employeeAllowanceTypes().join(' | ')||'No allowance types configured'],['Gender','Male | Female'],['Civil Status','Single | Married | Widowed | Separated | Other'],['Employment Status',EMP_STATUS.join(' | ')],['Classification Override','Auto | Probationary | Regular'],['SSS Number','10 digits; example 09-5421455-9'],['PhilHealth PIN','12 digits; 2-9-1 format'],['Pag-IBIG MID','12 digits; 4-4-4 format'],['BIR TIN','9 digits plus optional 3-digit branch code']];
+  const reference=[['Field','Allowed values'],['Department',employeeDepartmentNames().join(' | ')],['Position',positionCatalog().filter(item=>item.active).map(item=>`${item.name} (${item.department})`).join(' | ')||'Configure positions in Settings'],['Branch Reporting',employeeBranchLocations().join(' | ')],['Allowance Types',employeeAllowanceTypes().join(' | ')||'No allowance types configured'],['Gender','Male | Female'],['Civil Status','Single | Married | Widowed | Separated | Other'],['Employment Status',EMP_STATUS.join(' | ')],['Employment Type',EMPLOYMENT_TYPES.join(' | ')],['Status Reason',Object.entries(STATUS_REASONS).map(([status,reasons])=>`${status}: ${reasons.join(' | ')}`).join('; ')],['SSS Number','10 digits; example 09-5421455-9'],['PhilHealth PIN','12 digits; 2-9-1 format'],['Pag-IBIG MID','12 digits; 4-4-4 format'],['BIR TIN','9 digits plus optional 3-digit branch code']];
   const referenceSheet=window.XLSX.utils.aoa_to_sheet(reference);referenceSheet['!cols']=[{wch:30},{wch:95}];
   const workbook=window.XLSX.utils.book_new();
   window.XLSX.utils.book_append_sheet(workbook,employeeSheet,'Employees');window.XLSX.utils.book_append_sheet(workbook,instructionSheet,'Instructions');window.XLSX.utils.book_append_sheet(workbook,referenceSheet,'Reference');
@@ -4910,7 +4924,7 @@ function downloadEmployeeImportTemplate(){
 }
 const EMP_FORM_SECTIONS = [
   {title:'Employee Record',description:'Core identifiers and approved hiring reference.',keys:['employeeNo','prfNumber']},
-  {title:'Personal & Employment',description:'Legal name, assignment, and current employment details.',keys:['lastName','firstName','middleName','department','position','dateHired','birthDate','gender','civilStatus','status','statusDate','classOverride','remarks']},
+  {title:'Personal & Employment',description:'Legal name, assignment, and current employment details.',keys:['lastName','firstName','middleName','department','position','dateHired','birthDate','gender','civilStatus','employmentType','status','statusReason','statusDate','remarks']},
   {title:'Assignment & Compensation',description:'Required reporting location and current employee rate or allowances.',keys:['branchReporting','dailyRate'],allowances:true},
   {title:'Contact & Emergency',description:'Private contact information used by HR when needed.',keys:['mobileNumber','personalEmail','emergencyContactName','emergencyContactRelationship','emergencyContactPhone']},
   {title:'Government IDs',description:'Optional statutory identifiers with format validation.',keys:['tin','sssNumber','philHealthNumber','pagIbigNumber']},
@@ -4919,8 +4933,8 @@ const EMP_FORM_SECTIONS = [
 function employeeFormFieldValue(field,record){
   if(record) return record[field.key];
   if(field.key==='employeeNo') return nextEmployeeNumber(DB.employees);
-  if(field.key==='status') return 'Newly Hired';
-  if(field.key==='classOverride') return 'Auto';
+  if(field.key==='status') return 'Active';
+  if(field.key==='statusReason') return 'Active / Normal';
   return '';
 }
 function employeeFormSectionsHTML(record){
@@ -4933,6 +4947,8 @@ function employeeFormSectionsHTML(record){
       if(key==='branchReporting')resolved={...field,options:['',...uniqueSettingNames([...employeeBranchLocations(),record?.branchReporting||''])]};
       if(key==='department')resolved={...field,options:()=>employeeDepartmentNames(record?.department||'')};
       if(key==='position')resolved={...field,options:()=>employeePositionNames(record?.department||'',record?.position||'')};
+      if(key==='statusReason')resolved={...field,options:STATUS_REASONS[record?.status||'Active']};
+      if(key==='employmentType'&&record?.employmentType===REVIEW_TYPE)resolved={...field,options:[REVIEW_TYPE,...EMPLOYMENT_TYPES]};
       return fieldHTML(resolved,employeeFormFieldValue(resolved,record));
     }).join('')}${section.allowances?employeeAllowanceFieldsHTML(record):''}</div>
   </section>`).join('');
@@ -5036,7 +5052,7 @@ function openEmployeeForm(id){
     <div class="modal-body employee-form-body">
       ${existing?employeeWorkspaceNav(existing,'edit'):''}
       ${employeeFormSectionsHTML(formRecord)}
-      <div class="employee-form-guidance"><b>Automatic classification</b><span>Date Hired is evaluated against the ${DB.settings.probationDays}-day regularization threshold in Settings. Keep Classification on Auto unless HR needs to correct the record.</span></div>
+      <div class="employee-form-guidance"><b>Contract and status</b><span>Employment Type reflects the actual contract. Employment Status and its reason describe operational state. Date Hired does not populate Status Effective Date.</span></div>
     </div>
     ${existing?employeeWorkspaceFooter(existing,'Save Employee',`saveEmployee('${id}')`):`<div class="modal-foot employee-workspace-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><div class="toolbar-spacer"></div><button class="btn btn-primary" onclick="saveEmployee('')">Save Employee</button></div>`}
   `);
@@ -5136,8 +5152,9 @@ async function saveEmployee(id){
   vals.dailyRate=vals.dailyRate===''?'':Math.round(Number(vals.dailyRate)*100)/100;
   if(vals.dateHired>todayISO()){ toast('Date Hired cannot be in the future.'); return; }
   if(vals.birthDate && vals.birthDate>todayISO()){ toast('Birth Date cannot be in the future.'); return; }
-  if(vals.statusDate && vals.statusDate<vals.dateHired){ toast('Status Effective Date cannot be before Date Hired.'); return; }
-  if(EXIT_STATUSES.includes(vals.status)&&(!id||existingEmployee?.status!==vals.status)&&(!vals.exitClassification||!vals.exitFactor||!vals.exitReason)){toast('For a leaving status, enter the classification, primary factor, and reason.',true);return;}
+  const employmentError=employmentValidation(vals,{allowLegacy:existingEmployee?.employmentType===REVIEW_TYPE});
+  if(employmentError){toast(employmentError,true);return;}
+  if(vals.status==='Separated'&&(!id||existingEmployee?.status!==vals.status)&&(!vals.exitClassification||!vals.exitFactor||!vals.exitReason)){toast('For a leaving status, enter the classification, primary factor, and reason.',true);return;}
   const governmentIdValidation=validateGovernmentIds(vals); if(governmentIdValidation){toast(governmentIdValidation,true);return;}
   if(vals.employeeNo && DB.employees.some(e=>e.id!==id && String(e.employeeNo||'').toUpperCase()===String(vals.employeeNo).toUpperCase())){ vals.employeeNo=nextEmployeeNumber(DB.employees); }
   vals.name=formatEmployeeName(vals);
@@ -5160,15 +5177,15 @@ async function saveEmployee(id){
   if(!isNew&&JSON.stringify(original?.homeAddress||{})!==JSON.stringify(vals.homeAddress||{}))changedFields.push('Home Address');
   if(!isNew&&JSON.stringify(original?.presentAddress||{})!==JSON.stringify(vals.presentAddress||{}))changedFields.push('Present Address');
   if(!isNew&&JSON.stringify(original?.allowances||{})!==JSON.stringify(vals.allowances||{}))changedFields.push('Allowances');
-  Object.assign(rec, vals);
+  Object.assign(rec, vals,{employmentTypeNeedsReview:vals.employmentType===REVIEW_TYPE});
   if(!Array.isArray(rec.employmentHistory)) rec.employmentHistory=[];
   if(!Array.isArray(rec.recordHistory)) rec.recordHistory=[];
   if(isNew){
     Object.assign(rec,{createdAt:now,createdBy:SESSION?.id||null,createdByName:actorName,updatedAt:now,updatedBy:SESSION?.id||null,updatedByName:actorName});
     appendEmployeeRecordHistory(rec,'Created','Employee record created',now);
-    rec.employmentHistory.push({type:'Employment Status',from:'',to:rec.status,effectiveDate:rec.statusDate||rec.dateHired,remarks:'Initial employee record',exitClassification:rec.exitClassification||'',exitFactor:rec.exitFactor||'',exitReason:rec.exitReason||'',changedAt:now,changedBy:actorName});
-  } else if(previousStatus!==rec.status || previousStatusDate!==rec.statusDate || ['exitClassification','exitFactor','exitReason'].some(key=>String(original?.[key]||'')!==String(rec[key]||''))){
-    rec.employmentHistory.push({type:'Employment Status',from:previousStatus||'',to:rec.status||'',effectiveDate:rec.statusDate||todayISO(),remarks:'Updated from Employee Information',exitClassification:rec.exitClassification||'',exitFactor:rec.exitFactor||'',exitReason:rec.exitReason||'',changedAt:now,changedBy:actorName});
+    rec.employmentHistory.push({type:'Hiring',from:'',to:rec.status,statusReason:rec.statusReason,employmentType:rec.employmentType,effectiveDate:rec.dateHired,remarks:'Initial employee record',exitClassification:rec.exitClassification||'',exitFactor:rec.exitFactor||'',exitReason:rec.exitReason||'',changedAt:now,changedBy:actorName});
+  } else if(previousStatus!==rec.status || previousStatusDate!==rec.statusDate || original?.employmentType!==rec.employmentType || original?.statusReason!==rec.statusReason || ['exitClassification','exitFactor','exitReason'].some(key=>String(original?.[key]||'')!==String(rec[key]||''))){
+    rec.employmentHistory.push({type:'Employment Status / Type',from:previousStatus||'',to:rec.status||'',statusReason:rec.statusReason,employmentType:rec.employmentType,effectiveDate:rec.statusDate||'',remarks:'Updated from Employee Information',exitClassification:rec.exitClassification||'',exitFactor:rec.exitFactor||'',exitReason:rec.exitReason||'',changedAt:now,changedBy:actorName});
   }
   if(!isNew&&changedFields.length){
     const visible=changedFields.slice(0,4).join(', ');
@@ -5222,7 +5239,7 @@ async function openTransferForEmployee(id){
         <div class="field"><label>Position After Transfer *</label><select id="tf_position"><option value="">Select position</option>${employeePositionNames(emp.department,emp.position).map(position=>`<option value="${esc(position)}" ${position===emp.position?'selected':''}>${esc(position)}</option>`).join('')}</select></div>
         <div class="field full"><label>Remarks</label><textarea id="tf_remarks" rows="2"></textarea></div>
       </div>
-      <div class="computed-note">This logs the move in Department Transfers and updates the employee's current department and status to "Transferred to Another Department".</div>
+      <div class="computed-note">This records the department and position assignment. Employment Type, Status, Status Reason, and Status Effective Date remain unchanged.</div>
     </div>
     ${employeeWorkspaceFooter(emp,'Save Transfer',`saveEmployeeTransfer('${id}')`)}
   `);
@@ -5245,7 +5262,8 @@ async function saveEmployeeTransfer(id){
   DB.transfers.push(transfer);
   emp.department = toDepartment;
   emp.position = toPosition;
-  emp.status = 'Transferred to Another Department';
+  if(!Array.isArray(emp.employmentHistory))emp.employmentHistory=[];
+  emp.employmentHistory.push({type:'Department Transfer',from:emp.status,to:emp.status,statusReason:emp.statusReason,employmentType:emp.employmentType,fromDepartment,toDepartment,fromPosition:original.position,toPosition,effectiveDate:toDate,remarks,changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
   appendEmployeeRecordHistory(emp,'Transferred',`${fromDepartment} to ${toDepartment} · ${toPosition}`);
   if(!(await saveDB())){DB.transfers=DB.transfers.filter(row=>row!==transfer);Object.keys(emp).forEach(key=>delete emp[key]);Object.assign(emp,original);return;}
   logAudit(`Transferred ${employeeDisplayName(emp)} from ${fromDepartment} to ${toDepartment}`);
@@ -5279,8 +5297,9 @@ function openEmployeeStatusForm(id){
       ${employeeWorkspaceNav(emp,'status')}
       <div class="formgrid">
         <div class="field"><label>Current Status</label><input value="${esc(emp.status||'—')}" disabled style="background:var(--paper);"></div>
-        <div class="field"><label>New Status *</label><select id="es_status">${EMP_STATUS.map(s=>`<option value="${esc(s)}" ${s===emp.status?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
-        <div class="field"><label>Effective Date *</label><input type="date" id="es_date" value="${esc(emp.statusDate||todayISO())}"></div>
+        <div class="field"><label>New Status *</label><select id="es_status" onchange="syncEmployeeStatusReason('es_reason',this.value)">${EMP_STATUS.map(s=>`<option value="${esc(s)}" ${s===emp.status?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
+        <div class="field"><label>Status Reason *</label><select id="es_reason">${STATUS_REASONS[emp.status].map(reason=>`<option value="${esc(reason)}" ${reason===emp.statusReason?'selected':''}>${esc(reason)}</option>`).join('')}</select></div>
+        <div class="field"><label>Effective Date *</label><input type="date" id="es_date" value="${esc(emp.statusDate||'')}"></div>
         <div class="field"><label>Leaving Classification</label><select id="es_exit_class"><option value="">Select classification</option>${EXIT_CLASSIFICATIONS.map(v=>`<option ${emp.exitClassification===v?'selected':''}>${esc(v)}</option>`).join('')}</select></div>
         <div class="field"><label>Primary Leaving Factor</label><select id="es_exit_factor"><option value="">Select factor</option>${WORKFORCE_FACTORS.map(v=>`<option ${emp.exitFactor===v?'selected':''}>${esc(v)}</option>`).join('')}</select></div>
         <div class="field full"><label>Reason for Leaving</label><textarea id="es_exit_reason" rows="2" maxlength="1000">${esc(emp.exitReason||'')}</textarea></div>
@@ -5295,22 +5314,26 @@ async function saveEmployeeStatus(id){
   if(!canEdit()) return;
   const emp=DB.employees.find(e=>e.id===id); if(!emp) return;
   const status=document.getElementById('es_status').value;
+  const statusReason=document.getElementById('es_reason').value;
   const effectiveDate=document.getElementById('es_date').value;
   const remarks=document.getElementById('es_remarks').value.trim();
   const exitClassification=document.getElementById('es_exit_class').value;
   const exitFactor=document.getElementById('es_exit_factor').value;
   const exitReason=document.getElementById('es_exit_reason').value.trim();
-  if(EXIT_STATUSES.includes(status)&&(!exitClassification||!exitFactor||!exitReason)){toast('Enter the leaving classification, primary factor, and reason.',true);return;}
+  const employmentError=employmentValidation({...emp,status,statusReason,statusDate:effectiveDate},{allowLegacy:true});
+  if(employmentError){toast(employmentError,true);return;}
+  if(status==='Separated'&&(!exitClassification||!exitFactor||!exitReason)){toast('Enter the leaving classification, primary factor, and reason.',true);return;}
   if(!effectiveDate){ toast('Please set an effective date.'); return; }
   if(effectiveDate<emp.dateHired){ toast('Status Effective Date cannot be before Date Hired.'); return; }
-  if(status===emp.status && effectiveDate===(emp.statusDate||'')&&exitClassification===(emp.exitClassification||'')&&exitFactor===(emp.exitFactor||'')&&exitReason===(emp.exitReason||'')){ toast('No status change was made.'); return; }
+  if(status===emp.status && statusReason===emp.statusReason&&effectiveDate===(emp.statusDate||'')&&exitClassification===(emp.exitClassification||'')&&exitFactor===(emp.exitFactor||'')&&exitReason===(emp.exitReason||'')){ toast('No status change was made.'); return; }
   const from=emp.status||'';
   const original=JSON.parse(JSON.stringify(emp));
   emp.status=status;
+  const fromReason=emp.statusReason||'';emp.statusReason=statusReason;
   emp.statusDate=effectiveDate;
   Object.assign(emp,{exitClassification,exitFactor,exitReason});
   if(!Array.isArray(emp.employmentHistory)) emp.employmentHistory=[];
-  emp.employmentHistory.push({type:'Employment Status',from,to:status,effectiveDate,remarks,exitClassification,exitFactor,exitReason,changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
+  emp.employmentHistory.push({type:'Employment Status',from,to:status,fromReason,statusReason,employmentType:emp.employmentType,effectiveDate,remarks,exitClassification,exitFactor,exitReason,changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
   appendEmployeeRecordHistory(emp,'Status',`${from||'Unspecified'} to ${status}`);
   if(!(await saveDB())){Object.keys(emp).forEach(key=>delete emp[key]);Object.assign(emp,original);return;}
   logAudit(`Updated employment status for ${employeeDisplayName(emp)}: ${from||'—'} → ${status}`);
@@ -5330,7 +5353,7 @@ async function exportEmployeesCSV(){
     {header:'Position',get:r=>r.position},{header:'Department',get:r=>r.department},{header:'Branch Reporting',get:r=>r.branchReporting},{header:'Daily Rate',get:r=>r.dailyRate},{header:'Total Allowances',get:r=>employeeAllowanceTotal(r)},
     ...allowanceNames.map(name=>({header:`Allowance - ${name}`,get:r=>r.allowances?.[name]??''})),
     {header:'Date Hired',get:r=>r.dateHired},{header:'Birth Date',get:r=>r.birthDate},{header:'Gender',get:r=>r.gender},{header:'Civil Status',get:r=>r.civilStatus},
-    {header:'Employment Status',get:r=>r.status},{header:'Status Effective Date',get:r=>r.statusDate},{header:'Classification Override',get:r=>r.classOverride||'Auto'},{header:'Computed Classification',get:r=>classify(r)},
+    {header:'Employment Status',get:r=>r.status},{header:'Status Effective Date',get:r=>r.statusDate},{header:'Employment Type',get:r=>classify(r)},{header:'Status Reason',get:r=>r.statusReason},
     {header:'Leaving Classification',get:r=>r.exitClassification},{header:'Primary Leaving Factor',get:r=>r.exitFactor},{header:'Reason for Leaving',get:r=>r.exitReason},
     {header:'Mobile Number',get:r=>r.mobileNumber},{header:'Personal Email',get:r=>r.personalEmail},
     {header:'Home Address',get:r=>formatPhilippineAddress(r.homeAddress)||r.address},{header:'Home Region Code',get:r=>r.homeAddress?.regionCode},{header:'Home Province Code',get:r=>r.homeAddress?.provinceCode},{header:'Home City/Municipality Code',get:r=>r.homeAddress?.cityCode},{header:'Home Barangay Code',get:r=>r.homeAddress?.barangayCode},
@@ -5349,7 +5372,7 @@ async function exportEmployeesCSV(){
   employeeSheet['!autofilter']={ref:`A1:${window.XLSX.utils.encode_col(columns.length-1)}${Math.max(1,rows.length+1)}`};
   const employmentHistory=[];const recordHistory=[];
   DB.employees.forEach(employee=>{
-    (employee.employmentHistory||[]).forEach(item=>employmentHistory.push({'Employee No.':employee.employeeNo||'','Employee':employeeDisplayName(employee),'Event Type':item.type||'','From':item.from||'','To':item.to||'','Effective Date':item.effectiveDate||'','Remarks':item.remarks||'','Leaving Classification':item.exitClassification||'','Leaving Factor':item.exitFactor||'','Leaving Reason':item.exitReason||'','Changed At':item.changedAt||'','Changed By':item.changedBy||''}));
+    (employee.employmentHistory||[]).forEach(item=>employmentHistory.push({'Employee No.':employee.employeeNo||'','Employee':employeeDisplayName(employee),'Event Type':item.type||'','From':item.from||'','To':item.to||'','Effective Date':item.effectiveDate||'','Remarks':item.remarks||'','Leaving Classification':item.exitClassification||'','Leaving Factor':item.exitFactor||'','Leaving Reason':item.exitReason||'','Employment Type':item.employmentType||'','Status Reason':item.statusReason||'','Changed At':item.changedAt||'','Changed By':item.changedBy||''}));
     (employee.recordHistory||[]).forEach(item=>recordHistory.push({'Employee No.':employee.employeeNo||'','Employee':employeeDisplayName(employee),'Action':item.action||'','Detail':item.detail||'','Date/Time':item.at||'','User':item.by||''}));
   });
   const workbook=window.XLSX.utils.book_new();window.XLSX.utils.book_append_sheet(workbook,employeeSheet,'Employees');
@@ -5391,7 +5414,7 @@ async function openEmployeeProfileLegacy(id){
   const allowanceEntries=employeeAllowanceEntries(emp);
   openEmployeeWorkspaceModal(`${employeeWorkspaceHeader(emp,'Overview')}<div class="modal-body">
     ${employeeWorkspaceNav(emp,'overview')}
-    <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(employeeDisplayName(emp))}</div><div class="profile-sub">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}</div><div class="small" style="margin-top:6px;">${esc(employeeTenureText(emp))}</div></div><div class="profile-actions">${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="openEmployeeOperation('cases','${emp.id}')">${iShield(13)} Report ER Matter</button>`:''}</div></div>
+    <div class="profile-hero"><div class="profile-avatar">${esc(initials)}</div><div><div class="profile-title">${esc(employeeDisplayName(emp))}</div><div class="profile-sub">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(emp.status,statusMap)} ${statusBadge(classify(emp),classify(emp)==='Regular / Permanent'?{'Regular / Permanent':'b-green'}:{'Probationary':'b-amber'})}</div><div class="small" style="margin-top:6px;">${esc(employeeTenureText(emp))}</div></div><div class="profile-actions">${canEdit()?`<button class="btn btn-ghost btn-sm" onclick="openEmployeeOperation('cases','${emp.id}')">${iShield(13)} Report ER Matter</button>`:''}</div></div>
     <div class="employee-completeness"><div style="min-width:0;"><div style="font-size:11px;font-weight:700;color:var(--ink);">Master Data Completion</div><div style="font-size:10px;color:var(--slate);">${employeeCompleteness(emp)}% of standard employee fields completed</div></div><div class="bar"><div class="fill" style="width:${employeeCompleteness(emp)}%;"></div></div><div class="pct">${employeeCompleteness(emp)}%</div></div>
     <div class="profile-kpis">
       <div class="profile-kpi"><div class="k">HR Cases</div><div class="v">${cases.length}</div><div class="s">Case history</div></div>
@@ -5533,7 +5556,7 @@ function employeeProfileSummaryHTML(employee,snapshot){
   const completion=employeeCompleteness(employee);
   const activityCards=`<div class="profile-kpis">
     <div class="profile-kpi"><div class="k">Status</div><div class="v text-value">${esc(employee.status||'—')}</div><div class="s">Current employment state</div></div>
-    <div class="profile-kpi"><div class="k">Classification</div><div class="v text-value">${esc(classify(employee))}</div><div class="s">Current classification</div></div>
+    <div class="profile-kpi"><div class="k">Employment Type</div><div class="v text-value">${esc(classify(employee))}</div><div class="s">Recorded employment type</div></div>
     <div class="profile-kpi"><div class="k">Reporting Branch</div><div class="v text-value">${esc(employee.branchReporting||'—')}</div><div class="s">Assigned workplace</div></div>
     <div class="profile-kpi"><div class="k">Master Data</div><div class="v">${completion}%</div><div class="s">Profile completion</div></div>
   </div>`;
@@ -5547,9 +5570,9 @@ function employeeProfileSummaryHTML(employee,snapshot){
         <div class="item"><div class="label">Department</div><div class="value">${esc(employee.department||'—')}</div></div>
         <div class="item"><div class="label">Reporting Branch</div><div class="value">${esc(employee.branchReporting||'Not assigned')}</div></div>
         <div class="item"><div class="label">Date Hired</div><div class="value">${fmtDate(employee.dateHired)}</div></div>
-        <div class="item"><div class="label">Employment Status</div><div class="value">${esc(employee.status||'—')}</div></div>
+        <div class="item"><div class="label">Employment Status</div><div class="value">${esc(employee.status||'—')}</div></div><div class="item"><div class="label">Status Reason</div><div class="value">${esc(employee.statusReason||'—')}</div></div><div class="item"><div class="label">Employment Type</div><div class="value">${esc(classify(employee))}</div></div>
         <div class="item"><div class="label">Effective Date</div><div class="value">${fmtDate(employee.statusDate)}</div></div>
-        ${EXIT_STATUSES.includes(employee.status)?`<div class="item"><div class="label">Leaving Classification</div><div class="value">${esc(employee.exitClassification||'Not recorded')}</div></div><div class="item"><div class="label">Leaving Factor</div><div class="value">${esc(employee.exitFactor||'Not recorded')}</div></div><div class="item full"><div class="label">Reason for Leaving</div><div class="value">${esc(employee.exitReason||'Not recorded')}</div></div>`:''}
+        ${isSeparated(employee)?`<div class="item"><div class="label">Leaving Classification</div><div class="value">${esc(employee.exitClassification||'Not recorded')}</div></div><div class="item"><div class="label">Leaving Factor</div><div class="value">${esc(employee.exitFactor||'Not recorded')}</div></div><div class="item full"><div class="label">Reason for Leaving</div><div class="value">${esc(employee.exitReason||'Not recorded')}</div></div>`:''}
       </div></section>
       <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Assignment</h3><p>Current organizational placement</p></div></div><div class="profile-detail">
         <div class="item"><div class="label">Department</div><div class="value">${esc(employee.department||'—')}</div></div><div class="item"><div class="label">Position</div><div class="value">${esc(employee.position||'—')}</div></div><div class="item"><div class="label">Reporting Branch</div><div class="value">${esc(employee.branchReporting||'Not assigned')}</div></div><div class="item"><div class="label">Tenure</div><div class="value">${esc(employeeTenureText(employee))}</div></div>
@@ -5582,7 +5605,7 @@ function employeeProfileHistoryHTML(employee,snapshot){
   const employmentHistory=Array.isArray(employee.employmentHistory)?employee.employmentHistory.slice().reverse().slice(0,12):[];
   const recordHistory=Array.isArray(employee.recordHistory)?employee.recordHistory.slice().reverse().slice(0,20):[];
   return `<div class="employee-profile-history">
-    <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Employment history</h3><p>Status and assignment milestones</p></div></div>${employmentHistory.length?`<div class="employee-history">${employmentHistory.map(item=>`<div class="employee-history-row"><div class="dot"></div><div class="date">${fmtDate(item.effectiveDate||String(item.changedAt||'').slice(0,10))}</div><div><div class="title">${esc(item.from||'Initial')} ${item.from?'to ':''}${esc(item.to||'—')}</div><div class="meta">${esc(item.remarks||'No remarks')} · ${esc(item.changedBy||'System')}</div></div><div class="right">${statusBadge(item.to||'—',EMP_STATUS_MAP)}</div></div>`).join('')}</div>`:'<div class="empty"><b>No employment history</b>Status changes will appear here.</div>'}</section>
+    <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Employment history</h3><p>Status and assignment milestones</p></div></div>${employmentHistory.length?`<div class="employee-history">${employmentHistory.map(item=>`<div class="employee-history-row"><div class="dot"></div><div class="date">${fmtDate(item.effectiveDate||String(item.changedAt||'').slice(0,10))}</div><div><div class="title">${esc(item.eventType||item.type||'Employment')} · ${esc(item.from||'Initial')} ${item.from?'to ':''}${esc(item.to||'—')}</div><div class="meta">${esc([item.employmentType,item.statusReason,item.remarks].filter(Boolean).join(' · ')||'No remarks')} · ${esc(item.changedBy||'System')}</div></div><div class="right">${statusBadge(item.to||'—',EMP_STATUS_MAP)}</div></div>`).join('')}</div>`:'<div class="empty"><b>No employment history</b>Status changes will appear here.</div>'}</section>
     <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Recent HR activity</h3><p>Latest connected employee records</p></div></div>${snapshot.activities.length?`<div class="profile-list">${snapshot.activities.slice(0,12).map(activity=>`<div class="profile-list-row"><div class="main"><div class="title">${esc(activity.type)} · ${esc(activity.title)}</div><div class="meta">${esc(activity.meta||'')}</div></div><div class="right">${fmtDate(String(activity.date).slice(0,10))}</div></div>`).join('')}</div>`:'<div class="empty"><b>No HR activity</b>No connected records are on file.</div>'}</section>
     <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>HR cases</h3><p>Central case files associated with this employee</p></div></div>${snapshot.cases.length?`<div class="profile-list">${snapshot.cases.slice(0,8).map(record=>`<div class="profile-list-row"><div class="main"><div class="title">${esc(record.case_number)} · ${esc(record.subject||'HR Case')}</div><div class="meta">Opened ${fmtDate(record.opened_at)} · Updated ${fmtDate(String(record.updated_at).slice(0,10))}</div></div><div class="right">${statusBadge(record.status,CASE_STATUS_MAP)}<button class="btn btn-ghost btn-sm" onclick="openCaseDetails('${record.id}')">Open</button></div></div>`).join('')}</div>`:'<div class="empty"><b>No HR cases</b>No central case file is associated with this employee.</div>'}</section>
     <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Record audit</h3><p>Creation and update history</p></div></div>${recordHistory.length?`<div class="employee-record-history">${recordHistory.map(entry=>`<div><span class="record-history-action">${esc(entry.action||'Updated')}</span><span><b>${esc(entry.by||'System')}</b><small>${esc(entry.detail||'Employee record updated')}</small></span><time>${new Date(entry.at).toLocaleString()}</time></div>`).join('')}</div>`:'<div class="empty"><b>No record audit available</b>Future saved changes will appear here.</div>'}</section>
@@ -5651,7 +5674,7 @@ async function openEmployeeProfile(id){
   const tabs=[['summary','Overview'],['personal','Personal'],['pay','Pay & IDs'],['history','History']];
   openEmployeeWorkspaceModal(`${employeeWorkspaceHeader(employee,'Overview')}<div class="modal-body employee-profile-workspace ${snapshot?'':'loading-activity'}" data-employee-profile-id="${esc(employee.id)}" data-active-tab="summary">
     ${employeeWorkspaceNav(employee,'overview')}
-    <div class="profile-hero employee-profile-hero"><div class="profile-avatar">${esc(opsInitials(employeeDisplayName(employee)))}</div><div class="employee-profile-identity"><div class="profile-title">${esc(employeeDisplayName(employee))}</div><div class="profile-sub">${esc(employee.employeeNo||'—')} · ${esc(employee.position||'—')} · ${esc(employee.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(employee.status,EMP_STATUS_MAP)} ${statusBadge(classify(employee),classify(employee)==='Regular'?{'Regular':'b-green'}:{'Probationary':'b-amber'})}<span>${esc(employeeTenureText(employee))}</span></div></div>${canEdit()?`<button class="btn btn-ghost btn-sm profile-er-action" onclick="openEmployeeOperation('cases','${employee.id}')">${iShield(13)} <span>Report ER Matter</span></button>`:''}</div>
+    <div class="profile-hero employee-profile-hero"><div class="profile-avatar">${esc(opsInitials(employeeDisplayName(employee)))}</div><div class="employee-profile-identity"><div class="profile-title">${esc(employeeDisplayName(employee))}</div><div class="profile-sub">${esc(employee.employeeNo||'—')} · ${esc(employee.position||'—')} · ${esc(employee.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(employee.status,EMP_STATUS_MAP)} ${statusBadge(classify(employee),classify(employee)==='Regular / Permanent'?{'Regular / Permanent':'b-green'}:{'Probationary':'b-amber'})}<span>${esc(employeeTenureText(employee))}</span></div></div>${canEdit()?`<button class="btn btn-ghost btn-sm profile-er-action" onclick="openEmployeeOperation('cases','${employee.id}')">${iShield(13)} <span>Report ER Matter</span></button>`:''}</div>
     <div class="employee-profile-tabs" role="tablist" aria-label="Employee profile details">${tabs.map(([key,label],index)=>`<button type="button" class="employee-profile-tab ${index===0?'active':''}" data-profile-tab="${key}" role="tab" aria-selected="${index===0?'true':'false'}" tabindex="${index===0?'0':'-1'}" onclick="employeeProfileSetTab('${employee.id}','${key}')">${label}</button>`).join('')}</div>
     <div class="employee-profile-tab-content">${employeeProfileTabContent(employee,'summary',snapshot)}</div>
   </div><div class="modal-foot employee-workspace-foot"><span class="small">Selected employee: ${esc(employeeDisplayName(employee))}</span><div class="toolbar-spacer"></div><button class="btn btn-ghost" onclick="closeModal()">Back to Directory</button></div>`);
@@ -6028,7 +6051,7 @@ function tdaRulePickerKeydown(event,prefix){
 }
 function tdaRulePreviewHTML(rule){
   if(!rule)return '<div class="tda-rule-empty">Select an employee and an applicable TDA offense to review the approved sanction schedule.</div>';
-  return `<div class="tda-rule-summary"><div><span>Rule</span><b>${esc(rule.tdaType)}${rule.offenseNumber?' · '+esc(rule.offenseNumber):''}</b></div><div><span>Classification</span><b>${esc(rule.category||rule.disciplinaryRemarks||'—')}</b></div><div><span>Selected level</span><b>${esc(rule.offenseLevel)}</b></div><div class="recommended"><span>Recommended consequence</span><b>${esc(rule.recommendedConsequence)}</b></div></div><details><summary>View complete sanction schedule</summary><div class="tda-sanction-grid">${rule.consequences.map((value,index)=>`<div class="${index===rule.levelIndex?'active':''}"><span>${tdaOrdinal(index)}</span><b>${esc(value||'—')}</b></div>`).join('')}</div></details>`;
+  return `<div class="tda-rule-summary"><div><span>Rule</span><b>${esc(rule.tdaType)}${rule.offenseNumber?' · '+esc(rule.offenseNumber):''}</b></div><div><span>Employment type</span><b>${esc(rule.category||rule.disciplinaryRemarks||'—')}</b></div><div><span>Selected level</span><b>${esc(rule.offenseLevel)}</b></div><div class="recommended"><span>Recommended consequence</span><b>${esc(rule.recommendedConsequence)}</b></div></div><details><summary>View complete sanction schedule</summary><div class="tda-sanction-grid">${rule.consequences.map((value,index)=>`<div class="${index===rule.levelIndex?'active':''}"><span>${tdaOrdinal(index)}</span><b>${esc(value||'—')}</b></div>`).join('')}</div></details>`;
 }
 function tdaRuleSelectorHTML(prefix,module,existingRule=null,employee=null,department='',beforeId=''){
   const context=tdaContextForEmployee(employee?.id,employee?.name,department||employee?.department||'');
@@ -6388,9 +6411,9 @@ function renderWeeklyReport(){
   setTitle('Weekly Report', 'Employee movements, disciplinary activity, and leave for the selected week.');
 
   const newlyHired = DB.employees.filter(e=>inRange(e.dateHired, start, end));
-  const resigned = DB.employees.filter(e=>e.status==='Resigned' && inRange(e.statusDate, start, end));
-  const awol = DB.employees.filter(e=>e.status==='AWOL' && inRange(e.statusDate, start, end));
-  const separated = DB.employees.filter(e=>e.status==='Separated' && inRange(e.statusDate, start, end));
+  const resigned = DB.employees.filter(e=>e.status==='Separated'&&e.statusReason==='Resigned' && inRange(e.statusDate, start, end));
+  const awol = DB.employees.filter(e=>e.status==='Inactive'&&e.statusReason==='AWOL (Pending Review)' && inRange(e.statusDate, start, end));
+  const separated = DB.employees.filter(e=>e.status==='Separated'&&e.statusReason!=='Resigned' && inRange(e.statusDate, start, end));
   const transferred = DB.transfers.filter(t=>inRange(t.toDate, start, end));
 
   const cats = [
@@ -6484,9 +6507,9 @@ function exportWeeklyCSV(){
   const rows = [];
   DB.employees.forEach(e=>{
     if(inRange(e.dateHired,start,end)) rows.push({employeeName:e.name, department:e.department, category:'Newly Hired', date:e.dateHired});
-    if(e.status==='Resigned' && inRange(e.statusDate,start,end)) rows.push({employeeName:e.name, department:e.department, category:'Resigned', date:e.statusDate});
-    if(e.status==='AWOL' && inRange(e.statusDate,start,end)) rows.push({employeeName:e.name, department:e.department, category:'AWOL', date:e.statusDate});
-    if(e.status==='Separated' && inRange(e.statusDate,start,end)) rows.push({employeeName:e.name, department:e.department, category:'Separated', date:e.statusDate});
+    if(e.status==='Separated'&&e.statusReason==='Resigned' && inRange(e.statusDate,start,end)) rows.push({employeeName:e.name, department:e.department, category:'Resigned', date:e.statusDate});
+    if(e.status==='Inactive'&&e.statusReason==='AWOL (Pending Review)' && inRange(e.statusDate,start,end)) rows.push({employeeName:e.name, department:e.department, category:'AWOL', date:e.statusDate});
+    if(e.status==='Separated'&&e.statusReason!=='Resigned' && inRange(e.statusDate,start,end)) rows.push({employeeName:e.name, department:e.department, category:'Separated', date:e.statusDate});
   });
   DB.transfers.filter(t=>inRange(t.toDate,start,end)).forEach(t=>rows.push({employeeName:t.employeeName, department:t.toDepartment, category:`Transferred (${t.fromDepartment} → ${t.toDepartment})`, date:t.toDate}));
   DB.oncall.filter(o=>overlapsRange(o.startDate,o.endDate,start,end)).forEach(o=>rows.push({employeeName:o.employeeName, department:o.department, category:`On-Call (replacing ${o.employeeReplaced||'—'})`, date:o.startDate}));
@@ -6771,7 +6794,7 @@ function evalStatusInfo(emp, m){
 function renderEvaluations(){
   setTitle('Probationary Evaluations', 'Auto-scheduled 1st/3rd/6th month evaluations for employees still within the probation period.');
   const q=(STATE.search||'').toLowerCase();
-  let emps = DB.employees.filter(e=>classify(e)==='Probationary' && e.dateHired);
+  let emps = DB.employees.filter(e=>isEmployed(e)&&classify(e)==='Probationary' && e.dateHired);
   if(STATE.evaluationFilter) emps=emps.filter(e=>EVAL_MILESTONES.some(m=>evalStatusInfo(e,m).label===STATE.evaluationFilter));
   if(q) emps = emps.filter(e=>e.name.toLowerCase().includes(q) || (e.department||'').toLowerCase().includes(q));
   emps = emps.slice().sort((a,b)=>a.name.localeCompare(b.name));
@@ -7376,7 +7399,7 @@ async function runAutomationEngine({manual=false,silent=false}={}){
     // 1) Probation milestone preparation.
     if(automationRuleEnabled('probation_milestones')){
       const rstat=stats.probation_milestones;
-      DB.employees.filter(e=>classify(e)==='Probationary' && e.dateHired).forEach(emp=>EVAL_MILESTONES.forEach(m=>{
+      DB.employees.filter(e=>isEmployed(e)&&classify(e)==='Probationary' && e.dateHired).forEach(emp=>EVAL_MILESTONES.forEach(m=>{
         const due=evalDueDate(emp.dateHired,m.days); if(!due) return;
         const state=automationDateState(due,today,14);
         const ev=getEvalRecord(emp.id,m.key);
@@ -7542,7 +7565,7 @@ const MODULES = {
       {key:'remarks',label:'Remarks',type:'textarea'},
       {key:'attachment',label:'Supporting Document',type:'file',full:true},
     ],
-    columns:[{key:'employeeName',label:'Employee'},{key:'department',label:'Department'},{key:'branchReporting',label:'Branch'},{key:'workDate',label:'Work Date',render:r=>fmtDate(r.workDate)},{key:'status',label:'Status'},{key:'classification',label:'Employee Class'},{key:'lateMinutes',label:'Late (min)'},{key:'undertimeMinutes',label:'Undertime (min)'},{key:'absenceClassification',label:'Absence Class'},{key:'factor',label:'Factor'}],
+    columns:[{key:'employeeName',label:'Employee'},{key:'department',label:'Department'},{key:'branchReporting',label:'Branch'},{key:'workDate',label:'Work Date',render:r=>fmtDate(r.workDate)},{key:'status',label:'Status'},{key:'classification',label:'Employment Type'},{key:'lateMinutes',label:'Late (min)'},{key:'undertimeMinutes',label:'Undertime (min)'},{key:'absenceClassification',label:'Absence Class'},{key:'factor',label:'Factor'}],
   },
   leaves: {
     title:'Leave Tracker', subtitle:'Upload, monitor, and manage employee leave records.', singular:'Leave Record', addLabel:'Add Leave Record',
@@ -7763,7 +7786,7 @@ const MODULES = {
       {key:'prfNumber', label:'PRF Number (optional)', type:'text'},
       {key:'dateOfRequest', label:'Date of Request', type:'date', required:true},
       {key:'reasonForRequest', label:'Reason for Manpower Request', type:'text', full:true, required:true},
-      {key:'classification', label:'Classification', type:'select', options:PRF_CLASS, required:true},
+      {key:'classification', label:'Employment Type', type:'select', options:PRF_CLASS, required:true},
       {key:'employeeReplaced', label:'Employee Being Replaced (if applicable)', type:'text'},
       {key:'status', label:'Workflow Status', type:'select', options:PRF_STATUS, required:true, default:()=>PRF_STATUS[1]},
       {key:'attachment', label:'Uploaded PRF Document', type:'file', full:true},
@@ -7773,7 +7796,7 @@ const MODULES = {
       {key:'employeeName', label:'Employee', render:r=>`<b>${esc(r.employeeName)}</b>`},
       {key:'department', label:'Department'},
       {key:'prfNumber', label:'PRF No.'},
-      {key:'classification', label:'Classification'},
+      {key:'classification', label:'Employment Type'},
       {key:'employeeReplaced', label:'Replacing'},
       {key:'dateOfRequest', label:'Date', render:r=>fmtDate(r.dateOfRequest)},
       {key:'status', label:'Status', render:r=>statusBadge(r.status||'Draft',PRF_STATUS_MAP)},
@@ -7823,7 +7846,7 @@ function renderLegacyPrfWorkspace(){
   const page=paginateRows(filtered,STATE,'manpower:legacy',10);
   return `<div class="manpower-legacy-note"><span>${iInfo(16)}</span><div><b>Legacy PRF records</b><small>These flat records are preserved for reconciliation. New manpower work should be recorded in Requests.</small></div></div>
     <div class="data-toolbar record-directory-toolbar"><div class="searchbox">${iSearch(15)}<input data-search-key="manpowerSearch" type="search" autocomplete="off" placeholder="Search legacy PRF records…" value="${esc(STATE.manpowerSearch)}" oninput="queueSearchRender(this,'manpowerSearch',renderManpowerFulfillment)"></div>${q?`<button class="btn btn-ghost btn-sm" onclick="manpowerResetFilters()">Clear</button>`:''}<div class="toolbar-spacer"></div>${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportModuleCSV('prf')">${iDownload(14)} Export</button>`:''}</div>
-    <div class="table-card"><div class="table-card-head"><div class="table-meta"><b>${filtered.length}</b> legacy record${filtered.length===1?'':'s'}</div></div><div class="tablewrap"><table class="data-table"><thead><tr><th>PRF</th><th>Employee</th><th>Department</th><th>Classification</th><th>Replacing</th><th>Date</th><th>Status</th><th class="actions-head">Action</th></tr></thead><tbody>${page.rows.length?page.rows.map(row=>`<tr><td class="mono">${esc(row.prfNumber||'—')}</td><td><b>${esc(row.employeeName||'—')}</b></td><td>${esc(row.department||'—')}</td><td>${esc(row.classification||'—')}</td><td>${esc(row.employeeReplaced||'—')}</td><td>${fmtDate(row.dateOfRequest)}</td><td>${statusBadge(row.status||'Draft',PRF_STATUS_MAP)}</td><td><div class="rowactions">${canEdit()?`<button class="iconbtn" title="Edit legacy PRF" onclick="openRecordForm('prf','${row.id}')">${iEdit(14)}</button>`:'<span class="small">View only</span>'}</div></td></tr>`).join(''):`<tr><td colspan="8"><div class="empty"><b>No legacy PRF records</b><span>Existing flat PRF entries will remain available here.</span></div></td></tr>`}</tbody></table></div>${filtered.length?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${page.meta.start}–${page.meta.end} <span>of ${filtered.length}</span></div>${paginationHTML(page.meta,'manpower:legacy')}</div>`:''}</div>`;
+    <div class="table-card"><div class="table-card-head"><div class="table-meta"><b>${filtered.length}</b> legacy record${filtered.length===1?'':'s'}</div></div><div class="tablewrap"><table class="data-table"><thead><tr><th>PRF</th><th>Employee</th><th>Department</th><th>Employment Type</th><th>Replacing</th><th>Date</th><th>Status</th><th class="actions-head">Action</th></tr></thead><tbody>${page.rows.length?page.rows.map(row=>`<tr><td class="mono">${esc(row.prfNumber||'—')}</td><td><b>${esc(row.employeeName||'—')}</b></td><td>${esc(row.department||'—')}</td><td>${esc(row.classification||'—')}</td><td>${esc(row.employeeReplaced||'—')}</td><td>${fmtDate(row.dateOfRequest)}</td><td>${statusBadge(row.status||'Draft',PRF_STATUS_MAP)}</td><td><div class="rowactions">${canEdit()?`<button class="iconbtn" title="Edit legacy PRF" onclick="openRecordForm('prf','${row.id}')">${iEdit(14)}</button>`:'<span class="small">View only</span>'}</div></td></tr>`).join(''):`<tr><td colspan="8"><div class="empty"><b>No legacy PRF records</b><span>Existing flat PRF entries will remain available here.</span></div></td></tr>`}</tbody></table></div>${filtered.length?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${page.meta.start}–${page.meta.end} <span>of ${filtered.length}</span></div>${paginationHTML(page.meta,'manpower:legacy')}</div>`:''}</div>`;
 }
 
 function renderManpowerFulfillment(){
@@ -7901,7 +7924,7 @@ function openManpowerRequirementForm(requestId,id=''){
   const record=requirement||{department:'',position:'',designation:'',requestedHeadcount:1,requestType:'Expansion',vacancyDetails:'',qualifications:'',employmentType:'',targetDeploymentDateOverride:'',status:'Active'};
   const departmentField={key:'department',label:'Department',type:'select',options:employeeDepartmentNames(record.department),required:true,catalog:'department',catalogPositionId:'f_position',onchange:"syncPositionSelect('f_department','f_position')"};
   const positionField={key:'position',label:'Position',type:'select',options:employeePositionNames(record.department,record.position),required:true,catalog:'position',catalogDepartmentId:'f_department'};
-  openEmployeeWorkspaceModal(`<div class="modal-head"><div><h3>${requirement?'Edit':'Add'} Position Requirement</h3><div class="small">${esc(manpowerRequestLabel(request))} · requested headcount creates individual slots.</div></div><button onclick="requestCloseModal(this)" aria-label="Close">&times;</button></div><div class="modal-body"><div class="formgrid manpower-form">${fieldHTML(departmentField,record.department)}${fieldHTML(positionField,record.position)}<div class="field"><label>Designation</label><input id="mpr_designation" value="${esc(record.designation||'')}"></div><div class="field"><label>Requested Headcount *</label><input id="mpr_headcount" type="number" min="1" max="500" step="1" value="${Number(record.requestedHeadcount)||1}"></div><div class="field"><label>Request Type *</label><select id="mpr_type">${MANPOWER_REQUIREMENT_TYPES.map(value=>`<option value="${value}" ${value===record.requestType?'selected':''}>${value}</option>`).join('')}</select></div><div class="field"><label>Target Date Override</label><input id="mpr_target" type="date" min="${esc(request.dateRequested)}" value="${esc(record.targetDeploymentDateOverride||'')}"></div><div class="field"><label>Employment / Contract Type</label><input id="mpr_employment" value="${esc(record.employmentType||'')}"></div><div class="field"><label>Requirement State</label><select id="mpr_status"><option value="Active" ${record.status!=='Cancelled'?'selected':''}>Active</option><option value="Cancelled" ${record.status==='Cancelled'?'selected':''}>Cancelled</option></select></div><div class="field full"><label>Vacancy / Assignment Details *</label><textarea id="mpr_vacancy" rows="3">${esc(record.vacancyDetails||'')}</textarea></div><div class="field full"><label>Required Skills / Qualifications</label><textarea id="mpr_qualifications" rows="3">${esc(record.qualifications||'')}</textarea></div></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="requestCloseModal(this)">Cancel</button><div class="toolbar-spacer"></div><button class="btn btn-primary" onclick="saveManpowerRequirement('${requestId}','${id}')">${requirement?'Save Requirement':'Add Requirement'}</button></div>`);
+  openEmployeeWorkspaceModal(`<div class="modal-head"><div><h3>${requirement?'Edit':'Add'} Position Requirement</h3><div class="small">${esc(manpowerRequestLabel(request))} · requested headcount creates individual slots.</div></div><button onclick="requestCloseModal(this)" aria-label="Close">&times;</button></div><div class="modal-body"><div class="formgrid manpower-form">${fieldHTML(departmentField,record.department)}${fieldHTML(positionField,record.position)}<div class="field"><label>Designation</label><input id="mpr_designation" value="${esc(record.designation||'')}"></div><div class="field"><label>Requested Headcount *</label><input id="mpr_headcount" type="number" min="1" max="500" step="1" value="${Number(record.requestedHeadcount)||1}"></div><div class="field"><label>Request Type *</label><select id="mpr_type">${MANPOWER_REQUIREMENT_TYPES.map(value=>`<option value="${value}" ${value===record.requestType?'selected':''}>${value}</option>`).join('')}</select></div><div class="field"><label>Target Date Override</label><input id="mpr_target" type="date" min="${esc(request.dateRequested)}" value="${esc(record.targetDeploymentDateOverride||'')}"></div><div class="field"><label>Employment Type</label><select id="mpr_employment"><option value="">Not specified</option>${[...EMPLOYMENT_TYPES,...(record.employmentType&&!canonicalEmploymentType(record.employmentType)?[record.employmentType]:[])].map(type=>`<option value="${esc(type)}" ${type===(canonicalEmploymentType(record.employmentType)||record.employmentType)?'selected':''}>${esc(type)}</option>`).join('')}</select></div><div class="field"><label>Requirement State</label><select id="mpr_status"><option value="Active" ${record.status!=='Cancelled'?'selected':''}>Active</option><option value="Cancelled" ${record.status==='Cancelled'?'selected':''}>Cancelled</option></select></div><div class="field full"><label>Vacancy / Assignment Details *</label><textarea id="mpr_vacancy" rows="3">${esc(record.vacancyDetails||'')}</textarea></div><div class="field full"><label>Required Skills / Qualifications</label><textarea id="mpr_qualifications" rows="3">${esc(record.qualifications||'')}</textarea></div></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="requestCloseModal(this)">Cancel</button><div class="toolbar-spacer"></div><button class="btn btn-primary" onclick="saveManpowerRequirement('${requestId}','${id}')">${requirement?'Save Requirement':'Add Requirement'}</button></div>`);
 }
 
 async function saveManpowerRequirement(requestId,id=''){
@@ -7937,8 +7960,8 @@ async function saveManpowerRequirement(requestId,id=''){
 
 function manpowerReplacementDefaults(employee){
   if(!employee)return {date:'',reason:''};
-  const histories=(employee.employmentHistory||[]).filter(item=>['Resignation','Separation','AWOL / Leave of Absence','Employment Status'].includes(item.type)).sort((a,b)=>String(b.effectiveDate||'').localeCompare(String(a.effectiveDate||'')));
-  return {date:employee.statusDate||histories[0]?.effectiveDate||'',reason:employee.status||histories[0]?.remarks||''};
+  const histories=(employee.employmentHistory||[]).filter(item=>item.to==='Separated'||['Resignation','Separation'].includes(item.eventType||item.type)).sort((a,b)=>String(b.effectiveDate||'').localeCompare(String(a.effectiveDate||'')));
+  return {date:isSeparated(employee)?employee.statusDate||histories[0]?.effectiveDate||'':'',reason:employee.status!=='Active'?employee.statusReason||employee.status||'':histories[0]?.remarks||''};
 }
 function manpowerSlotReplacementChanged(){
   const employee=employeePickerSelected('mps_replacement');if(!employee)return;
@@ -8083,7 +8106,7 @@ function analyticsBranchMatch(record,branch){
 }
 function analyticsEmployeeActiveOn(employee,date){
   if(!employee?.dateHired||employee.dateHired>date)return false;
-  const separated=['Resigned','AWOL','Separated'].includes(employee.status);
+  const separated=isSeparated(employee);
   return !separated||!employee.statusDate||employee.statusDate>date;
 }
 function analyticsDeptFilterRows(module,start,end,dept,branch=''){
@@ -8100,7 +8123,7 @@ async function exportAnalyticsSnapshot(){
   const fill=fillRateSummary(DB.manpowerRequirements.filter(r=>fillRequestIds.has(String(r.requestId))&&(!dept||r.department===dept)),DB.manpowerSlots);
   const cases=(REPORT_CACHE.cases||[]).filter(c=>(!dept||(c.department||'Unassigned')===dept)&&analyticsBranchMatch({employeeName:c.employee_name,department:c.department},branch));
   const openCases=cases.filter(c=>!caseIsClosedStatus(c.status));
-  const separations=employees.filter(e=>['Resigned','AWOL','Separated'].includes(e.status)&&reportInRange(e.statusDate,start,end));
+  const separations=employees.filter(e=>isSeparated(e)&&reportInRange(e.statusDate,start,end));
   const beginning=employees.filter(employee=>analyticsEmployeeActiveOn(employee,start));
   const ending=employees.filter(employee=>analyticsEmployeeActiveOn(employee,end));
   const retained=beginning.filter(employee=>analyticsEmployeeActiveOn(employee,end));
@@ -8121,13 +8144,13 @@ async function exportAnalyticsSnapshot(){
   const rows=[
     {section:'Scope',metric:'Start Date',value:start,detail:`${branch||'All Branches'} · ${dept||'All Departments'}`},
     ...workforceAgeMix(employees,end).flatMap(row=>['male','female','other','total'].map(gender=>({section:'Age & Gender',metric:`${row.label} - ${gender}`,value:row[gender],detail:`Age as of ${end}`}))),
-    ...employees.filter(employee=>EXIT_STATUSES.includes(employee.status)&&reportInRange(employee.statusDate,start,end)).map(employee=>({section:'Leaving Reasons',metric:employeeDisplayName(employee),value:employee.exitClassification||'Unknown',detail:[employee.status,employee.exitFactor||'Unknown / Not Disclosed',employee.exitReason||'Not recorded'].join(' | ')})),
+    ...employees.filter(employee=>isSeparated(employee)&&reportInRange(employee.statusDate,start,end)).map(employee=>({section:'Leaving Reasons',metric:employeeDisplayName(employee),value:employee.exitClassification||'Unknown',detail:[employee.statusReason||employee.status,employee.exitFactor||'Unknown / Not Disclosed',employee.exitReason||'Not recorded'].join(' | ')})),
     {section:'Scope',metric:'End Date',value:end,detail:`${branch||'All Branches'} · ${dept||'All Departments'}`},
-    {section:'Workforce',metric:'Current Headcount',value:employees.length,detail:'Current employee records'},
+    {section:'Workforce',metric:'Current Headcount',value:employees.filter(isEmployed).length,detail:'Currently employed (Active and Inactive); separated excluded'},
     {section:'Workforce',metric:'Manpower Fill Rate',value:fill.rate??'No demand',detail:`${fill.deployed} deployed / ${fill.required} required; cancelled slots excluded (%)`},
-    {section:'Workforce',metric:'Probationary',value:employees.filter(e=>classify(e)==='Probationary').length,detail:'Current classification'},
+    {section:'Workforce',metric:'Probationary',value:employees.filter(e=>classify(e)==='Probationary').length,detail:'Recorded employment type'},
     {section:'Workforce',metric:'New Hires in Period',value:employees.filter(e=>reportInRange(e.dateHired,start,end)).length,detail:'Date hired'},
-    {section:'Workforce',metric:'Separations in Period',value:separations.length,detail:'Resigned, AWOL, and Separated by status date'},
+    {section:'Workforce',metric:'Separations in Period',value:separations.length,detail:'Confirmed separations by status date'},
     {section:'Workforce',metric:'Retention Rate',value:beginning.length?Math.round(retained.length/beginning.length*1000)/10:0,detail:'Beginning population active at period end / beginning headcount (%)'},
     {section:'Workforce',metric:'Turnover Rate',value:averageHeadcount?Math.round(separations.length/averageHeadcount*1000)/10:0,detail:'Separations / average of beginning and ending headcount (%)'},
     {section:'Cases',metric:'Open Cases',value:openCases.length,detail:'Current open cases'},
@@ -8197,8 +8220,8 @@ async function renderAnalytics({skipFetch=false}={}){
     const fillRequirements=DB.manpowerRequirements.filter(r=>fillRequestIds.has(String(r.requestId))&&(!dept||r.department===dept));
     const fill=fillRateSummary(fillRequirements,DB.manpowerSlots);
     const hired=employees.filter(e=>reportInRange(e.dateHired,start,end));
-    const separated=employees.filter(e=>['Resigned','AWOL','Separated'].includes(e.status)&&reportInRange(e.statusDate,start,end));
-    const activeEmployees=employees.filter(e=>e.status==='Active'||e.status==='Newly Hired');
+    const separated=employees.filter(e=>isSeparated(e)&&reportInRange(e.statusDate,start,end));
+    const activeEmployees=employees.filter(e=>e.status==='Active');
     const beginningEmployees=employees.filter(employee=>analyticsEmployeeActiveOn(employee,start));
     const endingEmployees=employees.filter(employee=>analyticsEmployeeActiveOn(employee,end));
     const retainedEmployees=beginningEmployees.filter(employee=>analyticsEmployeeActiveOn(employee,end));
@@ -8228,7 +8251,7 @@ async function renderAnalytics({skipFetch=false}={}){
     const monthly=monthKeys.map(k=>{
       const monthRows=(module,rows)=>rows.filter(r=>analyticsMonthKey(reportDateFor(module,r))===k).length;
       const hiresMonth=employees.filter(e=>analyticsMonthKey(e.dateHired)===k).length;
-      const sepMonth=employees.filter(e=>['Resigned','AWOL','Separated'].includes(e.status)&&analyticsMonthKey(e.statusDate)===k).length;
+      const sepMonth=employees.filter(e=>isSeparated(e)&&analyticsMonthKey(e.statusDate)===k).length;
       const casesMonth=periodCases.filter(c=>analyticsMonthKey(String(c.opened_at||c.updated_at||'').slice(0,10))===k).length;
       const intakeMonth=intakeRows.filter(record=>analyticsMonthKey(String(record.incident_at||record.received_at||'').slice(0,10))===k).length;
       const activityMonth=monthRows('incidents',incidentRows)+monthRows('cvr',cvrRows)+intakeMonth+monthRows('disciplinary',discRows)+monthRows('nte',nteRows)+monthRows('memos',memoRows)+monthRows('nod',nodRows)+monthRows('leaves',leaveRows)+monthRows('transfers',transferRows)+monthRows('atd',atdRows);
@@ -8273,9 +8296,9 @@ async function renderAnalytics({skipFetch=false}={}){
 
       <div class="analytics-kpis">
         ${workforceMetricHTML('Fill Rate',fill.rate===null?null:`${fill.rate}%`,`${fill.deployed} deployed / ${fill.required} required positions`)}
-        <div class="metric-card"><div class="k">Current Headcount</div><div class="v">${employees.length}</div><div class="s">${activeEmployees.length} active / newly hired</div></div>
+        <div class="metric-card"><div class="k">Current Headcount</div><div class="v">${employees.filter(isEmployed).length}</div><div class="s">${activeEmployees.length} active</div></div>
         <div class="metric-card"><div class="k">New Hires</div><div class="v">${hired.length}</div><div class="s">Within selected period</div></div>
-        <div class="metric-card"><div class="k">Separations</div><div class="v">${separated.length}</div><div class="s">Resigned / AWOL / separated</div></div>
+        <div class="metric-card"><div class="k">Separations</div><div class="v">${separated.length}</div><div class="s">Confirmed separated employees</div></div>
         <div class="metric-card"><div class="k">Retention Rate</div><div class="v">${retentionRate}%</div><div class="s">${retainedEmployees.length} of ${beginningEmployees.length} beginning employees</div></div>
         <div class="metric-card"><div class="k">Turnover Rate</div><div class="v">${turnoverRate}%</div><div class="s">Separations / ${averageHeadcount.toFixed(1)} average HC</div></div>
         <div class="metric-card"><div class="k">Open Cases</div><div class="v">${openCases.length}</div><div class="s">${overdueCases.length} currently overdue</div></div>
@@ -8295,12 +8318,12 @@ async function renderAnalytics({skipFetch=false}={}){
 
       <div class="analytics-grid equal ${tab==='workforce'?'':'workspace-section-hidden'}">
         <section class="panel"><div class="dashboard-panel-head"><h3>Age &amp; Gender Mix</h3></div>${workforceAgeTableHTML(employees,end)}</section>
-        ${workforceFactorTableHTML(employees.filter(e=>EXIT_STATUSES.includes(e.status)&&reportInRange(e.statusDate,start,end)),'exitFactor','Reasons for Leaving - Factors')}
-        ${workforceFactorTableHTML(employees.filter(e=>EXIT_STATUSES.includes(e.status)&&reportInRange(e.statusDate,start,end)),'exitClassification','Reasons for Leaving - Classification')}
+        ${workforceFactorTableHTML(employees.filter(e=>isSeparated(e)&&reportInRange(e.statusDate,start,end)),'exitFactor','Reasons for Leaving - Factors')}
+        ${workforceFactorTableHTML(employees.filter(e=>isSeparated(e)&&reportInRange(e.statusDate,start,end)),'exitClassification','Reasons for Leaving - Classification')}
         <div class="panel"><div class="dashboard-panel-head"><div><h3>${branch?'Workforce by Department':'Workforce by Branch'}</h3><div class="desc">${branch?`Department distribution within ${esc(branch)}.`:'Organization-wide headcount by reporting branch.'}</div></div></div>
           <div class="chart-list">${topDepts.length?topDepts.map(([d,c],i)=>`<div class="chart-row"><div class="label" title="${esc(d)}">${esc(d)}</div><div class="chart-track"><div class="chart-fill ${i===0?'alt':''}" style="width:${Math.round(c/maxDept*100)}%"></div></div><div class="chart-count">${c}</div></div>`).join(''):'<div class="analytics-empty">No employee records match the selected scope.</div>'}</div>
         </div>
-        <div class="panel"><div class="dashboard-panel-head"><div><h3>Employment Classification</h3><div class="desc">Current classification mix using the platform's lifecycle rules.</div></div></div>
+        <div class="panel"><div class="dashboard-panel-head"><div><h3>Employment Type</h3><div class="desc">Recorded contract types; unverified legacy types require HR review.</div></div></div>
           <div class="chart-list">${Object.entries(classCounts).sort((a,b)=>b[1]-a[1]).map(([k,c],i)=>`<div class="chart-row"><div class="label">${esc(k)}</div><div class="chart-track"><div class="chart-fill ${i===0?'alt':i===1?'warn':''}" style="width:${Math.round(c/Math.max(employees.length,1)*100)}%"></div></div><div class="chart-count">${c}</div></div>`).join('')||'<div class="analytics-empty">No employee records in scope.</div>'}</div>
           <div class="analytics-note" style="margin-top:10px;">${probationary.length} probationary employee(s); ${evalOverdue} evaluation checkpoint(s) currently overdue.</div>
         </div>
@@ -8381,9 +8404,11 @@ function qualityIssues(caseRows=[],employeeRelationsData={}){
     if(e.dateHired && e.dateHired>today) add(`${base}:future-hire`,'error','employees','Date Hired is in the future',`${e.name||'Employee'} is recorded as hired on ${fmtDate(e.dateHired)}.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Date']);
     if(e.birthDate && e.birthDate>today) add(`${base}:future-birth`,'error','employees','Birth Date is in the future',`${e.name||'Employee'} has a Birth Date later than today.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Date']);
     if(e.statusDate && e.dateHired && e.statusDate<e.dateHired) add(`${base}:status-date`,'error','employees','Status date precedes Date Hired',`${e.name||'Employee'} has ${fmtDate(e.statusDate)} as a status date but was hired on ${fmtDate(e.dateHired)}.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Timeline']);
-    if(['Resigned','Separated','AWOL'].includes(e.status) && !e.statusDate) add(`${base}:status-date-missing`,'warning','employees','Status effective date is missing',`${e.name||'Employee'} is marked ${e.status} without a status effective date.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Status']);
+    if(e.status!=='Active' && !e.statusDate) add(`${base}:status-date-missing`,'warning','employees','Status effective date is missing',`${e.name||'Employee'} is marked ${e.status} without a status effective date.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Status']);
+    if(!STATUS_REASONS[e.status]?.includes(e.statusReason)) add(`${base}:status-reason`,'error','employees','Status Reason does not match Employment Status',`${e.name||'Employee'} needs a valid reason for ${e.status}.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Status']);
+    if(e.status==='Active'&&e.statusDate&&e.statusDate===e.dateHired&&e.legacyEmploymentSnapshot&&(e.employmentHistory||[]).some(item=>/imported from Excel/i.test(item.remarks||''))) add(`${base}:imported-status-date`,'warning','employees','Verify imported status date',`${e.name||'Employee'} has the hiring date as a legacy status date. Verify the actual event; clear it if no status event occurred.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Import']);
     if(!Array.isArray(e.employmentHistory)) add(`${base}:history-shape`,'warning','employees','Employment history is missing or invalid',`${e.name||'Employee'} does not have a valid employment-history array.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','History']);
-    if(!['Auto','Probationary','Regular'].includes(e.classOverride)) add(`${base}:class-override`,'error','employees','Invalid employee classification override',`${e.name||'Employee'} has an unsupported classification value: ${e.classOverride||'blank'}.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Classification']);
+    if(!EMPLOYMENT_TYPES.includes(e.employmentType)) add(`${base}:class-override`,'warning','employees','Employment Type needs HR review',`${e.name||'Employee'} has no verified contract type. Do not infer legal tenure from Date Hired.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Classification']);
     if(e.dateHired && qualityDateInvalid(e.dateHired)) add(`${base}:hire-format`,'error','employees','Invalid Date Hired format',`${e.name||'Employee'} does not use the expected YYYY-MM-DD date format.`,e.id?`openEmployeeForm('${e.id}')`:"go('employees')",['Employee Master','Date']);
   });
 
@@ -8574,7 +8599,7 @@ function exportReportEmployees(){
   const rows=reportFilterRows('employees',STATE.reportStart,STATE.reportEnd,STATE.reportDept);
   exportReportRows('employees_report.csv',rows,[
     {label:'Employee',get:r=>r.name},{label:'Position',get:r=>r.position},{label:'Department',get:r=>r.department},
-    {label:'Date Hired',get:r=>r.dateHired},{label:'Gender',get:r=>r.gender},{label:'Status',get:r=>r.status},{label:'Classification',get:r=>classify(r)}
+    {label:'Date Hired',get:r=>r.dateHired},{label:'Gender',get:r=>r.gender},{label:'Status',get:r=>r.status},{label:'Status Reason',get:r=>r.statusReason},{label:'Employment Type',get:r=>classify(r)}
   ]);
 }
 function exportReportCases(){
@@ -8631,7 +8656,7 @@ async function renderReports(){
     const atdTotal=atdRows.reduce((s,r)=>s+(Number(r.totalAmount)||0),0);
     const atdPaid=atdRows.reduce((s,r)=>s+atdTotalPaid(r),0);
     const atdRemainingTotal=atdRows.reduce((s,r)=>s+atdRemaining(r),0);
-    const movement=employees.filter(e=>['Resigned','AWOL','Separated'].includes(e.status)&&e.statusDate>=start&&e.statusDate<=end);
+    const movement=employees.filter(e=>isSeparated(e)&&e.statusDate>=start&&e.statusDate<=end);
     const activityTotal=incidents.length+cvr.length+disc.length+nte.length+memos.length+nod.length+leaves.length+oncall.length+transfers.length+atdRows.length;
     const caseStatus={}; caseRows.forEach(c=>caseStatus[c.status]=(caseStatus[c.status]||0)+1);
     const deptCases={}; caseRows.filter(c=>!caseIsClosedStatus(c.status)).forEach(c=>{const d=c.department||'Unassigned';deptCases[d]=(deptCases[d]||0)+1;});
@@ -8671,7 +8696,7 @@ async function renderReports(){
       <div class="report-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
         <div class="panel"><div class="dashboard-panel-head"><div><h3>Workforce Movement</h3><div class="desc">Hires and recorded movement in the selected period.</div></div>${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportReportEmployees()">${iDownload(14)} Employees</button>`:''}</div>
           <div class="grid cols-2" style="gap:10px;margin-bottom:12px;"><div class="metric-card"><div class="k">Newly Hired</div><div class="v">${hired}</div></div><div class="metric-card"><div class="k">Transfers</div><div class="v">${transferred}</div></div></div>
-          <div class="small">Resigned / AWOL / Separated records require a populated <b>statusDate</b> to appear in the movement count.</div>
+          <div class="small">Separated records require a populated <b>statusDate</b> to appear in the movement count.</div>
           ${movement.length?`<div class="dashboard-list" style="margin-top:10px;">${movement.slice(0,6).map(e=>`<div class="dashboard-list-row"><div><div class="primary">${esc(employeeDisplayName(e))}</div><div class="secondary">${esc(e.department||'Unassigned')} · ${esc(e.status)}</div></div><div class="right">${fmtDate(e.statusDate)}</div></div>`).join('')}</div>`:''}
         </div>
         <div class="panel"><div class="dashboard-panel-head"><div><h3>ATD Collection</h3><div class="desc">Selected-period ATD records and payment progress.</div></div>${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportReportATD()">${iDownload(14)} Export ATD</button>`:''}</div>
@@ -8927,7 +8952,7 @@ function renderSettings(){
       ${admin?`<section class="settings-panel" data-settings-panel="general" ${activeTab==='general'?'':'hidden'}>
         <div class="settings-section-head"><div><h3>General</h3><p>Core organization identity and employment defaults.</p></div>${admin?'<button class="btn btn-primary btn-sm" onclick="saveSettings()">Save Changes</button>':''}</div>
         <div class="field"><label>Organization Name</label><input id="s_org" value="${esc(DB.settings.orgName)}" ${admin?'':'disabled'}></div>
-        <div class="field"><label>Probation → Regularization Threshold (days)</label><input id="s_prob" type="number" value="${DB.settings.probationDays}" ${admin?'':'disabled'}><div class="computed-note">Employee classification recalculates automatically wherever it is displayed.</div></div>
+        <div class="field"><label>Probation Review Reminder Threshold (days)</label><input id="s_prob" type="number" value="${DB.settings.probationDays}" ${admin?'':'disabled'}><div class="computed-note">Used for HR review reminders only. It never changes the recorded Employment Type.</div></div>
       </section>`:''}
       <section class="settings-panel" data-settings-panel="organization" ${activeTab==='organization'?'':'hidden'}>${settingsOrganizationHTML(canManageOrganization)}</section>
       ${admin?`
@@ -10323,6 +10348,7 @@ PAGE_INTRO_OBSERVER.observe(document.getElementById('content'),{childList:true,s
 // handlers. Expose the application handlers on window so GitHub Pages/Vercel
 // can execute those handlers normally.
 Object.assign(window, {
+  syncEmployeeStatusReason,
   renderAttendance, attendanceFilter, exportAttendance,
   STATE,
   performanceSnapshot,

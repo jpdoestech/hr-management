@@ -16,7 +16,7 @@ test('hidden employee details are excluded until selected',()=>{
 });
 
 test('computed and grouped columns request only the fields they need',()=>{
-  assert.deepEqual(employeeDirectoryProjection(['classification']),['id','dateHired','classOverride']);
+  assert.deepEqual(employeeDirectoryProjection(['classification']),['id','employmentType','classOverride']);
   assert.deepEqual(employeeDirectoryProjection(['address']),['id','homeAddress','address']);
   assert.deepEqual(employeeDirectoryProjection(['presentAddress']),['id','presentAddress','presentAddressText']);
   assert.deepEqual(employeeDirectoryProjection(['allowance:meal']),['id','allowances']);

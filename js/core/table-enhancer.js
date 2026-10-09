@@ -23,7 +23,7 @@ export function installTableEnhancer({getState, getContent, getAdditionalRoots=(
     const root=table.closest('#content')||getContent();
     const controls=Array.from(root?.querySelectorAll('select[aria-label*="filter" i]')||[]).map(control=>control.getAttribute('aria-label')?.toLowerCase()||'').join(' ');
     const columnText=`${key} ${label}`.toLowerCase();
-    return ['department','branch','status','classification'].some(category=>controls.includes(category)&&columnText.includes(category));
+    return ['department','branch','status','classification','employment type'].some(category=>controls.includes(category)&&columnText.includes(category));
   }
   function identifyColumns(table){
     const headers=Array.from(table.tHead?.rows?.[0]?.cells||[]);

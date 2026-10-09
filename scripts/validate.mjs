@@ -30,6 +30,7 @@ const orderedMigrations=[
   '0027_employee_relations_intake.sql','0028_employee_relations_revisions.sql','0029_employee_relations_confidentiality.sql',
   '0030_employee_number_six_digits.sql',
   '0031_workforce_attendance.sql',
+  '0032_employee_employment_model.sql',
 ];
 const migrationPath=name=>path.join(root,'supabase','migrations',migrationFiles[name]||name);
 const readMigration=name=>fs.readFileSync(migrationPath(name),'utf8');

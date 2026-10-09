@@ -1,6 +1,7 @@
 const FIELD_DEPENDENCIES={
   name:['name','lastName','firstName','middleName'],
-  classification:['dateHired','classOverride'],
+  classification:['employmentType','classOverride'],
+  status:['status','statusReason'],
   address:['homeAddress','address'],
   presentAddress:['presentAddress','presentAddressText'],
   allowances:['allowances'],
