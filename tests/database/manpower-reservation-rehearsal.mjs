@@ -248,4 +248,48 @@ if(process.argv.includes('--lifecycle')){
   await db.exec('set role anon');await denied(()=>lifecycle('multi',4,'Close'),'42501');
   console.log('Lifecycle rehearsal passed: line and request cancellation, multi-line closure, mandatory reservation resolution, preserved original/authorized/fulfilled quantities, reopen without capacity restoration, stale/invalid/access denials, append-only RLS history, direct-writer guards and multi-line audit rollback.');
 }
+if(process.argv.includes('--identity-refresh')){
+  await db.exec('reset role');
+  await db.exec(readFileSync(new URL('../../supabase/proposals/0043_manpower_identity_refresh.sql',import.meta.url),'utf8'));
+  await db.exec(`insert into hr_records values('${tenant}','onboardingCandidates','refresh-unassigned',
+    '{"id":"refresh-unassigned","name":"Unassigned review fixture","department":"Production","stage":"Applicant"}');`);
+  await db.exec("update hr_records set data=data||'{\"remarks\":\"Updated applicant metadata\"}' where record_id='candidate76';set role authenticated;");
+  const preview=async(candidate='candidate76',employee='duplicate')=>
+    (await db.query('select preview_manpower_identity_review($1,$2) result',[candidate,employee])).rows[0].result;
+  const review=async(pair,decision='SamePerson',reason='Rechecked unchanged resolved identity')=>
+    (await db.query('select record_manpower_identity_review($1,$2,$3,$4,$5,$6,$7) result',
+      [pair.candidate_id,pair.employee_id,decision,reason,pair.candidate_fingerprint,pair.employee_fingerprint,pair.review_revision])).rows[0].result;
+  const before=(await db.query("select manpower_line_capacity('request-line') result")).rows[0].result;
+  const stale=await preview();assert.equal(stale.source_changed,true);assert.equal(stale.review_revision,1);
+  await denied(()=>review(stale,'SeparatePersons'),'23514');
+  await db.exec("set test.denied='onboarding.review_identity'");await denied(()=>review(stale),'42501');
+  await db.exec("set test.denied='';set test.scope='Other'");await denied(()=>review(stale),'42501');
+  await db.exec("set test.scope='global'");
+  const refreshed=await review(stale);assert.equal(refreshed.revision,2);
+  assert.equal((await preview()).source_changed,false);
+  assert.deepEqual((await db.query("select manpower_line_capacity('request-line') result")).rows[0].result,before);
+  assert.equal((await db.query("select worker_key from hr_manpower_reservations where candidate_id='candidate76'")).rows[0].worker_key,'employee:duplicate');
+  await denied(()=>review(stale),'40001');
+  const unresolved=(await db.query("select candidate_id from hr_manpower_reservations where employee_id is null limit 1")).rows[0].candidate_id;
+  await denied(async()=>review(await preview(unresolved),'SamePerson'),'23514');
+  await denied(async()=>review(await preview(unresolved),'SeparatePersons'),'23514');
+  // Unassigned pairs can still be corrected despite the reservation table's existence.
+  const separate=await review(await preview('refresh-unassigned'),'SeparatePersons');assert.equal(separate.revision,1);
+  assert.equal((await review(await preview('refresh-unassigned'),'SeparatePersons')).revision,2);
+  await db.exec("reset role;update hr_records set data=data||'{\"remarks\":\"Updated employee metadata\"}' where record_id='duplicate';alter table hr_audit_logs add constraint fail_refresh check(action not like '%Reason: refresh audit failure') not valid;set role authenticated;");
+  const changed=await preview();assert.equal(changed.source_changed,true);
+  await denied(()=>review(changed,'SamePerson','refresh audit failure'),'23514');
+  assert.equal((await preview()).review_revision,2);
+  assert.equal((await db.query("select revision from hr_manpower_identity_links where candidate_id='candidate76'")).rows[0].revision,2);
+  const latest=await review(changed);assert.equal(latest.revision,3);assert.equal(latest.supersedes_audit_id,refreshed.audit_id);
+  assert.equal((await preview()).source_changed,false);
+  await db.exec(`reset role;insert into hr_records values('${tenant}','manpowerSlots','legacy-refresh','{"candidateId":"refresh-unassigned"}');set role authenticated;`);
+  await denied(async()=>review(await preview('refresh-unassigned'),'SeparatePersons'),'23514');
+  await db.exec('reset role;create table hr_manpower_deployments(id text);set role authenticated');
+  await denied(async()=>review(await preview()),'23514');
+  await db.exec('reset role;drop table hr_manpower_deployments;set role authenticated');
+  await db.exec(`set test.tenant='${other}'`);await denied(()=>preview(),'42501');await db.exec(`set test.tenant='${tenant}'`);
+  await db.exec('set role anon');await denied(()=>review(changed),'42501');
+  console.log('Identity refresh rehearsal passed: unchanged resolved refresh under reservations, stale-source/revision handling, unresolved assignment re-key protection, unassigned review corrections, immutable worker/capacity, audit rollback, permissions/scopes/tenants/anonymous denial and legacy/unknown-ledger gates.');
+}
 await db.close();console.log('Reservation PostgreSQL rehearsal passed: 75-worker atomic batch, ineligible/capacity/duplicate rollback, bounded real assignments for 1000 demand, role/scope/tenant denial, order-independent idempotent replay, worker uniqueness, authoritative capacity and audit-failure rollback. Production and independent concurrency remain unverified.');
