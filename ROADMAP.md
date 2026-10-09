@@ -493,3 +493,16 @@ Any required commit and push have been verified.
 Remaining limitations are documented.
 
 The roadmap is complete when all approved, applicable features are completed or explicitly resolved as not_needed, and no unresolved critical blocker remains.
+
+## Manpower Fulfillment Status (2026-10-10)
+
+Approved requirements: `docs/HRIS_MANPOWER_FULFILLMENT_SPEC.md`. The specification is NOT complete.
+
+- Stage A is partial. Draft transactions, spreadsheet paste, responsive inline editing, PRF registry/submission proposals and read-only submitted request/history views have local validation evidence in the Stage A2-A7 reports. Latest slice: `6329cf4`.
+- Stage A remaining: reasoned quantity amendments, safe decreases/cancellation/close/reopen, submission UI and coordinated release, legacy/export compatibility checks and live database verification.
+- Stage B remaining: individual/bulk applicant reservations, employee identity links, scheduled versus actual deployments, transfer/replacement/reversal intervals and explicitly approved on-call eligibility. Active, On Leave, Suspended and AWOL-pending workers remain excluded from on-call selection.
+- Stage C remaining: authoritative fulfillment/aging/timeline reporting and exports, analytics reconciliation, performance, live RLS/RBAC, independent concurrency and end-to-end acceptance.
+- Registry/submission SQL remains in `supabase/proposals/`, outside automatic migrations. Existing production data, attachments and Supabase configuration must be preserved. Local rehearsal is not evidence of production deployment.
+- MP-A08: prepared, deployment gated - audited quantity-increase amendment foundation and isolated database rehearsal (`docs/MANPOWER-FULFILLMENT-STAGE-A8.md`). Decreases remain gated on authoritative reservation/fulfillment accounting; do not assume commitments are zero or accept client-provided counters. Amendment UI/history integration is not yet enabled.
+
+Release gates: verify the live migration baseline and legacy data, rehearse compatible proposals, validate independent concurrent transactions and production authorization, then coordinate database and application enablement. No completion claim until these gates and the specification acceptance criteria pass.

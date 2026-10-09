@@ -86,5 +86,52 @@ assert.equal((await db.query("select count(*)::int count from hr_audit_logs wher
 const verification=await db.exec(readFileSync(new URL('../../supabase/verification/manpower_submission_integrity.sql',import.meta.url),'utf8'));
 for(const result of verification)assert.equal(result.rows.length,0);
 await db.exec('set role anon');await denied(()=>submit('draft1',2),'42501');await denied(()=>db.exec('select * from hr_manpower_quantity_history'),'42501');
+if(process.argv.includes('--amendments')){
+  await db.exec('reset role');
+  await db.exec(readFileSync(new URL('../../supabase/proposals/0037_manpower_quantity_increases.sql',import.meta.url),'utf8'));
+  await db.exec('set role authenticated');
+  async function increase(revision,quantity,reason='Additional approved demand'){
+    return (await db.query('select increase_manpower_quantity($1,$2,$3,$4,$5) as result',
+      ['draft1','line1',revision,quantity,reason])).rows[0].result;
+  }
+  await denied(()=>increase(2,100001,''),'23514');
+  await denied(()=>increase(2,100001,'x'.repeat(1001)),'23514');
+  await denied(()=>increase(2,99999),'23514');await denied(()=>increase(2,100000),'23514');
+  await denied(()=>increase(1,100001),'40001');
+  await db.exec("set test.permission='false'");await denied(()=>increase(2,100001),'42501');
+  await db.exec("set test.permission='true';set test.scope='none'");await denied(()=>increase(2,100001),'42501');
+  await db.exec(`set test.scope='global';set test.tenant='${other}'`);await denied(()=>increase(2,100001),'42501');
+  await db.exec(`set test.tenant='${tenant}'`);
+  await denied(()=>db.exec('select * from hr_manpower_amendment_intents'),'42501');
+  await denied(()=>db.exec("insert into hr_manpower_amendment_intents values(1,null,'x','x','{}','{}','{}','{}')"),'42501');
+  const amended=await increase(2,100001,'  New client demand  ');
+  assert.equal(amended.request.revision,3);assert.equal(amended.line.original_requested,100000);
+  assert.equal(amended.line.current_authorized,100001);assert.equal(amended.request.state,'Open');
+  await denied(()=>increase(2,100002),'40001');await increase(3,100002);
+  const facts=(await db.query('select * from hr_manpower_quantity_amendments order by request_revision')).rows;
+  assert.equal(facts.length,2);assert.equal(facts[0].reason,'New client demand');
+  assert.equal(facts[1].previous_authorized,100001);assert.equal(facts[1].current_authorized,100002);
+  assert.notEqual(facts[0].audit_id,facts[1].audit_id);
+  await db.exec("set test.scope='none'");assert.equal((await db.query('select * from hr_manpower_quantity_amendments')).rows.length,0);
+  await db.exec("set test.scope='global';reset role");
+  assert.equal((await db.query('select * from hr_manpower_amendment_intents')).rows.length,0);
+  await denied(()=>db.exec("update hr_manpower_lines set current_authorized=200000 where id='line1'"),'23514');
+  await denied(()=>db.exec('delete from hr_manpower_quantity_amendments'),'23514');
+  await db.exec("alter table hr_audit_logs add constraint fail_amendment check(action not like 'Manpower quantity increased%revision 5:%') not valid;set role authenticated");
+  await denied(()=>increase(4,100003),'23514');
+  assert.equal((await db.query("select revision from hr_manpower_requests where id='draft1'")).rows[0].revision,4);
+  assert.equal((await db.query("select current_authorized from hr_manpower_lines where id='line1'")).rows[0].current_authorized,100002);
+  assert.equal((await db.query('select * from hr_manpower_quantity_amendments')).rows.length,2);
+  await db.exec('reset role');assert.equal((await db.query('select * from hr_manpower_amendment_intents')).rows.length,0);
+  await db.exec("set hris.manpower_amendment='true'");
+  await denied(()=>db.exec("update hr_manpower_lines set original_requested=1 where id='line1'"),'23514');
+  await denied(()=>db.exec("update hr_manpower_requests set revision=99 where id='draft1'"),'23514');
+  const amendmentIntegrity=await db.exec(readFileSync(new URL('../../supabase/verification/manpower_quantity_increases_integrity.sql',import.meta.url),'utf8'));
+  for(const check of amendmentIntegrity)assert.equal(check.rows.length,0);
+  const integrity=await db.exec(readFileSync(new URL('../../supabase/verification/manpower_submission_integrity.sql',import.meta.url),'utf8'));
+  for(const check of integrity)assert.equal(check.rows.length,0);
+  await db.exec('set role anon');await denied(()=>increase(4,100003),'42501');
+  console.log('Quantity increases passed: reasons, revisions, immutable originals, append-only audit facts, private intent protection, permissions/scopes/tenants, decreases blocked, atomic audit-failure rollback.');
+}
 await db.close();
 console.log('Submission PostgreSQL rehearsal passed: registry prerequisite, incomplete/catalog/date/permission/scope/revision validation, immutable 100000/1000 quantity baselines, shared audit event, no worker placeholders, repeat submission and draft replacement blocked, scoped read-only history, full audit-failure rollback, source attachments preserved. Live policies and independent concurrent connections remain unverified.');
