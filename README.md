@@ -1,6 +1,6 @@
-# SCPA HR Management — Structured Professional Build
+# STRELLAS HR Management — An Online Portal
 
-This is the structured static build of the SCPA HR Management & Disciplinary Dashboard.
+This is the structured static build of the STRELLAS HR Management & Disciplinary Dashboard.
 
 ## Structure
 

@@ -1,0 +1,495 @@
+STRELLAS HR Management — Development Roadmap
+Purpose
+
+This roadmap guides incremental development of the STRELLAS HR Management & Disciplinary Dashboard.
+
+The goal is to improve security, reliability, HR workflow completeness, usability, accessibility, and maintainability while preserving existing application behavior.
+
+Codex must follow the repository's AGENTS.md before implementing roadmap items.
+
+Roadmap Rules
+Inspect the existing codebase before selecting a feature.
+Verify whether each proposed feature already exists and works correctly.
+Never reimplement a working feature merely because it appears in this roadmap.
+Refine acceptance criteria based on actual architecture and documented business requirements.
+Implement one coherent feature at a time.
+Respect dependencies and prioritize security and data integrity.
+Run required validation before marking a feature complete.
+Commit and push completed features only when authorized and permitted by repository policies.
+Record verified progress and the commit reference where applicable.
+Never mark a feature complete based only on a visual implementation or an unverified assumption.
+Status Definitions
+pending — Not yet started or awaiting assessment.
+in_progress — Currently being implemented.
+blocked — Cannot proceed safely because of a dependency, failure, missing permission, or unresolved decision.
+completed — Acceptance criteria and required checks have passed.
+not_needed — Audit confirmed the feature is already adequately implemented or is outside the approved scope.
+
+The initial statuses below are provisional until the repository audit is completed.
+
+Phase 0 — Repository Audit and Automation Foundation
+ROADMAP-001: Audit the existing application
+
+Priority: P0 — Critical
+Initial status: pending
+
+Tasks:
+
+Inspect README.md, AGENTS.md, package.json, source modules, styles, scripts, tests, migrations, deployment workflows, and docs/.
+Inspect the Git branch, working tree, and recent history.
+Inventory the existing HR operational areas and their actual functionality.
+Identify incomplete workflows, bugs, duplicated logic, security risks, and missing tests.
+Verify the existing validation, lint, test, and build commands.
+Review current Supabase authorization and migration practices.
+Produce a gap analysis that distinguishes verified issues from assumptions.
+
+Acceptance criteria:
+
+The current architecture and available commands are documented.
+Existing functionality is mapped to the proposed roadmap.
+Security concerns and deployment risks are recorded.
+No existing user changes are overwritten.
+Subsequent feature priorities are based on evidence from the repository.
+ROADMAP-002: Establish the feature backlog and workflow
+
+Priority: P0 — Critical
+Initial status: pending
+
+Tasks:
+
+Create or refine AGENTS.md.
+Create or refine ROADMAP.md.
+Document the feature selection, validation, commit, push, and recovery workflow.
+Identify which Git branch is intended for autonomous development.
+Establish a reliable way to resume after a session ends.
+
+Acceptance criteria:
+
+Each actionable feature has a unique ID, priority, status, dependencies, and measurable acceptance criteria.
+Completed features have verifiable evidence.
+Blocked features have documented reasons.
+The next eligible task can be identified without guessing.
+Phase 1 — Security, Privacy, and Data Integrity
+ROADMAP-010: Review authentication and authorization
+
+Priority: P0 — Critical
+Initial status: pending
+
+Audit and improve, where necessary:
+
+Authentication and session handling.
+Role-based access for employees, managers, HR personnel, and administrators.
+Supabase Row Level Security policies.
+Record-level access restrictions.
+Unauthorized data access through direct API or database requests.
+Session expiration and error handling.
+
+Acceptance criteria:
+
+Access follows the verified authorization requirements.
+Sensitive data cannot be accessed solely by bypassing frontend navigation.
+Security regressions have automated tests where feasible.
+Existing legitimate workflows remain functional.
+ROADMAP-011: Audit frontend secrets and integrations
+
+Priority: P0 — Critical
+Initial status: pending
+
+Tasks:
+
+Inspect browser-accessible files for privileged credentials.
+Verify that only approved public configuration is exposed.
+Review OAuth and Google Drive integration patterns.
+Identify sensitive information in logs, URLs, and error messages.
+Verify that privileged operations use an appropriate trusted backend or Edge Function.
+
+Acceptance criteria:
+
+No service-role keys or private credentials are exposed in frontend code.
+Integration security gaps are documented and safely addressed.
+No secrets are added to Git history or test fixtures.
+ROADMAP-012: Verify database migration safety
+
+Priority: P0 — Critical
+Initial status: pending
+
+Tasks:
+
+Review the ordered migrations in supabase/migrations/.
+Read docs/DEPLOYMENT.md and relevant baseline documentation.
+Identify migration dependencies and backward-compatibility risks.
+Review destructive operations and migration automation.
+Document a safe recovery and verification procedure.
+
+Acceptance criteria:
+
+Migration order and deployment prerequisites are documented.
+Existing database baselines are respected.
+No production reset or destructive migration runs automatically.
+Schema and policy changes can be tested in a safe environment.
+ROADMAP-013: Improve validation and data integrity
+
+Priority: P1 — High
+Initial status: pending
+
+Audit data validation for employee records, applicants, leave requests, attendance, disciplinary records, and related workflows.
+
+Acceptance criteria:
+
+Required fields and invalid values are handled consistently.
+Authorization is checked at the appropriate trusted boundary.
+Duplicate or inconsistent records are prevented where business rules require it.
+Error messages do not expose confidential information.
+Relevant regression tests cover important edge cases.
+Phase 2 — Core HR Workflows
+
+The following feature groups are proposed audit targets, not assertions that these features are currently missing.
+
+ROADMAP-020: Employee records and organizational structure
+
+Priority: P1 — High
+Initial status: pending
+
+Review employee profiles, employee status, departments, positions, reporting relationships, and employee record updates.
+
+Acceptance criteria:
+
+Existing employee operations work consistently.
+Field validation and authorization are enforced.
+Record changes preserve required history and data integrity.
+Search, filtering, and pagination behave consistently where applicable.
+ROADMAP-021: Employee self-service
+
+Priority: P1 — High
+Initial status: pending
+
+Review employee access to personal information, profile correction requests, leave requests, and request status.
+
+Acceptance criteria:
+
+Employees can access only their authorized information.
+Requests are validated and persisted correctly.
+Request states and error messages are clear.
+HR or manager review follows the established authorization model.
+ROADMAP-022: Attendance and leave management
+
+Priority: P1 — High
+Initial status: pending
+
+Review attendance records, leave balances where applicable, leave submissions, approvals, and request history.
+
+Acceptance criteria:
+
+Attendance and leave records follow documented business rules.
+Approval permissions are enforced.
+Duplicate submissions and invalid state transitions are handled safely.
+Relevant totals and statuses remain consistent with persisted data.
+ROADMAP-023: Onboarding and employee lifecycle
+
+Priority: P1 — High
+Initial status: pending
+
+Review onboarding, regularization, transfers, separation, checklists, task ownership, deadlines, and history.
+
+Acceptance criteria:
+
+Lifecycle stages follow documented transitions.
+Required tasks and deadlines are trackable.
+Ownership and permissions are enforced.
+Important status changes retain the required audit history.
+ROADMAP-024: Recruitment and applicant tracking
+
+Priority: P1 — High
+Initial status: pending
+
+Review applicant records, candidate evaluation, pre-employment readiness, and conversion to employee records.
+
+Acceptance criteria:
+
+Applicant information is appropriately restricted.
+Evaluation and status transitions are validated.
+Conversion does not create unintended duplicate employee records.
+Sensitive applicant information is not unnecessarily exposed.
+ROADMAP-025: Disciplinary management and TDA catalog
+
+Priority: P1 — High
+Initial status: pending
+
+Review disciplinary workflows, relevant employee records, the Table of Disciplinary Action catalog, and the documented catalog import process.
+
+Acceptance criteria:
+
+Access to disciplinary information follows strict authorization requirements.
+Catalog imports validate their inputs and report errors clearly.
+Historical disciplinary records are preserved according to approved business rules.
+Changes and decisions have appropriate traceability.
+ROADMAP-026: Documents and file integrations
+
+Priority: P1 — High
+Initial status: pending
+
+Review employee documents, attachments, file access, and any Google Drive integration.
+
+Acceptance criteria:
+
+Private documents are accessible only to authorized users.
+File operations use secure integration patterns.
+File validation and error handling are implemented.
+No private OAuth credentials are exposed in browser code.
+Phase 3 — Workflow Automation and Reporting
+ROADMAP-030: HR workflow automation
+
+Priority: P2 — Medium
+Initial status: pending
+
+Audit existing workflow automation, reminders, deadlines, and task assignments.
+
+Acceptance criteria:
+
+Automation rules reflect approved business requirements.
+Repeated execution does not create duplicate side effects.
+Failed operations are visible and recoverable.
+Automated actions respect permissions and record history.
+ROADMAP-031: Notifications and reminders
+
+Priority: P2 — Medium
+Initial status: pending
+
+Assess notifications for pending requests, deadlines, onboarding tasks, and other approved HR events.
+
+Acceptance criteria:
+
+Notifications are relevant and accurately reflect record status.
+Sensitive employee information is not unnecessarily included.
+Duplicate notifications are minimized.
+Delivery failures are handled appropriately.
+ROADMAP-032: Analytics and HR reporting
+
+Priority: P2 — Medium
+Initial status: pending
+
+Review dashboards, operational summaries, charts, and data-quality reporting.
+
+Acceptance criteria:
+
+Metrics are calculated from reliable data.
+Filters and date ranges behave consistently.
+Access to reports follows authorization rules.
+Charts and tables remain readable on smaller screens.
+Empty and error states are handled clearly.
+ROADMAP-033: Data quality and audit history
+
+Priority: P2 — Medium
+Initial status: pending
+
+Review data-quality indicators, audit history, incomplete records, and workflow consistency.
+
+Acceptance criteria:
+
+Data-quality issues can be identified without exposing unauthorized records.
+Audit history preserves relevant changes.
+Reports distinguish missing data from actual zero values.
+Any automated correction has a safe, documented process.
+Phase 4 — UI/UX Pro Max and Accessibility
+ROADMAP-040: Audit the existing design system
+
+Priority: P1 — High
+Initial status: pending
+
+Tasks:
+
+Read .agents/skills/ui-ux-pro-max/SKILL.md if present.
+Inspect existing design-system documentation and page-specific overrides.
+Inventory the application's colors, typography, spacing, components, navigation, tables, forms, and interaction states.
+Identify inconsistencies and accessibility problems.
+Preserve the current design language unless evidence supports a change.
+
+Acceptance criteria:
+
+UI/UX Pro Max guidance is used when available.
+Existing design-system rules are documented and respected.
+Improvements are based on actual application needs.
+No unnecessary full redesign is introduced.
+ROADMAP-041: Responsive layout and navigation
+
+Priority: P2 — Medium
+Initial status: pending
+
+Review the application shell, navigation groups, dashboards, forms, and data tables at different viewport sizes.
+
+Acceptance criteria:
+
+Core workflows remain usable on desktop, tablet, and mobile.
+Navigation remains understandable and keyboard-accessible.
+Tables and forms do not cause avoidable layout failures.
+Existing functionality is preserved.
+ROADMAP-042: Accessibility and interaction states
+
+Priority: P2 — Medium
+Initial status: pending
+
+Review accessible labels, keyboard behavior, focus management, contrast, form validation, loading states, empty states, errors, and confirmations.
+
+Acceptance criteria:
+
+Interactive elements have appropriate accessible names.
+Keyboard users can complete essential workflows.
+Focus states are visible.
+Errors are communicated clearly.
+Destructive actions have suitable safeguards.
+ROADMAP-043: Consistent data presentation
+
+Priority: P2 — Medium
+Initial status: pending
+
+Review search, filtering, sorting, pagination, status indicators, and table layouts across HR modules.
+
+Acceptance criteria:
+
+Data controls behave consistently.
+Pagination does not silently lose relevant filters or sorting.
+Loading, empty, and error states are clear.
+Large datasets remain practical to navigate.
+Phase 5 — Testing, Performance, and Maintainability
+ROADMAP-050: Strengthen automated regression tests
+
+Priority: P1 — High
+Initial status: pending
+
+Review existing tests and add coverage for critical business rules, data operations, authorization-sensitive behavior, and regression-prone features.
+
+Acceptance criteria:
+
+npm test passes for the supported test suite.
+Important regressions are covered by repeatable tests.
+Tests do not depend on real employee data or production credentials.
+Failures are actionable and reproducible.
+ROADMAP-051: Improve lint, build, and validation reliability
+
+Priority: P1 — High
+Initial status: pending
+
+Review the existing lint, test, build, and validation scripts.
+
+Acceptance criteria:
+
+npm run lint, npm test, and npm run build work as documented.
+node scripts/validate.mjs verifies the required project conditions.
+Validation failures produce meaningful diagnostics.
+No checks are weakened merely to make CI pass.
+ROADMAP-052: Performance and maintainability
+
+Priority: P2 — Medium
+Initial status: pending
+
+Inspect duplicated logic, oversized modules, unnecessary rendering work, expensive table operations, and avoidable frontend resource usage.
+
+Acceptance criteria:
+
+Changes address a verified maintenance or performance issue.
+Existing behavior is preserved.
+Unnecessary dependencies are avoided.
+Relevant regression checks pass.
+ROADMAP-053: Deployment and recovery procedures
+
+Priority: P1 — High
+Initial status: pending
+
+Review .github/workflows/pages.yml, migration deployment, GitHub Pages configuration, and deployment documentation.
+
+Acceptance criteria:
+
+Automated checks run before appropriate deployments.
+Deployment failures are observable.
+Protected branches and required reviews remain respected.
+Database migration prerequisites are documented.
+Recovery procedures do not rely on destructive automatic resets.
+Phase 6 — Autonomous Feature Delivery
+ROADMAP-060: Establish safe feature-by-feature delivery
+
+Priority: P1 — High
+Initial status: pending
+
+Implement a repeatable workflow for selecting, validating, committing, and publishing eligible features.
+
+Acceptance criteria:
+
+Each feature has a unique roadmap ID.
+Changes are reviewed and tested before commit.
+Only intended files are staged.
+Commits are focused and descriptive.
+Push success is verified before reporting completion.
+The roadmap records completed work and commit references.
+Failed or blocked features remain accurately marked.
+Unrelated user changes are preserved.
+ROADMAP-061: Verify GitHub Actions quality gates
+
+Priority: P1 — High
+Initial status: pending
+
+Assess whether GitHub Actions should run the existing lint, test, build, and validation commands on relevant pull requests and pushes.
+
+Acceptance criteria:
+
+CI uses the actual supported project commands.
+Required checks fail visibly when they fail.
+Secrets are handled through appropriate GitHub configuration.
+Production deployment is not treated as successful merely because code was pushed.
+Existing deployment behavior is preserved unless an approved change is necessary.
+ROADMAP-062: Verify safe session recovery
+
+Priority: P2 — Medium
+Initial status: pending
+
+Ensure autonomous work can resume after an interrupted Codex session.
+
+Acceptance criteria:
+
+The current feature and its status are recorded.
+Incomplete work is not falsely marked completed.
+The next eligible task can be selected deterministically.
+Git state and existing changes are checked before resuming.
+A session restart does not cause duplicate commits or unsafe deployment actions.
+Feature Execution Protocol
+
+For every feature selected from this roadmap:
+
+Confirm that the feature is applicable and not already complete.
+Check dependencies and business requirements.
+Set its status to in_progress.
+Implement the smallest coherent change.
+Add or update relevant tests.
+Run the required validation commands.
+Review security, accessibility, data integrity, and the final diff as applicable.
+Commit and push only when authorized and permitted.
+Verify the remote result.
+Record the commit reference, test results, and completion evidence.
+Mark the feature completed only when its acceptance criteria pass.
+Continue to the next eligible feature.
+
+If a feature is already implemented and passes its acceptance criteria, mark it not_needed with evidence rather than rebuilding it.
+
+If a feature is blocked, record the blocker and select another independent eligible feature when safe.
+
+Never bypass security checks, destructive-operation safeguards, required approvals, or repository protection rules to keep the workflow moving.
+
+Progress Log
+
+Append a concise entry for each completed feature.
+
+Date	Feature ID	Result	Commit	Notes
+—	—	Awaiting initial audit	—	No completion claims until verified
+Definition of Done
+
+A feature may be marked completed only when:
+
+Its acceptance criteria pass.
+Relevant automated tests pass.
+Required project validation passes.
+Security and data-integrity implications have been reviewed.
+Documentation is updated where necessary.
+The final diff contains only intended changes.
+Any required commit and push have been verified.
+Remaining limitations are documented.
+
+The roadmap is complete when all approved, applicable features are completed or explicitly resolved as not_needed, and no unresolved critical blocker remains.
