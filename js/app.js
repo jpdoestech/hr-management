@@ -10,9 +10,10 @@ import { compactRedundantPageIntros } from './core/content-layout.js?v=20260928-
 import { buildRecordChanges, valuesEqual } from './core/record-diff.js?v=20260930-1';
 import { roleCanExport } from './core/export-access.js?v=20260930-1';
 import { manpowerRequestSummary, manpowerRequestTotals, requirementSlotCounts, slotChronologyIssues, slotMetrics } from './core/manpower.js?v=20260930-1';
+import {manpowerCSV} from './core/manpower-export.js?v=20261010-1';
 import {newManpowerDraft,validateManpowerDraft} from './core/manpower-draft.js?v=20261009-1';
 import {manpowerDraftEditorHTML,manpowerDraftLinesHTML,manpowerDraftPositionOptionsHTML,readManpowerDraft} from './manpower/draft-editor.js?v=20261009-4';
-import {loadSubmittedRequests,loadSubmittedRequest,loadSubmittedRows,submittedListRowsHTML,submittedHeaderHTML,submittedTableHTML} from './manpower/submitted-workspace.js?v=20261010-1';
+import {loadSubmittedRequests,loadSubmittedRequest,loadSubmittedRows,submittedListRowsHTML,submittedHeaderHTML,submittedTableHTML} from './manpower/submitted-workspace.js?v=20261010-2';
 import {readManpowerPaste,detectManpowerPasteMapping,previewManpowerPaste} from './core/manpower-paste.js?v=20261009-1';
 import {manpowerPasteMappingHTML,manpowerPastePreviewHTML} from './manpower/paste-preview.js?v=20261009-1';
 import { measureAsync, recordPerformance, performanceSnapshot } from './core/performance.js?v=20261002-1';
@@ -8261,7 +8262,7 @@ function openManpowerRequestDetails(id){
 }
 
 function exportManpowerFulfillment(){
-  if(!requireExportAccess())return;
+  if(!SESSION||!hasPermission('manpower.view')||!hasPermission('manpower.export')||!requireExportAccess())return;
   const q=String(STATE.manpowerSearch||'').trim().toLowerCase();
   const rows=[];(DB.manpowerRequests||[]).forEach(request=>{
     const requirements=manpowerRequestRequirements(request.id);const summary=manpowerRequestSummary(request,DB.manpowerRequirements,DB.manpowerSlots,todayISO());
@@ -8270,7 +8271,7 @@ function exportManpowerFulfillment(){
     if(!requirements.length)rows.push({request:manpowerRequestLabel(request),prf:request.prfNumber,client:request.clientName,branch:request.branchSite,position:'',department:'',type:'',requestedHC:0,onboardedHC:0,deployedHC:0,remainingHC:0,dateRequested:request.dateRequested,target:request.targetDeploymentDate,fulfillment:summary.fulfillmentRate,risk:summary.risk,status:summary.status});
     requirements.forEach(requirement=>{const counts=requirementSlotCounts(requirement,manpowerRequestSlots(request.id));rows.push({request:manpowerRequestLabel(request),prf:request.prfNumber,client:request.clientName,branch:request.branchSite,position:requirement.position,department:requirement.department,type:requirement.requestType,requestedHC:counts.requested,onboardedHC:counts.onboarded,deployedHC:counts.deployed,remainingHC:counts.remaining,dateRequested:request.dateRequested,target:requirement.targetDeploymentDateOverride||request.targetDeploymentDate,fulfillment:counts.requested?Math.round(counts.deployed/counts.requested*1000)/10:0,risk:summary.risk,status:summary.status});});
   });
-  const columns=[['Request','request'],['PRF Number','prf'],['Client','client'],['Branch / Site','branch'],['Position','position'],['Department','department'],['Type','type'],['Requested HC','requestedHC'],['Onboarded HC','onboardedHC'],['Deployed HC','deployedHC'],['Remaining HC','remainingHC'],['Date Requested','dateRequested'],['Target Deployment','target'],['Fulfillment %','fulfillment'],['SLA / Risk','risk'],['Status','status']].map(([label,key])=>({label,key}));downloadCSV(`manpower-fulfillment-${todayISO()}.csv`,toCSV(rows,columns));
+  const columns=[['Request','request'],['PRF Number','prf'],['Client','client'],['Branch / Site','branch'],['Position','position'],['Department','department'],['Type','type'],['Requested HC','requestedHC'],['Onboarded HC','onboardedHC'],['Deployed HC','deployedHC'],['Remaining HC','remainingHC'],['Date Requested','dateRequested'],['Target Deployment','target'],['Fulfillment %','fulfillment'],['SLA / Risk','risk'],['Status','status']].map(([label,key])=>({label,key}));downloadCSV(`manpower-fulfillment-${todayISO()}.csv`,manpowerCSV(rows,columns));
 }
 
 /* ================================================================
