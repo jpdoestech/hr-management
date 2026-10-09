@@ -13,3 +13,5 @@ dist/
 .gs_backend/*
 .excel_templates/*
 docs/work_rback/*
+supabase-config.old.js
+supabase-config.js
