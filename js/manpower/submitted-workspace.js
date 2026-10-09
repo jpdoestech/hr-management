@@ -20,7 +20,10 @@ export async function loadSubmittedRequest(client,id){
 }
 export async function loadSubmittedRows(client,id,kind,{page=1,size=10}={}){
   let query;
-  if(kind==='history')query=client.from('hr_manpower_quantity_history')
+  if(kind==='amendments')query=client.from('hr_manpower_quantity_amendments')
+    .select('line_id,previous_authorized,current_authorized,request_revision,reason,hr_manpower_lines!inner(request_id,ordinal,department,position)',{count:'exact'})
+    .eq('hr_manpower_lines.request_id',id).order('request_revision',{ascending:false}).order('line_id');
+  else if(kind==='history')query=client.from('hr_manpower_quantity_history')
     .select('line_id,event_type,original_requested,current_authorized,cancelled_unfilled,request_revision,hr_manpower_lines!inner(request_id,ordinal,department,position)',{count:'exact'})
     .eq('hr_manpower_lines.request_id',id).order('request_revision',{ascending:false}).order('line_id');
   else query=client.from('hr_manpower_lines')
@@ -36,6 +39,10 @@ export function submittedHeaderHTML(request,formatDate){
   return `<section class="manpower-submitted-header" aria-label="Request summary"><dl>${fields.map(([label,value])=>`<div><dt>${escape(label)}</dt><dd>${escape(value??'')}</dd></div>`).join('')}</dl>${request.remarks?`<p class="manpower-submitted-remarks">${escape(request.remarks)}</p>`:''}</section>`;
 }
 export function submittedTableHTML(rows,kind,formatDate,headerTarget=''){
+  if(kind==='amendments'){
+    const body=rows.map(row=>`<tr><td>${escape(row.hr_manpower_lines?.ordinal==null?row.line_id:'Line '+(row.hr_manpower_lines.ordinal+1))}<div>${escape(row.hr_manpower_lines?.department)} / ${escape(row.hr_manpower_lines?.position)}</div></td><td>${escape(row.previous_authorized)}</td><td>${escape(row.current_authorized)}</td><td>${escape(row.request_revision)}</td><td><details><summary>Amendment reason</summary><p class="manpower-submitted-remarks">${escape(row.reason)}</p></details></td></tr>`).join('');
+    return `<div class="tablewrap" tabindex="0" role="region" aria-label="Quantity amendment records"><table class="data-table" data-server-paginated="true" data-table-tools="external"><caption class="sr-only">Quantity amendments</caption><thead><tr>${['Department / Position','Previous','Authorized','Revision','Reason'].map(label=>`<th scope="col">${label}</th>`).join('')}</tr></thead><tbody>${body||'<tr><td colspan="5"><div class="empty">No quantity amendments recorded.</div></td></tr>'}</tbody></table></div>`;
+  }
   const history=kind==='history';
   const headers=history?['Department / Position','Event','Original','Authorized','Cancelled','Revision']:['Department','Position','Original','Authorized','Cancelled','Target','Details'];
   const body=rows.map(row=>history?`<tr><td>${escape(row.hr_manpower_lines?.ordinal==null?row.line_id:'Line '+(row.hr_manpower_lines.ordinal+1))}<div>${escape(row.hr_manpower_lines?.department)} / ${escape(row.hr_manpower_lines?.position)}</div></td><td>${escape(row.event_type)}</td><td>${escape(row.original_requested)}</td><td>${escape(row.current_authorized)}</td><td>${escape(row.cancelled_unfilled)}</td><td>${escape(row.request_revision)}</td></tr>`:

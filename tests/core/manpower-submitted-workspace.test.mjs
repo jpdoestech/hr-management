@@ -33,10 +33,26 @@ test('lines and history have separate bounded queries and request-linked history
   assert.deepEqual(history.calls.find(call=>call[0]==='eq'),['eq','hr_manpower_lines.request_id','request']);
   assert.deepEqual(history.calls.find(call=>call[0]==='range'),['range',0,9]);
 });
+test('amendment reads are lazy, request-filtered and independently paginated',async()=>{
+  const {client,calls}=clientFixture();await loadSubmittedRows(client,'request','amendments',{page:2,size:25});
+  assert.deepEqual(calls[0],['from','hr_manpower_quantity_amendments']);
+  assert.deepEqual(calls.find(call=>call[0]==='range'),['range',25,49]);
+  assert.deepEqual(calls.find(call=>call[0]==='eq'),['eq','hr_manpower_lines.request_id','request']);
+  assert.match(calls.find(call=>call[0]==='select')[1],/previous_authorized.*reason.*hr_manpower_lines!inner/);
+  assert.doesNotMatch(calls.find(call=>call[0]==='select')[1],/\*|audit_id/);
+});
+test('amendment reason disclosure is escaped, accessible and read-only',()=>{
+  const html=submittedTableHTML([{line_id:'line',previous_authorized:100,current_authorized:125,request_revision:3,reason:'<script>alert(1)</script>'}],'amendments',value=>value);
+  assert.match(html,/100/);assert.match(html,/125/);assert.match(html,/&lt;script&gt;/);
+  assert.match(html,/<details><summary>Amendment reason/);assert.match(html,/scope="col"/);
+  assert.match(html,/tabindex="0"/);assert.doesNotMatch(html,/<script>|onclick=|undefined|NaN/);
+  assert.match(submittedTableHTML([],'amendments',value=>value),/No quantity amendments recorded/);
+});
 test('backend failures are propagated rather than displayed as empty success',async()=>{
   const {client}=clientFixture({error:{code:'42P01',message:'Missing'}});
   await assert.rejects(()=>loadSubmittedRequests(client),error=>error.code==='42P01');
   await assert.rejects(()=>loadSubmittedRows(client,'request','history'),error=>error.code==='42P01');
+  await assert.rejects(()=>loadSubmittedRows(client,'request','amendments'),error=>error.code==='42P01');
 });
 test('read-only views escape data, disclose details and use the header target fallback',()=>{
   const row={id:'request',ordinal:0,prf_number:'<script>',department:'Production',position:'Operator',original_requested:1000,current_authorized:1000,cancelled_unfilled:0,purpose:'<script>',demand_type:'Replacement'};
@@ -53,6 +69,11 @@ function controllerFixture(){
   runInNewContext(app.slice(app.indexOf('const MANPOWER_SUBMITTED_UI='),app.indexOf('function openManpowerRequestForm(')),context);
   return {host,pending,context};
 }
+test('missing amendment storage explains the limitation without claiming an empty history',()=>{
+  const {context}=controllerFixture();const html=context.manpowerSubmittedErrorHTML({code:'42P01'},'renderManpowerSubmittedDetails','amendments');
+  assert.match(html,/Quantity amendments unavailable/);assert.match(html,/Requisition lines and submission history remain available/);
+  assert.match(html,/role="alert"/);assert.doesNotMatch(html,/No quantity amendments recorded/);
+});
 test('late responses cannot overwrite a newer submitted list',async()=>{
   const {context,pending,host}=controllerFixture();const first=context.renderManpowerSubmitted(),second=context.renderManpowerSubmitted();
   pending[1]({data:[{id:'new',prf_number:'New response'}],count:1});await second;

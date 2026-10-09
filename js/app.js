@@ -8079,8 +8079,9 @@ async function saveManpowerDraft(){
 
 const MANPOWER_SUBMITTED_UI={request:0};
 function manpowerQuantityNavigationHTML(active){return `<nav class="workspace-tabs manpower-quantity-nav" aria-label="Quantity request workspaces"><button type="button" ${active==='drafts'?'aria-current="page" class="active"':''} onclick="go('manpowerDrafts')">Quantity Drafts</button><button type="button" ${active==='submitted'?'aria-current="page" class="active"':''} onclick="go('manpowerSubmitted')">Submitted Requests</button></nav>`;}
-function manpowerSubmittedErrorHTML(error,retry){
+function manpowerSubmittedErrorHTML(error,retry,kind=''){
   const missing=['42P01','42703','PGRST204','PGRST205'].includes(error.code);
+  if(kind==='amendments')return `<div class="empty" role="alert"><b>Quantity amendments unavailable</b><span>${esc(missing?'Amendment storage is not available in this database yet. Requisition lines and submission history remain available.':error.message||'Could not load quantity amendments.')}</span><button type="button" class="btn btn-ghost" onclick="${retry}()">Retry</button></div>`;
   return `<div class="empty" role="alert"><b>Submitted requests unavailable</b><span>${esc(missing?'Submitted-request storage is not available in this database yet.':error.message||'Could not load this request.')}</span><button type="button" class="btn btn-ghost" onclick="${retry}()">Retry</button></div>`;
 }
 function manpowerSubmittedPageSettings(key){
@@ -8110,7 +8111,7 @@ async function openManpowerSubmitted(id){
 async function renderManpowerSubmittedDetails(){
   if(!SESSION||!hasPermission('manpower.view'))return;
   const content=document.getElementById('content'),id=STATE.manpowerSubmittedId;
-  const kind=STATE.manpowerSubmittedTab==='history'?'history':'lines';
+  const kind=['history','amendments'].includes(STATE.manpowerSubmittedTab)?STATE.manpowerSubmittedTab:'lines';
   const key=`manpower:submitted-${kind}:${id}`,{page,size}=manpowerSubmittedPageSettings(key);
   const token=++MANPOWER_SUBMITTED_UI.request,sessionId=SESSION.id;
   let requestLoaded=false;
@@ -8122,7 +8123,7 @@ async function renderManpowerSubmittedDetails(){
     setTitle(`Manpower Fulfillment / ${request.prf_number}`,'Submitted request');
     if(content.dataset.submittedId!==id||!content.querySelector('#manpower-submitted-detail-results')){
       content.dataset.submittedId=id;
-      content.innerHTML=`<div class="data-toolbar"><button type="button" class="btn btn-ghost btn-sm" onclick="go('manpowerSubmitted')">Back to Submitted Requests</button><button type="button" class="iconbtn" title="About quantities" aria-label="About quantities" onclick="manpowerSubmittedInfo()">${iInfo(15)}</button></div>${submittedHeaderHTML(request,fmtDate)}<nav class="workspace-tabs manpower-submitted-tabs" aria-label="Submitted request sections"><button type="button" data-submitted-tab="lines" onclick="manpowerSubmittedSetTab('lines')">Requisition Lines</button><button type="button" data-submitted-tab="history" onclick="manpowerSubmittedSetTab('history')">Quantity History</button></nav><div id="manpower-submitted-detail-results" class="manpower-submitted-data" aria-live="polite"></div>`;
+      content.innerHTML=`<div class="data-toolbar"><button type="button" class="btn btn-ghost btn-sm" onclick="go('manpowerSubmitted')">Back to Submitted Requests</button><button type="button" class="iconbtn" title="About quantities" aria-label="About quantities" onclick="manpowerSubmittedInfo()">${iInfo(15)}</button></div>${submittedHeaderHTML(request,fmtDate)}<nav class="workspace-tabs manpower-submitted-tabs" aria-label="Submitted request sections"><button type="button" data-submitted-tab="lines" onclick="manpowerSubmittedSetTab('lines')">Requisition Lines</button><button type="button" data-submitted-tab="history" onclick="manpowerSubmittedSetTab('history')">Submission History</button><button type="button" data-submitted-tab="amendments" onclick="manpowerSubmittedSetTab('amendments')">Amendments</button></nav><div id="manpower-submitted-detail-results" class="manpower-submitted-data" aria-live="polite"></div>`;
     }else content.querySelector('.manpower-submitted-header').outerHTML=submittedHeaderHTML(request,fmtDate);
     content.querySelectorAll('[data-submitted-tab]').forEach(button=>{const active=button.dataset.submittedTab===kind;button.classList.toggle('active',active);if(active)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');});
     const host=document.getElementById('manpower-submitted-detail-results');host.innerHTML='<div class="empty">Loading records...</div>';
@@ -8130,12 +8131,12 @@ async function renderManpowerSubmittedDetails(){
     if(token!==MANPOWER_SUBMITTED_UI.request||STATE.view!=='manpowerSubmittedDetails'||STATE.manpowerSubmittedId!==id||SESSION?.id!==sessionId||!hasPermission('manpower.view')||!host.isConnected)return;
     const meta=paginationMeta(STATE,key,count||0);if(meta.page!==page){await renderManpowerSubmittedDetails();return;}
     host.innerHTML=submittedTableHTML(data||[],kind,fmtDate,request.target_date)+manpowerSubmittedPaginationHTML(meta,key);
-  }catch(error){if(token===MANPOWER_SUBMITTED_UI.request&&STATE.view==='manpowerSubmittedDetails'&&SESSION?.id===sessionId){const host=document.getElementById('manpower-submitted-detail-results');if(requestLoaded&&host)host.innerHTML=manpowerSubmittedErrorHTML(error,'renderManpowerSubmittedDetails');else content.innerHTML=`<button type="button" class="btn btn-ghost" onclick="go('manpowerSubmitted')">Back to Submitted Requests</button>${manpowerSubmittedErrorHTML(error,'renderManpowerSubmittedDetails')}`;}}
+  }catch(error){if(token===MANPOWER_SUBMITTED_UI.request&&STATE.view==='manpowerSubmittedDetails'&&SESSION?.id===sessionId){const host=document.getElementById('manpower-submitted-detail-results');if(requestLoaded&&host)host.innerHTML=manpowerSubmittedErrorHTML(error,'renderManpowerSubmittedDetails',kind);else content.innerHTML=`<button type="button" class="btn btn-ghost" onclick="go('manpowerSubmitted')">Back to Submitted Requests</button>${manpowerSubmittedErrorHTML(error,'renderManpowerSubmittedDetails')}`;}}
 }
-function manpowerSubmittedSetTab(kind){if(!['lines','history'].includes(kind))return;STATE.manpowerSubmittedTab=kind;renderManpowerSubmittedDetails();}
+function manpowerSubmittedSetTab(kind){if(!['lines','history','amendments'].includes(kind))return;STATE.manpowerSubmittedTab=kind;renderManpowerSubmittedDetails();}
 function manpowerSubmittedPageGo(scope,page){if(!scope.startsWith('manpower:submitted'))return;STATE.tablePages[scope]={...STATE.tablePages[scope],page};if(STATE.view==='manpowerSubmitted')renderManpowerSubmitted();else if(STATE.view==='manpowerSubmittedDetails')renderManpowerSubmittedDetails();}
 function manpowerSubmittedPageSize(scope,size){if(!scope.startsWith('manpower:submitted')||![10,25,50].includes(Number(size)))return;STATE.tablePages[scope]={page:1,size:Number(size)};if(STATE.view==='manpowerSubmitted')renderManpowerSubmitted();else if(STATE.view==='manpowerSubmittedDetails')renderManpowerSubmittedDetails();}
-function manpowerSubmittedInfo(){openModal('<div class="modal-head"><h3>Quantity definitions</h3><button onclick="closeModal()" aria-label="Close">&times;</button></div><div class="modal-body"><p>Original is the immutable headcount first submitted. Authorized is the current approved quantity. Cancelled is outstanding demand formally cancelled, not deployed history. Quantity History records the saved baseline and its revision. Reservations, deployments and controlled amendments are not enabled in this release.</p></div><div class="modal-foot"><button type="button" class="btn btn-ghost" onclick="closeModal()">Close</button></div>');}
+function manpowerSubmittedInfo(){openModal('<div class="modal-head"><h3>Quantity definitions</h3><button onclick="closeModal()" aria-label="Close">&times;</button></div><div class="modal-body"><p>Original is the immutable headcount first submitted. Authorized is the current approved quantity. Cancelled is outstanding demand formally cancelled, not deployed history. Submission History records the initial baseline. Amendments records previous and revised quantities with reasons where amendment storage has been deployed. These views are read-only. Reservations, deployments and amendment entry are not enabled in this release.</p></div><div class="modal-foot"><button type="button" class="btn btn-ghost" onclick="closeModal()">Close</button></div>');}
 
 function openManpowerRequestForm(id=''){
   const request=id?manpowerRequestById(id):null;

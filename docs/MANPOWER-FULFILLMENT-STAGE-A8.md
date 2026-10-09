@@ -12,7 +12,7 @@ Submitted rows remain protected against direct mutation. Private exact-row trans
 
 - No automatic migration, backfill, legacy-record mutation or UI enablement. Supabase configuration, production attachments and existing RBAC architecture are unchanged.
 - Requires verified registry/submission proposals 0035/0036. It replaces their submitted-record trigger function; inspect the live function and any additional triggers before promoting this proposal. Unexpected live customizations must be reconciled, not overwritten.
-- Separate additive amendment facts preserve the initial submission history schema. The current read-only history UI still displays submission facts only. A coordinated release must connect amendment facts to that view before exposing the amendment action.
+- Separate additive amendment facts preserve the initial submission history schema. At Stage A8, the read-only history UI displayed submission facts only. Stage A9 subsequently adds a separate read-only Amendments tab; amendment entry still requires a coordinated database/application release.
 - Only increases are supported. Decreases, cancellations, close/reopen and full capacity accounting remain outstanding. Do not assume reserved/fulfilled counts are zero. This is a safe subset, not satisfaction of the specification's increase/decrease acceptance criterion.
 - Do not promote based solely on local rehearsal: verify the production baseline, real RLS helpers, independent concurrent connections and complete live integration first.
 
