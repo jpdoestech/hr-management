@@ -88,7 +88,7 @@ await db.exec('reset role');
 for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_reservation_integrity.sql',import.meta.url),'utf8')))assert.equal(check.rows.length,0);
 await denied(()=>db.exec("update hr_manpower_reservation_batches set payload='[]'"),'23514');
 await db.exec('set role anon');await denied(()=>reserve('anon',items),'42501');
-if(process.argv.includes('--amendments')){
+if(process.argv.includes('--amendments')||process.argv.includes('--lifecycle')){
   await db.exec('reset role');
   await db.exec(readFileSync(new URL('../../supabase/proposals/0041_manpower_quantity_amendments.sql',import.meta.url),'utf8'));
   await db.exec('set role authenticated');
@@ -171,5 +171,81 @@ if(process.argv.includes('--amendments')){
     assert.equal(check.rows.length,0);
   await db.exec('set role anon');await denied(()=>amend(91,8),'42501');
   console.log('Quantity amendment rehearsal passed: reserved/scheduled/ended-credit/cancelled-demand boundaries, release before decrease, immutable original, strict increase-only compatibility, revision/permission/scope/tenant/anonymous denials, private-helper denial, append-only history and atomic audit rollback.');
+}
+if(process.argv.includes('--lifecycle')){
+  await db.exec('reset role');
+  await db.exec(readFileSync(new URL('../../supabase/proposals/0042_manpower_lifecycle.sql',import.meta.url),'utf8'));
+  await db.exec('set role authenticated');
+  const lifecycle=async(id,revision,operation,reason='Authorized lifecycle change',line=null,quantity=null)=>
+    (await db.query('select change_manpower_lifecycle($1,$2,$3,$4,$5,$6) result',[id,revision,operation,reason,line,quantity])).rows[0].result;
+  const counter=async(line)=>(await db.query('select manpower_line_capacity($1) result',[line])).rows[0].result;
+  const header=async(id)=>(await db.query('select * from hr_manpower_requests where id=$1',[id])).rows[0];
+  for(const operation of ['Close','Cancel'])await denied(()=>lifecycle('request',8,operation),'23514');
+  await denied(()=>lifecycle('request',8,'CancelLine','Reason','request-line',1),'23514');
+  await denied(()=>lifecycle('request',8,'Reopen'),'23514');
+  for(const [operation,reason,line,quantity] of [['Invalid','Reason',null,null],['Close','',null,null],
+    ['Close','x'.repeat(1001),null,null],['Close','Reason','request-line',1],['CancelLine','Reason',null,1],
+    ['CancelLine','Reason','request-line',0]])await denied(()=>lifecycle('request',8,operation,reason,line,quantity),'23514');
+  await denied(()=>lifecycle('request',8,'CancelLine','Reason','small-line',1),'42501');
+  await denied(()=>lifecycle('request',7,'Close'),'40001');
+  for(const key of ['manpower.update','manpower.view']){
+    await db.query('select set_config($1,$2,false)',['test.denied',key]);await denied(()=>lifecycle('request',8,'Close'),'42501');
+  }
+  await db.exec("set test.denied='';set test.scope='Other'");await denied(()=>lifecycle('request',8,'Close'),'42501');
+  await db.exec(`set test.scope='global';set test.tenant='${other}'`);await denied(()=>lifecycle('request',8,'Close'),'42501');
+  await db.exec(`set test.tenant='${tenant}'`);
+  for(const row of (await db.query("select id from hr_manpower_reservations where state in ('Reserved','Scheduled')")).rows)
+    await db.query('select release_manpower_reservation($1,$2)',[row.id,'Resolved before closure']);
+  const closed=await lifecycle('request',8,'Close');assert.equal(closed.request.state,'Closed');assert.equal(closed.request.revision,9);
+  assert.equal((await counter('request-line')).cancelled_unfilled,89);assert.equal((await counter('request-line')).fulfilled,1);
+  assert.equal((await counter('request-line')).available,0);assert.equal((await counter('request-line')).original_requested,1000);
+  assert.equal((await counter('request-line')).current_authorized,90);
+  await denied(()=>lifecycle('request',9,'Close'),'23514');
+  await denied(()=>db.query("select amend_manpower_quantity('request','request-line',9,91,'Closed request')"),'23514');
+  await denied(()=>reserve('closed-request',[{candidate_id:'candidate77',line_id:'request-line',hiring_category:'New Hire'}]),'23514');
+  const reopened=await lifecycle('request',9,'Reopen');assert.equal(reopened.request.revision,10);assert.equal(reopened.request.state,'Open');
+  assert.deepEqual(reopened.line_changes,[]);assert.equal((await counter('request-line')).cancelled_unfilled,89);
+  assert.equal((await counter('request-line')).available,0);
+  await denied(()=>reserve('no-restored-demand',[{candidate_id:'candidate77',line_id:'request-line',hiring_category:'New Hire'}]),'23514');
+  await db.query("select amend_manpower_quantity('request','request-line',10,92,'Explicit new authorization')");
+  assert.equal((await counter('request-line')).available,2);
+  await denied(()=>lifecycle('request',11,'CancelLine','Too much','request-line',3),'23514');
+  const partial=await lifecycle('request',11,'CancelLine','Partial outstanding closure','request-line',1);
+  assert.equal(partial.request.state,'Open');assert.equal(partial.line_changes[0].previous_cancelled,89);
+  assert.equal(partial.line_changes[0].current_cancelled,90);assert.equal((await counter('request-line')).available,1);
+  const cancelled=await lifecycle('request',12,'Cancel');assert.equal(cancelled.request.state,'Cancelled');
+  assert.equal((await counter('request-line')).cancelled_unfilled,91);assert.equal((await counter('request-line')).fulfilled,1);
+  await lifecycle('request',13,'Reopen');assert.equal((await counter('request-line')).available,0);
+
+  await db.query('select save_manpower_draft($1,0,$2,$3)',['multi',
+    {prf_number:'multi',client_id:client,branch_reporting:'Davao',requested_by:'Fixture HR',date_requested:'2026-10-09',target_date:'2026-10-10'},
+    ['a','b'].map((suffix,index)=>({id:'multi-'+suffix,department:'Production',position:'Operator',current_authorized:index?6:4}))]);
+  await denied(()=>lifecycle('multi',1,'Close'),'23514');
+  await db.query("select submit_manpower_request('multi',1)");
+  await db.exec("reset role;update hr_records set data=data||'{\"name\":\"LIFECYCLE FIXTURE OLIVERA\"}' where record_id='candidate77';set role authenticated;");
+  const held=await reserve('multi-held',[{candidate_id:'candidate77',line_id:'multi-b',hiring_category:'New Hire'}]);
+  await denied(()=>lifecycle('multi',2,'Close'),'23514');
+  assert.equal((await counter('multi-a')).cancelled_unfilled,0);assert.equal((await header('multi')).revision,2);
+  await db.query('select release_manpower_reservation($1,$2)',[held.reservation_ids[0],'Resolved second-line commitment']);
+  await db.exec("reset role;alter table hr_audit_logs add constraint fail_lifecycle check(action not like '%Reason: lifecycle audit failure') not valid;set role authenticated;");
+  await denied(()=>lifecycle('multi',2,'Close','lifecycle audit failure'),'23514');
+  assert.equal((await counter('multi-a')).cancelled_unfilled,0);assert.equal((await counter('multi-b')).cancelled_unfilled,0);
+  assert.equal((await header('multi')).state,'Open');assert.equal((await header('multi')).revision,2);
+  assert.equal((await db.query("select * from hr_manpower_lifecycle_history where request_id='multi'")).rows.length,0);
+  const multiClosed=await lifecycle('multi',2,'Close');assert.equal(multiClosed.line_changes.length,2);
+  assert.equal((await counter('multi-a')).cancelled_unfilled,4);assert.equal((await counter('multi-b')).cancelled_unfilled,6);
+  await lifecycle('multi',3,'Reopen');assert.equal((await counter('multi-a')).available,0);
+  await denied(()=>db.exec("delete from hr_manpower_lifecycle_history"),'42501');
+  await db.exec("set test.denied='manpower.view'");assert.equal((await db.query('select * from hr_manpower_lifecycle_history')).rows.length,0);
+  await db.exec("set test.denied='';reset role");
+  assert.equal((await db.query('select * from hr_manpower_amendment_intents')).rows.length,0);
+  await denied(()=>db.exec("update hr_manpower_lifecycle_history set reason='Rewrite'"),'23514');
+  await denied(()=>db.exec("update hr_manpower_requests set state='Closed' where id='multi'"),'23514');
+  for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_quantity_increases_integrity.sql',import.meta.url),'utf8')))
+    assert.equal(check.rows.length,0);
+  for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_lifecycle_integrity.sql',import.meta.url),'utf8')))
+    assert.equal(check.rows.length,0);
+  await db.exec('set role anon');await denied(()=>lifecycle('multi',4,'Close'),'42501');
+  console.log('Lifecycle rehearsal passed: line and request cancellation, multi-line closure, mandatory reservation resolution, preserved original/authorized/fulfilled quantities, reopen without capacity restoration, stale/invalid/access denials, append-only RLS history, direct-writer guards and multi-line audit rollback.');
 }
 await db.close();console.log('Reservation PostgreSQL rehearsal passed: 75-worker atomic batch, ineligible/capacity/duplicate rollback, bounded real assignments for 1000 demand, role/scope/tenant denial, order-independent idempotent replay, worker uniqueness, authoritative capacity and audit-failure rollback. Production and independent concurrency remain unverified.');
