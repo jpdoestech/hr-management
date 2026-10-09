@@ -88,4 +88,88 @@ await db.exec('reset role');
 for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_reservation_integrity.sql',import.meta.url),'utf8')))assert.equal(check.rows.length,0);
 await denied(()=>db.exec("update hr_manpower_reservation_batches set payload='[]'"),'23514');
 await db.exec('set role anon');await denied(()=>reserve('anon',items),'42501');
+if(process.argv.includes('--amendments')){
+  await db.exec('reset role');
+  await db.exec(readFileSync(new URL('../../supabase/proposals/0041_manpower_quantity_amendments.sql',import.meta.url),'utf8'));
+  await db.exec('set role authenticated');
+  const amend=async(quantity,revision,reason='Reviewed staffing requirement',operation='amend_manpower_quantity')=>
+    (await db.query(`select ${operation}($1,$2,$3,$4,$5) result`,['request','request-line',revision,quantity,reason])).rows[0].result;
+  const counters=async()=>(await db.query("select manpower_line_capacity('request-line') result")).rows[0].result;
+  const history=async()=>(await db.query("select * from hr_manpower_quantity_amendments where line_id='request-line' order by request_revision")).rows;
+  assert.equal((await counters()).reserved,75);
+  for(const [quantity,reason] of [[null,'Reason'],[0,'Reason'],[-1,'Reason'],[1000,'Reason'],[75,null],[75,''],[75,' '.repeat(10)],[75,'x'.repeat(1001)]])
+    await denied(()=>amend(quantity,2,reason),'23514');
+  await denied(()=>db.query('select amend_manpower_quantity($1,$2,2,75,$3)',['request','small-line','Wrong request line']),'42501');
+  await denied(()=>amend(74,2),'23514');
+  await denied(()=>amend(75,1),'40001');
+  for(const key of ['manpower.update','manpower.view']){
+    await db.query('select set_config($1,$2,false)',['test.denied',key]);await denied(()=>amend(75,2),'42501');
+  }
+  await db.exec("set test.denied='';set test.scope='Other'");await denied(()=>amend(75,2),'42501');
+  await db.exec(`set test.scope='global';set test.tenant='${other}'`);await denied(()=>amend(75,2),'42501');
+  await db.exec(`set test.tenant='${tenant}'`);
+  await denied(()=>db.query('select amend_manpower_quantity_internal($1,$2,2,75,$3,false)',['request','request-line','Bypass']),'42501');
+  const reduced=await amend(75,2);
+  assert.equal(reduced.request.revision,3);assert.equal(reduced.line.original_requested,1000);
+  assert.equal(reduced.line.current_authorized,75);assert.equal((await counters()).available,0);
+  assert.equal((await history()).length,1);assert.equal((await history())[0].previous_authorized,1000);
+  await denied(()=>amend(76,2),'40001');
+  await release(result.reservation_ids[1]);
+  await denied(()=>amend(74,3,'Wrong API','increase_manpower_quantity'),'23514');
+  assert.equal((await amend(74,3)).request.revision,4);
+  assert.equal((await amend(80,4,'Approved increase','increase_manpower_quantity')).request.revision,5);
+
+  // Owner-seeded accounting facts, NOT a deployment/scheduling/cancellation workflow test.
+  await db.exec('reset role');
+  await db.exec(`insert into hr_records values('${tenant}','employees','accounting-fixture',
+    '{"id":"accounting-fixture","name":"Accounting fixture","department":"Production"}');
+    insert into hr_audit_logs(tenant_id,user_id,user_name,action)
+      values('${tenant}','${actor}','Fixture HR','Synthetic historical fulfillment accounting');`);
+  const fixtureAudit=(await db.query("select id from hr_audit_logs where action='Synthetic historical fulfillment accounting'")).rows[0].id;
+  async function seedTransition(id,changes){
+    await db.exec('begin');
+    await db.query(`insert into hr_manpower_reservation_intents
+      select txid_current(),tenant_id,id,to_jsonb(reservation),to_jsonb(reservation)||$2::jsonb
+      from hr_manpower_reservations reservation where id=$1`,[id,changes]);
+    await db.query(`update hr_manpower_reservations set state=$2,employee_id=$3,worker_key=$4,
+      actual_date=$5,ended_date=$6,confirmation_audit_id=$7,scheduled_date=$8 where id=$1`,
+    [id,changes.state,changes.employee_id||null,changes.worker_key,changes.actual_date||null,
+      changes.ended_date||null,changes.confirmation_audit_id||null,changes.scheduled_date||null]);
+    await db.exec('delete from hr_manpower_reservation_intents where transaction_id=txid_current();commit;');
+  }
+  await seedTransition(result.reservation_ids[2],{state:'Ended',employee_id:'accounting-fixture',
+    worker_key:'employee:accounting-fixture',actual_date:'2026-10-09',ended_date:'2026-10-10',confirmation_audit_id:fixtureAudit});
+  const scheduled=(await db.query('select candidate_id from hr_manpower_reservations where id=$1',[result.reservation_ids[3]])).rows[0].candidate_id;
+  await seedTransition(result.reservation_ids[3],{state:'Scheduled',employee_id:null,worker_key:'candidate:'+scheduled,
+    scheduled_date:'2026-10-11',actual_date:null,ended_date:null,confirmation_audit_id:null});
+  await db.exec(`begin;insert into hr_manpower_amendment_intents
+    select txid_current(),line.tenant_id,request.id,line.id,to_jsonb(request),to_jsonb(request),
+      to_jsonb(line),to_jsonb(line)||'{"cancelled_unfilled":5}'::jsonb
+    from hr_manpower_lines line join hr_manpower_requests request on request.tenant_id=line.tenant_id and request.id=line.request_id
+    where line.id='request-line';
+    update hr_manpower_lines set cancelled_unfilled=5 where id='request-line';
+    delete from hr_manpower_amendment_intents where transaction_id=txid_current();commit;set role authenticated;`);
+  assert.equal((await counters()).reserved,73);assert.equal((await counters()).fulfilled,1);
+  assert.equal((await counters()).active_deployed,0);assert.equal((await counters()).scheduled,1);
+  await denied(()=>amend(78,5),'23514');
+  const boundary=await amend(79,5);
+  assert.equal(boundary.line.cancelled_unfilled,5);assert.equal(boundary.line.original_requested,1000);
+  assert.equal((await counters()).available,0);
+  await release(result.reservation_ids[3]);
+  assert.equal((await amend(78,6)).request.revision,7);
+  assert.equal((await counters()).fulfilled,1);assert.equal((await counters()).scheduled,0);
+  await db.exec("reset role;alter table hr_audit_logs add constraint fail_amend check(action not like '%Reason: amendment audit failure') not valid;set role authenticated;");
+  await denied(()=>amend(90,7,'amendment audit failure'),'23514');
+  assert.equal((await counters()).current_authorized,78);assert.equal((await history()).length,5);
+  assert.equal((await db.query("select revision from hr_manpower_requests where id='request'")).rows[0].revision,7);
+  assert.equal((await amend(90,7,'Approved renewed demand')).request.revision,8);
+  await db.exec('reset role');assert.equal((await db.query('select * from hr_manpower_amendment_intents')).rows.length,0);
+  await denied(()=>db.exec("update hr_manpower_quantity_amendments set reason='Rewrite'"),'23514');
+  await denied(()=>db.exec("update hr_manpower_lines set original_requested=90 where id='request-line'"),'23514');
+  await denied(()=>db.exec("update hr_manpower_lines set current_authorized=91 where id='request-line'"),'23514');
+  for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_quantity_increases_integrity.sql',import.meta.url),'utf8')))
+    assert.equal(check.rows.length,0);
+  await db.exec('set role anon');await denied(()=>amend(91,8),'42501');
+  console.log('Quantity amendment rehearsal passed: reserved/scheduled/ended-credit/cancelled-demand boundaries, release before decrease, immutable original, strict increase-only compatibility, revision/permission/scope/tenant/anonymous denials, private-helper denial, append-only history and atomic audit rollback.');
+}
 await db.close();console.log('Reservation PostgreSQL rehearsal passed: 75-worker atomic batch, ineligible/capacity/duplicate rollback, bounded real assignments for 1000 demand, role/scope/tenant denial, order-independent idempotent replay, worker uniqueness, authoritative capacity and audit-failure rollback. Production and independent concurrency remain unverified.');
