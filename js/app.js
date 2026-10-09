@@ -8861,6 +8861,64 @@ function syncUserExportControl(){syncUserPasswordPolicy();}
    SETTINGS
    ================================================================ */
 function settingsCatalogStatus(active){return statusBadge(active?'Active':'Inactive',active?{'Active':'b-green'}:{'Inactive':'b-grey'});}
+const CLIENT_CATALOG={rows:[],total:0,request:0,saving:false};
+function isClientCatalogAdmin(){return !!SESSION&&(SESSION.isSuperAdmin||SESSION.role==='Administrator')&&hasPermission('settings.manage');}
+function clientCatalogHTML(){
+  return `<div class="data-toolbar"><div class="searchbox">${iSearch(16)}<input type="search" aria-label="Search client accounts" data-search-key="clientSearch" placeholder="Search client accounts..." value="${esc(STATE.clientSearch||'')}" oninput="queueSearchRender(this,'clientSearch',renderClientCatalog)"></div><div class="spacer"></div><button class="btn btn-primary btn-sm" onclick="openClientAccountForm()">${iPlus(14)} Add Client</button></div><div id="client-catalog-results" aria-live="polite"></div>`;
+}
+async function renderClientCatalog(){
+  const host=document.getElementById('client-catalog-results');
+  if(!host||!isClientCatalogAdmin())return;
+  const request=++CLIENT_CATALOG.request;
+  const sessionId=SESSION.id;
+  host.innerHTML='<div class="empty">Loading client accounts...</div>';
+  const key='settings:clients';
+  STATE.tablePages||={};
+  const current=STATE.tablePages[key]||{page:1,size:10};
+  const size=[10,25,50].includes(Number(current.size))?Number(current.size):10;
+  const page=Math.max(1,Number(current.page)||1);
+  try{
+    let query=supabase.from('hr_manpower_clients').select('id,name,active,revision',{count:'exact'}).order('name').order('id').range((page-1)*size,page*size-1);
+    const search=(STATE.clientSearch||'').trim();
+    if(search)query=query.ilike('name',`%${search.replace(/[\\%_]/g,'\\$&')}%`);
+    const {data,count,error}=await query;
+    if(request!==CLIENT_CATALOG.request||!host.isConnected||SESSION?.id!==sessionId||!isClientCatalogAdmin())return;
+    if(error)throw error;
+    CLIENT_CATALOG.rows=data||[];CLIENT_CATALOG.total=count||0;
+    STATE.tablePages[key]={page,size};
+    const meta=paginationMeta(STATE,key,CLIENT_CATALOG.total);
+    if(meta.page!==page){await renderClientCatalog();return;}
+    host.innerHTML=`<div class="tablewrap"><table class="data-table settings-table" data-table-tools="external" data-server-paginated="true"><thead><tr><th>Client Account</th><th>Status</th><th class="actions-head">Action</th></tr></thead><tbody>${CLIENT_CATALOG.rows.map(row=>`<tr><td><b>${esc(row.name)}</b></td><td>${settingsCatalogStatus(row.active)}</td><td class="actions-head"><button class="iconbtn" title="Edit client account" onclick="openClientAccountForm('${row.id}')">${iEdit(14)}</button></td></tr>`).join('')||'<tr><td colspan="3"><div class="empty">No matching client accounts.</div></td></tr>'}</tbody></table></div><div class="table-pagination-wrap"><span>${meta.start}-${meta.end} of ${meta.total} clients</span>${paginationHTML(meta,key,{go:'clientCatalogPageGo',size:'clientCatalogPageSize',sizes:[10,25,50]})}</div>`;
+  }catch(error){
+    if(request!==CLIENT_CATALOG.request||!host.isConnected||SESSION?.id!==sessionId||!isClientCatalogAdmin())return;
+    CLIENT_CATALOG.rows=[];
+    const missing=['42P01','PGRST205'].includes(error.code);
+    host.innerHTML=`<div class="empty"><b>${missing?'Client Accounts migration required':'Unable to load client accounts'}</b><span>${missing?'Deploy migration 0033 before using this catalog.':esc(error.message||'Please retry.')}</span><button class="btn btn-ghost btn-sm" onclick="renderClientCatalog()">Retry</button></div>`;
+  }
+}
+function clientCatalogPageGo(scope,page){if(scope!=='settings:clients')return;STATE.tablePages[scope]={...STATE.tablePages[scope],page};renderClientCatalog();}
+function clientCatalogPageSize(scope,size){if(scope!=='settings:clients'||![10,25,50].includes(Number(size)))return;STATE.tablePages[scope]={page:1,size:Number(size)};renderClientCatalog();}
+function openClientAccountForm(id=''){
+  if(!isClientCatalogAdmin())return;
+  const row=id?CLIENT_CATALOG.rows.find(item=>item.id===id):null;
+  if(id&&!row){toast('Reload client accounts before editing.',true);return;}
+  openModal(`<div class="modal-head"><div><h3>${row?'Edit':'Add'} Client Account</h3><div class="small">Settings / Client Accounts</div></div><button onclick="closeModal()" aria-label="Close">&times;</button></div><div class="modal-body"><div class="formgrid"><div class="field full"><label for="client_name">Client Name *</label><input id="client_name" maxlength="120" required value="${esc(row?.name||'')}"></div><div class="field full"><label class="settings-check"><input id="client_active" type="checkbox" ${row?.active!==false?'checked':''}><span>Active client account</span></label></div></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button id="client_save" class="btn btn-primary" data-confirm-label="Save client account" onclick="saveClientAccount('${id}',${row?.revision||0})">Save Client</button></div>`);
+}
+async function saveClientAccount(id='',revision=0){
+  if(!isClientCatalogAdmin()||CLIENT_CATALOG.saving)return;
+  const name=(document.getElementById('client_name')?.value||'').trim().replace(/\s+/g,' ');
+  if(!name||name.length>120){toast('Enter a client name between 1 and 120 characters.',true);return;}
+  const button=document.getElementById('client_save');
+  const active=document.getElementById('client_active')?.checked===true;
+  CLIENT_CATALOG.saving=true;if(button)button.disabled=true;
+  try{
+    const {error}=await supabase.rpc('save_manpower_client',{p_id:id||crypto.randomUUID(),p_name:name,p_active:active,p_expected_revision:revision});
+    if(error)throw error;
+    await closeModal();await renderClientCatalog();toast('Client account saved.');
+  }catch(error){
+    toast(error.code==='23505'?'That client name already exists.':error.code==='40001'?'Another user changed this client. Close this form and reload before editing again.':error.message||'Client account could not be saved.',true);
+  }finally{CLIENT_CATALOG.saving=false;if(button?.isConnected)button.disabled=false;}
+}
 function settingsOrganizationHTML(canManage){
   const departments=departmentCatalog();
   const positions=positionCatalog();
@@ -8874,6 +8932,7 @@ function switchSettingsTab(tab){
   STATE.settingsTab=tab;
   document.querySelectorAll('[data-settings-tab]').forEach(button=>{const active=button.dataset.settingsTab===tab;button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active));});
   document.querySelectorAll('[data-settings-panel]').forEach(panel=>panel.hidden=panel.dataset.settingsPanel!==tab);
+  if(tab==='clients')renderClientCatalog();
 }
 function openDepartmentSetting(index=-1){
   if(!hasPermission('organization.manage'))return;
@@ -8940,6 +8999,7 @@ function renderSettings(){
   if(!hasPermission('settings.view')&&!hasPermission('organization.view')){go('dashboard',{skipUnsaved:true});return;}
   const admin=hasPermission('settings.manage');
   const canManageOrganization=hasPermission('organization.manage');
+  const clientAdmin=isClientCatalogAdmin();
   setTitle(admin?'Settings':'Organization Structure',admin?'Organization preferences and audit log.':'Manage approved departments and positions.');
   const provider=attachmentStorageProvider();
   const activeTab=admin?(STATE.settingsTab||'general'):'organization';
@@ -8947,7 +9007,7 @@ function renderSettings(){
   document.getElementById('content').innerHTML = `
     <div class="settings-shell">
       <div class="settings-tabs" role="tablist" aria-label="Settings sections">
-        ${(admin?[['general','General'],['organization','Organization Structure'],['workforce','Branches & Compensation'],['storage','File Storage'],['audit','Audit Trail']]:[['organization','Organization Structure']]).map(([key,label])=>`<button type="button" role="tab" data-settings-tab="${key}" class="${activeTab===key?'active':''}" aria-selected="${activeTab===key}" onclick="switchSettingsTab('${key}')">${label}</button>`).join('')}
+        ${(admin?[['general','General'],['organization','Organization Structure'],...(clientAdmin?[['clients','Client Accounts']]:[]),['workforce','Branches & Compensation'],['storage','File Storage'],['audit','Audit Trail']]:[['organization','Organization Structure']]).map(([key,label])=>`<button type="button" role="tab" data-settings-tab="${key}" class="${activeTab===key?'active':''}" aria-selected="${activeTab===key}" onclick="switchSettingsTab('${key}')">${label}</button>`).join('')}
       </div>
       ${admin?`<section class="settings-panel" data-settings-panel="general" ${activeTab==='general'?'':'hidden'}>
         <div class="settings-section-head"><div><h3>General</h3><p>Core organization identity and employment defaults.</p></div>${admin?'<button class="btn btn-primary btn-sm" onclick="saveSettings()">Save Changes</button>':''}</div>
@@ -8955,6 +9015,7 @@ function renderSettings(){
         <div class="field"><label>Probation Review Reminder Threshold (days)</label><input id="s_prob" type="number" value="${DB.settings.probationDays}" ${admin?'':'disabled'}><div class="computed-note">Used for HR review reminders only. It never changes the recorded Employment Type.</div></div>
       </section>`:''}
       <section class="settings-panel" data-settings-panel="organization" ${activeTab==='organization'?'':'hidden'}>${settingsOrganizationHTML(canManageOrganization)}</section>
+      ${clientAdmin?`<section class="settings-panel" data-settings-panel="clients" ${activeTab==='clients'?'':'hidden'}>${clientCatalogHTML()}</section>`:''}
       ${admin?`
       <section class="settings-panel" data-settings-panel="workforce" ${activeTab==='workforce'?'':'hidden'}>
         <div class="settings-section-head"><div><h3>Branches &amp; Compensation</h3><p>Reporting locations and configurable employee allowance fields.</p></div>${admin?'<button class="btn btn-primary btn-sm" onclick="saveSettings()">Save Changes</button>':''}</div>
@@ -8978,6 +9039,7 @@ function renderSettings(){
       </section>`:''}
     </div>
   `;
+  if(activeTab==='clients'&&clientAdmin)renderClientCatalog();
 }
 function storageSettingsChanged(){
   const group=document.getElementById('s_drive_settings');
@@ -10348,6 +10410,7 @@ PAGE_INTRO_OBSERVER.observe(document.getElementById('content'),{childList:true,s
 // handlers. Expose the application handlers on window so GitHub Pages/Vercel
 // can execute those handlers normally.
 Object.assign(window, {
+  renderClientCatalog, clientCatalogPageGo, clientCatalogPageSize, openClientAccountForm, saveClientAccount,
   syncEmployeeStatusReason,
   renderAttendance, attendanceFilter, exportAttendance,
   STATE,
