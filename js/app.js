@@ -11,7 +11,9 @@ import { buildRecordChanges, valuesEqual } from './core/record-diff.js?v=2026093
 import { roleCanExport } from './core/export-access.js?v=20260930-1';
 import { manpowerRequestSummary, manpowerRequestTotals, requirementSlotCounts, slotChronologyIssues, slotMetrics } from './core/manpower.js?v=20260930-1';
 import {newManpowerDraft,validateManpowerDraft} from './core/manpower-draft.js?v=20261009-1';
-import {manpowerDraftEditorHTML,manpowerDraftLinesHTML,readManpowerDraft} from './manpower/draft-editor.js?v=20261009-1';
+import {manpowerDraftEditorHTML,manpowerDraftLinesHTML,readManpowerDraft} from './manpower/draft-editor.js?v=20261009-2';
+import {readManpowerPaste,detectManpowerPasteMapping,previewManpowerPaste} from './core/manpower-paste.js?v=20261009-1';
+import {manpowerPasteMappingHTML,manpowerPastePreviewHTML} from './manpower/paste-preview.js?v=20261009-1';
 import { measureAsync, recordPerformance, performanceSnapshot } from './core/performance.js?v=20261002-1';
 import { ACCESS_ACTIONS, ACCESS_MODULES, ACCESS_PERMISSION_KEYS, EMPLOYEE_RELATIONS_CAPABILITIES, evaluateEffectiveAccess, hasEffectivePermission, legacyPermissions, permissionLabel } from './core/access-control.js?v=20261009-1';
 import { filterTdaRecords, normalizeTdaScope, normalizeTdaText, parseTdaMatrix, selectApplicableTdaRecord, tdaDuplicateKey, tdaRecordApplies, tdaScopeKey } from './core/tda-import.js?v=20261007-2';
@@ -7964,6 +7966,7 @@ async function renderManpowerDraftEditor(){
     MANPOWER_DRAFT_UI.draft=draft;MANPOWER_DRAFT_UI.catalogs={clients,departments:departmentCatalog(),positions:positionCatalog(),branches:employeeBranchLocations()};
     content.innerHTML=manpowerDraftEditorHTML(draft,MANPOWER_DRAFT_UI.catalogs,{plus:iPlus(14)});
     if(id&&!hasPermission('manpower.update')){
+      content.querySelector('.manpower-paste-panel')?.remove();
       content.querySelectorAll('input,select,textarea').forEach(control=>control.disabled=true);
       content.querySelectorAll('button').forEach(button=>{if(/manpowerDraftAddLine|manpowerDraftRemoveLine|saveManpowerDraft/.test(button.getAttribute('onclick')||''))button.remove();});
       setTitle('Manpower Fulfillment / View Draft','Quantity-based requisition draft');
@@ -7979,8 +7982,58 @@ function manpowerDraftAddLine(index=-1){
 }
 function manpowerDraftRemoveLine(index){MANPOWER_DRAFT_UI.draft=manpowerDraftRead();MANPOWER_DRAFT_UI.draft.lines.splice(index,1);manpowerDraftRenderLines();}
 function manpowerDraftDepartmentChanged(index){const root=document.getElementById(`md_${index}_position`);root.value='';MANPOWER_DRAFT_UI.draft=manpowerDraftRead();manpowerDraftRenderLines();}
+let MANPOWER_PASTE_PREVIEW=null;
+function manpowerDraftCanPaste(){return Boolean(SESSION&&STATE.view==='manpowerDraftEditor'&&!MANPOWER_DRAFT_UI.saving&&hasPermission(MANPOWER_DRAFT_UI.draft?.request.revision?'manpower.update':'manpower.create'));}
+function manpowerDraftPasteChanged(){
+  MANPOWER_PASTE_PREVIEW=null;
+  for(const id of ['md_paste_mapping','md_paste_status','md_paste_preview']){const element=document.getElementById(id);if(element)element.innerHTML='';}
+  const button=document.getElementById('md_paste_apply');if(button)button.disabled=true;
+}
+function manpowerDraftClearPaste(){
+  if(!manpowerDraftCanPaste())return;
+  document.getElementById('md_paste_text').value='';manpowerDraftPasteChanged();document.getElementById('md_paste_text').focus();
+}
+function manpowerDraftPreviewPaste(){
+  if(!manpowerDraftCanPaste())return;
+  manpowerDraftReadPastePreview();
+}
+function manpowerDraftReadPastePreview(){
+  const status=document.getElementById('md_paste_status');
+  try{
+    if(!window.XLSX)throw new Error('Spreadsheet tools are unavailable. Reload and retry.');
+    const matrix=readManpowerPaste(document.getElementById('md_paste_text').value,window.XLSX);
+    const hasHeader=document.getElementById('md_paste_header').checked;
+    const controls=[...document.querySelectorAll('[data-paste-mapping]')];
+    const mapping=controls.length?controls.map(control=>control.value):detectManpowerPasteMapping(matrix,hasHeader);
+    if(!controls.length)document.getElementById('md_paste_mapping').innerHTML=manpowerPasteMappingHTML(matrix,mapping,hasHeader);
+    MANPOWER_PASTE_PREVIEW=previewManpowerPaste(matrix,mapping,MANPOWER_DRAFT_UI.catalogs,{hasHeader,requestDate:document.getElementById('md_date_requested').value});
+    const invalid=MANPOWER_PASTE_PREVIEW.rows.filter(row=>row.errors.length).length;
+    status.textContent=`${MANPOWER_PASTE_PREVIEW.rows.length} rows reviewed. ${invalid} invalid row${invalid===1?'':'s'}. ${MANPOWER_PASTE_PREVIEW.valid?'Ready to add to the draft.':'Correct the rows or column mapping before adding.'}`;
+    document.getElementById('md_paste_apply').disabled=!MANPOWER_PASTE_PREVIEW.valid;
+    manpowerDraftPastePage(1);
+    return MANPOWER_PASTE_PREVIEW;
+  }catch(error){
+    MANPOWER_PASTE_PREVIEW=null;status.textContent=error.message;document.getElementById('md_paste_apply').disabled=true;document.getElementById('md_paste_preview').innerHTML='';return null;
+  }
+}
+function manpowerDraftPastePage(page){
+  if(MANPOWER_PASTE_PREVIEW)document.getElementById('md_paste_preview').innerHTML=manpowerPastePreviewHTML(MANPOWER_PASTE_PREVIEW,page);
+}
+async function manpowerDraftApplyPaste(){
+  if(!manpowerDraftCanPaste())return;
+  const preview=manpowerDraftReadPastePreview();if(!preview?.valid)return;
+  const sessionId=SESSION.id;const requestId=MANPOWER_DRAFT_UI.draft.request.id;
+  if(!(await confirmDataChange({title:'Add requisition rows',message:`Add all ${preview.rows.length} validated rows to this draft? Nothing is saved until Save Draft.`,confirmLabel:'Add Rows'})))return;
+  if(!manpowerDraftCanPaste()||SESSION.id!==sessionId||MANPOWER_DRAFT_UI.draft.request.id!==requestId)return;
+  const checked=manpowerDraftReadPastePreview();if(!checked?.valid)return;
+  MANPOWER_DRAFT_UI.draft=manpowerDraftRead();
+  MANPOWER_DRAFT_UI.draft.lines.push(...checked.rows.map(row=>({id:crypto.randomUUID(),...row.line})));
+  manpowerDraftRenderLines();manpowerDraftClearPaste();
+  document.getElementById('md_paste_status').textContent=`${checked.rows.length} lines added to the draft. Save Draft to persist changes.`;
+}
 async function saveManpowerDraft(){
   if(MANPOWER_DRAFT_UI.saving||!SESSION||STATE.view!=='manpowerDraftEditor')return;
+  if(document.getElementById('md_paste_text')?.value.trim()){toast('Add the pasted rows to the draft or clear the paste before saving.',true);document.getElementById('md_paste_text').focus();return;}
   const sessionId=SESSION.id;
   const draft=manpowerDraftRead();const payload=validateManpowerDraft(draft,MANPOWER_DRAFT_UI.catalogs);if(draft.unknownClient)payload.errors.push('Select a Client Account from the suggestions.');
   if(!hasPermission(draft.request.revision?'manpower.update':'manpower.create')){toast('Your account cannot save this draft.',true);return;}
@@ -10523,7 +10576,7 @@ PAGE_INTRO_OBSERVER.observe(document.getElementById('content'),{childList:true,s
 // handlers. Expose the application handlers on window so GitHub Pages/Vercel
 // can execute those handlers normally.
 Object.assign(window, {
-  renderManpowerDrafts,renderManpowerDraftEditor,openManpowerDraft,manpowerDraftInfo,manpowerDraftPageGo,manpowerDraftPageSize,manpowerDraftAddLine,manpowerDraftRemoveLine,manpowerDraftDepartmentChanged,saveManpowerDraft,
+  renderManpowerDrafts,renderManpowerDraftEditor,openManpowerDraft,manpowerDraftInfo,manpowerDraftPageGo,manpowerDraftPageSize,manpowerDraftAddLine,manpowerDraftRemoveLine,manpowerDraftDepartmentChanged,manpowerDraftPasteChanged,manpowerDraftClearPaste,manpowerDraftPreviewPaste,manpowerDraftPastePage,manpowerDraftApplyPaste,saveManpowerDraft,
   renderClientCatalog, clientCatalogPageGo, clientCatalogPageSize, openClientAccountForm, saveClientAccount,
   syncEmployeeStatusReason,
   renderAttendance, attendanceFilter, exportAttendance,

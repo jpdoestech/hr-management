@@ -1811,5 +1811,22 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
 .manpower-draft-editor input,.manpower-draft-editor select{height:36px;font-size:13px;}
 .manpower-draft-editor textarea,.manpower-draft-editor label{font-size:13px;}
 .manpower-draft-footer{position:sticky;bottom:0;z-index:3;display:flex;justify-content:flex-end;gap:8px;padding:12px 0;background:var(--bg,#fff);border-top:1px solid var(--border);}
+.manpower-paste-panel{min-width:0;margin-bottom:12px;border:1px solid var(--border);border-radius:6px;}
+.manpower-paste-panel>summary{padding:10px 12px;font-size:13px;font-weight:600;cursor:pointer;}
+.manpower-paste-body{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:0 12px 12px;min-width:0;}
+.manpower-paste-body textarea{width:100%;}
+#md_paste_preview{min-width:0;}
+.manpower-paste-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+.manpower-paste-tools>label{display:flex;align-items:center;gap:6px;margin:0;}
+.manpower-paste-tools input[type="checkbox"]{width:16px;height:16px;}
+.manpower-paste-mapping{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;min-width:0;}
+.manpower-paste-mapping label{overflow-wrap:anywhere;}
+.manpower-paste-body>[role="status"]{font-size:13px;line-height:1.5;}
+.manpower-paste-body>.btn{justify-self:start;}
+.manpower-paste-table{max-height:340px;overflow:auto;}
+.manpower-paste-table table{min-width:940px;}
+.manpower-paste-table td{white-space:normal;overflow-wrap:anywhere;max-width:240px;vertical-align:top;}
+.manpower-paste-errors{margin:0;padding-left:16px;color:var(--danger,#B42318);}
+.manpower-paste-panel :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 @media(max-width:1000px){.manpower-draft-header .settings-form-grid,.manpower-draft-line-fields{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:520px){.manpower-draft-header .settings-form-grid,.manpower-draft-line-fields{grid-template-columns:minmax(0,1fr);}.manpower-draft-footer .btn{flex:1;}.manpower-draft-line input,.manpower-draft-line select{width:100%;}.manpower-draft-editor .settings-section-head{flex-wrap:wrap;}}

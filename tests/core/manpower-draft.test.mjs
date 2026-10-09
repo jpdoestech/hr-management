@@ -51,7 +51,8 @@ test('unsaved-page tracking includes line identity changes even when visible val
 });
 test('view-only users can inspect existing draft lines but cannot edit or save',async()=>{
   const controls=[{},{}];const buttons=['manpowerDraftAddLine()','manpowerDraftRemoveLine(0)','saveManpowerDraft()',"go('manpowerDrafts')"].map(handler=>({getAttribute:()=>handler,remove(){this.removed=true;}}));
-  const content={innerHTML:'',querySelectorAll:selector=>selector==='button'?buttons:controls};let title='';
+  let pasteRemoved=false;
+  const content={innerHTML:'',querySelector:()=>({remove(){pasteRemoved=true;}}),querySelectorAll:selector=>selector==='button'?buttons:controls};let title='';
   const context={SESSION:{id:'viewer'},STATE:{view:'manpowerDraftEditor',manpowerDraftId:'draft1'},document:{getElementById:()=>content},hasPermission:permission=>permission==='manpower.view',
     newManpowerDraft,validateManpowerDraft,manpowerDraftEditorHTML,manpowerDraftLinesHTML,crypto:{randomUUID:()=> 'new-id'},departmentCatalog:()=>catalogs.departments,positionCatalog:()=>catalogs.positions,employeeBranchLocations:()=>catalogs.branches,
     iPlus:()=>'+',setTitle:value=>title=value,capturePageEditState:()=>{},toast:()=>{},
@@ -60,6 +61,7 @@ test('view-only users can inspect existing draft lines but cannot edit or save',
   vm.createContext(context);vm.runInContext(source.slice(source.indexOf('const MANPOWER_DRAFT_UI='),source.indexOf('function openManpowerRequestForm(')),context);
   await vm.runInContext('renderManpowerDraftEditor()',context);
   assert.match(title,/View Draft/);assert.ok(controls.every(control=>control.disabled));
+  assert.equal(pasteRemoved,true);
   assert.ok(buttons.slice(0,3).every(button=>button.removed));assert.equal(buttons[3].removed,undefined);
   assert.match(content.innerHTML,/value="1000"/);
 });

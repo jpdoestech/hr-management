@@ -1,3 +1,4 @@
+import {manpowerPastePanelHTML} from './paste-preview.js';
 const escape=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 function options(values,current){const retained=current&&!values.includes(current)?[current,...values]:values;return '<option value="">Not selected</option>'+retained.map(value=>`<option value="${escape(value)}" ${value===current?'selected':''}>${escape(value)}</option>`).join('');}
 function field(key,label,value,type='text'){return `<div class="field"><label for="md_${key}">${label}</label><input id="md_${key}" type="${type}" value="${escape(value)}"${type==='text'?' maxlength="120"':''}></div>`;}
@@ -14,7 +15,7 @@ export function manpowerDraftEditorHTML(draft,catalogs,icons={}){
       <div class="field"><label for="md_remarks">General Remarks</label><textarea id="md_remarks" rows="2" maxlength="10000">${escape(request.remarks)}</textarea></div>
     </div></section>
     <section class="manpower-draft-requisitions"><div class="settings-section-head"><h3>Requisition Lines</h3><button class="btn btn-ghost btn-sm" onclick="manpowerDraftAddLine()">${icons.plus||'+'} Add Line</button></div>
-    <div id="md_lines">${manpowerDraftLinesHTML(draft.lines,catalogs)}</div></section>
+    ${manpowerPastePanelHTML()}<div id="md_lines">${manpowerDraftLinesHTML(draft.lines,catalogs)}</div></section>
     <div id="md_errors" class="notice" role="alert" hidden></div>
     <div class="manpower-draft-footer"><button class="btn btn-ghost" onclick="go('manpowerDrafts')">Cancel</button><button id="md_save" class="btn btn-primary" onclick="saveManpowerDraft()">Save Draft</button></div></div>`;
 }
