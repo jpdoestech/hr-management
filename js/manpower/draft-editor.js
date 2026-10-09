@@ -14,22 +14,27 @@ export function manpowerDraftEditorHTML(draft,catalogs,icons={}){
       <div class="field"><label for="md_priority">Priority</label><select id="md_priority">${options(['Low','Normal','High','Urgent'],request.priority)}</select></div>
       <div class="field"><label for="md_remarks">General Remarks</label><textarea id="md_remarks" rows="2" maxlength="10000">${escape(request.remarks)}</textarea></div>
     </div></section>
-    <section class="manpower-draft-requisitions"><div class="settings-section-head"><h3>Requisition Lines</h3><button class="btn btn-ghost btn-sm" onclick="manpowerDraftAddLine()">${icons.plus||'+'} Add Line</button></div>
+    <section class="manpower-draft-requisitions"><div class="settings-section-head"><h3>Requisition Lines</h3><button id="md_add_line" type="button" class="btn btn-ghost btn-sm" onclick="manpowerDraftAddLine()">${icons.plus||'+'} Add Line</button></div>
     ${manpowerPastePanelHTML()}<div id="md_lines">${manpowerDraftLinesHTML(draft.lines,catalogs)}</div></section>
     <div id="md_errors" class="notice" role="alert" tabindex="-1" hidden></div>
     <div class="manpower-draft-footer"><button class="btn btn-ghost" onclick="go('manpowerDrafts')">Cancel</button><button id="md_save" class="btn btn-primary" onclick="saveManpowerDraft()">Save Draft</button></div></div>`;
 }
 export function manpowerDraftLinesHTML(lines,catalogs){
-  return lines.map((row,index)=>`<fieldset class="manpower-draft-line" data-line-id="${escape(row.id)}"><legend>Line ${index+1}</legend><div class="manpower-draft-line-fields">
+  if(!lines.length)return '<div class="empty">No requisition lines.</div>';
+  return '<div class="manpower-line-columns" aria-hidden="true"><span>Department</span><span>Position</span><span>Headcount</span><span>Demand Type</span><span>Actions</span></div>'+lines.map((row,index)=>`<fieldset class="manpower-draft-line" data-line-id="${escape(row.id)}"><legend>Line ${index+1}</legend><div class="manpower-draft-line-fields">
     <div class="field"><label for="md_${index}_department">Department</label><select id="md_${index}_department" data-draft-field="department" onchange="manpowerDraftDepartmentChanged(${index})">${options(catalogs.departments.filter(item=>item.active).map(item=>item.name),row.department)}</select></div>
-    <div class="field"><label for="md_${index}_position">Position</label><select id="md_${index}_position" data-draft-field="position">${options(catalogs.positions.filter(item=>item.active&&item.department===row.department).map(item=>item.name),row.position)}</select></div>
+    <div class="field"><label for="md_${index}_position">Position</label><select id="md_${index}_position" data-draft-field="position">${manpowerDraftPositionOptionsHTML(row.department,catalogs,row.position)}</select></div>
     <div class="field"><label for="md_${index}_quantity">Headcount</label><input id="md_${index}_quantity" data-draft-field="current_authorized" type="number" min="1" max="2147483647" step="1" value="${escape(row.current_authorized)}"></div>
     <div class="field"><label for="md_${index}_type">Demand Type</label><select id="md_${index}_type" data-draft-field="demand_type">${options(['Expansion','Replacement'],row.demand_type)}</select></div>
+    <div class="rowactions"><button type="button" class="btn btn-ghost btn-sm" aria-expanded="false" aria-controls="md_${index}_details" aria-label="Details for line ${index+1}" onclick="manpowerDraftToggleDetails(${index})">Details</button><button type="button" class="btn btn-ghost btn-sm" aria-label="Duplicate line ${index+1}" onclick="manpowerDraftAddLine(${index})">Duplicate</button><button type="button" class="btn btn-ghost btn-sm" aria-label="Remove line ${index+1}" onclick="manpowerDraftRemoveLine(${index})">Remove</button></div>
+    </div><div id="md_${index}_details" class="manpower-line-details" role="group" aria-label="Additional details for line ${index+1}" hidden>
     <div class="field"><label for="md_${index}_date">Target Date</label><input id="md_${index}_date" data-draft-field="target_date" type="date" value="${escape(row.target_date)}"></div>
     <div class="field"><label for="md_${index}_site">Site</label><select id="md_${index}_site" data-draft-field="site">${options(catalogs.branches,row.site)}</select></div>
     <div class="field"><label for="md_${index}_purpose">Purpose / Remarks</label><textarea id="md_${index}_purpose" data-draft-field="purpose" rows="2" maxlength="10000">${escape(row.purpose)}</textarea></div>
-    <div class="rowactions"><button class="btn btn-ghost btn-sm" onclick="manpowerDraftAddLine(${index})">Duplicate</button><button class="btn btn-ghost btn-sm" onclick="manpowerDraftRemoveLine(${index})">Remove</button></div>
-    </div></fieldset>`).join('')||'<div class="empty">No requisition lines.</div>';
+    </div></fieldset>`).join('');
+}
+export function manpowerDraftPositionOptionsHTML(department,catalogs,current=''){
+  return options(catalogs.positions.filter(item=>item.active&&item.department===department).map(item=>item.name),current);
 }
 export function readManpowerDraft(root,draft,catalogs){
   const request={...draft.request};

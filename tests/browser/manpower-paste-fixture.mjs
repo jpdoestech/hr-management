@@ -14,7 +14,7 @@ const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta nam
 <main style="padding:16px;overflow:auto;height:100dvh"><h2>Manpower Fulfillment / Edit Draft</h2><div id="content"></div><div id="fixture_status" role="status"></div></main>
 ${confirmationHTML}<script src="/js/vendor/xlsx.full.min.js"></script><script type="module">
 import {newManpowerDraft} from '/js/core/manpower-draft.js';
-import {manpowerDraftEditorHTML,manpowerDraftLinesHTML,readManpowerDraft} from '/js/manpower/draft-editor.js';
+import {manpowerDraftEditorHTML,manpowerDraftLinesHTML,manpowerDraftPositionOptionsHTML,readManpowerDraft} from '/js/manpower/draft-editor.js';
 import {readManpowerPaste,detectManpowerPasteMapping,previewManpowerPaste} from '/js/core/manpower-paste.js';
 import {manpowerPasteMappingHTML,manpowerPastePreviewHTML} from '/js/manpower/paste-preview.js';
 import {installTableEnhancer} from '/js/core/table-enhancer.js';

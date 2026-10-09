@@ -11,7 +11,7 @@ import { buildRecordChanges, valuesEqual } from './core/record-diff.js?v=2026093
 import { roleCanExport } from './core/export-access.js?v=20260930-1';
 import { manpowerRequestSummary, manpowerRequestTotals, requirementSlotCounts, slotChronologyIssues, slotMetrics } from './core/manpower.js?v=20260930-1';
 import {newManpowerDraft,validateManpowerDraft} from './core/manpower-draft.js?v=20261009-1';
-import {manpowerDraftEditorHTML,manpowerDraftLinesHTML,readManpowerDraft} from './manpower/draft-editor.js?v=20261009-3';
+import {manpowerDraftEditorHTML,manpowerDraftLinesHTML,manpowerDraftPositionOptionsHTML,readManpowerDraft} from './manpower/draft-editor.js?v=20261009-4';
 import {readManpowerPaste,detectManpowerPasteMapping,previewManpowerPaste} from './core/manpower-paste.js?v=20261009-1';
 import {manpowerPasteMappingHTML,manpowerPastePreviewHTML} from './manpower/paste-preview.js?v=20261009-1';
 import { measureAsync, recordPerformance, performanceSnapshot } from './core/performance.js?v=20261002-1';
@@ -7975,13 +7975,27 @@ async function renderManpowerDraftEditor(){
   }catch(error){if(token===MANPOWER_DRAFT_UI.request&&STATE.view==='manpowerDraftEditor')content.innerHTML=`<div class="empty"><b>Draft could not be loaded</b><span>${esc(error.message)}</span><button class="btn btn-ghost" onclick="go('manpowerDrafts')">Back to Drafts</button><button class="btn btn-ghost" onclick="renderManpowerDraftEditor()">Retry</button></div>`;}
 }
 function manpowerDraftRead(){return readManpowerDraft(document.getElementById('content'),MANPOWER_DRAFT_UI.draft,MANPOWER_DRAFT_UI.catalogs);}
-function manpowerDraftRenderLines(){document.getElementById('md_lines').innerHTML=manpowerDraftLinesHTML(MANPOWER_DRAFT_UI.draft.lines,MANPOWER_DRAFT_UI.catalogs);}
+function manpowerDraftRenderLines(focusId=''){
+  const host=document.getElementById('md_lines');
+  const expanded=new Set([...host.querySelectorAll('[data-line-id]')].filter(line=>line.querySelector('.manpower-line-details')?.hidden===false).map(line=>line.dataset.lineId));
+  host.innerHTML=manpowerDraftLinesHTML(MANPOWER_DRAFT_UI.draft.lines,MANPOWER_DRAFT_UI.catalogs);
+  MANPOWER_DRAFT_UI.draft.lines.forEach((line,index)=>{if(expanded.has(line.id))manpowerDraftToggleDetails(index);});
+  if(focusId)document.getElementById(focusId)?.focus();
+}
+function manpowerDraftToggleDetails(index){
+  const panel=document.getElementById(`md_${index}_details`);if(!panel)return;
+  const button=document.querySelector(`[aria-controls="md_${index}_details"]`);
+  panel.hidden=!panel.hidden;button.setAttribute('aria-expanded',String(!panel.hidden));button.textContent=panel.hidden?'Details':'Hide Details';
+}
 function manpowerDraftAddLine(index=-1){
   MANPOWER_DRAFT_UI.draft=manpowerDraftRead();const blank=newManpowerDraft('',crypto.randomUUID()).lines[0];
-  MANPOWER_DRAFT_UI.draft.lines.push(index>=0?{...MANPOWER_DRAFT_UI.draft.lines[index],id:blank.id}:blank);manpowerDraftRenderLines();
+  MANPOWER_DRAFT_UI.draft.lines.push(index>=0?{...MANPOWER_DRAFT_UI.draft.lines[index],id:blank.id}:blank);manpowerDraftRenderLines(`md_${MANPOWER_DRAFT_UI.draft.lines.length-1}_department`);
 }
-function manpowerDraftRemoveLine(index){MANPOWER_DRAFT_UI.draft=manpowerDraftRead();MANPOWER_DRAFT_UI.draft.lines.splice(index,1);manpowerDraftRenderLines();}
-function manpowerDraftDepartmentChanged(index){const root=document.getElementById(`md_${index}_position`);root.value='';MANPOWER_DRAFT_UI.draft=manpowerDraftRead();manpowerDraftRenderLines();}
+function manpowerDraftRemoveLine(index){MANPOWER_DRAFT_UI.draft=manpowerDraftRead();MANPOWER_DRAFT_UI.draft.lines.splice(index,1);manpowerDraftRenderLines(`md_${Math.min(index,MANPOWER_DRAFT_UI.draft.lines.length-1)}_department`);if(!MANPOWER_DRAFT_UI.draft.lines.length)document.getElementById('md_add_line')?.focus();}
+function manpowerDraftDepartmentChanged(index){
+  const root=document.getElementById(`md_${index}_position`);const department=document.getElementById(`md_${index}_department`).value;
+  root.innerHTML=manpowerDraftPositionOptionsHTML(department,MANPOWER_DRAFT_UI.catalogs);root.value='';MANPOWER_DRAFT_UI.draft=manpowerDraftRead();
+}
 let MANPOWER_PASTE_PREVIEW=null;
 function manpowerDraftCanPaste(){return Boolean(SESSION&&STATE.view==='manpowerDraftEditor'&&!MANPOWER_DRAFT_UI.saving&&hasPermission(MANPOWER_DRAFT_UI.draft?.request.revision?'manpower.update':'manpower.create'));}
 function manpowerDraftPasteChanged(){
@@ -10586,7 +10600,7 @@ PAGE_INTRO_OBSERVER.observe(document.getElementById('content'),{childList:true,s
 // handlers. Expose the application handlers on window so GitHub Pages/Vercel
 // can execute those handlers normally.
 Object.assign(window, {
-  renderManpowerDrafts,renderManpowerDraftEditor,openManpowerDraft,manpowerDraftInfo,manpowerDraftPageGo,manpowerDraftPageSize,manpowerDraftAddLine,manpowerDraftRemoveLine,manpowerDraftDepartmentChanged,manpowerDraftPasteChanged,manpowerDraftClearPaste,manpowerDraftPreviewPaste,manpowerDraftPastePage,manpowerDraftApplyPaste,saveManpowerDraft,
+  renderManpowerDrafts,renderManpowerDraftEditor,openManpowerDraft,manpowerDraftInfo,manpowerDraftPageGo,manpowerDraftPageSize,manpowerDraftAddLine,manpowerDraftRemoveLine,manpowerDraftDepartmentChanged,manpowerDraftToggleDetails,manpowerDraftPasteChanged,manpowerDraftClearPaste,manpowerDraftPreviewPaste,manpowerDraftPastePage,manpowerDraftApplyPaste,saveManpowerDraft,
   renderClientCatalog, clientCatalogPageGo, clientCatalogPageSize, openClientAccountForm, saveClientAccount,
   syncEmployeeStatusReason,
   renderAttendance, attendanceFilter, exportAttendance,

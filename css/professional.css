@@ -1801,13 +1801,21 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
 @media(max-width:720px){.attendance-toolbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.attendance-toolbar .searchbox{grid-column:1/-1;min-width:0}.attendance-toolbar>input,.attendance-toolbar>select{width:100%;min-width:0}.attendance-toolbar+.analytics-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.attendance-toolbar+.analytics-kpis .s{overflow-wrap:anywhere}}
 .manpower-draft-editor{min-width:0;display:grid;gap:16px;}
 .manpower-draft-header,.manpower-draft-requisitions{min-width:0;}
+.manpower-draft-requisitions{container-type:inline-size;}
 .manpower-draft-editor h3{font-size:16px;margin:0 0 12px;}
 .manpower-draft-header .settings-form-grid{grid-template-columns:repeat(4,minmax(0,1fr));}
 .manpower-draft-editor .field{min-width:0;margin-bottom:0;}
-.manpower-draft-line{min-width:0;margin:0 0 12px;padding:12px;border:1px solid var(--border);border-radius:6px;}
+.manpower-draft-line{min-width:0;margin:0 0 8px;padding:8px 12px 12px;border:1px solid var(--border);border-radius:6px;}
 .manpower-draft-line legend{font-size:12px;padding:0 6px;font-weight:600;}
-.manpower-draft-line-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end;}
-.manpower-draft-line .rowactions{flex-wrap:wrap;gap:6px;}
+.manpower-draft-line-fields,.manpower-line-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) 92px 140px 240px;gap:10px;align-items:end;}
+.manpower-line-columns{padding:8px 12px;font-size:12px;font-weight:600;color:var(--muted);}
+.manpower-draft-line-fields>.field>label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;}
+.manpower-draft-line .rowactions{display:flex;flex-wrap:wrap;gap:6px;min-width:0;}
+.manpower-draft-line .rowactions .btn{padding:6px 8px;min-height:36px;font-size:12px;}
+.manpower-line-details{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,2fr);gap:12px;padding-top:12px;margin-top:12px;border-top:1px solid var(--border);}
+.manpower-line-details[hidden]{display:none;}
+.manpower-draft-line input,.manpower-draft-line select,.manpower-draft-line textarea{width:100%;min-width:0;max-width:100%;}
+.manpower-draft-editor :focus-visible{outline:2px solid var(--accent);outline-offset:2px;scroll-margin-block:80px;}
 .manpower-draft-editor input,.manpower-draft-editor select{height:36px;font-size:13px;}
 .manpower-draft-editor textarea,.manpower-draft-editor label{font-size:13px;}
 .manpower-draft-footer{position:sticky;bottom:0;z-index:3;display:flex;justify-content:flex-end;gap:8px;padding:12px 0;background:var(--bg,#fff);border-top:1px solid var(--border);}
@@ -1828,5 +1836,9 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
 .manpower-paste-table td{white-space:normal;overflow-wrap:anywhere;max-width:240px;vertical-align:top;}
 .manpower-paste-errors{margin:0;padding-left:16px;color:var(--danger,#B42318);}
 .manpower-paste-panel :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
-@media(max-width:1000px){.manpower-draft-header .settings-form-grid,.manpower-draft-line-fields{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:1100px){.manpower-line-columns{display:none;}.manpower-draft-line-fields{grid-template-columns:repeat(2,minmax(0,1fr));}.manpower-draft-line-fields>.field>label{position:static;width:auto;height:auto;padding:0;margin:0 0 6px;overflow:visible;clip-path:none;white-space:normal;}.manpower-draft-line .rowactions{grid-column:1/-1;}.manpower-line-details{grid-template-columns:repeat(2,minmax(0,1fr));}.manpower-line-details>.field:last-child{grid-column:1/-1;}.manpower-draft-line .rowactions .btn{min-height:44px;padding:8px 12px;}.manpower-draft-line-fields label,.manpower-line-details label{overflow-wrap:anywhere;}}
+@container(max-width:850px){.manpower-line-columns{display:none;}.manpower-draft-line-fields{grid-template-columns:repeat(2,minmax(0,1fr));}.manpower-draft-line-fields>.field>label{position:static;width:auto;height:auto;padding:0;margin:0 0 6px;overflow:visible;clip-path:none;white-space:normal;}.manpower-draft-line .rowactions{grid-column:1/-1;}.manpower-line-details{grid-template-columns:repeat(2,minmax(0,1fr));}.manpower-line-details>.field:last-child{grid-column:1/-1;}}
+@media(max-width:1100px){.manpower-draft-editor input,.manpower-draft-editor select{height:44px;}}
+@media(max-width:1000px){.manpower-draft-header .settings-form-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:520px){.manpower-draft-header .settings-form-grid,.manpower-draft-line-fields{grid-template-columns:minmax(0,1fr);}.manpower-draft-footer .btn{flex:1;}.manpower-draft-line input,.manpower-draft-line select{width:100%;}.manpower-draft-editor .settings-section-head{flex-wrap:wrap;}}
+@media(max-width:520px){.manpower-line-details{grid-template-columns:minmax(0,1fr);}.manpower-draft-editor input,.manpower-draft-editor select,.manpower-draft-editor textarea{font-size:16px;}.manpower-draft-editor input,.manpower-draft-editor select{height:44px;}.manpower-draft-footer{padding-bottom:max(12px,env(safe-area-inset-bottom));}}
