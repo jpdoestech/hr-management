@@ -4265,8 +4265,16 @@ function applyEmployeeDirectoryPage(pageResult,signature){
   const table=document.querySelector('.employee-directory-table');
   const body=table?.tBodies?.[0];
   if(!table||!body)return;
+  const focused=document.activeElement;
+  const focusedRow=body.contains(focused)?focused.closest('[data-employee-id]'):null;
+  const focusedAction=focusedRow&&focused.matches('button');
   const columns=employeeVisibleColumns();
   body.innerHTML=employeeDirectoryRowsHTML(pageResult.rows,columns);
+  if(focusedRow){
+    const row=body.querySelector(`[data-employee-id="${CSS.escape(focusedRow.dataset.employeeId)}"]`);
+    (focusedAction?row?.querySelector('button'):row)?.focus({preventScroll:true});
+    if(!row)document.getElementById('employee-directory-search')?.focus({preventScroll:true});
+  }
   const surface=table.closest('.employee-directory-surface');
   const currentFooter=surface?.querySelector(':scope > .table-pagination-wrap');
   const footerHTML=employeeDirectoryPaginationHTML(pageResult,'records:employees');
@@ -4275,25 +4283,38 @@ function applyEmployeeDirectoryPage(pageResult,signature){
   else if(footerHTML)surface.insertAdjacentHTML('beforeend',footerHTML);
   const metadata=employeeDirectoryMetadata();
   setTitle('Employee Information',`${pageResult.meta.total} of ${DB.employees.length} employees · ${metadata.departments.length} departments`);
+  employeeDirectoryStatus(`${pageResult.meta.total} employees found. Showing ${pageResult.meta.start} to ${pageResult.meta.end}.`,false);
+}
+function employeeDirectoryStatus(message,busy){
+  document.querySelector('.employee-directory-surface')?.setAttribute('aria-busy',String(busy));
+  const status=document.getElementById('employee-directory-status');
+  if(status)status.textContent=message;
 }
 function refreshEmployeeDirectoryPage(query,signature){
-  if((!EMPLOYEE_DIRECTORY_QUERY_READY&&!SERVER_RECORD_QUERY_READY)||EMPLOYEE_DIRECTORY_PENDING.has(signature))return;
+  if(!EMPLOYEE_DIRECTORY_QUERY_READY&&!SERVER_RECORD_QUERY_READY)return;
+  employeeDirectoryStatus('Loading employee results.',true);
+  if(EMPLOYEE_DIRECTORY_PENDING.has(signature))return;
   const token=++EMPLOYEE_DIRECTORY_REQUEST_TOKEN;
   const request=queryEmployeeDirectoryPage({scope:query.pageScope,search:query.search,department:query.department,branch:query.branch,status:query.status,classification:query.classification,fields:query.fields,defaultSize:10})
     .then(pageResult=>pageResult||queryRecordPage({module:'employees',scope:query.pageScope,search:query.search,searchFields:EMPLOYEE_DIRECTORY_SEARCH_FIELDS,filters:{department:query.department,branchReporting:query.branch,status:query.status},classification:query.classification,sortKey:'lastName',defaultSize:10}))
     .then(pageResult=>{
-      if(!pageResult)return;
+      if(!pageResult){
+        if(STATE.view==='employees'&&employeeDirectorySignature()===signature)employeeDirectoryStatus('Showing locally cached employee results.',false);
+        return;
+      }
       EMPLOYEE_DIRECTORY_PAGE_CACHE.set(signature,{pageResult,storedAt:Date.now()});
       while(EMPLOYEE_DIRECTORY_PAGE_CACHE.size>24)EMPLOYEE_DIRECTORY_PAGE_CACHE.delete(EMPLOYEE_DIRECTORY_PAGE_CACHE.keys().next().value);
       if(token===EMPLOYEE_DIRECTORY_REQUEST_TOKEN)applyEmployeeDirectoryPage(pageResult,signature);
     })
     .catch(error=>{
       if(token===EMPLOYEE_DIRECTORY_REQUEST_TOKEN){console.warn('Server employee search failed; using locally cached records.',error);toast('Server employee search failed; showing locally cached records.',true);}
+      if(token===EMPLOYEE_DIRECTORY_REQUEST_TOKEN&&STATE.view==='employees'&&employeeDirectorySignature()===signature)employeeDirectoryStatus('Server employee search failed. Showing locally cached employee results.',false);
     })
     .finally(()=>{if(EMPLOYEE_DIRECTORY_PENDING.get(signature)===request)EMPLOYEE_DIRECTORY_PENDING.delete(signature);});
   EMPLOYEE_DIRECTORY_PENDING.set(signature,request);
 }
 function renderEmployees(){
+  const focusedFilter=document.activeElement?.closest('#employee-filter-set select')?.getAttribute('aria-label');
   const query=employeeDirectoryQueryState();
   const signature=employeeDirectorySignature(query);
   const q=(STATE.employeeSearch||'').trim().toLowerCase();
@@ -4349,8 +4370,11 @@ function renderEmployees(){
       </div>
       ${employeeDirectoryPaginationHTML(pageResult,pageScope)}
     </section>
+    <div id="employee-directory-status" role="status" aria-live="polite" aria-atomic="true" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap"></div>
   </div>`;
   document.getElementById('content').innerHTML = html;
+  if(focusedFilter)document.querySelector(`#employee-filter-set select[aria-label="${CSS.escape(focusedFilter)}"]`)?.focus({preventScroll:true});
+  employeeDirectoryStatus(`${filteredTotal} employees found. Showing ${pageResult.meta.start} to ${pageResult.meta.end}.`,false);
   refreshEmployeeDirectoryPage(query,signature);
 }
 function openEmployeeWorkspaceModal(html){
