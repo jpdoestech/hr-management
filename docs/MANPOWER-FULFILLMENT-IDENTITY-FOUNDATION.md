@@ -12,6 +12,8 @@ The reviewer supplies SamePerson or SeparatePersons and a mandatory reason. Sour
 
 ## Risks And Release Gates
 
+Follow-on Stage B2 supplies versioned re-review for records without assignment dependencies; see `MANPOWER-FULFILLMENT-IDENTITY-REVISIONS.md`. The limitations below describe Stage B1's original boundary. Assigned-worker correction and UI/deployment integration remain gated.
+
 - SQL remains outside automatic migrations. Live baseline, actual RLS helpers and independent concurrency must be verified before promotion.
 - This is only initial-review infrastructure, NOT completed identity resolution. Duplicate discovery, reviewer UI, effective-person resolution, applicant conversion reuse, unresolved-identity deployment blockers and reservations remain outstanding.
 - Initial decisions are immutable. Corrections/supersession and downstream dependency checks must be designed and delivered before enabling the review workflow for users. Never manually overwrite decisions to bypass that gate.

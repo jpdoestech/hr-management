@@ -77,4 +77,48 @@ const rollback=(await db.query("select preview_manpower_identity_review('rollbac
 await denied(()=>decide(rollback),'23514');
 assert.equal((await db.query("select * from hr_manpower_identity_reviews where candidate_id='rollback'")).rows.length,0);
 await db.exec('set role anon');await denied(()=>preview(),'42501');await denied(()=>db.exec('select * from hr_manpower_identity_reviews'),'42501');
+if(process.argv.includes('--revisions')){
+  await db.exec('reset role');
+  await db.exec(readFileSync(new URL('../../supabase/proposals/0039_manpower_identity_review_revisions.sql',import.meta.url),'utf8'));
+  await db.exec('set role authenticated');
+  const revise=async(pair,decision,revision=pair.review_revision,reason='Rechecked current source evidence')=>(await db.query(
+    'select record_manpower_identity_review($1,$2,$3,$4,$5,$6,$7) result',
+    [pair.candidate_id,pair.employee_id,decision,reason,pair.candidate_fingerprint,pair.employee_fingerprint,revision])).rows[0].result;
+  const stale=await preview();assert.equal(stale.review_revision,1);assert.equal(stale.source_changed,true);
+  await db.exec("set test.denied='onboarding.review_identity'");await denied(()=>revise(stale,'SamePerson'),'42501');
+  await db.exec("set test.denied='';set test.scope='Sales'");await denied(()=>revise(stale,'SamePerson'),'42501');
+  await db.exec("set test.scope='global'");
+  await denied(()=>revise(stale,'SamePerson',0),'40001');
+  await denied(()=>revise(stale,'SamePerson',1,''),'23514');
+  const refreshed=await revise(stale,'SamePerson');assert.equal(refreshed.revision,2);assert.equal(refreshed.supersedes_audit_id,result.audit_id);
+  assert.equal((await preview()).source_changed,false);
+  await denied(()=>revise(stale,'SeparatePersons'),'40001');
+  await denied(async()=>decide(await preview()),'40001');
+  await denied(async()=>revise(await preview('employee3'),'SamePerson'),'23514');
+  const latest=await preview();await revise(latest,'SeparatePersons');
+  assert.equal((await db.query('select * from hr_manpower_identity_links')).rows.length,0);
+  await revise(await preview('employee3'),'SamePerson');
+  const link=(await db.query('select * from hr_manpower_identity_links')).rows[0];assert.equal(link.employee_id,'employee3');
+  const facts=(await db.query("select * from hr_manpower_identity_reviews where employee_id='employee' order by revision")).rows;
+  assert.equal(facts.length,3);assert.equal(facts[0].decision,'SamePerson');assert.equal(facts[2].decision,'SeparatePersons');
+  assert.equal(facts[2].supersedes_audit_id,facts[1].audit_id);
+  await db.exec('reset role');
+  const revisionChecks=await db.exec(readFileSync(new URL('../../supabase/verification/manpower_identity_revisions_integrity.sql',import.meta.url),'utf8'));
+  assert.equal(revisionChecks[0].rows.length,0);assert.equal(revisionChecks[1].rows.length,0);
+  assert.equal(revisionChecks[2].rows.length,1);assert.equal(revisionChecks[2].rows[0].employee_id,'employee2');
+  await db.exec('set role authenticated');
+  await db.exec('reset role');await denied(()=>db.exec("delete from hr_manpower_identity_reviews"),'23514');
+  await db.exec(`insert into hr_records values('${tenant}','manpowerSlots','dependency','{"candidateId":"candidate"}');set role authenticated`);
+  await denied(async()=>revise(await preview('employee3'),'SeparatePersons'),'23514');
+  assert.equal((await db.query('select * from hr_manpower_identity_links')).rows[0].employee_id,'employee3');
+  await denied(()=>db.exec('delete from hr_manpower_identity_links'),'42501');
+  await db.exec("reset role;alter table hr_audit_logs add constraint fail_revision check(action not like '%revision 2:%') not valid;set role authenticated");
+  const isolated=(await db.query("select preview_manpower_identity_review('source-only','employee') result")).rows[0].result;
+  await revise(isolated,'SeparatePersons');
+  const isolatedLatest=(await db.query("select preview_manpower_identity_review('source-only','employee') result")).rows[0].result;
+  await denied(()=>revise(isolatedLatest,'SeparatePersons'),'23514');
+  assert.equal((await db.query("select * from hr_manpower_identity_reviews where candidate_id='source-only'")).rows.length,1);
+  await db.exec('set role anon');await denied(()=>revise(isolatedLatest,'SeparatePersons'),'42501');
+  console.log('Versioned identity reviews passed: refresh stale sources, optimistic revision checks, immutable supersession history, single current link, explicit release before relink, assignment dependency blocking, atomic audit failure, no source merges.');
+}
 await db.close();console.log('Identity PostgreSQL rehearsal passed: narrow permission, both-source scope, tenant isolation, minimal preview, stale fingerprint rejection, explicit decisions, conflicting/repeated links blocked, append-only audit facts, audit-failure rollback, unchanged source attachments. Live policies/concurrency and correction/deployment integration remain gated.');
