@@ -11,7 +11,7 @@ import { buildRecordChanges, valuesEqual } from './core/record-diff.js?v=2026093
 import { roleCanExport } from './core/export-access.js?v=20260930-1';
 import { manpowerRequestSummary, manpowerRequestTotals, requirementSlotCounts, slotChronologyIssues, slotMetrics } from './core/manpower.js?v=20260930-1';
 import {newManpowerDraft,validateManpowerDraft} from './core/manpower-draft.js?v=20261009-1';
-import {manpowerDraftEditorHTML,manpowerDraftLinesHTML,readManpowerDraft} from './manpower/draft-editor.js?v=20261009-2';
+import {manpowerDraftEditorHTML,manpowerDraftLinesHTML,readManpowerDraft} from './manpower/draft-editor.js?v=20261009-3';
 import {readManpowerPaste,detectManpowerPasteMapping,previewManpowerPaste} from './core/manpower-paste.js?v=20261009-1';
 import {manpowerPasteMappingHTML,manpowerPastePreviewHTML} from './manpower/paste-preview.js?v=20261009-1';
 import { measureAsync, recordPerformance, performanceSnapshot } from './core/performance.js?v=20261002-1';
@@ -8037,14 +8037,24 @@ async function saveManpowerDraft(){
   const sessionId=SESSION.id;
   const draft=manpowerDraftRead();const payload=validateManpowerDraft(draft,MANPOWER_DRAFT_UI.catalogs);if(draft.unknownClient)payload.errors.push('Select a Client Account from the suggestions.');
   if(!hasPermission(draft.request.revision?'manpower.update':'manpower.create')){toast('Your account cannot save this draft.',true);return;}
-  const errors=document.getElementById('md_errors');errors.hidden=!payload.errors.length;errors.innerHTML=payload.errors.map(error=>`<div>${esc(error)}</div>`).join('');if(payload.errors.length){errors.scrollIntoView({block:'nearest'});return;}
+  const prfInput=document.getElementById('md_prf_number');prfInput.removeAttribute('aria-invalid');prfInput.removeAttribute('aria-describedby');
+  const errors=document.getElementById('md_errors');errors.hidden=!payload.errors.length;errors.innerHTML=payload.errors.map(error=>`<div>${esc(error)}</div>`).join('');if(payload.errors.length){errors.focus();return;}
   MANPOWER_DRAFT_UI.saving=true;const button=document.getElementById('md_save');button.disabled=true;
   try{
     const {data,error}=await supabase.rpc('save_manpower_draft',{p_id:draft.request.id,p_expected_revision:draft.request.revision||0,p_header:payload.header,p_lines:payload.lines});if(error)throw error;
     if(SESSION?.id!==sessionId||STATE.view!=='manpowerDraftEditor'){PENDING_PAGE_NAVIGATION=null;return;}
     MANPOWER_DRAFT_UI.draft={...data,originalClientId:data.request.client_id};STATE.manpowerDraftId=data.request.id;
     PAGE_EDIT_STATE=null;const destination=PENDING_PAGE_NAVIGATION||'manpowerDrafts';PENDING_PAGE_NAVIGATION=null;MANPOWER_DRAFT_UI.saving=false;await go(destination,{skipUnsaved:true});toast('Manpower draft saved.');
-  }catch(error){PENDING_PAGE_NAVIGATION=null;toast(error.code==='23505'?'PRF number already exists. Use another number.':error.code==='40001'?'This draft changed. Keep your entries and reload the latest draft before retrying.':error.message||'Draft save failed.',true);}
+  }catch(error){
+    PENDING_PAGE_NAVIGATION=null;
+    const message=error.code==='23505'?'PRF number already exists in this organization. Use another number.':error.code==='40001'?'This draft changed. Keep your entries and reload the latest draft before retrying.':error.message||'Draft save failed.';
+    if(SESSION?.id===sessionId&&STATE.view==='manpowerDraftEditor'&&errors.isConnected){
+      errors.hidden=false;errors.textContent=message;
+      if(error.code==='23505'){prfInput.setAttribute('aria-invalid','true');prfInput.setAttribute('aria-describedby','md_errors');prfInput.focus();}
+      else errors.focus();
+    }
+    toast(message,true);
+  }
   finally{MANPOWER_DRAFT_UI.saving=false;if(button.isConnected)button.disabled=false;}
 }
 

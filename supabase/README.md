@@ -7,6 +7,7 @@ This directory is the single source of truth for the HRIS database.
 - `migrations/` contains the ordered Supabase CLI migration history. Files run once in numeric order.
 - `maintenance/` contains destructive or operator-invoked utilities. These files never run during deployment.
 - `verification/` contains read-only post-deployment checks. These files never run during deployment.
+- `proposals/` contains reviewed but deployment-gated SQL. Files do not run automatically; promote them to the next ordered migration only after their documented prerequisites and live baseline are verified.
 - `config.toml` contains local Supabase CLI configuration. It contains no credentials.
 
 ## Migration rules

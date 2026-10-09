@@ -16,7 +16,7 @@ export function manpowerDraftEditorHTML(draft,catalogs,icons={}){
     </div></section>
     <section class="manpower-draft-requisitions"><div class="settings-section-head"><h3>Requisition Lines</h3><button class="btn btn-ghost btn-sm" onclick="manpowerDraftAddLine()">${icons.plus||'+'} Add Line</button></div>
     ${manpowerPastePanelHTML()}<div id="md_lines">${manpowerDraftLinesHTML(draft.lines,catalogs)}</div></section>
-    <div id="md_errors" class="notice" role="alert" hidden></div>
+    <div id="md_errors" class="notice" role="alert" tabindex="-1" hidden></div>
     <div class="manpower-draft-footer"><button class="btn btn-ghost" onclick="go('manpowerDrafts')">Cancel</button><button id="md_save" class="btn btn-primary" onclick="saveManpowerDraft()">Save Draft</button></div></div>`;
 }
 export function manpowerDraftLinesHTML(lines,catalogs){
