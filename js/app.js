@@ -4,12 +4,13 @@ import { ALL_ROWS_SIZE, paginationMeta, paginationHTML, paginationReset, paginat
 import { installTableEnhancer } from './core/table-enhancer.js?v=20261008-5';
 import { employeeDirectoryProjection } from './core/employee-directory.js?v=20261008-1';
 import { isValidEmployeeNumber, nextEmployeeNumber, normalizeEmployeeNumber } from './core/employee-number.js?v=20261008-1';
+import { workforceAgeMix, validateAttendance, fillRateSummary, EXIT_STATUSES, EXIT_CLASSIFICATIONS, WORKFORCE_FACTORS, ATTENDANCE_STATUSES, ABSENCE_CLASSIFICATIONS } from './core/workforce-metrics.js?v=20261009-1';
 import { compactRedundantPageIntros } from './core/content-layout.js?v=20260928-4';
 import { buildRecordChanges, valuesEqual } from './core/record-diff.js?v=20260930-1';
 import { roleCanExport } from './core/export-access.js?v=20260930-1';
 import { manpowerRequestSummary, manpowerRequestTotals, requirementSlotCounts, slotChronologyIssues, slotMetrics } from './core/manpower.js?v=20260930-1';
 import { measureAsync, recordPerformance, performanceSnapshot } from './core/performance.js?v=20261002-1';
-import { ACCESS_ACTIONS, ACCESS_MODULES, ACCESS_PERMISSION_KEYS, EMPLOYEE_RELATIONS_CAPABILITIES, evaluateEffectiveAccess, hasEffectivePermission, legacyPermissions, permissionLabel } from './core/access-control.js?v=20261008-2';
+import { ACCESS_ACTIONS, ACCESS_MODULES, ACCESS_PERMISSION_KEYS, EMPLOYEE_RELATIONS_CAPABILITIES, evaluateEffectiveAccess, hasEffectivePermission, legacyPermissions, permissionLabel } from './core/access-control.js?v=20261009-1';
 import { filterTdaRecords, normalizeTdaScope, normalizeTdaText, parseTdaMatrix, selectApplicableTdaRecord, tdaDuplicateKey, tdaRecordApplies, tdaScopeKey } from './core/tda-import.js?v=20261007-2';
 import { CASE_WORKFLOW_STAGES, CASE_TERMINAL_STAGES, LEGACY_CASE_STAGES, CASE_RESPONSE_STATUSES, CASE_HEARING_STATUSES, CASE_DECISION_STATUSES, CASE_DECISION_OUTCOMES, CASE_NOD_STATUSES, actionRequiresImplementation, canTransitionCase, caseStageOptions, caseTransitionValidation, caseDueProcessReadiness, caseDecisionValidation, caseResponseChronology, caseImplementationReadiness, caseImplementationValidation, caseLifecycleWorkItem, caseProgressModel, employeeRelationsMetrics, employeeRelationsValidationIssues, employeeRelationsWorkItems, isCaseReportSource, isCaseTerminalStage, qualifyingDisciplinaryHistory } from './core/employee-relations.js?v=20261008-6';
 import { addressComponentHTML, addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom, addressDetailInput, initializeAddressComponents, readAddressComponent } from './address/address-component.js?v=20260930-2';
@@ -26,7 +27,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
    Phase 2: record-level Postgres persistence, Supabase Auth, and private Storage.
    ========================================================================= */
 
-const RECORD_MODULES = ['employees','onboardingCandidates','leaves','disciplinary','nte','memos','nod','oncall','transfers','offenseCatalog','cvr','incidents','prf','manpowerRequests','manpowerRequirements','manpowerSlots','evaluations','atd','workflowTasks','automationRuns','documents','lifecycleChecklists'];
+const RECORD_MODULES = ['employees','attendance','onboardingCandidates','leaves','disciplinary','nte','memos','nod','oncall','transfers','offenseCatalog','cvr','incidents','prf','manpowerRequests','manpowerRequirements','manpowerSlots','evaluations','atd','workflowTasks','automationRuns','documents','lifecycleChecklists'];
 const BOOTSTRAP_RECORD_MODULES = ['employees','onboardingCandidates','leaves','nte','oncall','incidents','evaluations','atd','workflowTasks','lifecycleChecklists'];
 const DEFAULT_TENANT_ID='00000000-0000-0000-0000-000000000001';
 let TENANT_SCHEMA_READY=false;
@@ -257,7 +258,7 @@ async function loadCaseCorrespondence({force=false}={}){
 function invalidateCaseCorrespondence(){CASE_CORRESPONDENCE_LOADED=false;CASE_CORRESPONDENCE_CACHE=[];}
 
 function blankDB(){
-  return {employees:[],onboardingCandidates:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],manpowerRequests:[],manpowerRequirements:[],manpowerSlots:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],lifecycleChecklists:[],serviceRequests:[],settings:{orgName:'SCPA',probationDays:180,fileStorageProvider:'supabase',googleDriveRootUrl:'',googleDriveClientId:'',branchLocations:['Main Office'],allowanceTypes:[],departments:DEFAULT_DEPARTMENT_NAMES.map(name=>({name,active:true})),positions:[]},audit:[],users:[]};
+  return {employees:[],attendance:[],onboardingCandidates:[],leaves:[],disciplinary:[],nte:[],memos:[],nod:[],oncall:[],transfers:[],offenseCatalog:[],cvr:[],incidents:[],prf:[],manpowerRequests:[],manpowerRequirements:[],manpowerSlots:[],evaluations:[],atd:[],workflowTasks:[],automationRuns:[],documents:[],lifecycleChecklists:[],serviceRequests:[],settings:{orgName:'SCPA',probationDays:180,fileStorageProvider:'supabase',googleDriveRootUrl:'',googleDriveClientId:'',branchLocations:['Main Office'],allowanceTypes:[],departments:DEFAULT_DEPARTMENT_NAMES.map(name=>({name,active:true})),positions:[]},audit:[],users:[]};
 }
 function uniqueSettingNames(values){
   const seen=new Set();
@@ -413,7 +414,8 @@ function recordFromRow(row){
   return record;
 }
 function unloadedRecordModules(modules){
-  return [...new Set(modules)].filter(module=>RECORD_MODULES.includes(module)&&!LOADED_RECORD_MODULES.has(module));
+  // Attendance is exclusively server-paginated; generic loaders must not fetch its full history.
+  return [...new Set(modules)].filter(module=>module!=='attendance'&&RECORD_MODULES.includes(module)&&!LOADED_RECORD_MODULES.has(module));
 }
 function ensureRecordModules(modules){
   MODULE_LOAD_QUEUE=MODULE_LOAD_QUEUE.catch(()=>{}).then(async()=>{
@@ -578,7 +580,7 @@ function serverTablePageGo(scope,page){
   Promise.resolve(RENDERERS[STATE.view]?.()).catch(error=>toast('Could not load that page: '+error.message,true));
 }
 function serverTablePageSize(scope,size){
-  const allowed=scope==='records:employees'?[10,25,50]:[10,25,50,100,ALL_ROWS_SIZE];
+  const allowed=scope==='records:employees'?[10,25,50]:scope==='attendance'?[10,25,50,100]:[10,25,50,100,ALL_ROWS_SIZE];
   const next=allowed.includes(Number(size))?Number(size):10;
   STATE.tablePageSizes[scope]=next;STATE.tablePages[scope]={page:1,size:next,signature:'server'};
   Promise.resolve(RENDERERS[STATE.view]?.()).catch(error=>toast('Could not change the page size: '+error.message,true));
@@ -2148,6 +2150,7 @@ const NAV = [
     {v:'onboarding',label:'Onboarding & Applicants',icon:iCheck,roles:['Administrator','HR Staff'],count:()=>onboardingOpenCount()},
     {v:'employeeLifecycle',label:'Employment Lifecycle',icon:iSwap},
     {v:'leaves',label:'Leave Tracker',icon:iCal},
+    {v:'attendance',label:'Attendance & KPIs',icon:iCal},
     {v:'evaluations',label:'Probationary Evaluations',icon:iChart},
     {v:'transfers',label:'Department Transfers',icon:iSwap},
     {v:'prf',label:'Manpower Fulfillment',icon:iDoc},
@@ -2252,9 +2255,10 @@ const VIEW_RECORD_MODULES={
 };
 const OPERATION_RECORD_MODULES={transfer:['employees','transfers'],lifecycle:['employees'],status:['employees'],profile:RECORD_MODULES};
 function recordModulesForView(view){
-  if(OPERATION_RECORD_MODULES[view])return OPERATION_RECORD_MODULES[view];
+  if(view==='attendance')return ['employees'];
+  if(OPERATION_RECORD_MODULES[view])return OPERATION_RECORD_MODULES[view].filter(module=>module!=='attendance');
   if(RECORD_MODULES.includes(view))return [view,...(view==='employees'?[]:['employees'])];
-  return VIEW_RECORD_MODULES[view]||[];
+  return (VIEW_RECORD_MODULES[view]||[]).filter(module=>module!=='attendance');
 }
 async function ensureViewRecordModules(view){
   const modules=recordModulesForView(view);
@@ -2442,6 +2446,7 @@ function hasPermission(key){
   if(SESSION.effectiveAccess)return hasEffectivePermission(SESSION.effectiveAccess,key);
   return legacyPermissions(SESSION.role,SESSION.canExport).includes(key);
 }
+VIEW_PERMISSION_MODULE.attendance='attendance';
 function hasErCapability(action,fallback='update'){
   const key=`employee_relations.${action}`;
   if(SESSION?.isSuperAdmin)return true;
@@ -2478,6 +2483,7 @@ function setTitle(t,sub){
 }
 
 const INFORMATION_NOTES={
+  attendanceKpis:{title:'Attendance KPI definitions',body:'Attendance and absence rates use recorded scheduled employee-days. Late and undertime rates use present employee-days. Lost time includes absence, late and undertime minutes divided by scheduled minutes. Approved leave is tracked separately; rest days and holidays are excluded. Missing records are not counted as absence.'},
   leaveUploads:{title:'Leave document handling',body:`Uploaded leave forms use the storage destination selected by the System Administrator. Files can be up to ${Math.round(MAX_ATTACH_BYTES/1024/1024)}MB each. Automatic OCR or text extraction is not performed, so all fields must be entered or confirmed manually.`},
   disciplinaryLevels:{title:'Disciplinary history',body:'Verified entries are generated from approved decisions and finalized NODs. Legacy records remain available for historical reference but do not affect progressive occurrence until they are reviewed and migrated.'},
   cvrOcr:{title:'CVR document handling',body:'The system does not automatically scan or OCR a photo or scan of a printed CVR. Select or enter the reported matters shown on the paper CVR and attach the source document. A CVR remains an allegation/source report and does not count as a confirmed offense.'},
@@ -3204,6 +3210,8 @@ async function renderDashboard({skipFetch=false}={}){
       </div>
 
       <div class="panel dashboard-pulse ${dashboardTab==='records'?'':'workspace-section-hidden'}">
+        <div class="dashboard-panel-head"><h3>Age &amp; Gender Mix</h3><span class="small">All employees as of ${fmtDate(today)}</span></div>
+        ${workforceAgeTableHTML(emps,today)}
         <div class="dashboard-panel-head"><div><h3>HR Operations Pulse</h3><div class="desc">A compact view of the modules most often reviewed by management.</div></div><button class="btn btn-ghost btn-sm" onclick="go('weeklyReport')">Weekly Report</button></div>
         <div class="grid cols-4">
           <div class="metric-card"><div class="k">Incidents</div><div class="v">${DB.incidents.length}</div><div class="s">Recorded incident reports</div></div>
@@ -3228,6 +3236,75 @@ function donut(segs){
   return `<div class="donut" style="background:${bg}; display:flex;align-items:center;justify-content:center;">
     <div style="width:74px;height:74px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-family:'Source Serif 4',serif;font-weight:700;font-size:18px;">${total}</div>
   </div>`;
+}
+
+function workforceAgeTableHTML(employees,date){
+  const rows=workforceAgeMix(employees,date);
+  return `<div class="tablewrap"><table class="data-table"><thead><tr><th>Age Band</th><th>Age</th><th>Male</th><th>Female</th><th>Other / Unknown</th><th>Total</th></tr></thead><tbody>${rows.map(row=>`<tr><td>${esc(row.label)}</td><td>${row.low===null?'Unknown':row.high===Infinity?'61+':`${row.low}-${row.high-1}`}</td><td>${row.male}</td><td>${row.female}</td><td>${row.other}</td><td><b>${row.total}</b></td></tr>`).join('')}</tbody><tfoot><tr><th>Total</th><td></td><td>${rows.reduce((n,r)=>n+r.male,0)}</td><td>${rows.reduce((n,r)=>n+r.female,0)}</td><td>${rows.reduce((n,r)=>n+r.other,0)}</td><td>${employees.length}</td></tr></tfoot></table></div>`;
+}
+function workforceMetricHTML(label,value,detail){return `<div class="metric-card"><div class="k">${esc(label)}</div><div class="v">${value===null?'\u2014':esc(value)}</div><div class="s">${esc(detail)}</div></div>`;}
+function workforceFactorTableHTML(rows,key,title){
+  const groups=new Map();let total=0;rows.forEach(row=>{const label=row[key]||'Unknown / Not Disclosed',count=Number(row.count)||1;total+=count;groups.set(label,(groups.get(label)||0)+count);});
+  return `<section class="panel"><div class="dashboard-panel-head"><h3>${esc(title)}</h3></div><div class="tablewrap"><table class="data-table"><thead><tr><th>Category</th><th>Records</th><th>Share</th></tr></thead><tbody>${[...groups].sort((a,b)=>b[1]-a[1]).map(([label,count])=>`<tr><td>${esc(label)}</td><td>${count}</td><td>${Math.round(count/total*1000)/10}%</td></tr>`).join('')||'<tr><td colspan="3">No records in this scope.</td></tr>'}</tbody></table></div></section>`;
+}
+let ATTENDANCE_REQUEST=0;
+async function renderAttendance(){
+  if(!hasPermission('attendance.view'))return;
+  await ensureRecordModules(['employees']);
+  if(STATE.view!=='attendance')return;
+  setTitle('Attendance & KPIs','');
+  const start=STATE.attendanceStart||todayISO().slice(0,7)+'-01',end=STATE.attendanceEnd||todayISO();
+  if(start>end){toast('From date must be on or before To date.',true);return;}
+  const request=++ATTENDANCE_REQUEST,current=requestedPageState('attendance'),size=Math.min(current.size,100);
+  const {data,error}=await supabase.rpc('query_attendance_dashboard',{p_start:start,p_end:end,p_department:STATE.filterDept||'',p_branch:STATE.attendanceBranch||'',p_status:STATE.filterStatus||'',p_search:STATE.search||'',p_offset:(current.page-1)*size,p_limit:size});
+  if(request!==ATTENDANCE_REQUEST||STATE.view!=='attendance')return;
+  if(error){document.getElementById('content').innerHTML=`<div class="notice"><b>Attendance could not be loaded.</b> ${esc(error.message)} <button class="btn btn-ghost" onclick="renderAttendance()">Retry</button></div>`;return;}
+  const total=Number(data.total)||0;
+  const pages=Math.max(1,Math.ceil(total/size));
+  if(current.page>pages){STATE.tablePages.attendance={...current,page:pages,size};return renderAttendance();}
+  const page={rows:data.records||[],meta:{key:'attendance',total,size,page:current.page,pages,start:total?(current.page-1)*size+1:0,end:Math.min(total,current.page*size)}};
+  const metrics=data.metrics;
+  DB.attendance=page.rows;
+  if(LOADED_RECORD_MODULES.has('attendance')){LOADED_RECORD_MODULES.delete('attendance');if(DB_SNAPSHOT)DB_SNAPSHOT.attendance=[];}
+  const percent=value=>value===null?null:`${value}%`;
+  document.getElementById('content').innerHTML=`<div class="data-toolbar record-directory-toolbar attendance-toolbar">
+    <div class="searchbox">${iSearch(16)}<input data-table-search data-search-key="search" aria-label="Search attendance" placeholder="Search attendance..." value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderAttendance)"></div>
+    <input type="date" aria-label="From date" value="${start}" onchange="attendanceFilter('attendanceStart',this.value)"><input type="date" aria-label="To date" value="${end}" onchange="attendanceFilter('attendanceEnd',this.value)">
+    <select aria-label="Department" onchange="attendanceFilter('filterDept',this.value)"><option value="">All Departments</option>${employeeDepartmentNames().map(v=>`<option ${STATE.filterDept===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
+    <select aria-label="Branch" onchange="attendanceFilter('attendanceBranch',this.value)"><option value="">All Branches</option>${employeeBranchLocations().map(v=>`<option ${STATE.attendanceBranch===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
+    <select aria-label="Attendance status" onchange="attendanceFilter('filterStatus',this.value)"><option value="">All Statuses</option>${ATTENDANCE_STATUSES.map(v=>`<option ${STATE.filterStatus===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
+    <button class="iconbtn" title="KPI definitions" aria-label="KPI definitions" onclick="openInformationNote('attendanceKpis')">${iInfo(16)}</button>
+    ${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportAttendance()">${iDownload(14)} Export</button>`:''}${hasPermission('attendance.create')?`<button class="btn btn-primary btn-sm" onclick="openRecordForm('attendance')">${iPlus(14)} Add Attendance</button>`:''}
+  </div><div class="analytics-kpis">${workforceMetricHTML('Attendance',percent(metrics.attendanceRate),`${metrics.present} present / ${metrics.scheduled} scheduled days`)}${workforceMetricHTML('Absence',percent(metrics.absenceRate),`${metrics.absent} absent; ${metrics.unauthorized} unauthorized`)}${workforceMetricHTML('Late',percent(metrics.lateRate),`${metrics.late} late / ${metrics.present} present days`)}${workforceMetricHTML('Undertime',percent(metrics.undertimeRate),`${metrics.undertime} undertime / ${metrics.present} present days`)}${workforceMetricHTML('Lost Time',percent(metrics.lostTimeRate),`${metrics.lostMinutes} / ${metrics.scheduledMinutes} scheduled minutes`)}</div>
+<div class="table-card"><div class="tablewrap"><table class="data-table" data-page-scope="attendance" data-server-paginated="true" data-view-all-disabled="true" data-managed-columns="department,branchReporting,status" data-page-handler="serverTablePageSize"><thead><tr>${MODULES.attendance.columns.map(c=>`<th data-column-key="${c.key}">${c.label}</th>`).join('')}<th>Action</th></tr></thead><tbody>${page.rows.map(row=>`<tr>${MODULES.attendance.columns.map(c=>`<td>${c.render?c.render(row):esc(row[c.key]??'\u2014')}</td>`).join('')}<td>${hasPermission('attendance.update')?`<button class="iconbtn" title="Edit attendance" onclick="openRecordForm('attendance','${esc(row.id)}')">${iEdit(14)}</button>`:''}${hasPermission('attendance.delete')?`<button class="iconbtn" title="Delete attendance" onclick="deleteRecord('attendance','${esc(row.id)}')">${iTrash(14)}</button>`:''}</td></tr>`).join('')||'<tr><td colspan="11"><div class="empty">No attendance records in this scope.</div></td></tr>'}</tbody></table></div><div class="table-pagination-wrap"><span>${page.meta.start}-${page.meta.end} of ${page.meta.total}</span>${paginationHTML(page.meta,'attendance',{go:'serverTablePageGo',size:'serverTablePageSize',sizes:[10,25,50,100]})}</div></div>
+  <div class="analytics-grid equal">${workforceFactorTableHTML(data.absenceGroups||[],'absenceClassification','Absence Classification')}${workforceFactorTableHTML(data.factorGroups||[],'factor','Attendance Factors')}</div>`;
+  enhanceDataTables();
+}
+function attendanceFilter(key,value){STATE[key]=value;STATE.tablePages={};renderAttendance();}
+async function exportAttendance(){
+  if(!hasPermission('attendance.export'))return;
+  const params={p_start:STATE.attendanceStart||todayISO().slice(0,7)+'-01',p_end:STATE.attendanceEnd||todayISO(),p_department:STATE.filterDept||'',p_branch:STATE.attendanceBranch||'',p_status:STATE.filterStatus||'',p_search:STATE.search||'',p_offset:0,p_limit:100};
+  const rows=[];
+  do{
+    const {data,error}=await supabase.rpc('query_attendance_dashboard',params);
+    if(error){toast('Export failed: '+error.message,true);return;}
+    rows.push(...data.records);params.p_offset+=100;
+    if(rows.length>=data.total||!data.records.length)break;
+  }while(true);
+  downloadCSV('attendance_export.csv',toCSV(rows,[...MODULES.attendance.columns.map(c=>({label:c.label,get:r=>r[c.key]})),{label:'Scheduled Minutes',get:r=>r.scheduledMinutes},{label:'Remarks',get:r=>r.remarks},{label:'Recorded By',get:r=>r.createdByName},{label:'Updated By',get:r=>r.updatedByName}]));
+}
+async function saveAttendanceRecord(id,vals){
+  const existing=id?DB.attendance.find(r=>r.id===id):null;
+  const now=new Date().toISOString(),record={...existing,...vals,id:id||uid(),updatedAt:now,updatedByName:SESSION?.fullName||'System',updatedBy:SESSION?.id||null};
+  if(!id)Object.assign(record,{createdAt:now,createdByName:SESSION?.fullName||'System',createdBy:SESSION?.id||null});
+  const row={module:'attendance',record_id:record.id,data:{...record,_dataResetAt:DB.settings.dataResetAt||''},updated_at:now,updated_by:SESSION?.id||null};
+  if(TENANT_SCHEMA_READY)row.tenant_id=SESSION?.tenantId||DEFAULT_TENANT_ID;
+  const {error}=await supabase.from('hr_records').upsert(row,{onConflict:'module,record_id'});
+  if(error){toast('Attendance save failed: '+error.message,true);return;}
+  const files=recordStoragePaths(record);rememberCommittedRecordFiles(record);
+  await deleteStorageObjects([...recordStoragePaths(existing)].filter(path=>!files.has(path)));
+  logAudit(`${id?'Updated':'Added'} attendance for ${record.employeeName} on ${record.workDate}`);
+  await closeModal([...files]);await renderAttendance();toast('Attendance saved.');
 }
 
 /* ================================================================
@@ -3295,7 +3372,13 @@ async function renderModuleView(key){
   requestAnimationFrame(()=>enhanceDataTables());
 }
 async function openRecordForm(key, id){
+  if(!hasPermission(viewPermission(key,id?'update':'create'))){toast('You do not have permission to open this entry form.',true);return;}
   await ensureRecordModules(recordModulesForView(key));
+  if(key==='attendance'&&id){
+    const {data,error}=await supabase.from('hr_records').select('data').eq('module','attendance').eq('record_id',id).single();
+    if(error){toast('Could not load attendance: '+error.message,true);return;}
+    DB.attendance=[...DB.attendance.filter(r=>r.id!==id),data.data];
+  }
   if(TDA_CONNECTED_MODULES.has(key)){
     try{await loadDisciplinaryHistory();}catch(error){toast('Could not load verified disciplinary history: '+error.message,true);return;}
   }
@@ -3424,10 +3507,18 @@ async function openCaseLinkedRecord(caseId,module,recordId){
 }
 
 async function saveRecord(key, id){
+  if(!hasPermission(viewPermission(key,id?'update':'create'))){toast('You do not have permission to save this record.',true);return;}
   if(CASE_WORKFLOW_CONTEXT?.module===key){const capability=key==='nte'?'manage_nte':key==='nod'?'issue_nod':'investigate';if(!hasErCapability(capability)){toast('This case action is not included in your effective access.',true);return;}}
   if(key==='disciplinary'&&!hasPermission('employee_relations.manage')){toast('Employee Relations management permission is required to maintain legacy history.',true);return;}
   const cfg = MODULES[key];
   const vals = readFields(cfg.fields);
+  if(key==='attendance'){
+    const employee=employeePickerSelected('f_employeeName');
+    Object.assign(vals,{employeeId:employee?.id||'',department:employee?.department||'',branchReporting:employee?.branchReporting||'',classification:employee?classify(employee):''});
+    const error=validateAttendance(vals,DB.attendance,id||'');
+    if(error){toast(error,true);return;}
+    return saveAttendanceRecord(id,vals);
+  }
   if(TDA_CONNECTED_MODULES.has(key)){
     const tdaRule=readTdaRuleSelection('record');
     if(tdaRule===false)return;
@@ -3470,7 +3561,7 @@ async function saveRecord(key, id){
     logAudit(`Added new ${cfg.singular.toLowerCase()} record for ${vals[cfg.searchFields[0]]||''}`);
     toast(cfg.singular+' added.');
   }
-  await saveDB();
+  if(!(await saveDB()))return;
   if(key==='disciplinary')invalidateDisciplinaryHistory();
   if(key==='memos')invalidateCaseCorrespondence();
   await workflowSyncTasks({silent:true});
@@ -3508,6 +3599,13 @@ async function saveRecord(key, id){
   }
 }
 async function deleteRecord(key,id){
+  if(!hasPermission(viewPermission(key,'delete'))){toast('You do not have permission to delete this record.',true);return;}
+  if(key==='attendance'){
+    const existing=DB.attendance.find(r=>r.id===id);
+    const {error}=await supabase.from('hr_records').delete().eq('module','attendance').eq('record_id',id);
+    if(error){toast('Could not delete attendance: '+error.message,true);return;}
+    await deleteStorageObjects(recordStoragePaths(existing));logAudit(`Deleted attendance ${id}`);await renderAttendance();return;
+  }
   if(key==='disciplinary'&&!hasPermission('employee_relations.manage')){toast('Employee Relations management permission is required to remove legacy history.',true);return;}
   const cfg = MODULES[key];
   const old=DB[key].find(r=>r.id===id);
@@ -3631,6 +3729,9 @@ function openEmployeeLifecycleEventForm(id){
         <div class="field"><label>Event Type *</label><select id="lc_eventType" onchange="lifecycleEventTypeChanged()">${LIFECYCLE_EVENT_TYPES.map(x=>`<option>${esc(x)}</option>`).join('')}</select></div>
         <div class="field"><label>Effective Date *</label><input type="date" id="lc_date" value="${todayISO()}"></div>
         <div class="field" id="lc_position_wrap" style="display:none"><label>New Position</label><input id="lc_position" placeholder="e.g. HR Officer II"></div>
+        <div class="field"><label>Leaving Classification</label><select id="lc_exit_class"><option value="">Select classification</option>${EXIT_CLASSIFICATIONS.map(v=>`<option>${esc(v)}</option>`).join('')}</select></div>
+        <div class="field"><label>Primary Leaving Factor</label><select id="lc_exit_factor"><option value="">Select factor</option>${WORKFORCE_FACTORS.map(v=>`<option>${esc(v)}</option>`).join('')}</select></div>
+        <div class="field full"><label>Reason for Leaving</label><textarea id="lc_exit_reason" rows="2" maxlength="1000"></textarea></div>
         <div class="field full"><label>Remarks / HR Reference</label><textarea id="lc_remarks" rows="3" placeholder="Reference, reason, approving authority, or other HR note…"></textarea></div>
       </div>
       <div id="lc_preview" class="lifecycle-helper">Select an employee to see the current employment state.</div>
@@ -3674,13 +3775,18 @@ async function saveEmployeeLifecycleEvent(){
   const fromStatus=emp.status||''; const fromPosition=emp.position||''; const fromDepartment=emp.department||'';
   let toStatus=fromStatus; let toPosition=fromPosition;
   if(LIFECYCLE_EVENT_STATUS[eventType]) toStatus=LIFECYCLE_EVENT_STATUS[eventType];
+  if(EXIT_STATUSES.includes(toStatus)){
+    const exitClassification=document.getElementById('lc_exit_class').value,exitFactor=document.getElementById('lc_exit_factor').value,exitReason=document.getElementById('lc_exit_reason').value.trim();
+    if(!exitClassification||!exitFactor||!exitReason){toast('Enter the leaving classification, primary factor, and reason.',true);return;}
+    Object.assign(emp,{exitClassification,exitFactor,exitReason});
+  }
   if(eventType==='Regularization'){ emp.classOverride='Regular'; }
   if(eventType==='Promotion / Position Change'){ emp.position=newPosition; toPosition=newPosition; }
   if(toStatus!==fromStatus){ emp.status=toStatus; emp.statusDate=effectiveDate; }
   if(!Array.isArray(emp.employmentHistory)) emp.employmentHistory=[];
   emp.employmentHistory.push({
     type:'Lifecycle Event',eventType,from:fromStatus,to:emp.status||fromStatus,fromPosition,toPosition,fromDepartment,toDepartment:emp.department||fromDepartment,
-    effectiveDate,remarks,changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'
+    effectiveDate,remarks,exitClassification:emp.exitClassification||'',exitFactor:emp.exitFactor||'',exitReason:emp.exitReason||'',changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'
   });
   appendEmployeeRecordHistory(emp,'Lifecycle',eventType);
   if(!(await saveDB())){Object.keys(emp).forEach(key=>delete emp[key]);Object.assign(emp,original);return;}
@@ -4349,6 +4455,9 @@ const EMP_FIELDS = [
   {key:'civilStatus', label:'Civil Status', type:'select', options:['Single','Married','Widowed','Separated','Other',''], required:false},
   {key:'status', label:'Employment Status', type:'select', options:EMP_STATUS, required:true},
   {key:'statusDate', label:'Status Effective Date (resignation/AWOL/separation/etc.)', type:'date'},
+  {key:'exitClassification',label:'Leaving Classification',type:'select',options:['',...EXIT_CLASSIFICATIONS]},
+  {key:'exitFactor',label:'Primary Leaving Factor',type:'select',options:['',...WORKFORCE_FACTORS]},
+  {key:'exitReason',label:'Reason for Leaving',type:'textarea',maxLength:1000},
   {key:'mobileNumber', label:'Mobile Number', type:'tel'},
   {key:'personalEmail', label:'Personal / Contact Email', type:'email'},
   {key:'tin', label:'BIR TIN', type:'text', format:'tin'},
@@ -4377,6 +4486,9 @@ const EMPLOYEE_IMPORT_COLUMNS = [
   {header:'Civil Status',key:'civilStatus',options:['Single','Married','Widowed','Separated','Other']},
   {header:'Employment Status',key:'status',required:true,options:EMP_STATUS},
   {header:'Status Effective Date',key:'statusDate',type:'date'},
+  {header:'Leaving Classification',key:'exitClassification',options:EXIT_CLASSIFICATIONS},
+  {header:'Primary Leaving Factor',key:'exitFactor',options:WORKFORCE_FACTORS},
+  {header:'Reason for Leaving',key:'exitReason'},
   {header:'Mobile Number',key:'mobileNumber'},
   {header:'Personal Email',key:'personalEmail'},
   {header:'Home Address',key:'address',note:'Complete free-text address. Imported as Street / House / Unit details for later PSGC validation.'},
@@ -4510,6 +4622,8 @@ function validateEmployeeImportRow(values,rowNumber,accepted){
   if(vals.statusDate&&vals.dateHired&&vals.statusDate<vals.dateHired) errors.push('Status Effective Date cannot be before Date Hired');
   if(vals.personalEmail&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vals.personalEmail)) errors.push('Personal Email is invalid');
   if(vals.remarks.length>1000) errors.push('Remarks cannot exceed 1,000 characters');
+  if(EXIT_STATUSES.includes(vals.status)&&(!vals.exitClassification||!vals.exitFactor||!vals.exitReason))errors.push('Leaving statuses require a classification, primary factor, and reason');
+  if(vals.exitReason.length>1000)errors.push('Reason for Leaving cannot exceed 1,000 characters');
   [employeeImportPhoneError(vals.mobileNumber,'Mobile Number'),employeeImportPhoneError(vals.emergencyContactPhone,'Emergency Contact Phone'),validateGovernmentIds(vals)].filter(Boolean).forEach(error=>errors.push(error));
   if(!vals.employeeNo) vals.employeeNo=nextEmployeeNumber([...DB.employees,...accepted]);
   else {
@@ -4771,7 +4885,7 @@ async function commitEmployeeImport(){
     employee.presentAddress=normalizeAddress(null,employee.address||'');
     employee.presentAddressText=employee.address||'';
     employee.recordHistory.push({action:'Imported',at:now,by:actorName,byId:SESSION?.id||null,detail:`Employee record imported from ${EMPLOYEE_IMPORT_PREVIEW.fileName}`});
-    employee.employmentHistory.push({type:'Employment Status',from:'',to:employee.status,effectiveDate:employee.statusDate||employee.dateHired,remarks:'Initial employee record imported from Excel',changedAt:now,changedBy:actorName});
+    employee.employmentHistory.push({type:'Employment Status',from:'',to:employee.status,effectiveDate:employee.statusDate||employee.dateHired,remarks:'Initial employee record imported from Excel',exitClassification:employee.exitClassification||'',exitFactor:employee.exitFactor||'',exitReason:employee.exitReason||'',changedAt:now,changedBy:actorName});
     DB.employees.push(employee);added.push(employee);
   });
   if(!(await saveDB())){DB.employees=DB.employees.filter(employee=>!added.includes(employee));return;}
@@ -4800,6 +4914,7 @@ const EMP_FORM_SECTIONS = [
   {title:'Assignment & Compensation',description:'Required reporting location and current employee rate or allowances.',keys:['branchReporting','dailyRate'],allowances:true},
   {title:'Contact & Emergency',description:'Private contact information used by HR when needed.',keys:['mobileNumber','personalEmail','emergencyContactName','emergencyContactRelationship','emergencyContactPhone']},
   {title:'Government IDs',description:'Optional statutory identifiers with format validation.',keys:['tin','sssNumber','philHealthNumber','pagIbigNumber']},
+  {title:'Leaving Details',description:'Classify departures and record contributing factors.',keys:['exitClassification','exitFactor','exitReason']},
 ];
 function employeeFormFieldValue(field,record){
   if(record) return record[field.key];
@@ -5022,6 +5137,7 @@ async function saveEmployee(id){
   if(vals.dateHired>todayISO()){ toast('Date Hired cannot be in the future.'); return; }
   if(vals.birthDate && vals.birthDate>todayISO()){ toast('Birth Date cannot be in the future.'); return; }
   if(vals.statusDate && vals.statusDate<vals.dateHired){ toast('Status Effective Date cannot be before Date Hired.'); return; }
+  if(EXIT_STATUSES.includes(vals.status)&&(!id||existingEmployee?.status!==vals.status)&&(!vals.exitClassification||!vals.exitFactor||!vals.exitReason)){toast('For a leaving status, enter the classification, primary factor, and reason.',true);return;}
   const governmentIdValidation=validateGovernmentIds(vals); if(governmentIdValidation){toast(governmentIdValidation,true);return;}
   if(vals.employeeNo && DB.employees.some(e=>e.id!==id && String(e.employeeNo||'').toUpperCase()===String(vals.employeeNo).toUpperCase())){ vals.employeeNo=nextEmployeeNumber(DB.employees); }
   vals.name=formatEmployeeName(vals);
@@ -5050,9 +5166,9 @@ async function saveEmployee(id){
   if(isNew){
     Object.assign(rec,{createdAt:now,createdBy:SESSION?.id||null,createdByName:actorName,updatedAt:now,updatedBy:SESSION?.id||null,updatedByName:actorName});
     appendEmployeeRecordHistory(rec,'Created','Employee record created',now);
-    rec.employmentHistory.push({type:'Employment Status',from:'',to:rec.status,effectiveDate:rec.statusDate||rec.dateHired,remarks:'Initial employee record',changedAt:now,changedBy:actorName});
-  } else if(previousStatus!==rec.status || previousStatusDate!==rec.statusDate){
-    rec.employmentHistory.push({type:'Employment Status',from:previousStatus||'',to:rec.status||'',effectiveDate:rec.statusDate||todayISO(),remarks:'Updated from Employee Information',changedAt:now,changedBy:actorName});
+    rec.employmentHistory.push({type:'Employment Status',from:'',to:rec.status,effectiveDate:rec.statusDate||rec.dateHired,remarks:'Initial employee record',exitClassification:rec.exitClassification||'',exitFactor:rec.exitFactor||'',exitReason:rec.exitReason||'',changedAt:now,changedBy:actorName});
+  } else if(previousStatus!==rec.status || previousStatusDate!==rec.statusDate || ['exitClassification','exitFactor','exitReason'].some(key=>String(original?.[key]||'')!==String(rec[key]||''))){
+    rec.employmentHistory.push({type:'Employment Status',from:previousStatus||'',to:rec.status||'',effectiveDate:rec.statusDate||todayISO(),remarks:'Updated from Employee Information',exitClassification:rec.exitClassification||'',exitFactor:rec.exitFactor||'',exitReason:rec.exitReason||'',changedAt:now,changedBy:actorName});
   }
   if(!isNew&&changedFields.length){
     const visible=changedFields.slice(0,4).join(', ');
@@ -5165,6 +5281,9 @@ function openEmployeeStatusForm(id){
         <div class="field"><label>Current Status</label><input value="${esc(emp.status||'—')}" disabled style="background:var(--paper);"></div>
         <div class="field"><label>New Status *</label><select id="es_status">${EMP_STATUS.map(s=>`<option value="${esc(s)}" ${s===emp.status?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
         <div class="field"><label>Effective Date *</label><input type="date" id="es_date" value="${esc(emp.statusDate||todayISO())}"></div>
+        <div class="field"><label>Leaving Classification</label><select id="es_exit_class"><option value="">Select classification</option>${EXIT_CLASSIFICATIONS.map(v=>`<option ${emp.exitClassification===v?'selected':''}>${esc(v)}</option>`).join('')}</select></div>
+        <div class="field"><label>Primary Leaving Factor</label><select id="es_exit_factor"><option value="">Select factor</option>${WORKFORCE_FACTORS.map(v=>`<option ${emp.exitFactor===v?'selected':''}>${esc(v)}</option>`).join('')}</select></div>
+        <div class="field full"><label>Reason for Leaving</label><textarea id="es_exit_reason" rows="2" maxlength="1000">${esc(emp.exitReason||'')}</textarea></div>
         <div class="field full"><label>Remarks</label><textarea id="es_remarks" rows="3" placeholder="Reason, supporting note, or HR reference…"></textarea></div>
       </div>
       <div class="computed-note">This update becomes part of the employee's employment history. Department transfers should continue to be recorded through the Transfer workflow.</div>
@@ -5178,15 +5297,20 @@ async function saveEmployeeStatus(id){
   const status=document.getElementById('es_status').value;
   const effectiveDate=document.getElementById('es_date').value;
   const remarks=document.getElementById('es_remarks').value.trim();
+  const exitClassification=document.getElementById('es_exit_class').value;
+  const exitFactor=document.getElementById('es_exit_factor').value;
+  const exitReason=document.getElementById('es_exit_reason').value.trim();
+  if(EXIT_STATUSES.includes(status)&&(!exitClassification||!exitFactor||!exitReason)){toast('Enter the leaving classification, primary factor, and reason.',true);return;}
   if(!effectiveDate){ toast('Please set an effective date.'); return; }
   if(effectiveDate<emp.dateHired){ toast('Status Effective Date cannot be before Date Hired.'); return; }
-  if(status===emp.status && effectiveDate===(emp.statusDate||'')){ toast('No status change was made.'); return; }
+  if(status===emp.status && effectiveDate===(emp.statusDate||'')&&exitClassification===(emp.exitClassification||'')&&exitFactor===(emp.exitFactor||'')&&exitReason===(emp.exitReason||'')){ toast('No status change was made.'); return; }
   const from=emp.status||'';
   const original=JSON.parse(JSON.stringify(emp));
   emp.status=status;
   emp.statusDate=effectiveDate;
+  Object.assign(emp,{exitClassification,exitFactor,exitReason});
   if(!Array.isArray(emp.employmentHistory)) emp.employmentHistory=[];
-  emp.employmentHistory.push({type:'Employment Status',from,to:status,effectiveDate,remarks,changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
+  emp.employmentHistory.push({type:'Employment Status',from,to:status,effectiveDate,remarks,exitClassification,exitFactor,exitReason,changedAt:new Date().toISOString(),changedBy:SESSION?.fullName||'System'});
   appendEmployeeRecordHistory(emp,'Status',`${from||'Unspecified'} to ${status}`);
   if(!(await saveDB())){Object.keys(emp).forEach(key=>delete emp[key]);Object.assign(emp,original);return;}
   logAudit(`Updated employment status for ${employeeDisplayName(emp)}: ${from||'—'} → ${status}`);
@@ -5207,6 +5331,7 @@ async function exportEmployeesCSV(){
     ...allowanceNames.map(name=>({header:`Allowance - ${name}`,get:r=>r.allowances?.[name]??''})),
     {header:'Date Hired',get:r=>r.dateHired},{header:'Birth Date',get:r=>r.birthDate},{header:'Gender',get:r=>r.gender},{header:'Civil Status',get:r=>r.civilStatus},
     {header:'Employment Status',get:r=>r.status},{header:'Status Effective Date',get:r=>r.statusDate},{header:'Classification Override',get:r=>r.classOverride||'Auto'},{header:'Computed Classification',get:r=>classify(r)},
+    {header:'Leaving Classification',get:r=>r.exitClassification},{header:'Primary Leaving Factor',get:r=>r.exitFactor},{header:'Reason for Leaving',get:r=>r.exitReason},
     {header:'Mobile Number',get:r=>r.mobileNumber},{header:'Personal Email',get:r=>r.personalEmail},
     {header:'Home Address',get:r=>formatPhilippineAddress(r.homeAddress)||r.address},{header:'Home Region Code',get:r=>r.homeAddress?.regionCode},{header:'Home Province Code',get:r=>r.homeAddress?.provinceCode},{header:'Home City/Municipality Code',get:r=>r.homeAddress?.cityCode},{header:'Home Barangay Code',get:r=>r.homeAddress?.barangayCode},
     {header:'Present Address',get:r=>formatPhilippineAddress(r.presentAddress)||r.presentAddressText},{header:'Present Region Code',get:r=>r.presentAddress?.regionCode},{header:'Present Province Code',get:r=>r.presentAddress?.provinceCode},{header:'Present City/Municipality Code',get:r=>r.presentAddress?.cityCode},{header:'Present Barangay Code',get:r=>r.presentAddress?.barangayCode},
@@ -5224,7 +5349,7 @@ async function exportEmployeesCSV(){
   employeeSheet['!autofilter']={ref:`A1:${window.XLSX.utils.encode_col(columns.length-1)}${Math.max(1,rows.length+1)}`};
   const employmentHistory=[];const recordHistory=[];
   DB.employees.forEach(employee=>{
-    (employee.employmentHistory||[]).forEach(item=>employmentHistory.push({'Employee No.':employee.employeeNo||'','Employee':employeeDisplayName(employee),'Event Type':item.type||'','From':item.from||'','To':item.to||'','Effective Date':item.effectiveDate||'','Remarks':item.remarks||'','Changed At':item.changedAt||'','Changed By':item.changedBy||''}));
+    (employee.employmentHistory||[]).forEach(item=>employmentHistory.push({'Employee No.':employee.employeeNo||'','Employee':employeeDisplayName(employee),'Event Type':item.type||'','From':item.from||'','To':item.to||'','Effective Date':item.effectiveDate||'','Remarks':item.remarks||'','Leaving Classification':item.exitClassification||'','Leaving Factor':item.exitFactor||'','Leaving Reason':item.exitReason||'','Changed At':item.changedAt||'','Changed By':item.changedBy||''}));
     (employee.recordHistory||[]).forEach(item=>recordHistory.push({'Employee No.':employee.employeeNo||'','Employee':employeeDisplayName(employee),'Action':item.action||'','Detail':item.detail||'','Date/Time':item.at||'','User':item.by||''}));
   });
   const workbook=window.XLSX.utils.book_new();window.XLSX.utils.book_append_sheet(workbook,employeeSheet,'Employees');
@@ -5424,6 +5549,7 @@ function employeeProfileSummaryHTML(employee,snapshot){
         <div class="item"><div class="label">Date Hired</div><div class="value">${fmtDate(employee.dateHired)}</div></div>
         <div class="item"><div class="label">Employment Status</div><div class="value">${esc(employee.status||'—')}</div></div>
         <div class="item"><div class="label">Effective Date</div><div class="value">${fmtDate(employee.statusDate)}</div></div>
+        ${EXIT_STATUSES.includes(employee.status)?`<div class="item"><div class="label">Leaving Classification</div><div class="value">${esc(employee.exitClassification||'Not recorded')}</div></div><div class="item"><div class="label">Leaving Factor</div><div class="value">${esc(employee.exitFactor||'Not recorded')}</div></div><div class="item full"><div class="label">Reason for Leaving</div><div class="value">${esc(employee.exitReason||'Not recorded')}</div></div>`:''}
       </div></section>
       <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Assignment</h3><p>Current organizational placement</p></div></div><div class="profile-detail">
         <div class="item"><div class="label">Department</div><div class="value">${esc(employee.department||'—')}</div></div><div class="item"><div class="label">Position</div><div class="value">${esc(employee.position||'—')}</div></div><div class="item"><div class="label">Reporting Branch</div><div class="value">${esc(employee.branchReporting||'Not assigned')}</div></div><div class="item"><div class="label">Tenure</div><div class="value">${esc(employeeTenureText(employee))}</div></div>
@@ -7402,6 +7528,22 @@ async function renderAutomationCenter({skipEngine=false}={}){
    use the generic table view)
    ================================================================ */
 const MODULES = {
+  attendance:{title:'Attendance & KPIs',singular:'Attendance Record',addLabel:'Add Attendance',subtitle:'Daily attendance and contributing factors.',searchFields:['employeeName','department','branchReporting','factor','absenceClassification'],sortKey:'workDate',
+    fields:[
+      {key:'employeeName',label:'Employee',type:'text',required:true},
+      {key:'department',label:'Department',type:'text',readonly:true},
+      {key:'workDate',label:'Work Date',type:'date',required:true,default:todayISO},
+      {key:'status',label:'Attendance Status',type:'select',options:ATTENDANCE_STATUSES,required:true},
+      {key:'scheduledMinutes',label:'Scheduled Minutes',type:'number',required:true,default:()=>480},
+      {key:'lateMinutes',label:'Late Minutes',type:'number',default:()=>0},
+      {key:'undertimeMinutes',label:'Undertime Minutes',type:'number',default:()=>0},
+      {key:'absenceClassification',label:'Absence Classification',type:'select',options:['',...ABSENCE_CLASSIFICATIONS]},
+      {key:'factor',label:'Contributing Factor',type:'select',options:WORKFORCE_FACTORS,required:true,default:()=> 'Unknown / Not Disclosed'},
+      {key:'remarks',label:'Remarks',type:'textarea'},
+      {key:'attachment',label:'Supporting Document',type:'file',full:true},
+    ],
+    columns:[{key:'employeeName',label:'Employee'},{key:'department',label:'Department'},{key:'branchReporting',label:'Branch'},{key:'workDate',label:'Work Date',render:r=>fmtDate(r.workDate)},{key:'status',label:'Status'},{key:'classification',label:'Employee Class'},{key:'lateMinutes',label:'Late (min)'},{key:'undertimeMinutes',label:'Undertime (min)'},{key:'absenceClassification',label:'Absence Class'},{key:'factor',label:'Factor'}],
+  },
   leaves: {
     title:'Leave Tracker', subtitle:'Upload, monitor, and manage employee leave records.', singular:'Leave Record', addLabel:'Add Leave Record',
     searchFields:['employeeName','department'], sortKey:'startDate',
@@ -7954,6 +8096,8 @@ async function exportAnalyticsSnapshot(){
   if(!requireExportAccess())return;
   const start=STATE.analyticsStart||addDaysISO(todayISO(),-89), end=STATE.analyticsEnd||todayISO(), dept=STATE.analyticsDept||'', branch=STATE.analyticsBranch||'';
   const employees=DB.employees.filter(e=>reportDeptMatch(e,dept)&&analyticsBranchMatch(e,branch));
+  const fillRequestIds=new Set(DB.manpowerRequests.filter(r=>r.status!=='Cancelled'&&(!branch||r.branchSite===branch)&&reportInRange(r.dateRequested,start,end)).map(r=>String(r.id)));
+  const fill=fillRateSummary(DB.manpowerRequirements.filter(r=>fillRequestIds.has(String(r.requestId))&&(!dept||r.department===dept)),DB.manpowerSlots);
   const cases=(REPORT_CACHE.cases||[]).filter(c=>(!dept||(c.department||'Unassigned')===dept)&&analyticsBranchMatch({employeeName:c.employee_name,department:c.department},branch));
   const openCases=cases.filter(c=>!caseIsClosedStatus(c.status));
   const separations=employees.filter(e=>['Resigned','AWOL','Separated'].includes(e.status)&&reportInRange(e.statusDate,start,end));
@@ -7976,8 +8120,11 @@ async function exportAnalyticsSnapshot(){
   const relations=employeeRelationsMetrics({cases,reports:reportRows,decisions:(decisionsResult.data||[]).filter(record=>caseIds.has(record.case_id)),allegations:(allegationsResult.data||[]).filter(record=>caseIds.has(record.case_id)),history:(history||[]).filter(record=>caseIds.has(record.case_id)),implementations:(monitoring.implementations||[]).filter(record=>caseIds.has(record.case_id)),today:todayISO()});
   const rows=[
     {section:'Scope',metric:'Start Date',value:start,detail:`${branch||'All Branches'} · ${dept||'All Departments'}`},
+    ...workforceAgeMix(employees,end).flatMap(row=>['male','female','other','total'].map(gender=>({section:'Age & Gender',metric:`${row.label} - ${gender}`,value:row[gender],detail:`Age as of ${end}`}))),
+    ...employees.filter(employee=>EXIT_STATUSES.includes(employee.status)&&reportInRange(employee.statusDate,start,end)).map(employee=>({section:'Leaving Reasons',metric:employeeDisplayName(employee),value:employee.exitClassification||'Unknown',detail:[employee.status,employee.exitFactor||'Unknown / Not Disclosed',employee.exitReason||'Not recorded'].join(' | ')})),
     {section:'Scope',metric:'End Date',value:end,detail:`${branch||'All Branches'} · ${dept||'All Departments'}`},
     {section:'Workforce',metric:'Current Headcount',value:employees.length,detail:'Current employee records'},
+    {section:'Workforce',metric:'Manpower Fill Rate',value:fill.rate??'No demand',detail:`${fill.deployed} deployed / ${fill.required} required; cancelled slots excluded (%)`},
     {section:'Workforce',metric:'Probationary',value:employees.filter(e=>classify(e)==='Probationary').length,detail:'Current classification'},
     {section:'Workforce',metric:'New Hires in Period',value:employees.filter(e=>reportInRange(e.dateHired,start,end)).length,detail:'Date hired'},
     {section:'Workforce',metric:'Separations in Period',value:separations.length,detail:'Resigned, AWOL, and Separated by status date'},
@@ -8045,6 +8192,10 @@ async function renderAnalytics({skipFetch=false}={}){
       ['61+ days',openCases.filter(c=>analyticsDaysOpen(c.opened_at)>=61).length]
     ];
     const employees=DB.employees.filter(e=>reportDeptMatch(e,dept)&&analyticsBranchMatch(e,branch));
+    const fillRequests=DB.manpowerRequests.filter(r=>r.status!=='Cancelled'&&(!branch||r.branchSite===branch)&&reportInRange(r.dateRequested,start,end));
+    const fillRequestIds=new Set(fillRequests.map(r=>String(r.id)));
+    const fillRequirements=DB.manpowerRequirements.filter(r=>fillRequestIds.has(String(r.requestId))&&(!dept||r.department===dept));
+    const fill=fillRateSummary(fillRequirements,DB.manpowerSlots);
     const hired=employees.filter(e=>reportInRange(e.dateHired,start,end));
     const separated=employees.filter(e=>['Resigned','AWOL','Separated'].includes(e.status)&&reportInRange(e.statusDate,start,end));
     const activeEmployees=employees.filter(e=>e.status==='Active'||e.status==='Newly Hired');
@@ -8121,6 +8272,7 @@ async function renderAnalytics({skipFetch=false}={}){
       <div class="workspace-tabs analytics-view-tabs" role="tablist" aria-label="Management analytics sections">${[['overview','Overview'],['workforce','Workforce'],['relations','Employee Relations'],['activity','HR Activity'],['followup',`Follow-Up (${attention.length})`]].map(([value,label])=>`<button type="button" role="tab" aria-selected="${tab===value}" class="${tab===value?'active':''}" onclick="analyticsSetTab('${value}')">${label}</button>`).join('')}</div>
 
       <div class="analytics-kpis">
+        ${workforceMetricHTML('Fill Rate',fill.rate===null?null:`${fill.rate}%`,`${fill.deployed} deployed / ${fill.required} required positions`)}
         <div class="metric-card"><div class="k">Current Headcount</div><div class="v">${employees.length}</div><div class="s">${activeEmployees.length} active / newly hired</div></div>
         <div class="metric-card"><div class="k">New Hires</div><div class="v">${hired.length}</div><div class="s">Within selected period</div></div>
         <div class="metric-card"><div class="k">Separations</div><div class="v">${separated.length}</div><div class="s">Resigned / AWOL / separated</div></div>
@@ -8142,6 +8294,9 @@ async function renderAnalytics({skipFetch=false}={}){
       </div>
 
       <div class="analytics-grid equal ${tab==='workforce'?'':'workspace-section-hidden'}">
+        <section class="panel"><div class="dashboard-panel-head"><h3>Age &amp; Gender Mix</h3></div>${workforceAgeTableHTML(employees,end)}</section>
+        ${workforceFactorTableHTML(employees.filter(e=>EXIT_STATUSES.includes(e.status)&&reportInRange(e.statusDate,start,end)),'exitFactor','Reasons for Leaving - Factors')}
+        ${workforceFactorTableHTML(employees.filter(e=>EXIT_STATUSES.includes(e.status)&&reportInRange(e.statusDate,start,end)),'exitClassification','Reasons for Leaving - Classification')}
         <div class="panel"><div class="dashboard-panel-head"><div><h3>${branch?'Workforce by Department':'Workforce by Branch'}</h3><div class="desc">${branch?`Department distribution within ${esc(branch)}.`:'Organization-wide headcount by reporting branch.'}</div></div></div>
           <div class="chart-list">${topDepts.length?topDepts.map(([d,c],i)=>`<div class="chart-row"><div class="label" title="${esc(d)}">${esc(d)}</div><div class="chart-track"><div class="chart-fill ${i===0?'alt':''}" style="width:${Math.round(c/maxDept*100)}%"></div></div><div class="chart-count">${c}</div></div>`).join(''):'<div class="analytics-empty">No employee records match the selected scope.</div>'}</div>
         </div>
@@ -10098,6 +10253,7 @@ const RENDERERS = {
   cases: renderCases,
   documents: renderDocuments,
   employees: renderEmployees,
+  attendance: renderAttendance,
   onboarding: renderOnboarding,
   employeeLifecycle: renderEmployeeLifecycle,
   leaves: renderLeaves,
@@ -10167,6 +10323,7 @@ PAGE_INTRO_OBSERVER.observe(document.getElementById('content'),{childList:true,s
 // handlers. Expose the application handlers on window so GitHub Pages/Vercel
 // can execute those handlers normally.
 Object.assign(window, {
+  renderAttendance, attendanceFilter, exportAttendance,
   STATE,
   performanceSnapshot,
   addDaysISO, atdComputeStatus, atdFillEmployee, atdPayslipCellHTML, atdRemaining, atdToggleCategory, atdTotalPaid,

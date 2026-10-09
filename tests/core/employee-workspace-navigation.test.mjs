@@ -35,7 +35,9 @@ test('employee transactions return to the selected overview on cancel or save',(
   for(const saver of ['saveRecord','saveCVR','saveIncident','saveATDRecord','saveEval','saveCase']){
     const start=source.indexOf(`function ${saver}(`)>=0?source.indexOf(`function ${saver}(`):source.indexOf(`function ${saver}`);
     assert.ok(start>=0,`${saver} exists`);
-    assert.match(source.slice(start,start+7000),/finishEmployeeTransaction\(/,`${saver} returns to employee context`);
+    const nextFunction=source.slice(start+1).search(/^(?:async )?function /m);
+    const body=source.slice(start,nextFunction<0?undefined:start+1+nextFunction);
+    assert.match(body,/finishEmployeeTransaction\(/,`${saver} returns to employee context`);
   }
 });
 

@@ -29,6 +29,7 @@ const orderedMigrations=[
   '0023_employee_relations_legacy_migration.sql','0024_employee_relations_monitoring.sql','0025_employee_relations_validation.sql','0026_employee_relations_evidence.sql',
   '0027_employee_relations_intake.sql','0028_employee_relations_revisions.sql','0029_employee_relations_confidentiality.sql',
   '0030_employee_number_six_digits.sql',
+  '0031_workforce_attendance.sql',
 ];
 const migrationPath=name=>path.join(root,'supabase','migrations',migrationFiles[name]||name);
 const readMigration=name=>fs.readFileSync(migrationPath(name),'utf8');

@@ -15,6 +15,7 @@ export const ACCESS_MODULES=[
   {key:'onboarding',label:'Onboarding & Applicants',actions:['view','create','update','delete','approve','export']},
   {key:'lifecycle',label:'Employment Lifecycle',actions:['view','create','update','approve','manage']},
   {key:'leave',label:'Leave Management',actions:['view','create','update','delete','export','approve']},
+  {key:'attendance',label:'Attendance',actions:['view','create','update','delete','export','manage']},
   {key:'manpower',label:'Manpower Fulfillment',actions:['view','create','update','delete','export','approve']},
   {key:'employee_relations',label:'Employee Relations',actions:['view','create','update','delete','export','approve','manage']},
   {key:'documents',label:'Documents',actions:['view','create','update','delete','export','manage']},
