@@ -12,6 +12,7 @@ import { roleCanExport } from './core/export-access.js?v=20260930-1';
 import { manpowerRequestSummary, manpowerRequestTotals, requirementSlotCounts, slotChronologyIssues, slotMetrics } from './core/manpower.js?v=20260930-1';
 import {newManpowerDraft,validateManpowerDraft} from './core/manpower-draft.js?v=20261009-1';
 import {manpowerDraftEditorHTML,manpowerDraftLinesHTML,manpowerDraftPositionOptionsHTML,readManpowerDraft} from './manpower/draft-editor.js?v=20261009-4';
+import {loadSubmittedRequests,loadSubmittedRequest,loadSubmittedRows,submittedListRowsHTML,submittedHeaderHTML,submittedTableHTML} from './manpower/submitted-workspace.js?v=20261010-1';
 import {readManpowerPaste,detectManpowerPasteMapping,previewManpowerPaste} from './core/manpower-paste.js?v=20261009-1';
 import {manpowerPasteMappingHTML,manpowerPastePreviewHTML} from './manpower/paste-preview.js?v=20261009-1';
 import { measureAsync, recordPerformance, performanceSnapshot } from './core/performance.js?v=20261002-1';
@@ -2190,8 +2191,8 @@ function navItemVisible(item){
   if(item.roles) return item.roles.includes(role);
   return !permission&&!['Employee','Manager'].includes(role);
 }
-function navSectionForView(view){if(['manpowerDrafts','manpowerDraftEditor'].includes(view))view='prf';return NAV.find(group=>group.items.some(item=>item.v===view&&navItemVisible(item)))?.sec||'';}
-function navLabelForView(view){if(['manpowerDrafts','manpowerDraftEditor'].includes(view))view='prf';return NAV.flatMap(group=>group.items).find(item=>item.v===view&&navItemVisible(item))?.label||'';}
+function navSectionForView(view){if(['manpowerDrafts','manpowerDraftEditor','manpowerSubmitted','manpowerSubmittedDetails'].includes(view))view='prf';return NAV.find(group=>group.items.some(item=>item.v===view&&navItemVisible(item)))?.sec||'';}
+function navLabelForView(view){if(['manpowerDrafts','manpowerDraftEditor','manpowerSubmitted','manpowerSubmittedDetails'].includes(view))view='prf';return NAV.flatMap(group=>group.items).find(item=>item.v===view&&navItemVisible(item))?.label||'';}
 let NAV_PANEL_SECTION='';
 function closeNavGroupPanel(){
   document.getElementById('navgroup-popover')?.remove();
@@ -2456,6 +2457,8 @@ function hasPermission(key){
 VIEW_PERMISSION_MODULE.attendance='attendance';
 VIEW_PERMISSION_MODULE.manpowerDrafts='manpower';
 VIEW_PERMISSION_MODULE.manpowerDraftEditor='manpower';
+VIEW_PERMISSION_MODULE.manpowerSubmitted='manpower';
+VIEW_PERMISSION_MODULE.manpowerSubmittedDetails='manpower';
 function hasErCapability(action,fallback='update'){
   const key=`employee_relations.${action}`;
   if(SESSION?.isSuperAdmin)return true;
@@ -7915,7 +7918,7 @@ function renderManpowerFulfillment(){
   }
   document.getElementById('content').innerHTML=`<div class="manpower-view-switch" role="tablist" aria-label="Manpower fulfillment views"><button type="button" role="tab" aria-selected="${activeView==='requests'}" class="${activeView==='requests'?'active':''}" onclick="manpowerSetView('requests')">Requests</button><button type="button" role="tab" aria-selected="${activeView==='legacy'}" class="${activeView==='legacy'?'active':''}" onclick="manpowerSetView('legacy')">Legacy PRF <span>${DB.prf.length}</span></button></div>${body}`;
   const switcher=document.querySelector('.manpower-view-switch');
-  if(switcher&&hasPermission('manpower.view'))switcher.insertAdjacentHTML('beforeend','<button type="button" role="tab" aria-selected="false" onclick="go(\'manpowerDrafts\')">Quantity Drafts</button>');
+  if(switcher&&hasPermission('manpower.view'))switcher.insertAdjacentHTML('beforeend','<button type="button" role="tab" aria-selected="false" onclick="go(\'manpowerDrafts\')">Quantity Drafts</button><button type="button" role="tab" aria-selected="false" onclick="go(\'manpowerSubmitted\')">Submitted Requests</button>');
   requestAnimationFrame(()=>enhanceDataTables());
 }
 
@@ -7925,13 +7928,14 @@ async function renderManpowerDrafts(){
   setTitle('Manpower Fulfillment / Quantity Drafts','Uncommitted requisition drafts');
   const content=document.getElementById('content');
   if(!document.getElementById('manpower-drafts-results'))content.innerHTML=`<div class="data-toolbar"><button class="btn btn-ghost btn-sm" onclick="go('prf')">Back to Requests</button><div class="searchbox">${iSearch(15)}<input type="search" data-search-key="manpowerDraftSearch" aria-label="Search draft PRF" placeholder="Search draft PRF..." value="${esc(STATE.manpowerDraftSearch||'')}" oninput="queueSearchRender(this,'manpowerDraftSearch',renderManpowerDrafts)"></div><button class="iconbtn" title="About quantity drafts" aria-label="About quantity drafts" onclick="manpowerDraftInfo()">${iInfo(15)}</button>${hasPermission('manpower.create')?`<button class="btn btn-primary btn-sm" onclick="openManpowerDraft()">${iPlus(14)} New Draft</button>`:''}</div><div id="manpower-drafts-results" aria-live="polite"></div>`;
+  if(!content.querySelector('.manpower-quantity-nav'))content.insertAdjacentHTML('afterbegin',manpowerQuantityNavigationHTML('drafts'));
   const host=document.getElementById('manpower-drafts-results');const token=++MANPOWER_DRAFT_UI.request;
   const sessionId=SESSION.id;
   host.innerHTML='<div class="empty">Loading drafts...</div>';
   STATE.tablePages||={};const key='manpower:drafts';const current=STATE.tablePages[key]||{page:1,size:10};
   const size=[10,25,50].includes(Number(current.size))?Number(current.size):10;const page=Math.max(1,Number(current.page)||1);
   try{
-    let query=supabase.from('hr_manpower_requests').select('id,prf_number,branch_reporting,date_requested,target_date,updated_at,revision',{count:'exact'}).order('updated_at',{ascending:false}).order('id').range((page-1)*size,page*size-1);
+    let query=supabase.from('hr_manpower_requests').select('id,prf_number,branch_reporting,date_requested,target_date,updated_at,revision',{count:'exact'}).eq('state','Draft').order('updated_at',{ascending:false}).order('id').range((page-1)*size,page*size-1);
     const search=(STATE.manpowerDraftSearch||'').trim();if(search)query=query.ilike('prf_number',`%${search.replace(/[\\%_]/g,'\\$&')}%`);
     const {data,count,error}=await query;if(error)throw error;
     if(token!==MANPOWER_DRAFT_UI.request||!host.isConnected||SESSION?.id!==sessionId)return;
@@ -7963,6 +7967,7 @@ async function renderManpowerDraftEditor(){
       const {hr_manpower_lines:lines,...request}=data;draft={request,lines:lines.sort((a,b)=>a.ordinal-b.ordinal),originalClientId:request.client_id};
     }
     if(token!==MANPOWER_DRAFT_UI.request||STATE.view!=='manpowerDraftEditor'||SESSION?.id!==sessionId)return;
+    if(draft.request.state&&draft.request.state!=='Draft'){STATE.manpowerSubmittedId=id;await go('manpowerSubmittedDetails',{skipUnsaved:true});return;}
     MANPOWER_DRAFT_UI.draft=draft;MANPOWER_DRAFT_UI.catalogs={clients,departments:departmentCatalog(),positions:positionCatalog(),branches:employeeBranchLocations()};
     content.innerHTML=manpowerDraftEditorHTML(draft,MANPOWER_DRAFT_UI.catalogs,{plus:iPlus(14)});
     if(id&&!hasPermission('manpower.update')){
@@ -8071,6 +8076,66 @@ async function saveManpowerDraft(){
   }
   finally{MANPOWER_DRAFT_UI.saving=false;if(button.isConnected)button.disabled=false;}
 }
+
+const MANPOWER_SUBMITTED_UI={request:0};
+function manpowerQuantityNavigationHTML(active){return `<nav class="workspace-tabs manpower-quantity-nav" aria-label="Quantity request workspaces"><button type="button" ${active==='drafts'?'aria-current="page" class="active"':''} onclick="go('manpowerDrafts')">Quantity Drafts</button><button type="button" ${active==='submitted'?'aria-current="page" class="active"':''} onclick="go('manpowerSubmitted')">Submitted Requests</button></nav>`;}
+function manpowerSubmittedErrorHTML(error,retry){
+  const missing=['42P01','42703','PGRST204','PGRST205'].includes(error.code);
+  return `<div class="empty" role="alert"><b>Submitted requests unavailable</b><span>${esc(missing?'Submitted-request storage is not available in this database yet.':error.message||'Could not load this request.')}</span><button type="button" class="btn btn-ghost" onclick="${retry}()">Retry</button></div>`;
+}
+function manpowerSubmittedPageSettings(key){
+  STATE.tablePages||={};const current=STATE.tablePages[key]||{size:STATE.tablePageSizes?.[key]};
+  const size=[10,25,50].includes(Number(current.size))?Number(current.size):10;
+  const page=Math.max(1,Math.floor(Number(current.page)||1));STATE.tablePages[key]={page,size};return {page,size};
+}
+async function renderManpowerSubmitted(){
+  if(!SESSION||!hasPermission('manpower.view'))return;
+  const content=document.getElementById('content');setTitle('Manpower Fulfillment / Submitted Requests','Submitted quantity requests');
+  if(!document.getElementById('manpower-submitted-results'))content.innerHTML=`${manpowerQuantityNavigationHTML('submitted')}<div class="data-toolbar manpower-submitted-toolbar"><button type="button" class="btn btn-ghost btn-sm" onclick="go('prf')">Back to Requests</button><div class="searchbox">${iSearch(15)}<input type="search" data-search-key="manpowerSubmittedSearch" aria-label="Search submitted PRF" placeholder="Search submitted PRF..." value="${esc(STATE.manpowerSubmittedSearch||'')}" oninput="queueSearchRender(this,'manpowerSubmittedSearch',renderManpowerSubmitted)"></div><select aria-label="Filter reporting branch" onchange="STATE.manpowerSubmittedBranch=this.value;STATE.tablePages['manpower:submitted']={page:1,size:STATE.tablePages['manpower:submitted']?.size||10};renderManpowerSubmitted()"><option value="">All Branches</option>${uniqueSettingNames([...employeeBranchLocations(),STATE.manpowerSubmittedBranch]).map(branch=>`<option value="${esc(branch)}" ${branch===STATE.manpowerSubmittedBranch?'selected':''}>${esc(branch)}</option>`).join('')}</select><button type="button" class="iconbtn" title="About quantities" aria-label="About quantities" onclick="manpowerSubmittedInfo()">${iInfo(15)}</button></div><div id="manpower-submitted-results" class="manpower-submitted-data" aria-live="polite"></div>`;
+  const host=document.getElementById('manpower-submitted-results'),token=++MANPOWER_SUBMITTED_UI.request,sessionId=SESSION.id;
+  const key='manpower:submitted',{page,size}=manpowerSubmittedPageSettings(key);host.innerHTML='<div class="empty">Loading submitted requests...</div>';
+  try{
+    const {data,count}=await loadSubmittedRequests(supabase,{page,size,search:STATE.manpowerSubmittedSearch||'',branch:STATE.manpowerSubmittedBranch||''});
+    if(token!==MANPOWER_SUBMITTED_UI.request||STATE.view!=='manpowerSubmitted'||SESSION?.id!==sessionId||!hasPermission('manpower.view')||!host.isConnected)return;
+    const meta=paginationMeta(STATE,key,count||0);if(meta.page!==page){await renderManpowerSubmitted();return;}
+    host.innerHTML=`<div class="tablewrap" tabindex="0" role="region" aria-label="Submitted request records"><table class="data-table" data-server-paginated="true" data-table-tools="external"><thead><tr><th scope="col">PRF Number</th><th scope="col">Reporting Branch</th><th scope="col">Requested</th><th scope="col">Target</th><th scope="col">State</th></tr></thead><tbody>${submittedListRowsHTML(data||[],fmtDate)}</tbody></table></div>${manpowerSubmittedPaginationHTML(meta,key)}`;
+  }catch(error){if(token===MANPOWER_SUBMITTED_UI.request&&STATE.view==='manpowerSubmitted'&&SESSION?.id===sessionId&&host.isConnected)host.innerHTML=manpowerSubmittedErrorHTML(error,'renderManpowerSubmitted');}
+}
+function manpowerSubmittedPaginationHTML(meta,key){return `<div class="table-pagination-wrap"><span>${meta.start}-${meta.end} of ${meta.total} records</span>${paginationHTML(meta,key,{go:'manpowerSubmittedPageGo',size:'manpowerSubmittedPageSize',sizes:[10,25,50]})}</div>`;}
+async function openManpowerSubmitted(id){
+  if(!SESSION||!hasPermission('manpower.view')||!id)return;
+  if(!(await requestPageNavigation('manpowerSubmittedDetails')))return;
+  STATE.manpowerSubmittedId=id;STATE.manpowerSubmittedTab='lines';await go('manpowerSubmittedDetails',{skipUnsaved:true});
+}
+async function renderManpowerSubmittedDetails(){
+  if(!SESSION||!hasPermission('manpower.view'))return;
+  const content=document.getElementById('content'),id=STATE.manpowerSubmittedId;
+  const kind=STATE.manpowerSubmittedTab==='history'?'history':'lines';
+  const key=`manpower:submitted-${kind}:${id}`,{page,size}=manpowerSubmittedPageSettings(key);
+  const token=++MANPOWER_SUBMITTED_UI.request,sessionId=SESSION.id;
+  let requestLoaded=false;
+  if(!content.querySelector('#manpower-submitted-detail-results'))content.innerHTML='<div class="empty">Loading submitted request...</div>';
+  try{
+    const request=await loadSubmittedRequest(supabase,id);
+    if(token!==MANPOWER_SUBMITTED_UI.request||STATE.view!=='manpowerSubmittedDetails'||SESSION?.id!==sessionId||!hasPermission('manpower.view'))return;
+    requestLoaded=true;
+    setTitle(`Manpower Fulfillment / ${request.prf_number}`,'Submitted request');
+    if(content.dataset.submittedId!==id||!content.querySelector('#manpower-submitted-detail-results')){
+      content.dataset.submittedId=id;
+      content.innerHTML=`<div class="data-toolbar"><button type="button" class="btn btn-ghost btn-sm" onclick="go('manpowerSubmitted')">Back to Submitted Requests</button><button type="button" class="iconbtn" title="About quantities" aria-label="About quantities" onclick="manpowerSubmittedInfo()">${iInfo(15)}</button></div>${submittedHeaderHTML(request,fmtDate)}<nav class="workspace-tabs manpower-submitted-tabs" aria-label="Submitted request sections"><button type="button" data-submitted-tab="lines" onclick="manpowerSubmittedSetTab('lines')">Requisition Lines</button><button type="button" data-submitted-tab="history" onclick="manpowerSubmittedSetTab('history')">Quantity History</button></nav><div id="manpower-submitted-detail-results" class="manpower-submitted-data" aria-live="polite"></div>`;
+    }else content.querySelector('.manpower-submitted-header').outerHTML=submittedHeaderHTML(request,fmtDate);
+    content.querySelectorAll('[data-submitted-tab]').forEach(button=>{const active=button.dataset.submittedTab===kind;button.classList.toggle('active',active);if(active)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');});
+    const host=document.getElementById('manpower-submitted-detail-results');host.innerHTML='<div class="empty">Loading records...</div>';
+    const {data,count}=await loadSubmittedRows(supabase,id,kind,{page,size});
+    if(token!==MANPOWER_SUBMITTED_UI.request||STATE.view!=='manpowerSubmittedDetails'||STATE.manpowerSubmittedId!==id||SESSION?.id!==sessionId||!hasPermission('manpower.view')||!host.isConnected)return;
+    const meta=paginationMeta(STATE,key,count||0);if(meta.page!==page){await renderManpowerSubmittedDetails();return;}
+    host.innerHTML=submittedTableHTML(data||[],kind,fmtDate,request.target_date)+manpowerSubmittedPaginationHTML(meta,key);
+  }catch(error){if(token===MANPOWER_SUBMITTED_UI.request&&STATE.view==='manpowerSubmittedDetails'&&SESSION?.id===sessionId){const host=document.getElementById('manpower-submitted-detail-results');if(requestLoaded&&host)host.innerHTML=manpowerSubmittedErrorHTML(error,'renderManpowerSubmittedDetails');else content.innerHTML=`<button type="button" class="btn btn-ghost" onclick="go('manpowerSubmitted')">Back to Submitted Requests</button>${manpowerSubmittedErrorHTML(error,'renderManpowerSubmittedDetails')}`;}}
+}
+function manpowerSubmittedSetTab(kind){if(!['lines','history'].includes(kind))return;STATE.manpowerSubmittedTab=kind;renderManpowerSubmittedDetails();}
+function manpowerSubmittedPageGo(scope,page){if(!scope.startsWith('manpower:submitted'))return;STATE.tablePages[scope]={...STATE.tablePages[scope],page};if(STATE.view==='manpowerSubmitted')renderManpowerSubmitted();else if(STATE.view==='manpowerSubmittedDetails')renderManpowerSubmittedDetails();}
+function manpowerSubmittedPageSize(scope,size){if(!scope.startsWith('manpower:submitted')||![10,25,50].includes(Number(size)))return;STATE.tablePages[scope]={page:1,size:Number(size)};if(STATE.view==='manpowerSubmitted')renderManpowerSubmitted();else if(STATE.view==='manpowerSubmittedDetails')renderManpowerSubmittedDetails();}
+function manpowerSubmittedInfo(){openModal('<div class="modal-head"><h3>Quantity definitions</h3><button onclick="closeModal()" aria-label="Close">&times;</button></div><div class="modal-body"><p>Original is the immutable headcount first submitted. Authorized is the current approved quantity. Cancelled is outstanding demand formally cancelled, not deployed history. Quantity History records the saved baseline and its revision. Reservations, deployments and controlled amendments are not enabled in this release.</p></div><div class="modal-foot"><button type="button" class="btn btn-ghost" onclick="closeModal()">Close</button></div>');}
 
 function openManpowerRequestForm(id=''){
   const request=id?manpowerRequestById(id):null;
@@ -10545,6 +10610,8 @@ const RENDERERS = {
   prf: renderManpowerFulfillment,
   manpowerDrafts: renderManpowerDrafts,
   manpowerDraftEditor: renderManpowerDraftEditor,
+  manpowerSubmitted: renderManpowerSubmitted,
+  manpowerSubmittedDetails: renderManpowerSubmittedDetails,
   evaluations: renderEvaluations,
   offenseSummary: renderOffenseSummary,
   offenseCatalog: renderTdaCatalog,
@@ -10601,6 +10668,7 @@ PAGE_INTRO_OBSERVER.observe(document.getElementById('content'),{childList:true,s
 // can execute those handlers normally.
 Object.assign(window, {
   renderManpowerDrafts,renderManpowerDraftEditor,openManpowerDraft,manpowerDraftInfo,manpowerDraftPageGo,manpowerDraftPageSize,manpowerDraftAddLine,manpowerDraftRemoveLine,manpowerDraftDepartmentChanged,manpowerDraftToggleDetails,manpowerDraftPasteChanged,manpowerDraftClearPaste,manpowerDraftPreviewPaste,manpowerDraftPastePage,manpowerDraftApplyPaste,saveManpowerDraft,
+  renderManpowerSubmitted,renderManpowerSubmittedDetails,openManpowerSubmitted,manpowerSubmittedSetTab,manpowerSubmittedPageGo,manpowerSubmittedPageSize,manpowerSubmittedInfo,
   renderClientCatalog, clientCatalogPageGo, clientCatalogPageSize, openClientAccountForm, saveClientAccount,
   syncEmployeeStatusReason,
   renderAttendance, attendanceFilter, exportAttendance,
