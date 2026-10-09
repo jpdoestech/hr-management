@@ -12,7 +12,7 @@ This directory is the single source of truth for the HRIS database.
 
 ## Migration rules
 
-Manpower fulfillment proposals 0035-0037 remain deployment gated. Proposal 0037 supports audited quantity increases only; decreases require authoritative commitment accounting and amendment UI/history is not enabled. See `docs/MANPOWER-FULFILLMENT-STAGE-A8.md` and `ROADMAP.md` before promotion. Run the read-only integrity checks only after their corresponding schemas are deployed.
+Manpower fulfillment proposals 0035-0040 remain deployment gated. Proposal 0037 supports audited quantity increases only; 0038/0039 prepare identity review and 0040 prepares atomic reservations/release and capacity accounting. None enables a complete production workflow. Decreases, dependency-aware identity refresh, conversion and deployment integration remain outstanding. Amendment history is read-only; mutation entry is not enabled. See the manpower implementation reports and `ROADMAP.md` before promotion. Run the read-only integrity checks only after their corresponding schemas are deployed.
 
 1. Never edit a migration after it has reached a shared or production database.
 2. Create the next numeric migration for every schema or policy change, for example `0031_feature_name.sql`.
