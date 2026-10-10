@@ -517,4 +517,6 @@ Approved requirements: `docs/HRIS_MANPOWER_FULFILLMENT_SPEC.md`. The specificati
 
 - MP-B06: locally rehearsed deployment interval prerequisite (`docs/MANPOWER-FULFILLMENT-DEPLOYMENT-INTERVALS.md`). User-approved end date is the first unassigned day, allowing adjacent half-open intervals. Database exclusion rejects historical/active overlaps; date guards reject future/non-finite/empty actual intervals. Reversed records remain auditable. Lint, 245 tests, build and isolated/combined PostgreSQL rehearsals passed. Actual confirmation, ending/transfer/reversal APIs, UI, live baseline and independent concurrency remain unfinished; no production enablement.
 
+MP-B06 publication: implementation `c420990` pushed to `origin/main` and verified. Repository validation and diff checks also passed. Proposal 0045 remains outside automatic deployment; the next eligible slice is actual deployment confirmation with authoritative identity/source checks, all-or-nothing batches and audit/idempotency protection.
+
 Release gates: verify the live migration baseline and legacy data, rehearse compatible proposals, validate independent concurrent transactions and production authorization, then coordinate database and application enablement. No completion claim until these gates and the specification acceptance criteria pass.
