@@ -32,9 +32,9 @@ if(interlock)for(const file of ['0043_manpower_identity_refresh.sql','0044_manpo
   await db.exec(readFileSync(new URL('../../supabase/proposals/'+file,import.meta.url),'utf8'));
 await db.exec(`set test.actor='${actor}';set test.tenant='${tenant}';set role authenticated`);
 await db.query('select * from save_manpower_client($1,$2,true,0)',[client,'Fixture Client']);
-async function request(id,quantity){
-  await db.query('select save_manpower_draft($1,0,$2,$3)',[id,{prf_number:id,client_id:client,branch_reporting:'Davao',requested_by:'Fixture HR',date_requested:'2026-10-09',target_date:'2026-10-10'},
-    [{id:id+'-line',department:'Production',position:'Operator',current_authorized:quantity}]]);
+async function request(id,quantity,{department='Production',position='Operator',dateRequested='2026-10-09',targetDate='2026-10-10'}={}){
+  await db.query('select save_manpower_draft($1,0,$2,$3)',[id,{prf_number:id,client_id:client,branch_reporting:'Davao',requested_by:'Fixture HR',date_requested:dateRequested,target_date:targetDate},
+    [{id:id+'-line',department,position,current_authorized:quantity}]]);
   await db.query('select submit_manpower_request($1,1)',[id]);
 }
 await request('request',1000);await request('small',1);
@@ -907,5 +907,92 @@ if(process.argv.includes('--shared-intervals')){
   assert.deepEqual((await db.query("select manpower_line_capacity('ending-line') result")).rows[0].result,creditBefore);
   for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_primary_intervals.sql',import.meta.url),'utf8')))assert.equal(check.rows.length,0);
   console.log('Shared primary interval rehearsal passed: unchanged reservation backfill, cross-ledger/history overlap rejection, adjacent non-credited chain, guarded intents, source/legacy/reservation conflicts, private/RLS denial and unchanged PRF capacity. Owner fixtures are not a public atomic transfer API or live acceptance.');
+}
+if(process.argv.includes('--transfers')){
+  if(!process.argv.includes('--shared-intervals'))throw new Error('Transfer rehearsal requires --interlock --ending --shared-intervals');
+  await db.exec('reset role');
+  await db.exec(readFileSync(new URL('../../supabase/proposals/0053_manpower_atomic_transfers.sql',import.meta.url),'utf8'));
+  const candidate={id:'atomic-transfer-candidate',name:'EMBER QUINTON STRANDWELL',department:'Production',stage:'Hired',employeeRecordId:'atomic-transfer-worker'};
+  const employee={id:'atomic-transfer-worker',name:candidate.name,department:'Production',position:'Operator',status:'Active',employeeNo:'EMP-970001',branchReporting:'Davao'};
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'onboardingCandidates',candidate.id,candidate]);
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'employees',employee.id,employee]);
+  const dates=(await db.query("select to_char((now() at time zone 'Asia/Manila')::date-20,'YYYY-MM-DD') initial,to_char((now() at time zone 'Asia/Manila')::date-15,'YYYY-MM-DD') first_move,to_char((now() at time zone 'Asia/Manila')::date-10,'YYYY-MM-DD') second_move,to_char((now() at time zone 'Asia/Manila')::date-5,'YYYY-MM-DD') third_move,to_char((now() at time zone 'Asia/Manila')::date-1,'YYYY-MM-DD') final_move")).rows[0];
+  const requestOptions={dateRequested:dates.initial,targetDate:dates.final_move};
+  await db.exec("update hr_settings set data=jsonb_set(jsonb_set(data,'{departments}',(data->'departments')||'[{\"name\":\"Packing\",\"active\":true}]'),'{positions}',(data->'positions')||'[{\"name\":\"Packer\",\"department\":\"Packing\",\"active\":true}]')");
+  await db.exec('set role authenticated');await request('atomic-source',1,requestOptions);await request('atomic-credit-one',1,requestOptions);await request('atomic-credit-two',1,requestOptions);
+  await request('atomic-outside-scope',1,{...requestOptions,department:'Packing',position:'Packer'});
+  const pair=(await db.query('select preview_manpower_identity_review($1,$2) result',[candidate.id,employee.id])).rows[0].result;
+  await db.query('select record_manpower_identity_review($1,$2,$3,$4,$5,$6,0)',[candidate.id,employee.id,'SamePerson','Verified existing worker for synthetic primary transfer',pair.candidate_fingerprint,pair.employee_fingerprint]);
+  const reserved=await reserve('atomic-source-reserve',[{candidate_id:candidate.id,line_id:'atomic-source-line',hiring_category:'Existing Employee / Transfer'}]);
+  await db.query('select confirm_manpower_deployments($1,$2)',['atomic-source-confirm',[{reservation_id:reserved.reservation_ids[0],schedule_revision:0,actual_date:dates.initial,reason:'Verified backdated reporting before transfer'}]]);
+  const preview=async(kind,id)=>(await db.query('select preview_manpower_transfer($1,$2) result',[kind,id])).rows[0].result;
+  const initial=await preview('reservation',reserved.reservation_ids[0]);
+  await request('atomic-full',1,requestOptions);
+  const full=await reserve('atomic-full-reserve',[{candidate_id:'ending-candidate-0',line_id:'atomic-full-line',hiring_category:'Existing Employee / Transfer'}]);
+  const today=(await db.query("select to_char((now() at time zone 'Asia/Manila')::date,'YYYY-MM-DD') value")).rows[0].value;
+  await db.query('select confirm_manpower_deployments($1,$2)',['atomic-full-confirm',[{reservation_id:full.reservation_ids[0],schedule_revision:0,actual_date:today,reason:'Verified reporting consumes the destination capacity'}]]);
+  const creditOne={kind:'reservation',line_id:'atomic-credit-one-line'};
+  const transfer=async(token,source=initial,destination=creditOne,date=dates.first_move,reason='Verified actual primary transfer')=>
+    (await db.query('select transfer_manpower_deployment($1,$2,$3,$4,$5,$6,$7) result',[token,source.source_kind,source.source_id,source.source_fingerprint,destination,date,reason])).rows[0].result;
+  const counter=async(line)=>(await db.query('select manpower_line_capacity($1) result',[line])).rows[0].result;
+  const history=async()=>(await db.query('select * from hr_manpower_transfer_history')).rows;
+  for(const permission of ['manpower.update','manpower.view','employees.view','onboarding.view','onboarding.update']){
+    await db.query('select set_config($1,$2,false)',['test.denied',permission]);await denied(()=>transfer('denied-transfer'),'42501');
+  }
+  await db.exec("set test.denied='';set test.scope='Other'");await denied(()=>transfer('scope-transfer'),'42501');
+  await db.exec(`set test.scope='global';set test.tenant='${other}'`);await denied(()=>transfer('tenant-transfer'),'42501');await db.exec(`set test.tenant='${tenant}'`);
+  await db.exec("set test.scope='Production'");
+  await denied(()=>transfer('destination-scope-transfer',initial,{kind:'reservation',line_id:'atomic-outside-scope-line'}),'42501');
+  await denied(()=>transfer('operation-scope-transfer',initial,{kind:'operational',department:'Packing',position:'Packer',branch_reporting:'Davao'}),'42501');
+  await db.exec("set test.scope='global'");
+  await denied(()=>transfer('stale-transfer',{...initial,source_fingerprint:'stale'}),'40001');
+  await denied(()=>transfer('future-transfer',initial,creditOne,'2999-01-01'),'23514');
+  await denied(()=>transfer('empty-interval-transfer',initial,creditOne,dates.initial),'23514');
+  await denied(()=>transfer('reason-transfer',initial,creditOne,dates.first_move,''),'23514');
+  await denied(()=>transfer('recredit-transfer',initial,{kind:'reservation',line_id:'atomic-source-line'}),'23514');
+  await denied(()=>transfer('full-transfer',initial,{kind:'reservation',line_id:'atomic-full-line'}),'23514');
+  assert.equal((await counter('atomic-full-line')).fulfilled,1);
+  assert.equal((await preview(initial.source_kind,initial.source_id)).source_fingerprint,initial.source_fingerprint);
+  await denied(()=>transfer('invalid-catalog-transfer',initial,{kind:'operational',department:'Unknown',position:'Operator',branch_reporting:'Davao'}),'23514');
+  assert.equal((await preview(initial.source_kind,initial.source_id)).state,'Deployed');assert.equal((await history()).length,0);
+  await db.exec('reset role');
+  await db.exec("alter table hr_audit_logs add constraint fail_transfer_audit check(action not like 'Primary deployment transferred: batch audit-transfer,%') not valid");
+  await db.exec('set role authenticated');await denied(()=>transfer('audit-transfer'),'23514');
+  await db.exec('reset role');await db.exec("alter table hr_manpower_transfer_history add constraint fail_transfer_late check(batch_token<>'late-transfer') not valid");
+  await db.exec("alter table hr_manpower_transfer_history add constraint fail_operational_transfer_late check(batch_token<>'late-operation-transfer') not valid");
+  await db.exec('set role authenticated');await denied(()=>transfer('late-transfer'),'23514');
+  assert.equal((await preview(initial.source_kind,initial.source_id)).state,'Deployed');assert.equal((await counter('atomic-credit-one-line')).fulfilled,0);
+  assert.equal((await history()).length,0);
+  const first=await transfer('credit-transfer');assert.equal(first.replayed,false);assert.equal(first.target_kind,'reservation');
+  assert.equal((await counter('atomic-source-line')).fulfilled,1);assert.equal((await counter('atomic-source-line')).active_deployed,0);
+  assert.equal((await counter('atomic-credit-one-line')).fulfilled,1);assert.equal((await counter('atomic-credit-one-line')).active_deployed,1);
+  const firstPreview=await preview(first.target_kind,first.target_id);
+  const operation={kind:'operational',client_id:client,department:'Production',position:'Operator',branch_reporting:'Davao'};
+  await denied(()=>transfer('late-operation-transfer',firstPreview,operation,dates.second_move),'23514');
+  assert.equal((await preview(first.target_kind,first.target_id)).state,'Deployed');
+  const second=await transfer('operation-transfer',firstPreview,operation,dates.second_move);assert.equal(second.target_kind,'operational');
+  assert.equal((await counter('atomic-credit-one-line')).fulfilled,1);assert.equal((await counter('atomic-credit-one-line')).active_deployed,0);
+  const secondPreview=await preview(second.target_kind,second.target_id);
+  const third=await transfer('internal-transfer',secondPreview,{...operation,client_id:null},dates.third_move);assert.equal(third.target_kind,'operational');
+  const thirdPreview=await preview(third.target_kind,third.target_id);
+  await denied(()=>transfer('late-transfer',thirdPreview,{kind:'reservation',line_id:'atomic-credit-two-line'},dates.final_move),'23514');
+  assert.equal((await preview(third.target_kind,third.target_id)).state,'Deployed');assert.equal((await counter('atomic-credit-two-line')).fulfilled,0);
+  const fourth=await transfer('return-credit-transfer',thirdPreview,{kind:'reservation',line_id:'atomic-credit-two-line'},dates.final_move);assert.equal(fourth.target_kind,'reservation');
+  assert.equal((await counter('atomic-credit-two-line')).fulfilled,1);assert.equal((await counter('atomic-credit-two-line')).active_deployed,1);
+  assert.equal((await history()).length,4);assert.equal((await transfer('credit-transfer')).replayed,true);
+  await denied(()=>transfer('credit-transfer',initial,creditOne,dates.first_move,'Different facts'),'23514');
+  assert.deepEqual((await db.query('select data from hr_records where record_id=$1',[employee.id])).rows[0].data,employee);
+  assert.deepEqual((await db.query('select data from hr_records where record_id=$1',[candidate.id])).rows[0].data,candidate);
+  await db.exec("set test.denied='manpower.update'");await denied(()=>transfer('credit-transfer'),'42501');await db.exec("set test.denied=''");
+  await denied(()=>db.exec('select * from manpower_private.transfer_batches'),'42501');
+  await db.exec("set test.scope='Other'");assert.equal((await history()).length,0);await db.exec("set test.scope='global'");
+  await db.exec('reset role');
+  await denied(()=>db.exec("delete from hr_manpower_transfer_history"),'23514');
+  await denied(()=>db.exec("update manpower_private.transfer_batches set payload='{}'"),'23514');
+  for(const table of ['manpower_private.operational_intents','hr_manpower_reservation_intents'])assert.equal((await db.query('select * from '+table)).rows.length,0);
+  for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_primary_intervals.sql',import.meta.url),'utf8')))assert.equal(check.rows.length,0);
+  for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_transfer_integrity.sql',import.meta.url),'utf8')))assert.equal(check.rows.length,0);
+  await db.exec('set role anon');await denied(()=>transfer('anonymous-transfer'),'42501');
+  console.log('Atomic transfer rehearsal passed: all four credited/operational source-destination combinations, preserved source credit and worker/master data, fresh previews, date/catalog/access denial, audit and late-history rollback, exact new-demand credit, immutable scoped history and replay. UI, independent concurrency and live acceptance remain gated.');
 }
 await db.close();console.log('Reservation PostgreSQL rehearsal passed: 75-worker atomic batch, ineligible/capacity/duplicate rollback, bounded real assignments for 1000 demand, role/scope/tenant denial, order-independent idempotent replay, worker uniqueness, authoritative capacity and audit-failure rollback. Production and independent concurrency remain unverified.');
