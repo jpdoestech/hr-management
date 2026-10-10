@@ -32,9 +32,9 @@ if(interlock)for(const file of ['0043_manpower_identity_refresh.sql','0044_manpo
   await db.exec(readFileSync(new URL('../../supabase/proposals/'+file,import.meta.url),'utf8'));
 await db.exec(`set test.actor='${actor}';set test.tenant='${tenant}';set role authenticated`);
 await db.query('select * from save_manpower_client($1,$2,true,0)',[client,'Fixture Client']);
-async function request(id,quantity,{department='Production',position='Operator',dateRequested='2026-10-09',targetDate='2026-10-10'}={}){
+async function request(id,quantity,{department='Production',position='Operator',dateRequested='2026-10-09',targetDate='2026-10-10',demandType='Expansion'}={}){
   await db.query('select save_manpower_draft($1,0,$2,$3)',[id,{prf_number:id,client_id:client,branch_reporting:'Davao',requested_by:'Fixture HR',date_requested:dateRequested,target_date:targetDate},
-    [{id:id+'-line',department,position,current_authorized:quantity}]]);
+    [{id:id+'-line',department,position,current_authorized:quantity,demand_type:demandType}]]);
   await db.query('select submit_manpower_request($1,1)',[id]);
 }
 await request('request',1000);await request('small',1);
@@ -1069,5 +1069,87 @@ if(process.argv.includes('--operational-ending')){
     for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/'+file,import.meta.url),'utf8')))assert.equal(check.rows.length,0);
   await db.exec('set role anon');await denied(()=>end('anonymous-op-ending'),'42501');
   console.log('Operational ending rehearsal passed: bulk genuine endings preserve credits/master data, fresh evidence, invalid/duplicate/date/access rejection, audit and late-second-row rollback, scoped immutable history, reauthorized order-independent retries and interval integrity. UI and independent/live acceptance remain gated.');
+}
+if(process.argv.includes('--replacement-sources')){
+  if(!process.argv.includes('--operational-ending'))throw new Error('Replacement sources require --interlock --ending --shared-intervals --transfers --operational-ending');
+  await db.exec('reset role');
+  await db.exec(readFileSync(new URL('../../supabase/proposals/0055_manpower_replacement_sources.sql',import.meta.url),'utf8'));
+  const originalMasters=(await db.query("select record_id,data from hr_records where record_id like 'op-end-%' or record_id like 'ending-%' order by record_id")).rows;
+  const sourceRows=(await db.query("select 'reservation' kind,id from hr_manpower_reservations where line_id='ending-line' and employee_id='ending-worker-0' union all select 'operational',id from hr_manpower_operational_deployments where employee_id='op-end-worker-0' and state='Ended'")).rows;
+  const items=[];
+  await db.exec('set role authenticated');
+  for(const source of sourceRows){
+    const preview=(await db.query('select preview_manpower_transfer($1,$2) result',[source.kind,source.id])).rows[0].result;
+    items.push({source_kind:source.kind,source_id:source.id,source_fingerprint:preview.source_fingerprint,reason:'Verified outgoing worker for authorized replacement demand'});
+  }
+  assert.equal(items.length,2);
+  await request('replacement-demand',2,{demandType:'Replacement'});
+  await request('replacement-single',1,{demandType:'Replacement'});
+  await request('replacement-outside',1,{demandType:'Replacement',department:'Packing',position:'Packer'});
+  await db.query('select save_manpower_draft($1,0,$2,$3)',['replacement-draft',{prf_number:'replacement-draft',client_id:client,branch_reporting:'Davao',requested_by:'Fixture HR',date_requested:'2026-10-09',target_date:'2026-10-10'},
+    [{id:'replacement-draft-line',department:'Production',position:'Operator',current_authorized:1,demand_type:'Replacement'}]]);
+  const revision=(await db.query("select revision from hr_manpower_requests where id='replacement-demand'")).rows[0].revision;
+  const link=async(token,selected=items,line='replacement-demand-line',expected=revision)=>(await db.query('select link_manpower_replacement_sources($1,$2,$3,$4) result',[token,line,expected,selected])).rows[0].result;
+  const capacity=async(line)=>(await db.query('select manpower_line_capacity($1) result',[line])).rows[0].result;
+  const links=async()=>(await db.query('select * from hr_manpower_replacement_sources')).rows;
+  const originalCapacity=await capacity('ending-line'),operationalCredit=await capacity('op-end-0-line'),newCapacity=await capacity('replacement-demand-line');
+  for(const permission of ['employees.view','manpower.view','manpower.update','onboarding.view']){
+    await db.query('select set_config($1,$2,false)',['test.denied',permission]);await denied(()=>link('permission-link'),'42501');
+  }
+  await db.exec("set test.denied='';set test.scope='Other'");await denied(()=>link('scope-link'),'42501');
+  await db.exec(`set test.scope='global';set test.tenant='${other}'`);await denied(()=>link('tenant-link'),'42501');await db.exec(`set test.tenant='${tenant}'`);
+  await db.exec("set test.scope='Production'");await denied(()=>link('destination-link',items,'replacement-outside-line'),'42501');await db.exec("set test.scope='global'");
+  await denied(()=>link('stale-request-link',items,'replacement-demand-line',Number(revision)+1),'40001');
+  await denied(()=>link('stale-source-link',[items[0],{...items[1],source_fingerprint:'0'.repeat(32)}]),'40001');
+  await denied(()=>link('duplicate-source-link',[items[0],items[0]]),'23514');
+  await denied(()=>link('reason-source-link',[{...items[0],reason:''}]),'23514');
+  await denied(()=>link('expansion-source-link',items,'op-end-0-line'),'23514');
+  await denied(()=>link('draft-source-link',items,'replacement-draft-line',1),'23514');
+  const active=(await db.query("select preview_manpower_transfer('reservation',id) result from hr_manpower_reservations where employee_id='atomic-transfer-worker' and state='Deployed'")).rows[0].result;
+  await denied(()=>link('active-source-link',[{source_kind:'reservation',source_id:active.source_id,source_fingerprint:active.source_fingerprint,reason:'Not an ended deployment'}]),'23514');
+  assert.equal((await links()).length,0);assert.deepEqual(await capacity('replacement-demand-line'),newCapacity);
+  await db.exec('reset role');
+  await db.exec("alter table hr_audit_logs add constraint fail_replacement_audit check(action not like 'Replacement outgoing deployments linked: batch audit-link,%') not valid");
+  const sorted=[...items].sort((a,b)=>a.source_kind.localeCompare(b.source_kind)||a.source_id.localeCompare(b.source_id));
+  await db.query("alter table hr_manpower_replacement_sources add constraint fail_replacement_late check(source_id<>'"+sorted[1].source_id+"'::uuid or batch_token<>'late-link') not valid");
+  await db.exec('set role authenticated');await denied(()=>link('audit-link'),'23514');await denied(()=>link('late-link'),'23514');
+  assert.equal((await links()).length,0);
+  assert.equal((await link('successful-link')).linked_count,2);assert.equal((await links()).length,2);
+  assert.equal((await link('successful-link',[...items].reverse())).replayed,true);
+  await denied(()=>link('successful-link',[{...items[0],reason:'Changed'},items[1]]),'23514');
+  await denied(()=>link('duplicate-link'),'23514');
+  assert.equal((await link('individual-link',[items[0]],'replacement-single-line')).linked_count,1);
+  assert.deepEqual(await capacity('ending-line'),originalCapacity);assert.deepEqual(await capacity('op-end-0-line'),operationalCredit);
+  assert.deepEqual(await capacity('replacement-demand-line'),newCapacity);
+  const replacement=await reserve('replacement-worker',[{candidate_id:'op-end-candidate-2',line_id:'replacement-demand-line',hiring_category:'Existing Employee / Transfer'}]);
+  const actual=(await db.query("select to_char((now() at time zone 'Asia/Manila')::date-1,'YYYY-MM-DD') value")).rows[0].value;
+  await db.query('select confirm_manpower_deployments($1,$2)',['replacement-confirm',[{reservation_id:replacement.reservation_ids[0],schedule_revision:0,actual_date:actual,reason:'Verified actual deployment fulfills new replacement demand only'}]]);
+  assert.equal((await capacity('replacement-demand-line')).fulfilled,1);assert.deepEqual(await capacity('ending-line'),originalCapacity);
+  const deployed=(await db.query('select * from hr_manpower_reservations where id=$1',[replacement.reservation_ids[0]])).rows[0];
+  const today=(await db.query("select to_char((now() at time zone 'Asia/Manila')::date,'YYYY-MM-DD') value")).rows[0].value;
+  await db.query('select end_manpower_deployments($1,$2)',['replacement-genuine-ending',[{reservation_id:deployed.id,confirmation_audit_id:deployed.confirmation_audit_id,actual_date:actual,ended_date:today,reason:'Genuine completion retains replacement fulfillment'}]]);
+  const self=(await db.query("select preview_manpower_transfer('reservation',$1) result",[deployed.id])).rows[0].result;
+  await denied(()=>link('same-original-line',[{source_kind:'reservation',source_id:self.source_id,source_fingerprint:self.source_fingerprint,reason:'Do not re-count the same filled requirement'}]),'23514');
+  assert.equal((await capacity('replacement-demand-line')).fulfilled,1);
+  if(process.argv.includes('--lifecycle')){
+    await request('replacement-late',1,{demandType:'Replacement'});
+    const before=(await db.query("select revision from hr_manpower_requests where id='replacement-late'")).rows[0].revision;
+    await db.query('select change_manpower_lifecycle($1,$2,$3,$4,$5,$6)',['replacement-late',before,'Close','Outstanding demand closed before outgoing details became known',null,null]);
+    const closed=(await db.query("select revision from hr_manpower_requests where id='replacement-late'")).rows[0].revision;
+    const closedCapacity=await capacity('replacement-late-line');
+    assert.equal((await link('late-information',[items[0]],'replacement-late-line',closed)).linked_count,1);
+    assert.deepEqual(await capacity('replacement-late-line'),closedCapacity);
+    assert.equal((await db.query("select state from hr_manpower_requests where id='replacement-late'")).rows[0].state,'Closed');
+  }
+  await db.exec("set test.denied='manpower.update'");await denied(()=>link('successful-link'),'42501');await db.exec("set test.denied=''");
+  await db.exec("set test.scope='Other'");assert.equal((await links()).length,0);await denied(()=>link('successful-link'),'42501');await db.exec("set test.scope='global'");
+  await denied(()=>db.exec('select * from manpower_private.replacement_link_batches'),'42501');
+  await denied(()=>db.exec('delete from hr_manpower_replacement_sources'),'42501');
+  await db.exec('reset role');await denied(()=>db.exec("update hr_manpower_replacement_sources set reason='Rewrite'"),'23514');
+  await denied(()=>db.exec('delete from manpower_private.replacement_link_batches'),'23514');
+  assert.deepEqual((await db.query("select record_id,data from hr_records where record_id like 'op-end-%' or record_id like 'ending-%' order by record_id")).rows,originalMasters);
+  for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_replacement_integrity.sql',import.meta.url),'utf8')))assert.equal(check.rows.length,0);
+  await db.exec('set role anon');await denied(()=>link('anonymous-link'),'42501');
+  console.log('Replacement source rehearsal passed: typed genuine ended references, new demand credit only after explicit actual confirmation, unchanged historical capacity/master records, bulk rollback, fresh evidence, authorization, immutable scoped references and idempotent replay. UI/live acceptance remain gated.');
 }
 await db.close();console.log('Reservation PostgreSQL rehearsal passed: 75-worker atomic batch, ineligible/capacity/duplicate rollback, bounded real assignments for 1000 demand, role/scope/tenant denial, order-independent idempotent replay, worker uniqueness, authoritative capacity and audit-failure rollback. Production and independent concurrency remain unverified.');
