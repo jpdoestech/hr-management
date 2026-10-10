@@ -701,3 +701,8 @@ explicit `node scripts/validate.mjs` and `git diff --check` passed. Browser
 fixture shutdown and temporary tab cleanup were verified. SQL setup and
 read-only diagnostics are documented in the header-amendments Markdown file.
 The unrelated untracked skill Python cache is excluded from publication.
+
+MP-A15 publication: `dff0cb6` pushed to `origin/main`; remote HEAD matched
+`dff0cb6b7a5a086fcf97020f35f2208d771beefe`. Staged diff checks passed.
+The specification is not complete; no live SQL or production deployment was
+performed by this workflow.
