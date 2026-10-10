@@ -660,3 +660,9 @@ confirmation/write and unlock on retained errors/cancel; the shared quantity
 editor receives the same protection. Fixture server shutdown verified and
 temporary browser tab closed/viewport reset. Historical read-only lifecycle
 documentation is preserved separately from the new transaction UI evidence.
+
+MP-A14 publication: implementation `0d6b77a` pushed to `origin/main`; remote
+HEAD verified. Staged diff checks passed; only this slice's files were staged.
+The existing untracked skill Python cache remains excluded. No production SQL
+was applied. Next: inspect submitted header/date/numbering amendment APIs and
+their immutable submission/registry guards before coordinated UI changes.
