@@ -2,9 +2,10 @@
 const modulePath=process.env.HRIS_PGLITE_MODULE||'@electric-sql/pglite';
 const {PGlite}=await import(modulePath);
 const {fuzzystrmatch}=await import(process.env.HRIS_PGLITE_MODULE?new URL('./contrib/fuzzystrmatch.js',modulePath).href:'@electric-sql/pglite/contrib/fuzzystrmatch');
+const {btree_gist}=await import(process.env.HRIS_PGLITE_MODULE?new URL('./contrib/btree_gist.js',modulePath).href:'@electric-sql/pglite/contrib/btree_gist');
 import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
-const db=new PGlite({extensions:{fuzzystrmatch}});
+const db=new PGlite({extensions:{fuzzystrmatch,btree_gist}});
 const tenant='00000000-0000-0000-0000-000000000001',other='00000000-0000-0000-0000-000000000002',actor='00000000-0000-0000-0000-000000000011',client='00000000-0000-0000-0000-000000000021';
 await db.exec(`create role authenticated;create role anon;create schema auth;
 create table auth.users(id uuid primary key);create table hr_tenants(id uuid primary key);
@@ -350,5 +351,50 @@ if(process.argv.includes('--scheduling')){
     assert.equal(check.rows.length,0);
   await db.exec('set role anon');await denied(()=>schedule(resolved,1,dates.second),'42501');
   console.log('Scheduling rehearsal passed: plan/reschedule/clear, ABA-safe revisions, scheduled remains reserved not fulfilled, actual dates untouched, explicit release retains schedule history, mandatory reasons/current-future dates, role/scope/tenant/RLS denial and audit rollback.');
+}
+if(process.argv.includes('--intervals')){
+  await db.exec('reset role');
+  await db.exec(readFileSync(new URL('../../supabase/proposals/0045_manpower_deployment_intervals.sql',import.meta.url),'utf8'));
+  await db.exec(`insert into hr_records select '${tenant}','onboardingCandidates','interval-candidate-'||number,
+    jsonb_build_object('id','interval-candidate-'||number,'name','ZEPPHYR INTERVAL FIXTURE '||number,'department','Production','stage','Applicant')
+    from generate_series(1,3) number;set role authenticated`);
+  await request('interval-fixture',3);
+  const batch=await reserve('interval-batch',Array.from({length:3},(_,i)=>({candidate_id:'interval-candidate-'+(i+1),line_id:'interval-fixture-line',hiring_category:'New Hire'})));
+  const dates=(await db.query(`select to_char((now() at time zone 'Asia/Manila')::date-4,'YYYY-MM-DD') start,
+    to_char((now() at time zone 'Asia/Manila')::date-2,'YYYY-MM-DD') boundary,
+    to_char((now() at time zone 'Asia/Manila')::date-1,'YYYY-MM-DD') finish,
+    to_char((now() at time zone 'Asia/Manila')::date+1,'YYYY-MM-DD') future`)).rows[0];
+  await db.exec('reset role');
+  const audit=(await db.query("insert into hr_audit_logs(tenant_id,user_name,action) values($1,'Fixture owner','Synthetic interval facts, not actual confirmation API') returning id",[tenant])).rows[0].id;
+  // Owner-only exact transition intents seed accounting facts; public confirmation is still gated.
+  async function fact(id,changes){
+    await db.exec('begin');
+    try{
+      await db.query(`insert into hr_manpower_reservation_intents select txid_current(),tenant_id,id,to_jsonb(r),to_jsonb(r)||$2::jsonb
+        from hr_manpower_reservations r where id=$1`,[id,changes]);
+      await db.query(`update hr_manpower_reservations set state=$2,employee_id=$3,worker_key='employee:'||$3,
+        actual_date=$4,ended_date=$5,confirmation_audit_id=$6 where id=$1`,[id,changes.state,changes.employee_id,changes.actual_date,changes.ended_date,changes.confirmation_audit_id]);
+      await db.exec('delete from hr_manpower_reservation_intents where transaction_id=txid_current();commit');
+    }catch(error){await db.exec('rollback');throw error;}
+  }
+  const ended={state:'Ended',employee_id:'interval-worker',worker_key:'employee:interval-worker',actual_date:dates.start,ended_date:dates.boundary,confirmation_audit_id:audit};
+  await fact(batch.reservation_ids[0],ended);
+  await denied(()=>fact(batch.reservation_ids[1],{...ended,ended_date:dates.finish}),'23P01');
+  for(const changes of [{actual_date:'infinity'},{actual_date:dates.future},{ended_date:dates.start},{ended_date:dates.future}])
+    await denied(()=>fact(batch.reservation_ids[1],{...ended,...changes}),'23514');
+  await fact(batch.reservation_ids[1],{...ended,actual_date:dates.boundary,ended_date:dates.finish});
+  await denied(()=>fact(batch.reservation_ids[2],{...ended,state:'Deployed',actual_date:dates.boundary,ended_date:null}),'23P01');
+  await denied(()=>fact(batch.reservation_ids[2],{...ended,state:'Deployed',actual_date:dates.finish}),'23514');
+  await fact(batch.reservation_ids[2],{...ended,state:'Deployed',actual_date:dates.finish,ended_date:null});
+  assert.equal((await db.query("select manpower_line_capacity('interval-fixture-line') result")).rows[0].result.fulfilled,3);
+  assert.equal((await db.query("select manpower_line_capacity('interval-fixture-line') result")).rows[0].result.active_deployed,1);
+  await fact(batch.reservation_ids[0],{...ended,state:'Reversed'});
+  await fact(batch.reservation_ids[1],{...ended,ended_date:dates.finish});
+  assert.equal((await db.query("select manpower_line_capacity('interval-fixture-line') result")).rows[0].result.fulfilled,2);
+  assert.equal((await db.query('select count(*)::int count from hr_manpower_reservations where id=$1',[batch.reservation_ids[0]])).rows[0].count,1);
+  assert.equal((await db.query('select * from hr_manpower_reservation_intents')).rows.length,0);
+  for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_deployment_intervals.sql',import.meta.url),'utf8')))
+    assert.equal(check.rows.length,0);
+  console.log('Deployment interval rehearsal passed: historical overlap rejected, adjacent half-open intervals accepted, invalid/future/empty dates rejected, active interval and historical fulfillment retained. Owner fixtures are not evidence of actual confirmation API or independent concurrency.');
 }
 await db.close();console.log('Reservation PostgreSQL rehearsal passed: 75-worker atomic batch, ineligible/capacity/duplicate rollback, bounded real assignments for 1000 demand, role/scope/tenant denial, order-independent idempotent replay, worker uniqueness, authoritative capacity and audit-failure rollback. Production and independent concurrency remain unverified.');
