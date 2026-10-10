@@ -26,6 +26,9 @@ insert into profiles values('${actor}','${tenant}','Fixture HR','Administrator',
 insert into hr_settings values('${tenant}','singleton','{"branchLocations":["Davao"],"departments":[{"name":"Production","active":true}],"positions":[{"name":"Operator","department":"Production","active":true}]}');`);
 for(const file of ['0033_manpower_client_catalog.sql','0034_manpower_draft_transactions.sql'])await db.exec(readFileSync(new URL('../../supabase/migrations/'+file,import.meta.url),'utf8'));
 for(const file of ['0035_manpower_prf_registry.sql','0036_manpower_submission.sql','0037_manpower_quantity_increases.sql','0038_manpower_identity_reviews.sql','0039_manpower_identity_review_revisions.sql','0040_manpower_reservations.sql'])await db.exec(readFileSync(new URL('../../supabase/proposals/'+file,import.meta.url),'utf8'));
+const interlock=process.argv.includes('--interlock');
+if(interlock)for(const file of ['0043_manpower_identity_refresh.sql','0044_manpower_scheduling.sql','0045_manpower_deployment_intervals.sql','0046_manpower_deployment_confirmation.sql','0047_manpower_source_interlock.sql'])
+  await db.exec(readFileSync(new URL('../../supabase/proposals/'+file,import.meta.url),'utf8'));
 await db.exec(`set test.actor='${actor}';set test.tenant='${tenant}';set role authenticated`);
 await db.query('select * from save_manpower_client($1,$2,true,0)',[client,'Fixture Client']);
 async function request(id,quantity){
@@ -252,7 +255,7 @@ if(process.argv.includes('--lifecycle')){
 }
 if(process.argv.includes('--identity-refresh')){
   await db.exec('reset role');
-  await db.exec(readFileSync(new URL('../../supabase/proposals/0043_manpower_identity_refresh.sql',import.meta.url),'utf8'));
+  if(!interlock)await db.exec(readFileSync(new URL('../../supabase/proposals/0043_manpower_identity_refresh.sql',import.meta.url),'utf8'));
   await db.exec(`insert into hr_records values('${tenant}','onboardingCandidates','refresh-unassigned',
     '{"id":"refresh-unassigned","name":"Unassigned review fixture","department":"Production","stage":"Applicant"}');`);
   await db.exec("update hr_records set data=data||'{\"remarks\":\"Updated applicant metadata\"}' where record_id='candidate76';set role authenticated;");
@@ -296,7 +299,7 @@ if(process.argv.includes('--identity-refresh')){
 }
 if(process.argv.includes('--scheduling')){
   await db.exec('reset role');
-  await db.exec(readFileSync(new URL('../../supabase/proposals/0044_manpower_scheduling.sql',import.meta.url),'utf8'));
+  if(!interlock)await db.exec(readFileSync(new URL('../../supabase/proposals/0044_manpower_scheduling.sql',import.meta.url),'utf8'));
   await db.exec(`insert into hr_records values
     ('${tenant}','onboardingCandidates','schedule-unresolved','{"id":"schedule-unresolved","name":"OLIVERA UNIQUE SCHEDULE FIXTURE","department":"Production","stage":"Applicant"}'),
     ('${tenant}','onboardingCandidates','schedule-resolved','{"id":"schedule-resolved","name":"DAWSON LINKED SCHEDULE FIXTURE","department":"Production","stage":"Applicant"}'),
@@ -355,7 +358,7 @@ if(process.argv.includes('--scheduling')){
 }
 if(process.argv.includes('--intervals')){
   await db.exec('reset role');
-  await db.exec(readFileSync(new URL('../../supabase/proposals/0045_manpower_deployment_intervals.sql',import.meta.url),'utf8'));
+  if(!interlock)await db.exec(readFileSync(new URL('../../supabase/proposals/0045_manpower_deployment_intervals.sql',import.meta.url),'utf8'));
   await db.exec(`insert into hr_records select '${tenant}','onboardingCandidates','interval-candidate-'||number,
     jsonb_build_object('id','interval-candidate-'||number,'name','ZEPPHYR INTERVAL FIXTURE '||number,'department','Production','stage','Applicant')
     from generate_series(1,3) number;set role authenticated`);
@@ -398,11 +401,11 @@ if(process.argv.includes('--intervals')){
     assert.equal(check.rows.length,0);
   console.log('Deployment interval rehearsal passed: historical overlap rejected, adjacent half-open intervals accepted, invalid/future/empty dates rejected, active interval and historical fulfillment retained. Owner fixtures are not evidence of actual confirmation API or independent concurrency.');
 }
-if(process.argv.includes('--confirmation')){
+if(process.argv.includes('--confirmation')||interlock){
   await db.exec('reset role');
   for(const [flag,file] of [['--scheduling','0044_manpower_scheduling.sql'],['--intervals','0045_manpower_deployment_intervals.sql']])
-    if(!process.argv.includes(flag))await db.exec(readFileSync(new URL('../../supabase/proposals/'+file,import.meta.url),'utf8'));
-  await db.exec(readFileSync(new URL('../../supabase/proposals/0046_manpower_deployment_confirmation.sql',import.meta.url),'utf8'));
+    if(!process.argv.includes(flag)&&!interlock)await db.exec(readFileSync(new URL('../../supabase/proposals/'+file,import.meta.url),'utf8'));
+  if(!interlock)await db.exec(readFileSync(new URL('../../supabase/proposals/0046_manpower_deployment_confirmation.sql',import.meta.url),'utf8'));
   const names=['ALVAREZ CLARISSE TAMAYO','DELGADO ROBERTO PASCUAL'];
   for(let index=0;index<2;index++){
     const id='confirm-'+index,source={id,name:names[index],department:'Production',stage:'Applicant'};
@@ -441,7 +444,7 @@ if(process.argv.includes('--confirmation')){
   await denied(()=>confirm('stale-confirm',selection.slice(0,2)),'40001');selection[0].schedule_revision=1;
   await db.exec("reset role;update hr_records set data=data||'{\"remarks\":\"New evidence\"}' where record_id='confirm-worker-0';set role authenticated");
   await denied(()=>confirm('stale-identity-confirm',selection.slice(0,2)),'23514');
-  if(!process.argv.includes('--identity-refresh')){
+  if(!process.argv.includes('--identity-refresh')&&!interlock){
     await db.exec('reset role');await db.exec(readFileSync(new URL('../../supabase/proposals/0043_manpower_identity_refresh.sql',import.meta.url),'utf8'));await db.exec('set role authenticated');
   }
   await reviewIdentity(0);
@@ -536,5 +539,36 @@ if(process.argv.includes('--confirmation')){
     assert.equal(check.rows.length,0);
   await db.exec('set role anon');await denied(()=>confirm('anonymous',selection.slice(0,2)),'42501');
   console.log('Actual confirmation rehearsal passed: same-row reserved-to-fulfilled accounting, individual date overrides, past-date reasons, current identity and new-duplicate gates, schedule revision, all-or-nothing unresolved/audit rollback, idempotent replay, RLS/access denial and unchanged employee master. Conversion, transfers, legacy/on-call reconciliation, live and independent concurrency remain gated.');
+}
+if(interlock){
+  await db.exec('set role authenticated');
+  await denied(()=>db.query('select manpower_private.reserve_manpower_applicants($1,$2)',['bypass',[]]),'42501');
+  await denied(()=>db.query('select manpower_private.lock_source_snapshot($1)',[tenant]),'42501');
+  const oldPair=(await db.query("select preview_manpower_identity_review('confirm-0','confirm-worker-0') result")).rows[0].result;
+  await denied(()=>db.query('select record_manpower_identity_review($1,$2,$3,$4,$5,$6)',[oldPair.candidate_id,oldPair.employee_id,'SamePerson','Legacy wrapper cannot overwrite a review',oldPair.candidate_fingerprint,oldPair.employee_fingerprint]),'40001');
+  await db.exec('reset role');await db.exec('begin');
+  await db.exec("update hr_records set data=data||'{\"remarks\":\"Source gate test\"}' where record_id='duplicate'");
+  assert.equal((await db.query("select count(*)::int count from pg_locks where locktype='advisory' and pid=pg_backend_pid() and granted")).rows[0].count,1);
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[other,'employees','other-tenant-source',{id:'other-tenant-source',name:'OTHER TENANT SYNTHETIC'}]);
+  assert.equal((await db.query("select count(*)::int count from pg_locks where locktype='advisory' and pid=pg_backend_pid() and granted")).rows[0].count,2);
+  await db.exec('rollback');await db.exec('reset role');await db.exec('begin');
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'leaves','unrelated-lock-fixture',{id:'unrelated-lock-fixture'}]);
+  assert.equal((await db.query("select count(*)::int count from pg_locks where locktype='advisory' and pid=pg_backend_pid() and granted")).rows[0].count,0);
+  await db.exec('rollback');await db.exec('reset role');await db.exec('begin isolation level repeatable read');
+  await denied(()=>db.exec("update hr_records set data=data||'{\"remarks\":\"Stale snapshot\"}' where record_id='duplicate'"),'25000');
+  await db.exec('rollback;begin isolation level repeatable read;set local role authenticated');
+  await denied(()=>reserve('stale-snapshot',[]),'25000');await db.exec('rollback');await db.exec('reset role');
+  await db.exec('begin isolation level serializable');
+  await db.exec("update hr_records set data=data||'{\"remarks\":\"Serializable source write\"}' where record_id='duplicate'");
+  await db.exec('rollback');
+  await denied(()=>db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'oncall','conflicting-oncall',{employeeId:'confirm-worker-0'}]),'23514');
+  await denied(()=>db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'oncall','conflicting-name-oncall',{employeeName:'ALVAREZ CLARISSE TAMAYO'}]),'23514');
+  await denied(()=>db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'manpowerSlots','conflicting-slot',{requestId:'unrelated-legacy',candidateId:'confirm-0'}]),'23514');
+  await db.exec('begin');
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'oncall','replacement-target-only',{employeeName:'UNRELATED REPLACEMENT PERSON',employeeReplaced:'ALVAREZ CLARISSE TAMAYO'}]);
+  await db.exec('rollback');
+  for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_source_interlock.sql',import.meta.url),'utf8')))
+    assert.equal(check.rows.length,0);
+  console.log('Source interlock rehearsal passed: private body/helper denial, source-only transaction lock, repeatable-read rejection, legacy slot/on-call conflicts and replaced-person distinction. Wrapped reservation, identity, schedule and confirmation behavior passes; independent connections, deadlock/retry UX and live baseline remain unverified.');
 }
 await db.close();console.log('Reservation PostgreSQL rehearsal passed: 75-worker atomic batch, ineligible/capacity/duplicate rollback, bounded real assignments for 1000 demand, role/scope/tenant denial, order-independent idempotent replay, worker uniqueness, authoritative capacity and audit-failure rollback. Production and independent concurrency remain unverified.');

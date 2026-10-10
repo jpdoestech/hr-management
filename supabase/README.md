@@ -12,6 +12,11 @@ This directory is the single source of truth for the HRIS database.
 
 ## Migration rules
 
+Proposal 0047 adds a tenant source-writer interlock and private transaction bodies
+while preserving public RPC signatures. It is deployment gated pending independent
+session testing, dependency/cache/isolation checks and deadlock/retry UX validation.
+See `docs/MANPOWER-FULFILLMENT-SOURCE-INTERLOCK.md`.
+
 Proposal 0046 adds resolved-identity individual/bulk actual confirmation with
 idempotent tokens and immutable history. It remains deployment gated; controlled
 conversion, transfer/reversal, legacy/on-call integration and mutation UI are
