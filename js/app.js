@@ -14,10 +14,11 @@ import {manpowerCSV} from './core/manpower-export.js?v=20261010-1';
 import {newManpowerDraft,validateManpowerDraft} from './core/manpower-draft.js?v=20261009-1';
 import {manpowerDraftEditorHTML,manpowerDraftLinesHTML,manpowerDraftPositionOptionsHTML,readManpowerDraft} from './manpower/draft-editor.js?v=20261010-1';
 import {reviewManpowerSubmission,manpowerSubmissionReviewHTML,manpowerSubmissionError} from './manpower/submission-review.js?v=20261010-1';
-import {loadSubmittedRequests,loadSubmittedRequest,loadSubmittedRows,submittedListRowsHTML,submittedHeaderHTML,submittedTableHTML} from './manpower/submitted-workspace.js?v=20261010-6';
+import {loadSubmittedRequests,loadSubmittedRequest,loadSubmittedRows,submittedListRowsHTML,submittedHeaderHTML,submittedTableHTML} from './manpower/submitted-workspace.js?v=20261010-7';
 import {quantityAmendmentPayload,quantityAmendmentHTML,quantityAmendmentError} from './manpower/quantity-editor.js?v=20261010-1';
 import {LIFECYCLE_LABELS,lifecycleOperations,lifecycleActionsHTML,lifecyclePayload,lifecycleEditorHTML,lifecycleResultValid,lifecycleError} from './manpower/lifecycle-editor.js?v=20261010-2';
 import {HEADER_AMENDMENT_FIELDS,readHeaderAmendment,headerAmendmentPayload,headerEditorHTML,headerAmendmentResultValid,headerAmendmentError} from './manpower/header-editor.js?v=20261010-1';
+import {loadLineCapacity,lineCapacityHTML,capacityErrorHTML} from './manpower/capacity-summary.js?v=20261010-1';
 import {readManpowerPaste,detectManpowerPasteMapping,previewManpowerPaste} from './core/manpower-paste.js?v=20261009-1';
 import {manpowerPasteMappingHTML,manpowerPastePreviewHTML} from './manpower/paste-preview.js?v=20261009-1';
 import { measureAsync, recordPerformance, performanceSnapshot } from './core/performance.js?v=20261002-1';
@@ -8188,6 +8189,20 @@ async function manpowerSubmittedPageGo(scope,page){if(MANPOWER_SUBMITTED_UI.savi
 async function manpowerSubmittedPageSize(scope,size){if(MANPOWER_SUBMITTED_UI.saving||!scope.startsWith('manpower:submitted')||![10,25,50].includes(Number(size)))return;if(MANPOWER_SUBMITTED_UI.edit&&!(await resolveManpowerQuantityEdit()))return;STATE.tablePages[scope]={page:1,size:Number(size)};if(STATE.view==='manpowerSubmitted')await renderManpowerSubmitted();else if(STATE.view==='manpowerSubmittedDetails')await renderManpowerSubmittedDetails();}
 function manpowerSubmittedInfo(){openModal('<div class="modal-head"><h3>Quantity definitions</h3><button onclick="closeModal()" aria-label="Close">&times;</button></div><div class="modal-body"><p>Original is the immutable headcount first submitted. Authorized is the current approved quantity. Cancelled is outstanding demand formally cancelled, not deployed history. Open requests permit reasoned quantity amendments where the reviewed backend has been released; reserved and historical fulfilled commitments are checked by the database. Submission History records the initial baseline. Amendments records previous and revised quantities with reasons. Lifecycle History records reasoned cancellations, closures and reopening where lifecycle storage has been deployed. Reopening does not restore cancelled demand. Reservations and deployment entry are not enabled in this workspace.</p></div><div class="modal-foot"><button type="button" class="btn btn-ghost" onclick="closeModal()">Close</button></div>');}
 
+async function showManpowerLineCapacity(id,button){
+  if(!SESSION||STATE.view!=='manpowerSubmittedDetails'||!hasPermission('manpower.view')||MANPOWER_SUBMITTED_UI.saving||button.disabled)return;
+  const line=MANPOWER_SUBMITTED_UI.rows.find(row=>row.id===id),requestId=STATE.manpowerSubmittedId;
+  const host=button.parentElement.querySelector('[data-line-capacity]');
+  if(!line||line.request_id!==requestId||!host?.isConnected)return;
+  const sessionId=SESSION.id,revision=MANPOWER_SUBMITTED_UI.record?.revision;
+  button.disabled=true;host.setAttribute('aria-busy','true');host.innerHTML='<p role="status">Loading capacity...</p>';
+  const current=()=>host.isConnected&&SESSION?.id===sessionId&&STATE.view==='manpowerSubmittedDetails'&&STATE.manpowerSubmittedId===requestId&&MANPOWER_SUBMITTED_UI.record?.revision===revision&&hasPermission('manpower.view');
+  try{
+    const data=await loadLineCapacity(supabase,id);
+    if(current()){host.innerHTML=lineCapacityHTML(data);button.textContent='Refresh capacity';}
+  }catch(error){if(current()){host.innerHTML=capacityErrorHTML(error);button.textContent='Retry capacity';}}
+  finally{button.disabled=false;host.removeAttribute('aria-busy');}
+}
 function manpowerQuantityEditDirty(){
   const edit=MANPOWER_SUBMITTED_UI.edit;
   if(edit?.kind==='header')return Boolean(document.getElementById('mp_header_editor')?.isConnected&&(JSON.stringify(readHeaderAmendment(document))!==JSON.stringify(edit.baseline)||document.getElementById('mp_header_reason').value!==''));
@@ -10918,6 +10933,7 @@ Object.assign(window, {
   openManpowerQuantityAmendment,saveManpowerQuantityAmendment,discardManpowerQuantityAmendment,
   openManpowerLifecycle,saveManpowerLifecycle,
   openManpowerHeaderAmendment,saveManpowerHeaderAmendment,
+  showManpowerLineCapacity,
   renderClientCatalog, clientCatalogPageGo, clientCatalogPageSize, openClientAccountForm, saveClientAccount,
   syncEmployeeStatusReason,
   renderAttendance, attendanceFilter, exportAttendance,

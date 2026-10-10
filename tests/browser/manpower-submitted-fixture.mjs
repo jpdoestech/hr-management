@@ -14,6 +14,7 @@ import {paginationMeta,paginationHTML} from '/js/core/pagination.js';
 import {quantityAmendmentPayload,quantityAmendmentHTML,quantityAmendmentError} from '/js/manpower/quantity-editor.js';
 import {LIFECYCLE_LABELS,lifecycleOperations,lifecycleActionsHTML,lifecyclePayload,lifecycleEditorHTML,lifecycleResultValid,lifecycleError} from '/js/manpower/lifecycle-editor.js';
 import {HEADER_AMENDMENT_FIELDS,readHeaderAmendment,headerAmendmentPayload,headerEditorHTML,headerAmendmentResultValid,headerAmendmentError} from '/js/manpower/header-editor.js';
+import {loadLineCapacity,lineCapacityHTML,capacityErrorHTML} from '/js/manpower/capacity-summary.js';
 const SESSION={id:'fixture-user'};const STATE={view:'manpowerSubmitted'};const hasPermission=()=>true;
 const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 const iSearch=()=>'';const iInfo=()=>'<span aria-hidden="true">i</span>';
@@ -39,6 +40,12 @@ const lifecycle=Array.from({length:31},(_,index)=>({request_id:'request0',reques
   operation:index%2?'Reopen':'Close',previous_state:index%2?'Closed':'Open',current_state:index%2?'Open':'Closed',
   reason:'Synthetic lifecycle reason '+(index+1)+'. '+('Historical fulfillment is preserved. '.repeat(8))}));
 const supabase={rpc:async(name,payload)=>{
+  if(name==='manpower_line_capacity'){
+    if(location.search.includes('missing-capacity'))return {error:{code:'PGRST202'}};
+    const line=lines.find(row=>row.id===payload.p_line);
+    if(!line)return {error:{code:'42501'}};
+    return {data:{original_requested:line.original_requested,current_authorized:line.current_authorized,cancelled_unfilled:line.cancelled_unfilled,effective_capacity:line.current_authorized-line.cancelled_unfilled,reserved:3,scheduled:1,fulfilled:2,active_deployed:1,available:line.current_authorized-line.cancelled_unfilled-5}};
+  }
   if(name==='amend_manpower_header'){
     if(location.search.includes('missing-header-rpc'))return {error:{code:'PGRST202'}};
     if(location.search.includes('duplicate-header'))return {error:{code:'23505'}};

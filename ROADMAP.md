@@ -706,3 +706,18 @@ MP-A15 publication: `dff0cb6` pushed to `origin/main`; remote HEAD matched
 `dff0cb6b7a5a086fcf97020f35f2208d771beefe`. Staged diff checks passed.
 The specification is not complete; no live SQL or production deployment was
 performed by this workflow.
+
+- MP-A16: lazy authoritative requisition-line capacity disclosure. Reuses the
+  reviewed `manpower_line_capacity(text)` API with strict integer/arithmetic
+  result verification, refresh/retry, accessible announcements and stale-read
+  guards. No worker hydration, per-page N+1 reads, schema/configuration changes
+  or live SQL. Applicable SQL diagnostics are in
+  `docs/MANPOWER-FULFILLMENT-LINE-CAPACITY-UI.md`. Eight focused tests passed;
+  synthetic browser disclosure/refresh/missing-RPC and 390/768/1440 document
+  containment verified. Tablet summary adjusted from three to two columns.
+  Request totals and worker lists are not yet implemented by this change.
+
+MP-A16 validation: lint, 302 automated tests, production build, explicit
+repository validation and diff checks passed. Synthetic fixture server exited
+successfully after shutdown; temporary browser tab closed and viewport reset.
+Full specification remains incomplete and production release gates unchanged.
