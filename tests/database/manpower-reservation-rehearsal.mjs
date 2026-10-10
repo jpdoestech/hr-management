@@ -839,4 +839,73 @@ if(process.argv.includes('--ending')){
   await db.exec('set role anon');await denied(()=>end('anonymous-ending'),'42501');
   console.log('Deployment ending rehearsal passed: half-open genuine endings retain fulfillment, bulk all-or-nothing audit/late-row rollback, stale/invalid/access denials, reauthorized order-independent retries, immutable scoped history and unchanged source employment data. Transfer/reversal, UI and independent/live acceptance remain gated.');
 }
+if(process.argv.includes('--shared-intervals')){
+  if(!process.argv.includes('--ending'))throw new Error('Shared interval rehearsal requires --interlock --ending');
+  await db.exec('reset role');
+  await db.exec(readFileSync(new URL('../../supabase/proposals/0052_manpower_shared_primary_intervals.sql',import.meta.url),'utf8'));
+  const original=(await db.query("select * from hr_manpower_reservations where line_id='ending-line' and employee_id='ending-worker-1'")).rows[0];
+  const now=(await db.query('select now()::text value')).rows[0].value;
+  const base={tenant_id:tenant,id:'10000000-0000-0000-0000-000000000001',employee_id:original.employee_id,candidate_id:original.candidate_id,
+    origin_kind:'reservation',origin_id:original.id,client_id:client,branch_reporting:'Davao',department:'Production',position:'Operator',
+    state:'Deployed',actual_date:original.ended_date.toISOString().slice(0,10),ended_date:null,reason:'Synthetic non-credited destination',
+    created_by:actor,created_at:now,audit_id:original.confirmation_audit_id,end_audit_id:null,end_reason:null};
+  const insert=async(row,intent=true)=>{
+    await db.exec('begin');
+    try{
+      if(intent)await db.query('insert into manpower_private.operational_intents select txid_current(),tenant_id,id,null,to_jsonb(r) from jsonb_populate_record(null::hr_manpower_operational_deployments,$1) r',[row]);
+      await db.query('insert into hr_manpower_operational_deployments select * from jsonb_populate_record(null::hr_manpower_operational_deployments,$1)',[row]);
+      await db.exec('delete from manpower_private.operational_intents where transaction_id=txid_current()');await db.exec('commit');
+    }catch(error){await db.exec('rollback');throw error;}
+  };
+  const update=async(row)=>{
+    await db.exec('begin');
+    try{
+      await db.query('insert into manpower_private.operational_intents select txid_current(),r.tenant_id,r.id,to_jsonb(old),to_jsonb(r) from jsonb_populate_record(null::hr_manpower_operational_deployments,$1) r join hr_manpower_operational_deployments old on old.tenant_id=r.tenant_id and old.id=r.id',[row]);
+      await db.query('update hr_manpower_operational_deployments set state=$2,ended_date=$3,end_audit_id=$4,end_reason=$5 where id=$1',[row.id,row.state,row.ended_date,row.end_audit_id,row.end_reason]);
+      await db.exec('delete from manpower_private.operational_intents where transaction_id=txid_current()');await db.exec('commit');
+    }catch(error){await db.exec('rollback');throw error;}
+  };
+  const projection=async()=>(await db.query('select * from manpower_private.primary_intervals')).rows;
+  const before=await projection();
+  assert.equal(before.length,(await db.query("select count(*)::int count from hr_manpower_reservations where state in ('Deployed','Ended')")).rows[0].count);
+  const creditBefore=(await db.query("select manpower_line_capacity('ending-line') result")).rows[0].result;
+  await denied(()=>insert(base,false),'23514');
+  await denied(()=>insert({...base,origin_id:'ffffffff-ffff-ffff-ffff-ffffffffffff'}),'23514');
+  await denied(()=>insert({...base,branch_reporting:'Unknown'}),'23514');
+  await denied(()=>insert({...base,actual_date:original.actual_date.toISOString().slice(0,10)}),'23514');
+  await insert(base);assert.equal((await projection()).length,before.length+1);
+  await db.exec('begin');
+  await db.query("insert into hr_manpower_reservation_intents select txid_current(),tenant_id,id,to_jsonb(r),to_jsonb(r)||jsonb_build_object('state','Deployed','ended_date',null) from hr_manpower_reservations r where id=$1",[original.id]);
+  await denied(()=>db.query("update hr_manpower_reservations set state='Deployed',ended_date=null where id=$1",[original.id]),'23P01');
+  await db.exec('rollback');
+  assert.equal((await projection()).find(row=>row.source_id===original.id).ended_date.toISOString().slice(0,10),base.actual_date);
+  assert.deepEqual((await db.query("select manpower_line_capacity('ending-line') result")).rows[0].result,creditBefore);
+  await denied(()=>insert({...base,id:'10000000-0000-0000-0000-000000000002'}),'23P01');
+  await denied(()=>db.exec("update hr_records set data=data||'{\"name\":\"Unreviewed rename\"}' where record_id='ending-worker-1'"),'23514');
+  await denied(()=>db.exec("delete from hr_records where record_id='ending-candidate-1'"),'23514');
+  await denied(()=>db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'oncall','operational-oncall',{employeeId:base.employee_id}]),'23514');
+  await denied(()=>db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'oncall','operational-name-oncall',{employeeName:'BALMONT OCTAVIA SILVERWICK'}]),'23514');
+  await denied(()=>db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'manpowerSlots','operational-slot',{candidateId:base.candidate_id}]),'23514');
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'employees','operational-module-shift',{id:'operational-module-shift',name:'UNRELATED SYNTHETIC SOURCE'}]);
+  await denied(()=>db.query("update hr_records set module='oncall',data=$1 where record_id='operational-module-shift'",[{employeeId:base.employee_id}]),'23514');
+  await db.exec('set role authenticated');
+  await request('operational-conflict',1);
+  await denied(()=>reserve('operational-conflict',[{candidate_id:base.candidate_id,line_id:'operational-conflict-line',hiring_category:'Existing Employee / Transfer'}]),'23514');
+  assert.equal((await db.query('select * from hr_manpower_operational_deployments')).rows.length,1);
+  await db.exec("set test.scope='Other'");assert.equal((await db.query('select * from hr_manpower_operational_deployments')).rows.length,0);await db.exec("set test.scope='global'");
+  await denied(()=>db.exec('select * from manpower_private.primary_intervals'),'42501');
+  await denied(()=>db.query('insert into hr_manpower_operational_deployments select * from jsonb_populate_record(null::hr_manpower_operational_deployments,$1)',[base]),'42501');
+  await db.exec('reset role');
+  await denied(()=>db.exec('delete from hr_manpower_operational_deployments'),'23514');
+  const today=(await db.query("select to_char((now() at time zone 'Asia/Manila')::date,'YYYY-MM-DD') value")).rows[0].value;
+  const ended={...base,state:'Ended',ended_date:today,end_audit_id:original.confirmation_audit_id,end_reason:'Synthetic operational ending'};
+  await denied(()=>update({...ended,end_reason:null}),'23514');
+  await update(ended);assert.equal((await projection()).find(row=>row.source_id===base.id).ended_date.toISOString().slice(0,10),today);
+  await denied(()=>insert({...base,id:'10000000-0000-0000-0000-000000000003'}),'23P01');
+  await insert({...base,id:'10000000-0000-0000-0000-000000000004',origin_kind:'operational',origin_id:base.id,actual_date:today});
+  assert.equal((await projection()).length,before.length+2);
+  assert.deepEqual((await db.query("select manpower_line_capacity('ending-line') result")).rows[0].result,creditBefore);
+  for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_primary_intervals.sql',import.meta.url),'utf8')))assert.equal(check.rows.length,0);
+  console.log('Shared primary interval rehearsal passed: unchanged reservation backfill, cross-ledger/history overlap rejection, adjacent non-credited chain, guarded intents, source/legacy/reservation conflicts, private/RLS denial and unchanged PRF capacity. Owner fixtures are not a public atomic transfer API or live acceptance.');
+}
 await db.close();console.log('Reservation PostgreSQL rehearsal passed: 75-worker atomic batch, ineligible/capacity/duplicate rollback, bounded real assignments for 1000 demand, role/scope/tenant denial, order-independent idempotent replay, worker uniqueness, authoritative capacity and audit-failure rollback. Production and independent concurrency remain unverified.');
