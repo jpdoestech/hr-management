@@ -292,4 +292,63 @@ if(process.argv.includes('--identity-refresh')){
   await db.exec('set role anon');await denied(()=>review(changed),'42501');
   console.log('Identity refresh rehearsal passed: unchanged resolved refresh under reservations, stale-source/revision handling, unresolved assignment re-key protection, unassigned review corrections, immutable worker/capacity, audit rollback, permissions/scopes/tenants/anonymous denial and legacy/unknown-ledger gates.');
 }
+if(process.argv.includes('--scheduling')){
+  await db.exec('reset role');
+  await db.exec(readFileSync(new URL('../../supabase/proposals/0044_manpower_scheduling.sql',import.meta.url),'utf8'));
+  await db.exec(`insert into hr_records values
+    ('${tenant}','onboardingCandidates','schedule-unresolved','{"id":"schedule-unresolved","name":"OLIVERA UNIQUE SCHEDULE FIXTURE","department":"Production","stage":"Applicant"}'),
+    ('${tenant}','onboardingCandidates','schedule-resolved','{"id":"schedule-resolved","name":"DAWSON LINKED SCHEDULE FIXTURE","department":"Production","stage":"Applicant"}'),
+    ('${tenant}','employees','schedule-worker','{"id":"schedule-worker","name":"DAWSON LINKED SCHEDULE FIXTURE","department":"Production"}');set role authenticated;`);
+  await request('scheduling',2);
+  const pair=(await db.query("select preview_manpower_identity_review('schedule-resolved','schedule-worker') result")).rows[0].result;
+  await db.query('select record_manpower_identity_review($1,$2,$3,$4,$5,$6,$7)',[pair.candidate_id,pair.employee_id,'SamePerson','Verified scheduling fixture identity',pair.candidate_fingerprint,pair.employee_fingerprint,0]);
+  await reserve('schedule-fixture',[{candidate_id:'schedule-unresolved',line_id:'scheduling-line',hiring_category:'New Hire'},
+    {candidate_id:'schedule-resolved',line_id:'scheduling-line',hiring_category:'Rehire'}]);
+  const row=async(candidate)=>(await db.query('select * from hr_manpower_reservations where candidate_id=$1',[candidate])).rows[0];
+  const unlinked=(await row('schedule-unresolved')).id,resolved=(await row('schedule-resolved')).id;
+  const dates=(await db.query(`select to_char((now() at time zone 'Asia/Manila')::date+1,'YYYY-MM-DD') "first",to_char((now() at time zone 'Asia/Manila')::date+2,'YYYY-MM-DD') "second",to_char((now() at time zone 'Asia/Manila')::date-1,'YYYY-MM-DD') past`)).rows[0];
+  const schedule=async(id,revision,date,reason='Approved deployment plan')=>
+    (await db.query('select schedule_manpower_reservation($1,$2,$3,$4) result',[id,revision,date,reason])).rows[0].result;
+  const counters=async()=>(await db.query("select manpower_line_capacity('scheduling-line') result")).rows[0].result;
+  await denied(()=>schedule(unlinked,0,dates.past),'23514');
+  await denied(()=>schedule(unlinked,0,'infinity'),'23514');
+  for(const reason of ['',null,'x'.repeat(1001)])await denied(()=>schedule(unlinked,0,dates.first,reason),'23514');
+  await denied(()=>schedule(unlinked,-1,dates.first),'23514');await denied(()=>schedule(unlinked,0,null),'23514');
+  for(const key of ['onboarding.update','onboarding.view','manpower.view']){
+    await db.query('select set_config($1,$2,false)',['test.denied',key]);await denied(()=>schedule(unlinked,0,dates.first),'42501');
+  }
+  await db.exec("set test.denied='employees.view'");await denied(()=>schedule(resolved,0,dates.first),'42501');
+  await db.exec("set test.denied='';set test.scope='Other'");await denied(()=>schedule(unlinked,0,dates.first),'42501');
+  await db.exec(`set test.scope='global';set test.tenant='${other}'`);await denied(()=>schedule(unlinked,0,dates.first),'42501');
+  await db.exec(`set test.tenant='${tenant}'`);
+  assert.equal((await schedule(unlinked,0,dates.first)).schedule_revision,1);
+  assert.equal((await counters()).reserved,2);assert.equal((await counters()).scheduled,1);
+  assert.equal((await counters()).fulfilled,0);assert.equal((await counters()).available,0);
+  assert.equal((await row('schedule-unresolved')).actual_date,null);
+  await denied(()=>schedule(unlinked,0,dates.second),'40001');
+  await denied(()=>schedule(unlinked,1,dates.first),'23514');
+  assert.equal((await schedule(unlinked,1,dates.second)).schedule_revision,2);
+  assert.equal((await schedule(unlinked,2,dates.first)).schedule_revision,3);
+  await denied(()=>schedule(unlinked,1,dates.second),'40001');
+  const cleared=await schedule(unlinked,3,null);assert.equal(cleared.state,'Reserved');assert.equal(cleared.scheduled_date,null);
+  assert.equal((await counters()).reserved,2);assert.equal((await counters()).scheduled,0);assert.equal((await counters()).fulfilled,0);
+  await schedule(unlinked,4,dates.first);await db.query('select release_manpower_reservation($1,$2)',[unlinked,'Released planned applicant']);
+  await denied(()=>schedule(unlinked,5,dates.second),'23514');assert.equal((await counters()).available,1);
+  assert.equal((await row('schedule-unresolved')).schedule_revision,5);
+  assert.equal((await schedule(resolved,0,dates.first)).schedule_revision,1);
+  await db.exec("reset role;alter table hr_audit_logs add constraint fail_schedule check(action not like '%Reason: schedule audit failure') not valid;set role authenticated;");
+  await denied(()=>schedule(resolved,1,dates.second,'schedule audit failure'),'23514');
+  assert.equal((await row('schedule-resolved')).schedule_revision,1);
+  assert.equal((await db.query('select * from hr_manpower_schedule_history where reservation_id=$1',[resolved])).rows.length,1);
+  assert.equal((await counters()).reserved,1);assert.equal((await counters()).scheduled,1);assert.equal((await counters()).fulfilled,0);
+  await db.exec("set test.denied='onboarding.view'");assert.equal((await db.query('select * from hr_manpower_schedule_history')).rows.length,0);
+  await db.exec("set test.denied='';reset role");
+  await denied(()=>db.exec("update hr_manpower_schedule_history set reason='Rewrite'"),'23514');
+  await denied(()=>db.exec("update hr_manpower_reservations set schedule_revision=99 where candidate_id='schedule-resolved'"),'23514');
+  assert.equal((await db.query('select * from hr_manpower_reservation_intents')).rows.length,0);
+  for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_schedule_integrity.sql',import.meta.url),'utf8')))
+    assert.equal(check.rows.length,0);
+  await db.exec('set role anon');await denied(()=>schedule(resolved,1,dates.second),'42501');
+  console.log('Scheduling rehearsal passed: plan/reschedule/clear, ABA-safe revisions, scheduled remains reserved not fulfilled, actual dates untouched, explicit release retains schedule history, mandatory reasons/current-future dates, role/scope/tenant/RLS denial and audit rollback.');
+}
 await db.close();console.log('Reservation PostgreSQL rehearsal passed: 75-worker atomic batch, ineligible/capacity/duplicate rollback, bounded real assignments for 1000 demand, role/scope/tenant denial, order-independent idempotent replay, worker uniqueness, authoritative capacity and audit-failure rollback. Production and independent concurrency remain unverified.');
