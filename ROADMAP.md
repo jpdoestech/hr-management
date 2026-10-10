@@ -594,4 +594,9 @@ scroll internally, mobile summaries use two columns and submit targets are
 44px high. Temporary browser viewport reset and fixture server stopped.
 No native PostgreSQL runtime, installation or production database operation.
 
+MP-A12 publication: implementation `f1eecf4` pushed to `origin/main`; remote
+HEAD verified. Only this feature's application/test/docs files were staged.
+The skill search generated an untracked Python cache, excluded from the commit;
+its cleanup was blocked by the execution policy. No existing user files changed.
+
 Release gates: verify the live migration baseline and legacy data, rehearse compatible proposals, validate independent concurrent transactions and production authorization, then coordinate database and application enablement. No completion claim until these gates and the specification acceptance criteria pass.
