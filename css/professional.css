@@ -1837,6 +1837,16 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
 .manpower-draft-editor input,.manpower-draft-editor select{height:36px;font-size:13px;}
 .manpower-draft-editor textarea,.manpower-draft-editor label{font-size:13px;}
 .manpower-draft-footer{position:sticky;bottom:0;z-index:3;display:flex;justify-content:flex-end;gap:8px;padding:12px 0;background:var(--bg,#fff);border-top:1px solid var(--border);}
+.manpower-draft-footer{flex-wrap:wrap;}
+.manpower-submission-review{min-width:0;border-top:1px solid var(--border);padding-top:16px;scroll-margin-block:80px;}
+.manpower-submission-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:12px;margin:12px 0;}
+.manpower-submission-summary dt{font-size:12px;color:var(--muted);}
+.manpower-submission-summary dd{margin:4px 0 0;overflow-wrap:anywhere;}
+.manpower-submission-review .tablewrap{max-height:360px;overflow:auto;}
+.manpower-submission-review th{position:sticky;top:0;background:var(--bg);}
+.manpower-submission-review td{overflow-wrap:anywhere;}
+.manpower-submission-review button{min-height:44px;scroll-margin-block:100px;}
+.manpower-draft-editor #md_errors{white-space:pre-line;}
 .manpower-paste-panel{min-width:0;margin-bottom:12px;border:1px solid var(--border);border-radius:6px;}
 .manpower-paste-panel>summary{padding:10px 12px;font-size:13px;font-weight:600;cursor:pointer;}
 .manpower-paste-body{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:0 12px 12px;min-width:0;}

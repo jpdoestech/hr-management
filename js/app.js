@@ -12,7 +12,8 @@ import { roleCanExport } from './core/export-access.js?v=20260930-1';
 import { manpowerRequestSummary, manpowerRequestTotals, requirementSlotCounts, slotChronologyIssues, slotMetrics } from './core/manpower.js?v=20260930-1';
 import {manpowerCSV} from './core/manpower-export.js?v=20261010-1';
 import {newManpowerDraft,validateManpowerDraft} from './core/manpower-draft.js?v=20261009-1';
-import {manpowerDraftEditorHTML,manpowerDraftLinesHTML,manpowerDraftPositionOptionsHTML,readManpowerDraft} from './manpower/draft-editor.js?v=20261009-4';
+import {manpowerDraftEditorHTML,manpowerDraftLinesHTML,manpowerDraftPositionOptionsHTML,readManpowerDraft} from './manpower/draft-editor.js?v=20261010-1';
+import {reviewManpowerSubmission,manpowerSubmissionReviewHTML,manpowerSubmissionError} from './manpower/submission-review.js?v=20261010-1';
 import {loadSubmittedRequests,loadSubmittedRequest,loadSubmittedRows,submittedListRowsHTML,submittedHeaderHTML,submittedTableHTML} from './manpower/submitted-workspace.js?v=20261010-3';
 import {readManpowerPaste,detectManpowerPasteMapping,previewManpowerPaste} from './core/manpower-paste.js?v=20261009-1';
 import {manpowerPasteMappingHTML,manpowerPastePreviewHTML} from './manpower/paste-preview.js?v=20261009-1';
@@ -7923,7 +7924,7 @@ function renderManpowerFulfillment(){
   requestAnimationFrame(()=>enhanceDataTables());
 }
 
-const MANPOWER_DRAFT_UI={draft:null,catalogs:null,request:0,saving:false};
+const MANPOWER_DRAFT_UI={draft:null,saved:null,review:null,catalogs:null,request:0,saving:false};
 async function renderManpowerDrafts(){
   if(!SESSION||!hasPermission('manpower.view')){toast('Manpower access denied.',true);return;}
   setTitle('Manpower Fulfillment / Quantity Drafts','Uncommitted requisition drafts');
@@ -7945,7 +7946,7 @@ async function renderManpowerDrafts(){
     host.innerHTML=`<div class="tablewrap"><table class="data-table" data-server-paginated="true" data-table-tools="external"><thead><tr><th>PRF Number</th><th>Reporting Branch</th><th>Requested</th><th>Target</th><th>Updated</th><th>Action</th></tr></thead><tbody>${(data||[]).map(row=>`<tr><td>${esc(row.prf_number||'Unnumbered draft')}</td><td>${esc(row.branch_reporting||'Not selected')}</td><td>${fmtDate(row.date_requested)}</td><td>${fmtDate(row.target_date)}</td><td>${fmtDate(row.updated_at?.slice(0,10))}</td><td><button class="iconbtn" title="${hasPermission('manpower.update')?'Edit draft':'View draft'}" onclick="openManpowerDraft('${esc(row.id)}')">${hasPermission('manpower.update')?iEdit(14):iDoc(14)}</button></td></tr>`).join('')||'<tr><td colspan="6"><div class="empty">No matching drafts.</div></td></tr>'}</tbody></table></div><div class="table-pagination-wrap"><span>${meta.start}-${meta.end} of ${meta.total} drafts</span>${paginationHTML(meta,key,{go:'manpowerDraftPageGo',size:'manpowerDraftPageSize',sizes:[10,25,50]})}</div>`;
   }catch(error){if(token===MANPOWER_DRAFT_UI.request&&host.isConnected)host.innerHTML=`<div class="empty"><b>Draft workspace unavailable</b><span>${['42P01','PGRST205'].includes(error.code)?'Deploy migration 0034 before using quantity drafts.':esc(error.message)}</span><button class="btn btn-ghost" onclick="renderManpowerDrafts()">Retry</button></div>`;}
 }
-function manpowerDraftInfo(){openModal('<div class="modal-head"><h3>Quantity Drafts</h3><button onclick="closeModal()" aria-label="Close">&times;</button></div><div class="modal-body"><p>These drafts are stored separately from legacy requests. They do not create worker slots, open recruitment, or count toward fulfillment. PRF numbers are provisional until submission is enabled. Existing requests remain available under Requests.</p></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>');}
+function manpowerDraftInfo(){openModal('<div class="modal-head"><h3>Quantity Drafts</h3><button onclick="closeModal()" aria-label="Close">&times;</button></div><div class="modal-body"><p>These drafts are stored separately from legacy requests. They do not create worker slots or count toward fulfillment. Save a complete draft, reopen it and use Review &amp; Submit to open recruitment where the reviewed submission backend has been released. Opening a request never reserves applicants or confirms deployment. Existing requests remain available under Requests.</p></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>');}
 function manpowerDraftPageGo(scope,page){if(scope!=='manpower:drafts')return;STATE.tablePages[scope]={...STATE.tablePages[scope],page};renderManpowerDrafts();}
 function manpowerDraftPageSize(scope,size){if(scope!=='manpower:drafts'||![10,25,50].includes(Number(size)))return;STATE.tablePages[scope]={page:1,size:Number(size)};renderManpowerDrafts();}
 async function openManpowerDraft(id=''){
@@ -7969,16 +7970,51 @@ async function renderManpowerDraftEditor(){
     }
     if(token!==MANPOWER_DRAFT_UI.request||STATE.view!=='manpowerDraftEditor'||SESSION?.id!==sessionId)return;
     if(draft.request.state&&draft.request.state!=='Draft'){STATE.manpowerSubmittedId=id;await go('manpowerSubmittedDetails',{skipUnsaved:true});return;}
-    MANPOWER_DRAFT_UI.draft=draft;MANPOWER_DRAFT_UI.catalogs={clients,departments:departmentCatalog(),positions:positionCatalog(),branches:employeeBranchLocations()};
+    MANPOWER_DRAFT_UI.draft=draft;MANPOWER_DRAFT_UI.saved=structuredClone(draft);MANPOWER_DRAFT_UI.review=null;MANPOWER_DRAFT_UI.catalogs={clients,departments:departmentCatalog(),positions:positionCatalog(),branches:employeeBranchLocations()};
     content.innerHTML=manpowerDraftEditorHTML(draft,MANPOWER_DRAFT_UI.catalogs,{plus:iPlus(14)});
     if(id&&!hasPermission('manpower.update')){
       content.querySelector('.manpower-paste-panel')?.remove();
       content.querySelectorAll('input,select,textarea').forEach(control=>control.disabled=true);
-      content.querySelectorAll('button').forEach(button=>{if(/manpowerDraftAddLine|manpowerDraftRemoveLine|saveManpowerDraft/.test(button.getAttribute('onclick')||''))button.remove();});
+      content.querySelectorAll('button').forEach(button=>{if(/manpowerDraftAddLine|manpowerDraftRemoveLine|saveManpowerDraft|reviewManpowerDraftSubmission/.test(button.getAttribute('onclick')||''))button.remove();});
       setTitle('Manpower Fulfillment / View Draft','Quantity-based requisition draft');
     }
+    if(!hasPermission('manpower.update'))content.querySelector('#md_review')?.remove();
     capturePageEditState();
   }catch(error){if(token===MANPOWER_DRAFT_UI.request&&STATE.view==='manpowerDraftEditor')content.innerHTML=`<div class="empty"><b>Draft could not be loaded</b><span>${esc(error.message)}</span><button class="btn btn-ghost" onclick="go('manpowerDrafts')">Back to Drafts</button><button class="btn btn-ghost" onclick="renderManpowerDraftEditor()">Retry</button></div>`;}
+}
+function manpowerDraftCloseReview(){
+  if(MANPOWER_DRAFT_UI.saving)return;
+  MANPOWER_DRAFT_UI.review=null;document.getElementById('md_submission_review')?.remove();document.getElementById('md_review')?.focus();
+}
+function reviewManpowerDraftSubmission(){
+  if(MANPOWER_DRAFT_UI.saving||!SESSION||STATE.view!=='manpowerDraftEditor'||!hasPermission('manpower.update'))return;
+  manpowerDraftCloseReview();
+  const review=reviewManpowerSubmission(manpowerDraftRead(),MANPOWER_DRAFT_UI.catalogs,MANPOWER_DRAFT_UI.saved);
+  if(document.getElementById('md_paste_text')?.value.trim())review.errors.push('Add the pasted rows to the draft or clear the paste before reviewing.');
+  const errors=document.getElementById('md_errors');errors.hidden=!review.errors.length;errors.textContent=review.errors.join('\n');
+  if(review.errors.length){errors.focus();return;}
+  MANPOWER_DRAFT_UI.review=review;
+  document.querySelector('.manpower-draft-footer').insertAdjacentHTML('beforebegin',manpowerSubmissionReviewHTML(review,MANPOWER_DRAFT_UI.catalogs));
+  document.getElementById('md_submission_review').focus();
+}
+async function submitManpowerDraft(){
+  if(MANPOWER_DRAFT_UI.saving||!SESSION||STATE.view!=='manpowerDraftEditor'||!hasPermission('manpower.update')||!MANPOWER_DRAFT_UI.review)return;
+  const review=MANPOWER_DRAFT_UI.review,sessionId=SESSION.id;
+  const button=document.getElementById('md_submit'),errors=document.getElementById('md_errors');
+  MANPOWER_DRAFT_UI.saving=true;button.disabled=true;
+  try{
+    if(await confirmDataChange({title:'Open manpower request?',message:`Submit ${review.header.prf_number} with ${review.lines.length} requisition lines and ${review.total} requested headcount? Original quantities will be recorded. No workers will be reserved or deployed.`,confirmLabel:'Submit / Open'})!=='confirm')return;
+    if(SESSION?.id!==sessionId||STATE.view!=='manpowerDraftEditor'||!button.isConnected||!hasPermission('manpower.update'))return;
+    const current=reviewManpowerSubmission(manpowerDraftRead(),MANPOWER_DRAFT_UI.catalogs,MANPOWER_DRAFT_UI.saved);
+    if(current.errors.length||current.signature!==review.signature||document.getElementById('md_paste_text')?.value.trim())throw new Error('The draft changed after review. Save your changes and review again before submitting.');
+    const {data,error}=await supabase.rpc('submit_manpower_request',{p_id:review.id,p_expected_revision:review.revision});if(error)throw error;
+    if(data?.request?.id!==review.id||data?.request?.state!=='Open')throw new Error('Submission could not be confirmed. Reload the request to check its current state before retrying.');
+    if(SESSION?.id!==sessionId||STATE.view!=='manpowerDraftEditor')return;
+    PAGE_EDIT_STATE=null;PENDING_PAGE_NAVIGATION=null;STATE.manpowerSubmittedId=review.id;
+    await go('manpowerSubmittedDetails',{skipUnsaved:true});toast('Manpower request opened.');
+  }catch(error){
+    if(SESSION?.id===sessionId&&STATE.view==='manpowerDraftEditor'&&errors.isConnected){errors.hidden=false;errors.textContent=manpowerSubmissionError(error);errors.focus();}
+  }finally{MANPOWER_DRAFT_UI.saving=false;if(button.isConnected)button.disabled=false;}
 }
 function manpowerDraftRead(){return readManpowerDraft(document.getElementById('content'),MANPOWER_DRAFT_UI.draft,MANPOWER_DRAFT_UI.catalogs);}
 function manpowerDraftRenderLines(focusId=''){
@@ -8051,6 +8087,7 @@ async function manpowerDraftApplyPaste(){
   manpowerDraftRenderLines();manpowerDraftClearPaste();
   document.getElementById('md_paste_status').textContent=`${checked.rows.length} lines added to the draft. Save Draft to persist changes.`;
 }
+
 async function saveManpowerDraft(){
   if(MANPOWER_DRAFT_UI.saving||!SESSION||STATE.view!=='manpowerDraftEditor')return;
   if(document.getElementById('md_paste_text')?.value.trim()){toast('Add the pasted rows to the draft or clear the paste before saving.',true);document.getElementById('md_paste_text').focus();return;}
@@ -10670,7 +10707,7 @@ PAGE_INTRO_OBSERVER.observe(document.getElementById('content'),{childList:true,s
 // handlers. Expose the application handlers on window so GitHub Pages/Vercel
 // can execute those handlers normally.
 Object.assign(window, {
-  renderManpowerDrafts,renderManpowerDraftEditor,openManpowerDraft,manpowerDraftInfo,manpowerDraftPageGo,manpowerDraftPageSize,manpowerDraftAddLine,manpowerDraftRemoveLine,manpowerDraftDepartmentChanged,manpowerDraftToggleDetails,manpowerDraftPasteChanged,manpowerDraftClearPaste,manpowerDraftPreviewPaste,manpowerDraftPastePage,manpowerDraftApplyPaste,saveManpowerDraft,
+  renderManpowerDrafts,renderManpowerDraftEditor,openManpowerDraft,manpowerDraftInfo,manpowerDraftPageGo,manpowerDraftPageSize,manpowerDraftAddLine,manpowerDraftRemoveLine,manpowerDraftDepartmentChanged,manpowerDraftToggleDetails,manpowerDraftPasteChanged,manpowerDraftClearPaste,manpowerDraftPreviewPaste,manpowerDraftPastePage,manpowerDraftApplyPaste,saveManpowerDraft,reviewManpowerDraftSubmission,manpowerDraftCloseReview,submitManpowerDraft,
   renderManpowerSubmitted,renderManpowerSubmittedDetails,openManpowerSubmitted,manpowerSubmittedSetTab,manpowerSubmittedPageGo,manpowerSubmittedPageSize,manpowerSubmittedInfo,
   renderClientCatalog, clientCatalogPageGo, clientCatalogPageSize, openClientAccountForm, saveClientAccount,
   syncEmployeeStatusReason,

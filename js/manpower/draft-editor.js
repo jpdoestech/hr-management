@@ -17,7 +17,7 @@ export function manpowerDraftEditorHTML(draft,catalogs,icons={}){
     <section class="manpower-draft-requisitions"><div class="settings-section-head"><h3>Requisition Lines</h3><button id="md_add_line" type="button" class="btn btn-ghost btn-sm" onclick="manpowerDraftAddLine()">${icons.plus||'+'} Add Line</button></div>
     ${manpowerPastePanelHTML()}<div id="md_lines">${manpowerDraftLinesHTML(draft.lines,catalogs)}</div></section>
     <div id="md_errors" class="notice" role="alert" tabindex="-1" hidden></div>
-    <div class="manpower-draft-footer"><button class="btn btn-ghost" onclick="go('manpowerDrafts')">Cancel</button><button id="md_save" class="btn btn-primary" onclick="saveManpowerDraft()">Save Draft</button></div></div>`;
+    <div class="manpower-draft-footer"><button class="btn btn-ghost" onclick="go('manpowerDrafts')">Cancel</button><button id="md_save" class="btn btn-primary" onclick="saveManpowerDraft()">Save Draft</button><button id="md_review" type="button" class="btn btn-ghost" onclick="reviewManpowerDraftSubmission()">Review &amp; Submit</button></div></div>`;
 }
 export function manpowerDraftLinesHTML(lines,catalogs){
   if(!lines.length)return '<div class="empty">No requisition lines.</div>';

@@ -25,11 +25,12 @@ test('legitimate identical lines remain separate and duplicate ids are rejected'
   const draft=newManpowerDraft('request','line');draft.lines.push({...draft.lines[0],id:'line2'});
   assert.equal(validateManpowerDraft(draft,catalogs).errors.length,0);draft.lines[1].id='line';assert.match(validateManpowerDraft(draft,catalogs).errors.join(' '),/distinct stable id/);
 });
-test('draft editor retains its shared full-width form and has no deployment submission action',()=>{
+test('draft editor retains its shared full-width form and separates review from deployment',()=>{
   const draft=newManpowerDraft('request','line');draft.request.remarks='<script>bad</script>';
   const html=manpowerDraftEditorHTML(draft,catalogs);
   assert.match(html,/Save Draft/);assert.match(html,/PRF Header/);assert.match(html,/Requisition Lines/);assert.match(html,/go\('manpowerDrafts'\)/);
-  assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/<script>|Submit|openModal/);
+  assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/<script>|submitManpowerDraft|openModal/);
+  assert.match(html,/reviewManpowerDraftSubmission/);
   assert.match(manpowerDraftLinesHTML(draft.lines,catalogs),/data-line-id="line"/);
 });
 test('new drafts are saved atomically and cannot mutate legacy records or bypass draft state',()=>{
@@ -55,7 +56,7 @@ test('view-only users can inspect existing draft lines but cannot edit or save',
   const content={innerHTML:'',querySelector:()=>({remove(){pasteRemoved=true;}}),querySelectorAll:selector=>selector==='button'?buttons:controls};let title='';
   const context={SESSION:{id:'viewer'},STATE:{view:'manpowerDraftEditor',manpowerDraftId:'draft1'},document:{getElementById:()=>content},hasPermission:permission=>permission==='manpower.view',
     newManpowerDraft,validateManpowerDraft,manpowerDraftEditorHTML,manpowerDraftLinesHTML,crypto:{randomUUID:()=> 'new-id'},departmentCatalog:()=>catalogs.departments,positionCatalog:()=>catalogs.positions,employeeBranchLocations:()=>catalogs.branches,
-    iPlus:()=>'+',setTitle:value=>title=value,capturePageEditState:()=>{},toast:()=>{},
+    structuredClone,iPlus:()=>'+',setTitle:value=>title=value,capturePageEditState:()=>{},toast:()=>{},
     supabase:{from:table=>{const query={select:()=>query,order:()=>query,range:()=>query,eq:()=>query,single:()=>query,then:resolve=>Promise.resolve(resolve(table==='hr_manpower_clients'?{data:catalogs.clients,count:1}:{data:{...newManpowerDraft('draft1','line').request,revision:1,hr_manpower_lines:[{id:'line',ordinal:0,current_authorized:1000}]}}))};return query;}}
   };
   vm.createContext(context);vm.runInContext(source.slice(source.indexOf('const MANPOWER_DRAFT_UI='),source.indexOf('function openManpowerRequestForm(')),context);

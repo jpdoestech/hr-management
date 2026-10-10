@@ -571,4 +571,27 @@ MP-B18 publication: implementation `7c5af6e` pushed to `origin/main`; remote HEA
 
 MP-B19 publication: implementation `7f2feea` pushed to `origin/main`; remote HEAD verified. Staged diff checks passed. Only test/docs files changed; no proposal promotion or production activation occurred. Next: exercise mixed employee/conversion/source-row lock order and contention on the disposable native runtime, fix verified deadlocks without weakening guards, and continue audited replacement/linked-transfer correction. Targeted race coverage does not complete Stage B/C or replace live migration/privacy acceptance.
 
+Scope clarification: the approved `docs/HRIS_MANPOWER_FULFILLMENT_SPEC.md`
+defines implementation scope; this roadmap only tracks it. The previous native
+runtime follow-up is deferred. Do not install/start database servers without
+explicit approval. Preserve PostgreSQL compatibility for the user's homelab.
+
+- MP-A12: saved-draft submission review/UI implemented using the existing
+  `submit_manpower_request` RPC (`docs/MANPOWER-FULFILLMENT-SUBMISSION-UI.md`).
+  Full-width saved header/line review, aggregate demand, explicit confirmation,
+  current permission/revision/value checks, duplicate-click protection, cancel
+  retention and focused backend errors are connected to submitted details.
+  No migration was promoted or applied; backend release prerequisites remain.
+  Next specification work: coordinated submitted detail amendments/lifecycle
+  controls, followed by authoritative onboarding reservation/deployment UI.
+  Stage A/B/C and live end-to-end acceptance remain incomplete.
+
+MP-A12 validation: lint, all 256 automated tests, production build, explicit
+`node scripts/validate.mjs` and diff checks passed. Synthetic browser fixture
+verified review, explicit confirmation and missing-RPC retention. Viewports
+390x844, 768x1024 and 1440x900 had no document-width overflow; review tables
+scroll internally, mobile summaries use two columns and submit targets are
+44px high. Temporary browser viewport reset and fixture server stopped.
+No native PostgreSQL runtime, installation or production database operation.
+
 Release gates: verify the live migration baseline and legacy data, rehearse compatible proposals, validate independent concurrent transactions and production authorization, then coordinate database and application enablement. No completion claim until these gates and the specification acceptance criteria pass.
