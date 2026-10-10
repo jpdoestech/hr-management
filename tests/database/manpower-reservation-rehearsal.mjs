@@ -1,15 +1,15 @@
 // Synthetic PostgreSQL rehearsal; no live database or credentials.
-const modulePath=process.env.HRIS_PGLITE_MODULE||'@electric-sql/pglite';
-const {PGlite}=await import(modulePath);
-const {fuzzystrmatch}=await import(process.env.HRIS_PGLITE_MODULE?new URL('./contrib/fuzzystrmatch.js',modulePath).href:'@electric-sql/pglite/contrib/fuzzystrmatch');
-const {btree_gist}=await import(process.env.HRIS_PGLITE_MODULE?new URL('./contrib/btree_gist.js',modulePath).href:'@electric-sql/pglite/contrib/btree_gist');
+import {openRehearsalDatabase} from './rehearsal-database.mjs';
 import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readPhilippineAddressCatalog,addressCatalogSeedSQL} from '../../scripts/lib/philippine-address-catalog.mjs';
-const db=new PGlite({extensions:{fuzzystrmatch,btree_gist}});
+const db=await openRehearsalDatabase();
 const tenant='00000000-0000-0000-0000-000000000001',other='00000000-0000-0000-0000-000000000002',actor='00000000-0000-0000-0000-000000000011',client='00000000-0000-0000-0000-000000000021';
-await db.exec(`create role authenticated;create role anon;create schema auth;
+await db.exec(`do $$begin
+  if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated;end if;
+  if not exists(select 1 from pg_roles where rolname='anon') then create role anon;end if;
+end $$;create schema auth;
 create table auth.users(id uuid primary key);create table hr_tenants(id uuid primary key);
 create table profiles(id uuid primary key,tenant_id uuid,full_name text,role text,is_super_admin boolean);
 create table access_permissions(permission_key text primary key,module_key text,action_key text,label text);
@@ -1291,5 +1291,82 @@ if(process.argv.includes('--credit-reversal')){
     for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/'+file,import.meta.url),'utf8')))assert.equal(check.rows.length,0);
   await db.exec('set role anon');await denied(()=>reverse('anonymous-reversal'),'42501');
   console.log('Credit reversal rehearsal passed: active/ended corrections preserve original facts/master records, negative credit and capacity exactly once, fresh authorization/evidence, current/redacted dependency blockers, audit/late rollback, immutable RLS history, voided-reference write guard and source interval removal. Independent write races, linked operational corrections, UI/live acceptance remain gated.');
+}
+if(process.argv.includes('--native-races')){
+  if(!db.native||!process.argv.includes('--credit-reversal'))throw new Error('Native race tests require an isolated native cluster and the full credit-reversal chain');
+  await db.exec('reset role');
+  const writer=await db.connection(),reverser=await db.connection(),retry=await db.connection();
+  const pending=promise=>promise.then(value=>({value}),error=>({error}));
+  const waitForLock=async(pid)=>{
+    for(let attempt=0;attempt<80;attempt++){
+      const row=(await db.query('select wait_event,pg_blocking_pids(pid) blockers from pg_stat_activity where pid=$1',[pid])).rows[0];
+      if(row?.wait_event==='advisory'&&row.blockers.length)return row;
+      await new Promise(resolve=>setTimeout(resolve,25));
+    }
+    throw new Error('Expected native session did not enter an observed advisory-lock wait');
+  };
+  const actorSetup=`set test.actor='${actor}';set test.tenant='${tenant}';set test.scope='global';set test.denied=''`;
+  try{
+    await writer.exec(actorSetup);await reverser.exec(actorSetup+';set role authenticated');await retry.exec(actorSetup+';set role authenticated');
+    const writerPid=(await writer.query('select pg_backend_pid() pid')).rows[0].pid;
+    const reversalPid=(await reverser.query('select pg_backend_pid() pid')).rows[0].pid;
+    const retryPid=(await retry.query('select pg_backend_pid() pid')).rows[0].pid;
+    const today=(await db.query("select to_char((now() at time zone 'Asia/Manila')::date,'YYYY-MM-DD') value")).rows[0].value;
+    const create=async(name)=>{
+      await db.exec('set role authenticated');await request(name,1);
+      const result=await reserve(name+'-reserve',[{candidate_id:'op-end-candidate-2',line_id:name+'-line',hiring_category:'Existing Employee / Transfer'}]);
+      await db.query('select confirm_manpower_deployments($1,$2)',[name+'-confirm',[{reservation_id:result.reservation_ids[0],schedule_revision:0,actual_date:today,reason:'Synthetic independent-session reversal race source'}]]);
+      const preview=(await db.query("select preview_manpower_reversal('reservation',$1) result",[result.reservation_ids[0]])).rows[0].result;
+      await db.exec('reset role');return preview;
+    };
+    const reverse=(connection,token,source)=>connection.query('select reverse_manpower_deployment($1,$2,$3,$4,$5) result',
+      [token,'reservation',source.source_id,source.source_fingerprint,'Verified synthetic race correction']);
+    let source=await create('race-writer-first');
+    await writer.exec('begin');
+    await writer.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'attendance','race-attendance',{employeeId:source.employee_id,department:'Production',workDate:today}]);
+    let operation=pending(reverse(reverser,'race-writer-first',source));
+    assert.equal((await waitForLock(reversalPid)).blockers.includes(writerPid),true);
+    await writer.exec('commit');
+    let outcome=await operation;assert.equal(outcome.error,undefined);assert.equal(outcome.value.rows[0].result.reversed,false);
+    assert.equal(outcome.value.rows[0].result.blockers[0].code,'attendance_interval');
+    await writer.exec("delete from hr_records where record_id='race-attendance'");
+    assert.equal((await reverse(reverser,'race-writer-first',source)).rows[0].result.reversed,true);
+
+    source=await create('race-reversal-first');
+    await reverser.exec('begin');assert.equal((await reverse(reverser,'race-reversal-first',source)).rows[0].result.reversed,true);
+    operation=pending(writer.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'documents','race-voided-reference',{link:{reservationId:source.source_id.toUpperCase()}}]));
+    assert.equal((await waitForLock(writerPid)).blockers.includes(reversalPid),true);
+    await reverser.exec('commit');outcome=await operation;assert.equal(outcome.error?.code,'23514');
+    assert.equal((await db.query("select count(*)::int count from hr_records where record_id='race-voided-reference'")).rows[0].count,0);
+
+    source=await create('race-idempotency');
+    await reverser.exec('begin');await reverse(reverser,'race-idempotency',source);
+    operation=pending(reverse(retry,'race-idempotency',source));
+    assert.equal((await waitForLock(retryPid)).blockers.includes(reversalPid),true);
+    await reverser.exec('commit');outcome=await operation;assert.equal(outcome.error,undefined);assert.equal(outcome.value.rows[0].result.replayed,true);
+    assert.equal((await db.query('select count(*)::int count from hr_manpower_reversal_history where reservation_id=$1',[source.source_id])).rows[0].count,1);
+    assert.equal((await db.query("select manpower_line_capacity('race-idempotency-line') result")).rows[0].result.available,1);
+
+    source=await create('race-timeout');
+    await writer.exec('begin');
+    await writer.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'documents','race-hold',{name:'Synthetic independent lock holder'}]);
+    await reverser.exec("set lock_timeout='100ms'");
+    await denied(()=>reverse(reverser,'race-timeout',source),'55P03');
+    assert.equal((await db.query('select count(*)::int count from hr_manpower_reversal_history where reservation_id=$1',[source.source_id])).rows[0].count,0);
+    assert.equal((await db.query("select manpower_line_capacity('race-timeout-line') result")).rows[0].result.fulfilled,1);
+    await writer.exec('rollback');await reverser.exec("set lock_timeout='5s'");
+    assert.equal((await reverse(reverser,'race-timeout',source)).rows[0].result.reversed,true);
+
+    await writer.exec('begin');
+    await writer.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'documents','race-tenant-one',{name:'Synthetic first tenant lock'}]);
+    // Completion before releasing tenant one proves this independent tenant does not wait for that mutex.
+    await db.query('insert into hr_records values($1,$2,$3,$4)',[other,'documents','race-tenant-two',{name:'Synthetic second tenant write'}]);
+    await writer.exec('rollback');await db.exec("delete from hr_records where record_id='race-tenant-two'");
+    for(const file of ['manpower_primary_intervals.sql','manpower_confirmation_integrity.sql','manpower_ending_integrity.sql','manpower_reversal_integrity.sql'])
+      for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/'+file,import.meta.url),'utf8')))assert.equal(check.rows.length,0);
+    console.log('Native independent-session races passed: observed writer-before-reversal blocking, committed voided-reference rejection after reversal-first wait, simultaneous token replay exactly once, lock-timeout rollback/retry and independent tenant writes. Broader deadlock/throughput and live policy acceptance remain unverified.');
+  }finally{
+    for(const connection of [writer,reverser,retry]){try{await connection.exec('rollback');}finally{await connection.close();}}
+  }
 }
 await db.close();console.log('Reservation PostgreSQL rehearsal passed: 75-worker atomic batch, ineligible/capacity/duplicate rollback, bounded real assignments for 1000 demand, role/scope/tenant denial, order-independent idempotent replay, worker uniqueness, authoritative capacity and audit-failure rollback. Production and independent concurrency remain unverified.');
