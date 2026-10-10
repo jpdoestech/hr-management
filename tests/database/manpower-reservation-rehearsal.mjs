@@ -995,4 +995,79 @@ if(process.argv.includes('--transfers')){
   await db.exec('set role anon');await denied(()=>transfer('anonymous-transfer'),'42501');
   console.log('Atomic transfer rehearsal passed: all four credited/operational source-destination combinations, preserved source credit and worker/master data, fresh previews, date/catalog/access denial, audit and late-history rollback, exact new-demand credit, immutable scoped history and replay. UI, independent concurrency and live acceptance remain gated.');
 }
+if(process.argv.includes('--operational-ending')){
+  if(!process.argv.includes('--transfers'))throw new Error('Operational ending rehearsal requires --interlock --ending --shared-intervals --transfers');
+  await db.exec('reset role');
+  await db.exec(readFileSync(new URL('../../supabase/proposals/0054_manpower_operational_ending.sql',import.meta.url),'utf8'));
+  const dates=(await db.query("select to_char((now() at time zone 'Asia/Manila')::date-8,'YYYY-MM-DD') initial,to_char((now() at time zone 'Asia/Manila')::date-6,'YYYY-MM-DD') moved,to_char((now() at time zone 'Asia/Manila')::date-2,'YYYY-MM-DD') ended")).rows[0];
+  const names=['CERULEAN VESPER GOLDHAVEN','THORNBRIDGE WILLOW EVERCREST','NIMBUS CORAL FERNVALE'],items=[],masters=[];
+  for(const [index,name] of names.entries()){
+    const employee={id:'op-end-worker-'+index,name,department:'Production',position:'Operator',status:'Active',employeeNo:'EMP-96000'+index,branchReporting:'Davao'};
+    const candidate={id:'op-end-candidate-'+index,name,department:'Production',stage:'Hired',employeeRecordId:employee.id};
+    await db.exec('reset role');
+    await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'employees',employee.id,employee]);
+    await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'onboardingCandidates',candidate.id,candidate]);
+    masters.push(employee,candidate);await db.exec('set role authenticated');
+    await request('op-end-'+index,1,{dateRequested:dates.initial,targetDate:dates.moved});
+    const pair=(await db.query('select preview_manpower_identity_review($1,$2) result',[candidate.id,employee.id])).rows[0].result;
+    await db.query('select record_manpower_identity_review($1,$2,$3,$4,$5,$6,0)',[candidate.id,employee.id,'SamePerson','Verified synthetic ending worker',pair.candidate_fingerprint,pair.employee_fingerprint]);
+    const reserved=await reserve('op-end-reserve-'+index,[{candidate_id:candidate.id,line_id:'op-end-'+index+'-line',hiring_category:'Existing Employee / Transfer'}]);
+    await db.query('select confirm_manpower_deployments($1,$2)',['op-end-confirm-'+index,[{reservation_id:reserved.reservation_ids[0],schedule_revision:0,actual_date:dates.initial,reason:'Verified original deployment before genuine ending'}]]);
+    const source=(await db.query("select preview_manpower_transfer('reservation',$1) result",[reserved.reservation_ids[0]])).rows[0].result;
+    const moved=(await db.query('select transfer_manpower_deployment($1,$2,$3,$4,$5,$6,$7) result',['op-end-transfer-'+index,'reservation',source.source_id,source.source_fingerprint,{kind:'operational',client_id:client,department:'Production',position:'Operator',branch_reporting:'Davao'},dates.moved,'Verified non-credited operational deployment'])).rows[0].result;
+    const current=(await db.query("select preview_manpower_transfer('operational',$1) result",[moved.target_id])).rows[0].result;
+    items.push({deployment_id:moved.target_id,source_fingerprint:current.source_fingerprint,ended_date:dates.ended,reason:'Genuine operational completion without separation'});
+  }
+  const bulk=items.slice(0,2);
+  const end=async(token,selected=bulk)=>(await db.query('select end_manpower_operational_deployments($1,$2) result',[token,selected])).rows[0].result;
+  const history=async()=>(await db.query('select * from hr_manpower_operational_ending_history')).rows;
+  const active=async()=>(await db.query('select * from hr_manpower_operational_deployments where id=any($1::uuid[])',[items.map(item=>item.deployment_id)])).rows;
+  const original=await active();
+  for(const permission of ['employees.view','manpower.view','manpower.update']){
+    await db.query('select set_config($1,$2,false)',['test.denied',permission]);await denied(()=>end('permission-ending'),'42501');
+  }
+  await db.exec("set test.denied='';set test.scope='Other'");await denied(()=>end('scope-ending'),'42501');
+  await db.exec(`set test.scope='global';set test.tenant='${other}'`);await denied(()=>end('tenant-ending'),'42501');await db.exec(`set test.tenant='${tenant}'`);
+  await denied(()=>end('missing-ending',[{...items[0],deployment_id:'ffffffff-ffff-ffff-ffff-ffffffffffff'}]),'42501');
+  await denied(()=>end('stale-ending',[items[0],{...items[1],source_fingerprint:'0'.repeat(32)}]),'40001');
+  await denied(()=>end('duplicate-ending',[items[0],items[0]]),'23514');
+  await denied(()=>end('empty-ending',[]),'23514');
+  await denied(()=>end('future-ending',[{...items[0],ended_date:'2999-01-01'}]),'23514');
+  await denied(()=>end('invalid-date-ending',[{...items[0],ended_date:'2026-02-30'}]),'23514');
+  await denied(()=>end('empty-interval-ending',[{...items[0],ended_date:dates.moved}]),'23514');
+  await denied(()=>end('reason-ending',[{...items[0],reason:' '}]),'23514');
+  assert.deepEqual(await active(),original);assert.equal((await history()).length,0);
+  await db.exec('reset role');
+  await db.exec("alter table hr_audit_logs add constraint fail_operational_end_audit check(action not like 'Operational deployments ended: batch audit-op-ending,%') not valid");
+  await db.exec('set role authenticated');await denied(()=>end('audit-op-ending'),'23514');
+  await db.exec('reset role');
+  await db.query("alter table hr_manpower_operational_ending_history add constraint fail_operational_end_late check(deployment_id<> '"+[...bulk].sort((a,b)=>a.deployment_id.localeCompare(b.deployment_id))[1].deployment_id+"'::uuid or batch_token<>'late-op-ending') not valid");
+  await db.exec('set role authenticated');await denied(()=>end('late-op-ending'),'23514');
+  assert.deepEqual(await active(),original);assert.equal((await history()).length,0);
+  assert.equal((await end('successful-op-ending')).replayed,false);
+  assert.equal((await end('successful-op-ending',[...bulk].reverse())).replayed,true);
+  await denied(()=>end('successful-op-ending',[{...items[0],reason:'Changed'},items[1]]),'23514');
+  const fresh=(await db.query("select preview_manpower_transfer('operational',$1) result",[items[0].deployment_id])).rows[0].result;
+  await denied(()=>end('repeat-op-ending',[{...items[0],source_fingerprint:fresh.source_fingerprint}]),'23514');
+  assert.equal((await history()).length,2);
+  assert.equal((await end('individual-op-ending',[items[2]])).replayed,false);
+  assert.equal((await end('individual-op-ending',[items[2]])).replayed,true);
+  assert.equal((await history()).length,3);
+  for(const row of await active()){
+    assert.equal(row.state,'Ended');assert.equal(row.ended_date.toISOString().slice(0,10),dates.ended);
+    assert.equal(row.actual_date.toISOString().slice(0,10),dates.moved);assert.equal(row.end_reason,items.find(item=>item.deployment_id===row.id).reason);
+  }
+  for(const [index] of names.entries())assert.equal((await db.query('select manpower_line_capacity($1) result',['op-end-'+index+'-line'])).rows[0].result.fulfilled,1);
+  for(const master of masters)assert.deepEqual((await db.query('select data from hr_records where record_id=$1',[master.id])).rows[0].data,master);
+  await db.exec("set test.denied='manpower.update'");await denied(()=>end('successful-op-ending'),'42501');await db.exec("set test.denied=''");
+  await db.exec("set test.scope='Other'");assert.equal((await history()).length,0);await denied(()=>end('successful-op-ending'),'42501');await db.exec("set test.scope='global'");
+  await denied(()=>db.exec('select * from manpower_private.operational_ending_batches'),'42501');
+  await db.exec('reset role');await denied(()=>db.exec('delete from hr_manpower_operational_ending_history'),'23514');
+  await denied(()=>db.exec("update manpower_private.operational_ending_batches set payload='{}'"),'23514');
+  assert.equal((await db.query('select * from manpower_private.operational_intents')).rows.length,0);
+  for(const file of ['manpower_primary_intervals.sql','manpower_transfer_integrity.sql','manpower_operational_ending_integrity.sql'])
+    for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/'+file,import.meta.url),'utf8')))assert.equal(check.rows.length,0);
+  await db.exec('set role anon');await denied(()=>end('anonymous-op-ending'),'42501');
+  console.log('Operational ending rehearsal passed: bulk genuine endings preserve credits/master data, fresh evidence, invalid/duplicate/date/access rejection, audit and late-second-row rollback, scoped immutable history, reauthorized order-independent retries and interval integrity. UI and independent/live acceptance remain gated.');
+}
 await db.close();console.log('Reservation PostgreSQL rehearsal passed: 75-worker atomic batch, ineligible/capacity/duplicate rollback, bounded real assignments for 1000 demand, role/scope/tenant denial, order-independent idempotent replay, worker uniqueness, authoritative capacity and audit-failure rollback. Production and independent concurrency remain unverified.');
