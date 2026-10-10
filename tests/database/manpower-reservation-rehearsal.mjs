@@ -1152,4 +1152,63 @@ if(process.argv.includes('--replacement-sources')){
   await db.exec('set role anon');await denied(()=>link('anonymous-link'),'42501');
   console.log('Replacement source rehearsal passed: typed genuine ended references, new demand credit only after explicit actual confirmation, unchanged historical capacity/master records, bulk rollback, fresh evidence, authorization, immutable scoped references and idempotent replay. UI/live acceptance remain gated.');
 }
+if(process.argv.includes('--reversal-preview')){
+  if(!process.argv.includes('--replacement-sources'))throw new Error('Reversal preview requires the ending, transfer and replacement rehearsal chain');
+  await db.exec('reset role');
+  // Match the production module mapping only for this isolated synthetic database.
+  await db.exec("create function hr_record_permission_key(text,text) returns text language sql immutable as $$select (case $1 when 'attendance' then 'attendance' when 'atd' then 'employee_relations' when 'documents' then 'documents' when 'oncall' then 'manpower' when 'manpowerSlots' then 'manpower' else 'employees' end)||'.'||$2$$");
+  await db.exec(readFileSync(new URL('../../supabase/proposals/0056_manpower_reversal_dependency_preview.sql',import.meta.url),'utf8'));
+  const source=(await db.query("select * from hr_manpower_reservations where line_id='replacement-demand-line' and state='Ended'")).rows[0];
+  const dates={actual:source.actual_date.toISOString().slice(0,10),end:source.ended_date.toISOString().slice(0,10)};
+  const preview=async(kind='reservation',id=source.id)=>(await db.query('select preview_manpower_reversal($1,$2) result',[kind,id])).rows[0].result;
+  const put=async(module,id,data)=>{
+    await db.exec('reset role');await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,module,id,data]);await db.exec('set role authenticated');
+  };
+  const remove=async(id)=>{await db.exec('reset role');await db.query('delete from hr_records where record_id=$1',[id]);await db.exec('set role authenticated');};
+  await db.exec('set role authenticated');
+  const clear=await preview();assert.equal(clear.dependency_clear,true);assert.equal(clear.reversal_enabled,false);assert.equal(clear.requires_fresh_transaction_check,true);
+  assert.deepEqual(clear.blockers,[]);assert.equal(clear.source_id,source.id);
+  for(const permission of ['manpower.approve','manpower.view','employees.view','onboarding.view']){
+    await db.query('select set_config($1,$2,false)',['test.denied',permission]);await denied(()=>preview(),'42501');
+  }
+  await db.exec("set test.denied='';set test.scope='Other'");await denied(()=>preview(),'42501');
+  await db.exec(`set test.scope='global';set test.tenant='${other}'`);await denied(()=>preview(),'42501');await db.exec(`set test.tenant='${tenant}'`);
+  await put('attendance','preview-outside',{employeeId:source.employee_id,department:'Production',workDate:dates.end});
+  assert.equal((await preview()).dependency_clear,true);await remove('preview-outside');
+  await put('attendance','preview-attendance',{employeeId:source.employee_id,department:'Production',workDate:dates.actual,remarks:'PRIVATE SYNTHETIC NOTE'});
+  assert.deepEqual((await preview()).blockers,[{code:'attendance_interval',reference_count:1}]);
+  assert.equal(JSON.stringify(await preview()).includes('PRIVATE SYNTHETIC NOTE'),false);
+  await db.exec("set test.denied='attendance.view'");assert.deepEqual((await preview()).blockers,[{code:'restricted_dependency_review'}]);await db.exec("set test.denied=''");
+  await remove('preview-attendance');
+  await put('attendance','preview-malformed',{employeeId:source.employee_id,department:'Production',workDate:'2026-02-30'});
+  assert.equal((await preview()).dependency_clear,false);await remove('preview-malformed');
+  await put('attendance','preview-legacy-name',{employeeName:'NIMBUS CORAL FERNVALE',department:'Production',workDate:dates.actual});
+  assert.equal((await preview()).blockers[0].code,'attendance_interval');await remove('preview-legacy-name');
+  await put('atd','preview-financial',{employeeId:source.employee_id,department:'Production',atdDate:'2001-01-01',payments:[{dateRecorded:'2001-01-02',amountPaid:100}]});
+  assert.deepEqual((await preview()).blockers,[{code:'financial_review',reference_count:1}]);await remove('preview-financial');
+  await put('documents','preview-nested',{department:'Production',link:{reservationId:source.id},name:'PRIVATE DOCUMENT'});
+  assert.deepEqual((await preview()).blockers,[{code:'explicit_record_references',reference_count:1}]);
+  await db.exec("set test.denied='documents.view'");assert.deepEqual((await preview()).blockers,[{code:'restricted_dependency_review'}]);await db.exec("set test.denied=''");
+  await remove('preview-nested');
+  await put('payrollRuns','preview-nested-finance',{department:'Production',entries:[{employee_id:source.employee_id,reservationId:source.id}]});
+  await db.exec("set test.denied='payroll.view'");assert.deepEqual((await preview()).blockers,[{code:'restricted_dependency_review'}]);await db.exec("set test.denied=''");
+  assert.equal((await preview()).blockers.some(item=>item.code==='financial_review'),true);await remove('preview-nested-finance');
+  await db.exec('reset role');
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[other,'attendance','preview-other-tenant',{employeeId:source.employee_id,workDate:dates.actual}]);
+  await db.exec('set role authenticated');assert.equal((await preview()).dependency_clear,true);await remove('preview-other-tenant');
+  await put('attendance','preview-outside-scope',{employeeId:source.employee_id,department:'Packing',workDate:dates.actual});
+  await db.exec("set test.scope='Production'");assert.deepEqual((await preview()).blockers,[{code:'restricted_dependency_review'}]);await db.exec("set test.scope='global'");await remove('preview-outside-scope');
+  const transferred=(await db.query("select id from hr_manpower_reservations where employee_id='atomic-transfer-worker' and state='Deployed'")).rows[0].id;
+  assert.equal((await preview('reservation',transferred)).blockers.some(item=>item.code==='transfer_chain'),true);
+  const outgoing=(await db.query("select id from hr_manpower_reservations where employee_id='ending-worker-0' and line_id='ending-line'")).rows[0].id;
+  assert.equal((await preview('reservation',outgoing)).blockers.some(item=>item.code==='replacement_references'),true);
+  const operational=(await db.query("select id from hr_manpower_operational_deployments where employee_id='op-end-worker-0'")).rows[0].id;
+  assert.equal((await preview('operational',operational)).blockers.some(item=>item.code==='linked_operational_origin'),true);
+  await put('oncall','preview-legacy',{employeeId:source.employee_id,department:'Production'});
+  assert.equal((await preview()).blockers.some(item=>item.code==='legacy_assignment_review'),true);await remove('preview-legacy');
+  await denied(()=>db.query('select * from manpower_private.reversal_dependencies($1,$2)',['reservation',source.id]),'42501');
+  await db.exec('reset role');assert.deepEqual((await db.query('select * from hr_manpower_reservations where id=$1',[source.id])).rows[0],source);
+  await db.exec('set role anon');await denied(()=>preview(),'42501');
+  console.log('Reversal dependency preview rehearsal passed: half-open attendance boundary, malformed/legacy dates/names, conservative financial review, nested references, transfer/replacement/origin/legacy blockers, role/tenant/scope/private denial and redacted diagnostics. No reversal mutation or concurrency safety is claimed.');
+}
 await db.close();console.log('Reservation PostgreSQL rehearsal passed: 75-worker atomic batch, ineligible/capacity/duplicate rollback, bounded real assignments for 1000 demand, role/scope/tenant denial, order-independent idempotent replay, worker uniqueness, authoritative capacity and audit-failure rollback. Production and independent concurrency remain unverified.');
