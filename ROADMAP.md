@@ -721,3 +721,7 @@ MP-A16 validation: lint, 302 automated tests, production build, explicit
 repository validation and diff checks passed. Synthetic fixture server exited
 successfully after shutdown; temporary browser tab closed and viewport reset.
 Full specification remains incomplete and production release gates unchanged.
+
+MP-A16 publication: `f298fa0` pushed to `origin/main`; remote HEAD verified as
+`f298fa0fe3ae770e305baa3c4c6704348cb304d2`. Only this feature's files were
+staged; the unrelated skill cache remains untouched and excluded.
