@@ -1,3 +1,4 @@
+import {headerHistoryChangesHTML} from './header-editor.js?v=20261010-1';
 const escape=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
 function bounds(page,size){
   size=[10,25,50].includes(Number(size))?Number(size):10;
@@ -15,13 +16,16 @@ export async function loadSubmittedRequests(client,{page=1,size=10,search='',bra
 }
 export async function loadSubmittedRequest(client,id){
   const result=checked(await client.from('hr_manpower_requests')
-    .select('id,prf_number,branch_reporting,requested_by,date_requested,target_date,priority,remarks,state,revision,submitted_at,hr_manpower_clients(name)')
+    .select('id,prf_number,client_id,branch_reporting,requested_by,date_requested,target_date,priority,remarks,state,revision,submitted_at,submitted_by,hr_manpower_clients(name)')
     .eq('id',id).in('state',['Open','Closed','Cancelled']).single());
   return result.data;
 }
 export async function loadSubmittedRows(client,id,kind,{page=1,size=10}={}){
   let query;
-  if(kind==='lifecycle')query=client.from('hr_manpower_lifecycle_history')
+  if(kind==='header-amendments')query=client.from('hr_manpower_header_amendments')
+    .select('request_revision,before_header,after_header,reason',{count:'exact'})
+    .eq('request_id',id).order('request_revision',{ascending:false});
+  else if(kind==='lifecycle')query=client.from('hr_manpower_lifecycle_history')
     .select('operation,previous_state,current_state,request_revision,reason',{count:'exact'})
     .eq('request_id',id).order('request_revision',{ascending:false});
   else if(kind==='amendments')query=client.from('hr_manpower_quantity_amendments')
@@ -43,6 +47,10 @@ export function submittedHeaderHTML(request,formatDate){
   return `<section class="manpower-submitted-header" aria-label="Request summary"><dl>${fields.map(([label,value])=>`<div><dt>${escape(label)}</dt><dd>${escape(value??'')}</dd></div>`).join('')}</dl>${request.remarks?`<p class="manpower-submitted-remarks">${escape(request.remarks)}</p>`:''}</section>`;
 }
 export function submittedTableHTML(rows,kind,formatDate,headerTarget='',{canAmend=false,canManage=false}={}){
+  if(kind==='header-amendments'){
+    const body=rows.map(row=>`<tr><td>${escape(row.request_revision)}</td><td>${headerHistoryChangesHTML(row)}</td><td><details><summary>Header amendment reason</summary><p class="manpower-submitted-remarks">${escape(row.reason)}</p></details></td></tr>`).join('');
+    return `<div class="tablewrap" tabindex="0" role="region" aria-label="Header amendment records"><table class="data-table" data-server-paginated="true" data-table-tools="external"><caption class="sr-only">Header amendment history</caption><thead><tr>${['Revision','Changed Fields','Reason'].map(label=>`<th scope="col">${label}</th>`).join('')}</tr></thead><tbody>${body||'<tr><td colspan="3"><div class="empty">No header amendments recorded.</div></td></tr>'}</tbody></table></div>`;
+  }
   if(kind==='lifecycle'){
     const labels={CancelLine:'Line cancellation',Close:'Request closed',Cancel:'Request cancelled',Reopen:'Request reopened'};
     const body=rows.map(row=>`<tr><td>${escape(row.request_revision)}</td><td>${escape(labels[row.operation]||row.operation)}</td><td>${escape(row.previous_state)}</td><td>${escape(row.current_state)}</td><td><details><summary>Lifecycle reason</summary><p class="manpower-submitted-remarks">${escape(row.reason)}</p></details></td></tr>`).join('');

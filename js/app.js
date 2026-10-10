@@ -14,9 +14,10 @@ import {manpowerCSV} from './core/manpower-export.js?v=20261010-1';
 import {newManpowerDraft,validateManpowerDraft} from './core/manpower-draft.js?v=20261009-1';
 import {manpowerDraftEditorHTML,manpowerDraftLinesHTML,manpowerDraftPositionOptionsHTML,readManpowerDraft} from './manpower/draft-editor.js?v=20261010-1';
 import {reviewManpowerSubmission,manpowerSubmissionReviewHTML,manpowerSubmissionError} from './manpower/submission-review.js?v=20261010-1';
-import {loadSubmittedRequests,loadSubmittedRequest,loadSubmittedRows,submittedListRowsHTML,submittedHeaderHTML,submittedTableHTML} from './manpower/submitted-workspace.js?v=20261010-5';
+import {loadSubmittedRequests,loadSubmittedRequest,loadSubmittedRows,submittedListRowsHTML,submittedHeaderHTML,submittedTableHTML} from './manpower/submitted-workspace.js?v=20261010-6';
 import {quantityAmendmentPayload,quantityAmendmentHTML,quantityAmendmentError} from './manpower/quantity-editor.js?v=20261010-1';
-import {LIFECYCLE_LABELS,lifecycleOperations,lifecycleActionsHTML,lifecyclePayload,lifecycleEditorHTML,lifecycleResultValid,lifecycleError} from './manpower/lifecycle-editor.js?v=20261010-1';
+import {LIFECYCLE_LABELS,lifecycleOperations,lifecycleActionsHTML,lifecyclePayload,lifecycleEditorHTML,lifecycleResultValid,lifecycleError} from './manpower/lifecycle-editor.js?v=20261010-2';
+import {HEADER_AMENDMENT_FIELDS,readHeaderAmendment,headerAmendmentPayload,headerEditorHTML,headerAmendmentResultValid,headerAmendmentError} from './manpower/header-editor.js?v=20261010-1';
 import {readManpowerPaste,detectManpowerPasteMapping,previewManpowerPaste} from './core/manpower-paste.js?v=20261009-1';
 import {manpowerPasteMappingHTML,manpowerPastePreviewHTML} from './manpower/paste-preview.js?v=20261009-1';
 import { measureAsync, recordPerformance, performanceSnapshot } from './core/performance.js?v=20261002-1';
@@ -8122,6 +8123,7 @@ const MANPOWER_SUBMITTED_UI={request:0,record:null,rows:[],edit:null,saving:fals
 function manpowerQuantityNavigationHTML(active){return `<nav class="workspace-tabs manpower-quantity-nav" aria-label="Quantity request workspaces"><button type="button" ${active==='drafts'?'aria-current="page" class="active"':''} onclick="go('manpowerDrafts')">Quantity Drafts</button><button type="button" ${active==='submitted'?'aria-current="page" class="active"':''} onclick="go('manpowerSubmitted')">Submitted Requests</button></nav>`;}
 function manpowerSubmittedErrorHTML(error,retry,kind=''){
   const missing=['42P01','42703','PGRST204','PGRST205'].includes(error.code);
+  if(kind==='header-amendments')return `<div class="empty" role="alert"><b>Header amendments unavailable</b><span>${esc(missing?'Header amendment storage is not available in this database yet. Other submitted-request sections remain available where deployed.':error.message||'Could not load header amendments.')}</span><button type="button" class="btn btn-ghost" onclick="${retry}()">Retry</button></div>`;
   if(kind==='lifecycle')return `<div class="empty" role="alert"><b>Lifecycle history unavailable</b><span>${esc(missing?'Lifecycle storage is not available in this database yet. Requisition lines, submission history and amendments remain available where deployed.':error.message||'Could not load lifecycle history.')}</span><button type="button" class="btn btn-ghost" onclick="${retry}()">Retry</button></div>`;
   if(kind==='amendments')return `<div class="empty" role="alert"><b>Quantity amendments unavailable</b><span>${esc(missing?'Amendment storage is not available in this database yet. Requisition lines and submission history remain available.':error.message||'Could not load quantity amendments.')}</span><button type="button" class="btn btn-ghost" onclick="${retry}()">Retry</button></div>`;
   return `<div class="empty" role="alert"><b>Submitted requests unavailable</b><span>${esc(missing?'Submitted-request storage is not available in this database yet.':error.message||'Could not load this request.')}</span><button type="button" class="btn btn-ghost" onclick="${retry}()">Retry</button></div>`;
@@ -8152,12 +8154,12 @@ async function openManpowerSubmitted(id){
 }
 async function renderManpowerSubmittedDetails(){
   if(!SESSION||!hasPermission('manpower.view'))return;
-  if(MANPOWER_SUBMITTED_UI.edit&&(document.getElementById('mp_quantity_editor')?.isConnected||document.getElementById('mp_lifecycle_editor')?.isConnected)&&MANPOWER_SUBMITTED_UI.edit.request.id===STATE.manpowerSubmittedId&&PAGE_EDIT_STATE?.view===STATE.view)return;
+  if(MANPOWER_SUBMITTED_UI.edit&&(document.getElementById('mp_quantity_editor')?.isConnected||document.getElementById('mp_lifecycle_editor')?.isConnected||document.getElementById('mp_header_editor')?.isConnected)&&MANPOWER_SUBMITTED_UI.edit.request.id===STATE.manpowerSubmittedId&&PAGE_EDIT_STATE?.view===STATE.view)return;
   if(MANPOWER_SUBMITTED_UI.edit)clearManpowerQuantityEdit();
   MANPOWER_SUBMITTED_UI.record=null;MANPOWER_SUBMITTED_UI.rows=[];
   const lifecycleActions=document.getElementById('manpower-lifecycle-actions');if(lifecycleActions)lifecycleActions.innerHTML='';
   const content=document.getElementById('content'),id=STATE.manpowerSubmittedId;
-  const kind=['history','amendments','lifecycle'].includes(STATE.manpowerSubmittedTab)?STATE.manpowerSubmittedTab:'lines';
+  const kind=['history','amendments','lifecycle','header-amendments'].includes(STATE.manpowerSubmittedTab)?STATE.manpowerSubmittedTab:'lines';
   const key=`manpower:submitted-${kind}:${id}`,{page,size}=manpowerSubmittedPageSettings(key);
   const token=++MANPOWER_SUBMITTED_UI.request,sessionId=SESSION.id;
   let requestLoaded=false;
@@ -8169,7 +8171,7 @@ async function renderManpowerSubmittedDetails(){
     setTitle(`Manpower Fulfillment / ${request.prf_number}`,'Submitted request');
     if(content.dataset.submittedId!==id||!content.querySelector('#manpower-submitted-detail-results')){
       content.dataset.submittedId=id;
-      content.innerHTML=`<div class="data-toolbar"><button type="button" class="btn btn-ghost btn-sm" onclick="go('manpowerSubmitted')">Back to Submitted Requests</button><button type="button" class="iconbtn" title="About quantities" aria-label="About quantities" onclick="manpowerSubmittedInfo()">${iInfo(15)}</button></div>${submittedHeaderHTML(request,fmtDate)}<div id="manpower-lifecycle-actions" class="manpower-lifecycle-actions"></div><nav class="workspace-tabs manpower-submitted-tabs" aria-label="Submitted request sections"><button type="button" data-submitted-tab="lines" onclick="manpowerSubmittedSetTab('lines')">Requisition Lines</button><button type="button" data-submitted-tab="history" onclick="manpowerSubmittedSetTab('history')">Submission History</button><button type="button" data-submitted-tab="amendments" onclick="manpowerSubmittedSetTab('amendments')">Amendments</button><button type="button" data-submitted-tab="lifecycle" onclick="manpowerSubmittedSetTab('lifecycle')">Lifecycle History</button></nav><div id="manpower-submitted-detail-results" class="manpower-submitted-data" aria-live="polite"></div>`;
+      content.innerHTML=`<div class="data-toolbar"><button type="button" class="btn btn-ghost btn-sm" onclick="go('manpowerSubmitted')">Back to Submitted Requests</button><button type="button" class="iconbtn" title="About quantities" aria-label="About quantities" onclick="manpowerSubmittedInfo()">${iInfo(15)}</button></div>${submittedHeaderHTML(request,fmtDate)}<div id="manpower-lifecycle-actions" class="manpower-lifecycle-actions"></div><nav class="workspace-tabs manpower-submitted-tabs" aria-label="Submitted request sections"><button type="button" data-submitted-tab="lines" onclick="manpowerSubmittedSetTab('lines')">Requisition Lines</button><button type="button" data-submitted-tab="history" onclick="manpowerSubmittedSetTab('history')">Submission History</button><button type="button" data-submitted-tab="amendments" onclick="manpowerSubmittedSetTab('amendments')">Amendments</button><button type="button" data-submitted-tab="header-amendments" onclick="manpowerSubmittedSetTab('header-amendments')">Header History</button><button type="button" data-submitted-tab="lifecycle" onclick="manpowerSubmittedSetTab('lifecycle')">Lifecycle History</button></nav><div id="manpower-submitted-detail-results" class="manpower-submitted-data" aria-live="polite"></div>`;
     }else content.querySelector('.manpower-submitted-header').outerHTML=submittedHeaderHTML(request,fmtDate);
     content.querySelectorAll('[data-submitted-tab]').forEach(button=>{const active=button.dataset.submittedTab===kind;button.classList.toggle('active',active);if(active)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');});
     const host=document.getElementById('manpower-submitted-detail-results');host.innerHTML='<div class="empty">Loading records...</div>';
@@ -8177,17 +8179,18 @@ async function renderManpowerSubmittedDetails(){
     if(token!==MANPOWER_SUBMITTED_UI.request||STATE.view!=='manpowerSubmittedDetails'||STATE.manpowerSubmittedId!==id||SESSION?.id!==sessionId||!hasPermission('manpower.view')||!host.isConnected)return;
     const meta=paginationMeta(STATE,key,count||0);if(meta.page!==page){await renderManpowerSubmittedDetails();return;}
     MANPOWER_SUBMITTED_UI.record=request;MANPOWER_SUBMITTED_UI.rows=kind==='lines'?data||[]:[];
-    document.getElementById('manpower-lifecycle-actions').innerHTML=lifecycleActionsHTML(request,hasPermission('manpower.update'));
+    document.getElementById('manpower-lifecycle-actions').innerHTML=lifecycleActionsHTML(request,hasPermission('manpower.update'),true);
     host.innerHTML=submittedTableHTML(data||[],kind,fmtDate,request.target_date,{canAmend:request.state==='Open'&&hasPermission('manpower.update'),canManage:request.state==='Open'&&hasPermission('manpower.update')})+manpowerSubmittedPaginationHTML(meta,key);
   }catch(error){if(token===MANPOWER_SUBMITTED_UI.request&&STATE.view==='manpowerSubmittedDetails'&&SESSION?.id===sessionId){const host=document.getElementById('manpower-submitted-detail-results');if(requestLoaded&&host)host.innerHTML=manpowerSubmittedErrorHTML(error,'renderManpowerSubmittedDetails',kind);else content.innerHTML=`<button type="button" class="btn btn-ghost" onclick="go('manpowerSubmitted')">Back to Submitted Requests</button>${manpowerSubmittedErrorHTML(error,'renderManpowerSubmittedDetails')}`;}}
 }
-async function manpowerSubmittedSetTab(kind){if(MANPOWER_SUBMITTED_UI.saving||!['lines','history','amendments','lifecycle'].includes(kind))return;if(MANPOWER_SUBMITTED_UI.edit&&!(await resolveManpowerQuantityEdit()))return;STATE.manpowerSubmittedTab=kind;await renderManpowerSubmittedDetails();}
+async function manpowerSubmittedSetTab(kind){if(MANPOWER_SUBMITTED_UI.saving||!['lines','history','amendments','lifecycle','header-amendments'].includes(kind))return;if(MANPOWER_SUBMITTED_UI.edit&&!(await resolveManpowerQuantityEdit()))return;STATE.manpowerSubmittedTab=kind;await renderManpowerSubmittedDetails();}
 async function manpowerSubmittedPageGo(scope,page){if(MANPOWER_SUBMITTED_UI.saving||!scope.startsWith('manpower:submitted'))return;if(MANPOWER_SUBMITTED_UI.edit&&!(await resolveManpowerQuantityEdit()))return;STATE.tablePages[scope]={...STATE.tablePages[scope],page};if(STATE.view==='manpowerSubmitted')await renderManpowerSubmitted();else if(STATE.view==='manpowerSubmittedDetails')await renderManpowerSubmittedDetails();}
 async function manpowerSubmittedPageSize(scope,size){if(MANPOWER_SUBMITTED_UI.saving||!scope.startsWith('manpower:submitted')||![10,25,50].includes(Number(size)))return;if(MANPOWER_SUBMITTED_UI.edit&&!(await resolveManpowerQuantityEdit()))return;STATE.tablePages[scope]={page:1,size:Number(size)};if(STATE.view==='manpowerSubmitted')await renderManpowerSubmitted();else if(STATE.view==='manpowerSubmittedDetails')await renderManpowerSubmittedDetails();}
 function manpowerSubmittedInfo(){openModal('<div class="modal-head"><h3>Quantity definitions</h3><button onclick="closeModal()" aria-label="Close">&times;</button></div><div class="modal-body"><p>Original is the immutable headcount first submitted. Authorized is the current approved quantity. Cancelled is outstanding demand formally cancelled, not deployed history. Open requests permit reasoned quantity amendments where the reviewed backend has been released; reserved and historical fulfilled commitments are checked by the database. Submission History records the initial baseline. Amendments records previous and revised quantities with reasons. Lifecycle History records reasoned cancellations, closures and reopening where lifecycle storage has been deployed. Reopening does not restore cancelled demand. Reservations and deployment entry are not enabled in this workspace.</p></div><div class="modal-foot"><button type="button" class="btn btn-ghost" onclick="closeModal()">Close</button></div>');}
 
 function manpowerQuantityEditDirty(){
   const edit=MANPOWER_SUBMITTED_UI.edit;
+  if(edit?.kind==='header')return Boolean(document.getElementById('mp_header_editor')?.isConnected&&(JSON.stringify(readHeaderAmendment(document))!==JSON.stringify(edit.baseline)||document.getElementById('mp_header_reason').value!==''));
   if(edit?.kind==='lifecycle')return Boolean(document.getElementById('mp_lifecycle_editor')?.isConnected&&(document.getElementById('mp_lifecycle_reason').value!==''||(edit.operation==='CancelLine'&&document.getElementById('mp_lifecycle_quantity').value!=='')));
   return Boolean(edit&&document.getElementById('mp_quantity_editor')?.isConnected&&
     (document.getElementById('mp_quantity_value').value!==String(edit.line.current_authorized)||document.getElementById('mp_quantity_reason').value!==''));
@@ -8197,7 +8200,8 @@ function clearManpowerQuantityEdit(){
   if(edit?.cell.isConnected)edit.cell.innerHTML=edit.originalHTML;
   MANPOWER_SUBMITTED_UI.edit=null;
   if(PAGE_EDIT_STATE?.view==='manpowerSubmittedDetails')PAGE_EDIT_STATE=null;
-  if(edit?.kind==='lifecycle'){
+  if(edit?.kind==='header')edit.cell.querySelector('[data-header-edit]')?.focus();
+  else if(edit?.kind==='lifecycle'){
     if(edit.trigger?.isConnected)edit.trigger.focus();
     else edit.cell.querySelector(`[data-lifecycle-operation="${edit.operation}"]`)?.focus();
   }
@@ -8207,8 +8211,9 @@ async function resolveManpowerQuantityEdit(){
   if(MANPOWER_SUBMITTED_UI.saving)return false;
   if(!manpowerQuantityEditDirty()){clearManpowerQuantityEdit();return true;}
   const lifecycle=MANPOWER_SUBMITTED_UI.edit?.kind==='lifecycle';
-  const choice=await confirmDataChange({title:lifecycle?'Unsaved lifecycle change':'Unsaved quantity amendment',message:'Save this change before continuing?',confirmLabel:'Save changes',secondaryLabel:'Discard changes',cancelLabel:'Keep editing'});
-  if(choice==='confirm')return lifecycle?saveManpowerLifecycle():saveManpowerQuantityAmendment();
+  const header=MANPOWER_SUBMITTED_UI.edit?.kind==='header';
+  const choice=await confirmDataChange({title:header?'Unsaved header amendment':lifecycle?'Unsaved lifecycle change':'Unsaved quantity amendment',message:'Save this change before continuing?',confirmLabel:'Save changes',secondaryLabel:'Discard changes',cancelLabel:'Keep editing'});
+  if(choice==='confirm')return header?saveManpowerHeaderAmendment():lifecycle?saveManpowerLifecycle():saveManpowerQuantityAmendment();
   if(choice==='discard'){clearManpowerQuantityEdit();return true;}
   return false;
 }
@@ -8325,6 +8330,55 @@ async function saveManpowerLifecycle(){
   }catch(error){
     PENDING_PAGE_NAVIGATION=null;
     if(SESSION?.id===sessionId&&STATE.view==='manpowerSubmittedDetails'&&root.isConnected)showManpowerLifecycleErrors({request:lifecycleError(error)});
+    return false;
+  }finally{MANPOWER_SUBMITTED_UI.saving=false;if(root.isConnected){controls.forEach(control=>control.disabled=false);root.removeAttribute('aria-busy');}}
+}
+
+async function openManpowerHeaderAmendment(){
+  if(!SESSION||STATE.view!=='manpowerSubmittedDetails'||!hasPermission('manpower.view')||!hasPermission('manpower.update')||MANPOWER_SUBMITTED_UI.saving)return;
+  const sessionId=SESSION.id,requestId=STATE.manpowerSubmittedId;
+  if(MANPOWER_SUBMITTED_UI.edit&&!(await resolveManpowerQuantityEdit()))return;
+  if(SESSION?.id!==sessionId||STATE.view!=='manpowerSubmittedDetails'||STATE.manpowerSubmittedId!==requestId||!hasPermission('manpower.view')||!hasPermission('manpower.update'))return;
+  const request=MANPOWER_SUBMITTED_UI.record,cell=document.getElementById('manpower-lifecycle-actions');
+  if(request?.id!==requestId||request.state!=='Open'||!cell?.isConnected)return;
+  MANPOWER_SUBMITTED_UI.edit={kind:'header',request:structuredClone(request),cell,originalHTML:cell.innerHTML};
+  cell.innerHTML=headerEditorHTML(request);MANPOWER_SUBMITTED_UI.edit.baseline=readHeaderAmendment(document);
+  PAGE_EDIT_STATE={view:STATE.view,baseline:serializeEditor(document.getElementById('content'),{page:true}),saveButton:document.getElementById('mp_header_save')};
+  document.getElementById('mp_header_editor').scrollIntoView({block:'nearest',inline:'nearest'});document.getElementById('mp_header_prf_number').focus({preventScroll:true});
+}
+function showManpowerHeaderErrors(errors){
+  const summary=document.getElementById('mp_header_error');if(!summary)return;
+  const fields=[...Object.keys(HEADER_AMENDMENT_FIELDS),'reason'];summary.hidden=!Object.keys(errors).length;
+  summary.innerHTML=Object.entries(errors).map(([key,message])=>fields.includes(key)?`<div><a href="#mp_header_${key}">${esc(message)}</a></div>`:`<div>${esc(message)}</div>`).join('');
+  for(const field of fields){
+    const control=document.getElementById('mp_header_'+field),message=document.getElementById('mp_header_'+field+'_error');
+    message.hidden=!errors[field];message.textContent=errors[field]||'';
+    if(errors[field])control.setAttribute('aria-invalid','true');else control.removeAttribute('aria-invalid');
+  }
+  if(Object.keys(errors).length)summary.focus();
+}
+async function saveManpowerHeaderAmendment(){
+  const edit=MANPOWER_SUBMITTED_UI.edit;
+  if(MANPOWER_SUBMITTED_UI.saving)return false;
+  if(edit?.kind!=='header'||!SESSION||STATE.view!=='manpowerSubmittedDetails'||!hasPermission('manpower.view')||!hasPermission('manpower.update')){PENDING_PAGE_NAVIGATION=null;return false;}
+  const root=document.getElementById('mp_header_editor');if(!root?.isConnected){PENDING_PAGE_NAVIGATION=null;return false;}
+  const read=()=>headerAmendmentPayload(edit.request,readHeaderAmendment(document),document.getElementById('mp_header_reason').value);
+  const checked=read();showManpowerHeaderErrors(checked.errors);if(Object.keys(checked.errors).length){PENDING_PAGE_NAVIGATION=null;return false;}
+  const sessionId=SESSION.id,controls=[...root.querySelectorAll('input,select,textarea,button')];
+  MANPOWER_SUBMITTED_UI.saving=true;controls.forEach(control=>control.disabled=true);root.setAttribute('aria-busy','true');
+  try{
+    if(await confirmDataChange({title:'Confirm header amendment',message:`Save changes to ${Object.keys(checked.payload.p_header).map(key=>HEADER_AMENDMENT_FIELDS[key]).join(', ')}? Existing line IDs, quantities and worker assignments stay unchanged.`,confirmLabel:'Save header'})!=='confirm'){PENDING_PAGE_NAVIGATION=null;return false;}
+    if(SESSION?.id!==sessionId||STATE.view!=='manpowerSubmittedDetails'||STATE.manpowerSubmittedId!==edit.request.id||!root.isConnected||!hasPermission('manpower.view')||!hasPermission('manpower.update')){PENDING_PAGE_NAVIGATION=null;return false;}
+    if(JSON.stringify(read())!==JSON.stringify(checked))throw new Error('Your entries changed during confirmation. Review them and save again.');
+    const {data,error}=await supabase.rpc('amend_manpower_header',checked.payload);if(error)throw error;
+    if(!headerAmendmentResultValid(data,edit.request,checked.payload))throw new Error('The header amendment could not be confirmed. Check the saved request and header history before retrying.');
+    if(SESSION?.id!==sessionId||STATE.view!=='manpowerSubmittedDetails'||STATE.manpowerSubmittedId!==edit.request.id){PENDING_PAGE_NAVIGATION=null;return false;}
+    const destination=PENDING_PAGE_NAVIGATION;PENDING_PAGE_NAVIGATION=null;clearManpowerQuantityEdit();toast('Request header amended.');
+    if(destination){MANPOWER_SUBMITTED_UI.saving=false;await go(destination,{skipUnsaved:true});}else{await renderManpowerSubmittedDetails();document.querySelector('[data-header-edit]')?.focus();}
+    return true;
+  }catch(error){
+    PENDING_PAGE_NAVIGATION=null;
+    if(SESSION?.id===sessionId&&STATE.view==='manpowerSubmittedDetails'&&root.isConnected)showManpowerHeaderErrors({[error.code==='23505'?'prf_number':'request']:headerAmendmentError(error)});
     return false;
   }finally{MANPOWER_SUBMITTED_UI.saving=false;if(root.isConnected){controls.forEach(control=>control.disabled=false);root.removeAttribute('aria-busy');}}
 }
@@ -10863,6 +10917,7 @@ Object.assign(window, {
   renderManpowerSubmitted,renderManpowerSubmittedDetails,openManpowerSubmitted,manpowerSubmittedSetTab,manpowerSubmittedPageGo,manpowerSubmittedPageSize,manpowerSubmittedInfo,
   openManpowerQuantityAmendment,saveManpowerQuantityAmendment,discardManpowerQuantityAmendment,
   openManpowerLifecycle,saveManpowerLifecycle,
+  openManpowerHeaderAmendment,saveManpowerHeaderAmendment,
   renderClientCatalog, clientCatalogPageGo, clientCatalogPageSize, openClientAccountForm, saveClientAccount,
   syncEmployeeStatusReason,
   renderAttendance, attendanceFilter, exportAttendance,

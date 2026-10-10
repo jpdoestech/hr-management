@@ -2,8 +2,8 @@ import {manpowerQuantity} from '../core/manpower-demand.js';
 const escape=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
 export const LIFECYCLE_LABELS={Close:'Close request',Cancel:'Cancel request',Reopen:'Reopen request',CancelLine:'Cancel line demand'};
 export function lifecycleOperations(state){return state==='Open'?['Close','Cancel']:['Closed','Cancelled'].includes(state)?['Reopen']:[];}
-export function lifecycleActionsHTML(request,allowed=false){
-  return allowed?`<div class="rowactions" aria-label="Request lifecycle actions">${lifecycleOperations(request.state).map(operation=>`<button type="button" class="btn btn-ghost btn-sm" data-lifecycle-operation="${operation}" onclick="openManpowerLifecycle('${operation}')">${LIFECYCLE_LABELS[operation]}</button>`).join('')}</div>`:'';
+export function lifecycleActionsHTML(request,allowed=false,includeHeader=false){
+  return allowed?`<div class="rowactions" aria-label="Request lifecycle actions">${includeHeader&&request.state==='Open'?'<button type="button" class="btn btn-ghost btn-sm" data-header-edit onclick="openManpowerHeaderAmendment()">Edit Header</button>':''}${lifecycleOperations(request.state).map(operation=>`<button type="button" class="btn btn-ghost btn-sm" data-lifecycle-operation="${operation}" onclick="openManpowerLifecycle('${operation}')">${LIFECYCLE_LABELS[operation]}</button>`).join('')}</div>`:'';
 }
 export function lifecyclePayload(request,operation,line,quantity,reason){
   const errors={},note=String(reason??'').trim();let value=null;

@@ -13,6 +13,7 @@ import {loadSubmittedRequests,loadSubmittedRequest,loadSubmittedRows,submittedLi
 import {paginationMeta,paginationHTML} from '/js/core/pagination.js';
 import {quantityAmendmentPayload,quantityAmendmentHTML,quantityAmendmentError} from '/js/manpower/quantity-editor.js';
 import {LIFECYCLE_LABELS,lifecycleOperations,lifecycleActionsHTML,lifecyclePayload,lifecycleEditorHTML,lifecycleResultValid,lifecycleError} from '/js/manpower/lifecycle-editor.js';
+import {HEADER_AMENDMENT_FIELDS,readHeaderAmendment,headerAmendmentPayload,headerEditorHTML,headerAmendmentResultValid,headerAmendmentError} from '/js/manpower/header-editor.js';
 const SESSION={id:'fixture-user'};const STATE={view:'manpowerSubmitted'};const hasPermission=()=>true;
 const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 const iSearch=()=>'';const iInfo=()=>'<span aria-hidden="true">i</span>';
@@ -31,11 +32,23 @@ const lines=Array.from({length:31},(_,index)=>({id:'line'+index,request_id:'requ
 const history=lines.map(line=>({...line,line_id:line.id,event_type:'Submitted',request_revision:2,hr_manpower_lines:{request_id:line.request_id,ordinal:line.ordinal,department:line.department,position:line.position}}));
 const amendments=history.map((row,index)=>({...row,previous_authorized:1000,current_authorized:1025,request_revision:index+3,reason:'Additional client demand. '+('Synthetic reason with sufficient detail for responsive wrapping. '.repeat(5))}));
 requests[0].state='Closed';requests[1].state='Cancelled';
-if(location.search.includes('quantity')||location.search.includes('lifecycle-open'))requests[0].state='Open';
+if(location.search.includes('quantity')||location.search.includes('lifecycle-open')||location.search.includes('header'))requests[0].state='Open';
+requests.forEach(request=>{request.client_id='synthetic-client';request.submitted_by='fixture-user';});
+const headerAmendments=[];
 const lifecycle=Array.from({length:31},(_,index)=>({request_id:'request0',request_revision:index+3,
   operation:index%2?'Reopen':'Close',previous_state:index%2?'Closed':'Open',current_state:index%2?'Open':'Closed',
   reason:'Synthetic lifecycle reason '+(index+1)+'. '+('Historical fulfillment is preserved. '.repeat(8))}));
 const supabase={rpc:async(name,payload)=>{
+  if(name==='amend_manpower_header'){
+    if(location.search.includes('missing-header-rpc'))return {error:{code:'PGRST202'}};
+    if(location.search.includes('duplicate-header'))return {error:{code:'23505'}};
+    const request=requests.find(row=>row.id===payload.p_id);
+    if(!request||request.revision!==payload.p_expected_revision)return {error:{code:'40001'}};
+    const before=Object.fromEntries(Object.keys(HEADER_AMENDMENT_FIELDS).map(key=>[key,request[key]]));
+    Object.assign(request,payload.p_header);request.revision++;
+    headerAmendments.unshift({request_id:request.id,request_revision:request.revision,before_header:before,after_header:Object.fromEntries(Object.keys(HEADER_AMENDMENT_FIELDS).map(key=>[key,request[key]])),reason:payload.p_reason});
+    return {data:{request:{...request}}};
+  }
   if(name==='change_manpower_lifecycle'){
     if(location.search.includes('missing-lifecycle-rpc'))return {error:{code:'PGRST202'}};
     if(location.search.includes('reservation-block'))return {error:{code:'23514',message:'Release or reassign all reservations on affected lines before cancellation or closure.'}};
@@ -65,7 +78,8 @@ const supabase={rpc:async(name,payload)=>{
     if(table==='hr_manpower_quantity_history'&&location.search.includes('missing-history'))return Promise.resolve(resolve({error:{code:'42P01',message:'Missing history'}}));
     if(table==='hr_manpower_quantity_amendments'&&location.search.includes('missing-amendments'))return Promise.resolve(resolve({error:{code:'42P01',message:'Missing amendments'}}));
     if(table==='hr_manpower_lifecycle_history'&&location.search.includes('missing-lifecycle'))return Promise.resolve(resolve({error:{code:'42P01',message:'Missing lifecycle'}}));
-    const rows=(table==='hr_manpower_requests'?requests:table==='hr_manpower_lines'?lines:table==='hr_manpower_quantity_amendments'?amendments:table==='hr_manpower_lifecycle_history'?lifecycle:history).filter(row=>predicates.every(predicate=>predicate(row))).sort((a,b)=>{for(const [key,ascending] of sorts){if(a[key]!==b[key])return (a[key]>b[key]?1:-1)*(ascending?1:-1);}return 0;});
+    if(table==='hr_manpower_header_amendments'&&location.search.includes('missing-header-history'))return Promise.resolve(resolve({error:{code:'42P01',message:'Missing header history'}}));
+    const rows=(table==='hr_manpower_requests'?requests:table==='hr_manpower_lines'?lines:table==='hr_manpower_quantity_amendments'?amendments:table==='hr_manpower_lifecycle_history'?lifecycle:table==='hr_manpower_header_amendments'?headerAmendments:history).filter(row=>predicates.every(predicate=>predicate(row))).sort((a,b)=>{for(const [key,ascending] of sorts){if(a[key]!==b[key])return (a[key]>b[key]?1:-1)*(ascending?1:-1);}return 0;});
     return Promise.resolve(resolve(single?{data:rows[0],error:rows.length?null:{message:'Request unavailable'}}:{data:rows.slice(first,last+1),count:rows.length}));
   }};return query;
 }};

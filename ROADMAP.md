@@ -666,3 +666,38 @@ HEAD verified. Staged diff checks passed; only this slice's files were staged.
 The existing untracked skill Python cache remains excluded. No production SQL
 was applied. Next: inspect submitted header/date/numbering amendment APIs and
 their immutable submission/registry guards before coordinated UI changes.
+
+MP-A14 publication documentation: `04f7841` pushed to `origin/main`; remote
+HEAD verified. Specification remains the scope; ROADMAP records progress only.
+
+- MP-A15: controlled submitted-header amendments
+  (`docs/MANPOWER-FULFILLMENT-HEADER-AMENDMENTS.md`). Proposal 0058 reuses
+  current request locks, private exact intents, scoped authorization, cross-model
+  PRF registry and actor audit with append-only before/after history. Inline
+  PRF/date/requested-by/priority/remarks entry confirms reasons, preserves
+  submission/line/worker facts and same-request page context. Lazy Header History
+  is bounded and escaped. Missing backend/duplicate/stale/denied errors retain
+  input. Client/branch are deliberately not reinterpreted by this operation.
+
+MP-A15 database evidence: standalone and combined existing in-memory PGlite
+rehearsals passed. Strict field/date/state/revision/reason/access validation,
+normalized current/legacy duplicate rejection, atomic registry/audit rollback,
+old-number reuse, immutable baselines, quantity/lifecycle coexistence and empty
+header integrity checks verified. Combined proposals through 0057 plus 0058
+preserved an active reservation and canonical capacity after PRF/date edits.
+No package/server installation, native server startup, live SQL execution,
+historical migration edit or proposal promotion occurred.
+
+MP-A15 browser evidence: synthetic page-two Save/Discard, changed-field history,
+duplicate-number field error, missing RPC/storage retention and sibling
+navigation verified. 390x844, 768x1024 and 1440x900 show no document horizontal
+overflow; one/two-column forms max at 760px and mobile/tablet controls are 44px.
+Next: controlled line metadata amendments, then authoritative onboarding
+reservation/deployment UI. Identity/on-call, unified monitoring/reporting,
+legacy reconciliation and live release/security acceptance remain unfinished.
+
+MP-A15 project validation: lint, all 294 automated tests, production build,
+explicit `node scripts/validate.mjs` and `git diff --check` passed. Browser
+fixture shutdown and temporary tab cleanup were verified. SQL setup and
+read-only diagnostics are documented in the header-amendments Markdown file.
+The unrelated untracked skill Python cache is excluded from publication.

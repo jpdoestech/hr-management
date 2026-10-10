@@ -73,6 +73,7 @@ PostgreSQL compatibility does not require changing it.
 with expected(signature) as (
   values
     ('public.submit_manpower_request(text,bigint)'),
+    ('public.amend_manpower_header(text,bigint,jsonb,text)'),
     ('public.amend_manpower_quantity(text,text,bigint,integer,text)'),
     ('public.change_manpower_lifecycle(text,bigint,text,text,text,integer)')
 ), routines as (
@@ -122,6 +123,11 @@ in the diagnostic does not mean lifecycle UI or overall specification work is
 complete. Later reservation/deployment workflows have their own dependencies
 and release gates; this section is not a full-system deployment script.
 
+Submitted header amendments additionally require reviewed
+[0058 SQL](../supabase/proposals/0058_manpower_header_amendments.sql) and
+[header integrity checks](../supabase/verification/manpower_header_amendments_integrity.sql).
+See [header amendment setup](MANPOWER-FULFILLMENT-HEADER-AMENDMENTS.md#applicable-sql-and-rollout).
+
 ## Validation evidence
 
 Core/handler tests exercise payload validation, immutable baseline/cancellation,
@@ -144,8 +150,9 @@ Live database/RLS/end-to-end acceptance is not claimed by synthetic UI tests.
 
 Reasoned close/cancel/reopen and line cancellation UI is now connected in
 [MP-A14](MANPOWER-FULFILLMENT-LIFECYCLE-TRANSACTIONS-UI.md), still subject to backend release
-and live acceptance. Remaining: submitted header/date/
-numbering amendments; authoritative applicant reservation and deployment
+and live acceptance. Submitted header/date/numbering amendments are connected
+in [MP-A15](MANPOWER-FULFILLMENT-HEADER-AMENDMENTS.md), also release-gated.
+Remaining: line metadata amendments; authoritative applicant reservation and deployment
 workflows; identity and on-call UI; worker lists, timeline, reporting/exports;
 legacy reconciliation and verified production release/security acceptance.
 

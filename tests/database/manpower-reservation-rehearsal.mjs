@@ -1369,4 +1369,26 @@ if(process.argv.includes('--native-races')){
     for(const connection of [writer,reverser,retry]){try{await connection.exec('rollback');}finally{await connection.close();}}
   }
 }
+if(process.argv.includes('--header-amendments')){
+  if(!process.argv.includes('--lifecycle'))throw new Error('Header integration requires --lifecycle prerequisites');
+  await db.exec('reset role');
+  await db.exec(readFileSync(new URL('../../supabase/proposals/0058_manpower_header_amendments.sql',import.meta.url),'utf8'));
+  await db.exec(`set test.actor='${actor}';set test.tenant='${tenant}';set test.denied='';set test.scope='global';set role authenticated`);
+  await request('header-integration',2);
+  await db.exec(`reset role;insert into hr_records values('${tenant}','onboardingCandidates','header-candidate',
+    '{"id":"header-candidate","name":"Header Integration QA Applicant","department":"Production","stage":"Applicant"}',now(),null);set role authenticated`);
+  const reserved=await reserve('header-reserve',[{candidate_id:'header-candidate',line_id:'header-integration-line',hiring_category:'New Hire'}]);
+  const before=(await db.query('select to_jsonb(reservation) snapshot from hr_manpower_reservations reservation where id=$1',[reserved.reservation_ids[0]])).rows[0].snapshot;
+  const capacityBefore=(await db.query("select manpower_line_capacity('header-integration-line') result")).rows[0].result;
+  const snapshot=(await db.query("select to_jsonb(request) snapshot from hr_manpower_requests request where id='header-integration'")).rows[0].snapshot;
+  await db.query('select amend_manpower_header($1,$2,$3,$4)',['header-integration',snapshot.revision,{prf_number:'Header Integration Renamed',target_date:'2026-10-25'},'Synthetic integrated correction']);
+  assert.deepEqual((await db.query('select to_jsonb(reservation) snapshot from hr_manpower_reservations reservation where id=$1',[reserved.reservation_ids[0]])).rows[0].snapshot,before);
+  assert.deepEqual((await db.query("select manpower_line_capacity('header-integration-line') result")).rows[0].result,capacityBefore);
+  const after=(await db.query("select to_jsonb(request) snapshot from hr_manpower_requests request where id='header-integration'")).rows[0].snapshot;
+  assert.equal(after.prf_number,'Header Integration Renamed');assert.equal(after.revision,snapshot.revision+1);
+  for(const key of ['id','tenant_id','client_id','branch_reporting','submitted_at','submitted_by'])assert.equal(after[key],snapshot[key]);
+  await db.exec('reset role');
+  for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_header_amendments_integrity.sql',import.meta.url),'utf8')))assert.equal(check.rows.length,0);
+  console.log('Integrated header amendment passed: active reservation/source links and canonical capacity unchanged after PRF/date correction. No live database used.');
+}
 await db.close();console.log('Reservation PostgreSQL rehearsal passed: 75-worker atomic batch, ineligible/capacity/duplicate rollback, bounded real assignments for 1000 demand, role/scope/tenant denial, order-independent idempotent replay, worker uniqueness, authoritative capacity and audit-failure rollback. Production and independent concurrency remain unverified.');
