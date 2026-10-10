@@ -5,6 +5,7 @@ const {fuzzystrmatch}=await import(process.env.HRIS_PGLITE_MODULE?new URL('./con
 const {btree_gist}=await import(process.env.HRIS_PGLITE_MODULE?new URL('./contrib/btree_gist.js',modulePath).href:'@electric-sql/pglite/contrib/btree_gist');
 import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 const db=new PGlite({extensions:{fuzzystrmatch,btree_gist}});
 const tenant='00000000-0000-0000-0000-000000000001',other='00000000-0000-0000-0000-000000000002',actor='00000000-0000-0000-0000-000000000011',client='00000000-0000-0000-0000-000000000021';
 await db.exec(`create role authenticated;create role anon;create schema auth;
@@ -396,5 +397,144 @@ if(process.argv.includes('--intervals')){
   for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_deployment_intervals.sql',import.meta.url),'utf8')))
     assert.equal(check.rows.length,0);
   console.log('Deployment interval rehearsal passed: historical overlap rejected, adjacent half-open intervals accepted, invalid/future/empty dates rejected, active interval and historical fulfillment retained. Owner fixtures are not evidence of actual confirmation API or independent concurrency.');
+}
+if(process.argv.includes('--confirmation')){
+  await db.exec('reset role');
+  for(const [flag,file] of [['--scheduling','0044_manpower_scheduling.sql'],['--intervals','0045_manpower_deployment_intervals.sql']])
+    if(!process.argv.includes(flag))await db.exec(readFileSync(new URL('../../supabase/proposals/'+file,import.meta.url),'utf8'));
+  await db.exec(readFileSync(new URL('../../supabase/proposals/0046_manpower_deployment_confirmation.sql',import.meta.url),'utf8'));
+  const names=['ALVAREZ CLARISSE TAMAYO','DELGADO ROBERTO PASCUAL'];
+  for(let index=0;index<2;index++){
+    const id='confirm-'+index,source={id,name:names[index],department:'Production',stage:'Applicant'};
+    const employee={id:'confirm-worker-'+index,name:names[index],department:'Production',status:'Active',statusReason:'Active / Normal'};
+    await db.query('insert into hr_records values($1,$2,$3,$4),($1,$5,$6,$7)',[tenant,'onboardingCandidates',id,source,'employees',employee.id,employee]);
+  }
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'onboardingCandidates','confirm-unresolved',{id:'confirm-unresolved',name:'WOJTEK ZYGMUNT KRAKOW',department:'Production',stage:'Applicant'}]);
+  await db.exec('set role authenticated');await request('confirmation',3);
+  async function reviewIdentity(index){
+    const pair=(await db.query('select preview_manpower_identity_review($1,$2) result',['confirm-'+index,'confirm-worker-'+index])).rows[0].result;
+    return db.query('select record_manpower_identity_review($1,$2,$3,$4,$5,$6,$7)',[pair.candidate_id,pair.employee_id,'SamePerson','Verified synthetic deployment identity',pair.candidate_fingerprint,pair.employee_fingerprint,pair.review_revision]);
+  }
+  await reviewIdentity(0);await reviewIdentity(1);
+  await reserve('confirm-reserve',[...names.map((_,index)=>({candidate_id:'confirm-'+index,line_id:'confirmation-line',hiring_category:'Existing Employee / Transfer'})),
+    {candidate_id:'confirm-unresolved',line_id:'confirmation-line',hiring_category:'New Hire'}]);
+  const row=async(id)=>(await db.query("select * from hr_manpower_reservations where candidate_id=$1 and state in ('Reserved','Scheduled','Deployed')",[id])).rows[0];
+  const dates=(await db.query(`select to_char((now() at time zone 'Asia/Manila')::date,'YYYY-MM-DD') today,
+    to_char((now() at time zone 'Asia/Manila')::date-1,'YYYY-MM-DD') past,
+    to_char((now() at time zone 'Asia/Manila')::date+1,'YYYY-MM-DD') future`)).rows[0];
+  const rows=[];for(const id of ['confirm-0','confirm-1','confirm-unresolved'])rows.push(await row(id));
+  const selection=rows.map((r,index)=>({reservation_id:r.id,schedule_revision:0,actual_date:index===0?dates.today:dates.past,reason:'HR confirmed actual reporting'}));
+  const confirm=async(token,items)=>(await db.query('select confirm_manpower_deployments($1,$2) result',[token,items])).rows[0].result;
+  const counters=async()=>(await db.query("select manpower_line_capacity('confirmation-line') result")).rows[0].result;
+  for(const invalid of [[],null,[selection[0],selection[0]],[{...selection[0],reason:''}],[{...selection[0],reason:{text:'not text'}}],
+    [{...selection[0],actual_date:dates.future}],[{...selection[0],extra:true}],[{...selection[0],schedule_revision:-1}],[{...selection[0],reservation_id:'invalid'}]])
+    await denied(()=>confirm('invalid-confirm',invalid),'23514');
+  await denied(()=>confirm('unresolved-batch',selection),'23514');
+  assert.equal((await counters()).fulfilled,0);assert.equal((await db.query('select * from hr_manpower_confirmation_history')).rows.length,0);
+  for(const permission of ['onboarding.view','onboarding.update','manpower.view','manpower.update','employees.view']){
+    await db.query('select set_config($1,$2,false)',['test.denied',permission]);await denied(()=>confirm('denied-confirm',selection.slice(0,2)),'42501');
+  }
+  await db.exec("set test.denied='';set test.scope='Other'");await denied(()=>confirm('scope-confirm',selection.slice(0,2)),'42501');
+  await db.exec(`set test.scope='global';set test.tenant='${other}'`);await denied(()=>confirm('tenant-confirm',selection.slice(0,2)),'42501');
+  await db.exec(`set test.tenant='${tenant}'`);
+  await db.query('select schedule_manpower_reservation($1,0,$2,$3)',[rows[0].id,dates.future,'Proposed date only']);
+  await denied(()=>confirm('stale-confirm',selection.slice(0,2)),'40001');selection[0].schedule_revision=1;
+  await db.exec("reset role;update hr_records set data=data||'{\"remarks\":\"New evidence\"}' where record_id='confirm-worker-0';set role authenticated");
+  await denied(()=>confirm('stale-identity-confirm',selection.slice(0,2)),'23514');
+  if(!process.argv.includes('--identity-refresh')){
+    await db.exec('reset role');await db.exec(readFileSync(new URL('../../supabase/proposals/0043_manpower_identity_refresh.sql',import.meta.url),'utf8'));await db.exec('set role authenticated');
+  }
+  await reviewIdentity(0);
+  await db.exec('reset role');
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'employees','confirm-new-duplicate',{id:'confirm-new-duplicate',name:names[0],department:'Production'}]);
+  await db.exec('set role authenticated');await denied(()=>confirm('new-duplicate-confirm',selection.slice(0,2)),'23514');
+  await db.exec("reset role;delete from hr_records where record_id='confirm-new-duplicate'");
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'oncall','confirm-legacy-oncall',{employeeName:names[0]}]);
+  await db.exec('set role authenticated');await denied(()=>confirm('oncall-confirm',selection.slice(0,2)),'23514');
+  await db.exec("reset role;delete from hr_records where record_id='confirm-legacy-oncall';alter table hr_audit_logs add constraint fail_confirmation check(action not like 'Actual deployments confirmed: batch audit-failure-confirm,%') not valid;set role authenticated");
+  await denied(()=>confirm('audit-failure-confirm',selection.slice(0,2)),'23514');
+  assert.equal((await counters()).reserved,3);assert.equal((await counters()).fulfilled,0);
+  await db.exec('reset role');assert.equal((await db.query('select * from hr_manpower_confirmation_batches')).rows.length,0);
+  await db.exec("alter table hr_manpower_confirmation_history add constraint fail_late_history check(reason<>'late history failure') not valid;set role authenticated");
+  const lateFailure=selection.slice(0,2).sort((a,b)=>a.reservation_id.localeCompare(b.reservation_id)).map((item,index)=>({...item,reason:index===1?'late history failure':item.reason}));
+  await denied(()=>confirm('late-row-failure',lateFailure),'23514');
+  assert.equal((await counters()).fulfilled,0);assert.equal((await counters()).reserved,3);
+  await db.exec('reset role');assert.equal((await db.query('select * from hr_manpower_confirmation_batches')).rows.length,0);
+  assert.equal((await db.query("select * from hr_audit_logs where action like 'Actual deployments confirmed:%'")).rows.length,0);
+  await db.exec('set role authenticated');await request('confirm-old',1);await db.exec('reset role');
+  const oldAudit=(await db.query("insert into hr_audit_logs(tenant_id,user_name,action) values($1,'Fixture owner','Synthetic historical interval before confirmation') returning id",[tenant])).rows[0].id;
+  const historical=(await db.query(`insert into hr_manpower_reservations
+    select (jsonb_populate_record(null::hr_manpower_reservations,to_jsonb(r)||jsonb_build_object('id',gen_random_uuid(),
+      'line_id','confirm-old-line','state','Ended','scheduled_date',null,'schedule_revision',0,
+      'actual_date',(now() at time zone 'Asia/Manila')::date-3,'ended_date',(now() at time zone 'Asia/Manila')::date,
+      'confirmation_audit_id',$2::uuid))).* from hr_manpower_reservations r where r.id=$1 returning id`,[rows[0].id,oldAudit])).rows[0].id;
+  await db.exec('set role authenticated');
+  await denied(()=>confirm('overlap-confirm',[{...selection[0],actual_date:dates.past}]),'23P01');
+  assert.equal((await counters()).fulfilled,0);
+  assert.equal((await db.query('select * from hr_manpower_reservations where id=$1',[historical])).rows[0].state,'Ended');
+  await db.exec('reset role');
+  const employeesBefore=(await db.query("select data from hr_records where module='employees' and record_id like 'confirm-worker-%' order by record_id")).rows;
+  await db.exec('set role authenticated');
+  const confirmed=await confirm('actual-two',selection.slice(0,2));assert.equal(confirmed.replayed,false);
+  assert.deepEqual(confirmed.reservation_ids,selection.slice(0,2).map(r=>r.reservation_id).sort());
+  assert.equal((await counters()).fulfilled,2);assert.equal((await counters()).reserved,1);assert.equal((await counters()).available,0);
+  assert.equal((await counters()).active_deployed,2);assert.equal((await counters()).scheduled,0);
+  assert.equal((await row('confirm-0')).scheduled_date.toISOString().slice(0,10),dates.future);
+  assert.equal((await row('confirm-0')).actual_date.toISOString().slice(0,10),dates.today);
+  assert.equal((await db.query('select * from hr_manpower_confirmation_history')).rows.length,2);
+  assert.equal((await confirm('actual-two',selection.slice(0,2).reverse())).replayed,true);
+  await denied(()=>db.exec('insert into hr_manpower_confirmation_history default values'),'42501');
+  await denied(()=>db.exec('delete from hr_manpower_confirmation_history'),'42501');
+  await denied(()=>db.exec('select * from hr_manpower_confirmation_batches'),'42501');
+  await denied(()=>confirm('actual-two',[selection[0]]),'23514');
+  await denied(()=>confirm('second-token',selection.slice(0,2)),'23514');
+  await db.exec("set test.denied='employees.view'");assert.equal((await db.query('select * from hr_manpower_confirmation_history')).rows.length,0);
+  await denied(()=>confirm('actual-two',selection.slice(0,2)),'42501');
+  await db.exec("set test.denied='';set test.scope='Other'");assert.equal((await db.query('select * from hr_manpower_confirmation_history')).rows.length,0);
+  await db.exec("set test.scope='global';reset role");
+  assert.deepEqual((await db.query("select data from hr_records where module='employees' and record_id like 'confirm-worker-%' order by record_id")).rows,employeesBefore);
+  await denied(()=>db.exec("update hr_manpower_confirmation_history set reason='Rewrite'"),'23514');
+  await denied(()=>db.exec('delete from hr_manpower_confirmation_batches'),'23514');
+  assert.equal((await db.query('select * from hr_manpower_reservation_intents')).rows.length,0);
+  for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_confirmation_integrity.sql',import.meta.url),'utf8')))
+    assert.equal(check.rows.length,0);
+  await db.query('insert into hr_records values($1,$2,$3,$4),($1,$5,$6,$7)',[tenant,'onboardingCandidates','confirm-single',
+    {id:'confirm-single',name:'NERI BIANCA SOLANO',department:'Production',stage:'Applicant'},'employees','confirm-single-worker',
+    {id:'confirm-single-worker',name:'NERI BIANCA SOLANO',department:'Production',status:'Active'}]);
+  await db.exec('set role authenticated');await request('confirm-single',1);
+  const singlePair=(await db.query("select preview_manpower_identity_review('confirm-single','confirm-single-worker') result")).rows[0].result;
+  await db.query('select record_manpower_identity_review($1,$2,$3,$4,$5,$6,0)',[singlePair.candidate_id,singlePair.employee_id,'SamePerson','Verified singleton identity',singlePair.candidate_fingerprint,singlePair.employee_fingerprint]);
+  await reserve('single-reservation',[{candidate_id:'confirm-single',line_id:'confirm-single-line',hiring_category:'Existing Employee / Transfer'}]);
+  const singleSelection={reservation_id:(await row('confirm-single')).id,schedule_revision:0,actual_date:dates.today,reason:'Individual reporting confirmed'};
+  assert.equal((await confirm('single-confirmation',[singleSelection])).replayed,false);
+  assert.equal((await db.query("select manpower_line_capacity('confirm-single-line') result")).rows[0].result.fulfilled,1);
+  assert.equal((await confirm('single-confirmation',[singleSelection])).replayed,true);
+  await db.exec('reset role');
+  for(let index=0;index<75;index++){
+    const id='bulk-confirm-'+index,name='SYNTHETIC '+createHash('sha256').update(String(index)).digest('hex').slice(0,32);
+    await db.query('insert into hr_records values($1,$2,$3,$4),($1,$5,$6,$7)',[tenant,'onboardingCandidates',id,
+      {id,name,department:'Production',stage:'Applicant'},'employees',id+'-worker',{id:id+'-worker',name,department:'Production',status:'Active'}]);
+  }
+  await db.exec('set role authenticated');await request('bulk-confirmation',1000);
+  for(let index=0;index<75;index++){
+    const id='bulk-confirm-'+index,pair=(await db.query('select preview_manpower_identity_review($1,$2) result',[id,id+'-worker'])).rows[0].result;
+    await db.query('select record_manpower_identity_review($1,$2,$3,$4,$5,$6,0)',[id,id+'-worker','SamePerson','Verified bulk fixture identity',pair.candidate_fingerprint,pair.employee_fingerprint]);
+  }
+  await reserve('bulk-confirm-reserve',Array.from({length:75},(_,index)=>({candidate_id:'bulk-confirm-'+index,line_id:'bulk-confirmation-line',hiring_category:'Existing Employee / Transfer'})));
+  const bulkSelections=(await db.query("select id from hr_manpower_reservations where line_id='bulk-confirmation-line' order by id")).rows
+    .map(r=>({reservation_id:r.id,schedule_revision:0,actual_date:dates.today,reason:'Actual bulk reporting confirmed'}));
+  await denied(()=>confirm('bulk-late-failure',bulkSelections.map((item,index)=>({...item,reason:index===74?'late history failure':item.reason}))),'23514');
+  assert.equal((await db.query("select manpower_line_capacity('bulk-confirmation-line') result")).rows[0].result.reserved,75);
+  assert.equal((await db.query("select manpower_line_capacity('bulk-confirmation-line') result")).rows[0].result.fulfilled,0);
+  assert.equal((await confirm('bulk-actual-75',bulkSelections)).reservation_ids.length,75);
+  const bulkCapacity=(await db.query("select manpower_line_capacity('bulk-confirmation-line') result")).rows[0].result;
+  assert.equal(bulkCapacity.reserved,0);assert.equal(bulkCapacity.fulfilled,75);assert.equal(bulkCapacity.available,925);
+  assert.equal((await db.query("select count(*)::int count from hr_manpower_reservations where line_id='bulk-confirmation-line'")).rows[0].count,75);
+  assert.equal((await confirm('bulk-actual-75',bulkSelections.reverse())).replayed,true);
+  await db.exec('reset role');
+  for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_confirmation_integrity.sql',import.meta.url),'utf8')))
+    assert.equal(check.rows.length,0);
+  await db.exec('set role anon');await denied(()=>confirm('anonymous',selection.slice(0,2)),'42501');
+  console.log('Actual confirmation rehearsal passed: same-row reserved-to-fulfilled accounting, individual date overrides, past-date reasons, current identity and new-duplicate gates, schedule revision, all-or-nothing unresolved/audit rollback, idempotent replay, RLS/access denial and unchanged employee master. Conversion, transfers, legacy/on-call reconciliation, live and independent concurrency remain gated.');
 }
 await db.close();console.log('Reservation PostgreSQL rehearsal passed: 75-worker atomic batch, ineligible/capacity/duplicate rollback, bounded real assignments for 1000 demand, role/scope/tenant denial, order-independent idempotent replay, worker uniqueness, authoritative capacity and audit-failure rollback. Production and independent concurrency remain unverified.');

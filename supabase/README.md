@@ -12,6 +12,11 @@ This directory is the single source of truth for the HRIS database.
 
 ## Migration rules
 
+Proposal 0046 adds resolved-identity individual/bulk actual confirmation with
+idempotent tokens and immutable history. It remains deployment gated; controlled
+conversion, transfer/reversal, legacy/on-call integration and mutation UI are
+unfinished. See `docs/MANPOWER-FULFILLMENT-ACTUAL-CONFIRMATION.md`.
+
 Proposal 0045 adds half-open historical deployment overlap/date guards, requiring
 `btree_gist` in `extensions`. It is also deployment gated; actual confirmation and
 transfer transactions are not enabled. See `docs/MANPOWER-FULFILLMENT-DEPLOYMENT-INTERVALS.md`.
