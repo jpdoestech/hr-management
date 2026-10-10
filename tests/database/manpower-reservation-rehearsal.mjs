@@ -1211,4 +1211,85 @@ if(process.argv.includes('--reversal-preview')){
   await db.exec('set role anon');await denied(()=>preview(),'42501');
   console.log('Reversal dependency preview rehearsal passed: half-open attendance boundary, malformed/legacy dates/names, conservative financial review, nested references, transfer/replacement/origin/legacy blockers, role/tenant/scope/private denial and redacted diagnostics. No reversal mutation or concurrency safety is claimed.');
 }
+if(process.argv.includes('--credit-reversal')){
+  if(!process.argv.includes('--reversal-preview'))throw new Error('Credit reversal requires the complete reversal-preview rehearsal chain');
+  await db.exec('reset role');
+  await db.exec(readFileSync(new URL('../../supabase/proposals/0057_manpower_credit_reversal.sql',import.meta.url),'utf8'));
+  const source=(await db.query("select * from hr_manpower_reservations where line_id='replacement-demand-line' and state='Ended'")).rows[0];
+  const masters=(await db.query('select record_id,data from hr_records where record_id=any($1::text[]) order by record_id',[[source.employee_id,source.candidate_id]])).rows;
+  await db.exec('set role authenticated');
+  const preview=(await db.query("select preview_manpower_reversal('reservation',$1) result",[source.id])).rows[0].result;
+  assert.equal(preview.reversal_enabled,true);
+  if(process.argv.includes('--lifecycle')){
+    const revision=(await db.query("select revision from hr_manpower_requests where id='replacement-demand'")).rows[0].revision;
+    await db.query('select change_manpower_lifecycle($1,$2,$3,$4,$5,$6)',['replacement-demand',revision,'Close','Demand closed; correction must not reopen it',null,null]);
+  }
+  const reverse=async(token,selected=preview,reason='Verified incorrect reporting; void fulfillment credit')=>
+    (await db.query('select reverse_manpower_deployment($1,$2,$3,$4,$5) result',[token,selected.source_kind,selected.source_id,selected.source_fingerprint,reason])).rows[0].result;
+  const capacity=async(line)=>(await db.query('select manpower_line_capacity($1) result',[line])).rows[0].result;
+  const history=async()=>(await db.query('select * from hr_manpower_reversal_history')).rows;
+  const before=await capacity(source.line_id);
+  for(const permission of ['manpower.approve','manpower.update','manpower.view','employees.view','onboarding.view']){
+    await db.query('select set_config($1,$2,false)',['test.denied',permission]);await denied(()=>reverse('permission-reversal'),'42501');
+  }
+  await db.exec("set test.denied='';set test.scope='Other'");await denied(()=>reverse('scope-reversal'),'42501');
+  await db.exec(`set test.scope='global';set test.tenant='${other}'`);await denied(()=>reverse('tenant-reversal'),'42501');await db.exec(`set test.tenant='${tenant}'`);
+  await denied(()=>reverse('stale-reversal',{...preview,source_fingerprint:'0'.repeat(32)}),'40001');
+  await denied(()=>reverse('reason-reversal',preview,''),'23514');
+  await db.exec('reset role');
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'attendance','reversal-use',{employeeId:source.employee_id,department:'Production',workDate:preview.actual_date}]);
+  await db.exec('set role authenticated');
+  const blocked=await reverse('blocked-reversal');assert.equal(blocked.reversed,false);assert.equal(blocked.blockers[0].code,'attendance_interval');
+  assert.equal((await history()).length,0);assert.deepEqual(await capacity(source.line_id),before);
+  await db.exec("set test.denied='attendance.view'");assert.deepEqual((await reverse('hidden-reversal')).blockers,[{code:'restricted_dependency_review'}]);await db.exec("set test.denied=''");
+  await db.exec('reset role');await db.exec("delete from hr_records where record_id='reversal-use'");
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'documents','uppercase-use',{department:'Production',link:{reservationId:source.id.toUpperCase()}}]);
+  await db.exec('set role authenticated');assert.equal((await reverse('uppercase-reversal')).reversed,false);
+  await db.exec('reset role');await db.exec("delete from hr_records where record_id='uppercase-use'");
+  await db.exec("alter table hr_audit_logs add constraint fail_reversal_audit check(action not like 'Deployment credit reversed: batch audit-reversal,%') not valid");
+  await db.exec("alter table hr_manpower_reversal_history add constraint fail_reversal_late check(batch_token<>'late-reversal') not valid");
+  await db.exec('set role authenticated');await denied(()=>reverse('audit-reversal'),'23514');await denied(()=>reverse('late-reversal'),'23514');
+  assert.deepEqual(await capacity(source.line_id),before);assert.equal((await history()).length,0);
+  const transferred=(await db.query("select preview_manpower_reversal('reservation',id) result from hr_manpower_reservations where employee_id='atomic-transfer-worker' and state='Deployed'")).rows[0].result;
+  assert.equal((await reverse('transfer-reversal',transferred)).reversed,false);
+  const outgoing=(await db.query("select preview_manpower_reversal('reservation',id) result from hr_manpower_reservations where employee_id='ending-worker-0' and line_id='ending-line'")).rows[0].result;
+  assert.equal((await reverse('replacement-reversal',outgoing)).blockers.some(item=>item.code==='replacement_references'),true);
+  const operation=(await db.query("select preview_manpower_reversal('operational',id) result from hr_manpower_operational_deployments where employee_id='op-end-worker-0'")).rows[0].result;
+  assert.equal((await reverse('operational-reversal',operation)).reversed,false);
+  assert.equal((await reverse('successful-reversal')).replayed,false);assert.equal((await reverse('successful-reversal')).replayed,true);
+  assert.equal((await history()).length,1);assert.equal((await history())[0].credit_delta,-1);
+  assert.equal((await capacity(source.line_id)).fulfilled,before.fulfilled-1);assert.equal((await capacity(source.line_id)).available,before.available+1);
+  if(process.argv.includes('--lifecycle'))assert.equal((await db.query("select state from hr_manpower_requests where id='replacement-demand'")).rows[0].state,'Closed');
+  await denied(()=>reverse('successful-reversal',preview,'Different reason'),'23514');
+  const fresh=(await db.query("select preview_manpower_reversal('reservation',$1) result",[source.id])).rows[0].result;
+  assert.equal(fresh.reversal_enabled,false);await denied(()=>reverse('second-reversal',fresh),'23514');
+  await db.exec("set test.denied='manpower.approve'");await denied(()=>reverse('successful-reversal'),'42501');await db.exec("set test.denied=''");
+  await db.exec('reset role');
+  await denied(()=>db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'documents','voided-reference',{link:{deploymentId:source.id}}]),'23514');
+  await denied(()=>db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'documents','uppercase-voided-reference',{link:{deploymentId:source.id.toUpperCase()}}]),'23514');
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'documents','unrelated-document',{name:'Synthetic unrelated document'}]);
+  await denied(()=>db.query("update hr_records set data=data||$1::jsonb where record_id='unrelated-document'",[{reservationId:source.id}]),'23514');
+  // Working employment without a primary assignment remains valid; no typed voided link.
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'attendance','standalone-work',{employeeId:source.employee_id,workDate:preview.actual_date}]);
+  await db.exec("delete from hr_records where record_id in ('standalone-work','unrelated-document')");
+  await db.exec('set role authenticated');
+  await request('active-credit-reversal',1);
+  const next=await reserve('active-reversal-reserve',[{candidate_id:source.candidate_id,line_id:'active-credit-reversal-line',hiring_category:'Existing Employee / Transfer'}]);
+  const today=(await db.query("select to_char((now() at time zone 'Asia/Manila')::date,'YYYY-MM-DD') value")).rows[0].value;
+  await db.query('select confirm_manpower_deployments($1,$2)',['active-reversal-confirm',[{reservation_id:next.reservation_ids[0],schedule_revision:0,actual_date:today,reason:'Synthetic actual confirmation to test active-credit correction'}]]);
+  const active=(await db.query("select preview_manpower_reversal('reservation',$1) result",[next.reservation_ids[0]])).rows[0].result;
+  assert.equal((await reverse('active-reversal',active)).reversed,true);assert.equal((await capacity('active-credit-reversal-line')).fulfilled,0);
+  assert.equal((await capacity('active-credit-reversal-line')).active_deployed,0);assert.equal((await capacity('active-credit-reversal-line')).available,1);
+  assert.equal((await history()).length,2);await denied(()=>db.exec('select * from manpower_private.reversal_batches'),'42501');
+  await db.exec("set test.scope='Other'");assert.equal((await history()).length,0);await db.exec("set test.scope='global'");
+  await db.exec('reset role');
+  assert.deepEqual((await db.query('select * from hr_manpower_reservations where id=$1',[source.id])).rows[0],{...source,state:'Reversed'});
+  assert.deepEqual((await db.query('select record_id,data from hr_records where record_id=any($1::text[]) order by record_id',[[source.employee_id,source.candidate_id]])).rows,masters);
+  await denied(()=>db.exec('delete from hr_manpower_reversal_history'),'23514');await denied(()=>db.exec("update manpower_private.reversal_batches set payload='{}'"),'23514');
+  assert.equal((await db.query('select * from hr_manpower_reservation_intents')).rows.length,0);
+  for(const file of ['manpower_primary_intervals.sql','manpower_confirmation_integrity.sql','manpower_ending_integrity.sql','manpower_reversal_integrity.sql'])
+    for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/'+file,import.meta.url),'utf8')))assert.equal(check.rows.length,0);
+  await db.exec('set role anon');await denied(()=>reverse('anonymous-reversal'),'42501');
+  console.log('Credit reversal rehearsal passed: active/ended corrections preserve original facts/master records, negative credit and capacity exactly once, fresh authorization/evidence, current/redacted dependency blockers, audit/late rollback, immutable RLS history, voided-reference write guard and source interval removal. Independent write races, linked operational corrections, UI/live acceptance remain gated.');
+}
 await db.close();console.log('Reservation PostgreSQL rehearsal passed: 75-worker atomic batch, ineligible/capacity/duplicate rollback, bounded real assignments for 1000 demand, role/scope/tenant denial, order-independent idempotent replay, worker uniqueness, authoritative capacity and audit-failure rollback. Production and independent concurrency remain unverified.');
