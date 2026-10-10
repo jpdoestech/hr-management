@@ -33,3 +33,7 @@ test('worker SQL uses invoker RLS, scoped joins, bounded filtered totals and min
   assert.match(sql,/from filtered order by created_at desc,id/);assert.match(sql,/count\(\*\) from filtered/);assert.match(sql,/p_size not in \(10,25,50\)/);assert.match(sql,/from public,anon/);
   assert.doesNotMatch(sql,/to_jsonb\(candidate\)|candidate.data as/);
 });
+test('worker responses recheck applicant access before painting',()=>{
+  const app=readFileSync(new URL('../../js/app.js',import.meta.url),'utf8');
+  assert.match(app,/kind==='workers'&&!hasPermission\('onboarding.view'\)\)\|\|!host.isConnected/);
+});

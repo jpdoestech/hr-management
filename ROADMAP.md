@@ -743,3 +743,7 @@ staged; the unrelated skill cache remains untouched and excluded.
 MP-A17 project validation: lint, all 307 automated tests, production build,
 explicit repository validation and diff checks passed. Fixture shutdown/exit,
 temporary tab cleanup and viewport reset verified. No server was installed.
+
+MP-A17 publication: `ec00be7` pushed to `origin/main`; remote HEAD verified.
+Follow-up review adds an explicit onboarding-permission recheck before painting
+an in-flight worker response. No database deployment was performed.

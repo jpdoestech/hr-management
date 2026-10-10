@@ -8183,7 +8183,7 @@ async function renderManpowerSubmittedDetails(){
     if(kind!=='workers')delete host.dataset.workerLine;
     const results=kind==='workers'?host.querySelector('[data-worker-results]'):host;results.innerHTML='<div class="empty">Loading records...</div>';
     const {data,count}=kind==='workers'?await loadLineWorkers(supabase,id,STATE.manpowerWorkerLine,{page,size,search:STATE.manpowerWorkerSearch||'',state:STATE.manpowerWorkerState||''}):await loadSubmittedRows(supabase,id,kind,{page,size});
-    if(token!==MANPOWER_SUBMITTED_UI.request||STATE.view!=='manpowerSubmittedDetails'||STATE.manpowerSubmittedId!==id||SESSION?.id!==sessionId||!hasPermission('manpower.view')||!host.isConnected)return;
+    if(token!==MANPOWER_SUBMITTED_UI.request||STATE.view!=='manpowerSubmittedDetails'||STATE.manpowerSubmittedId!==id||SESSION?.id!==sessionId||!hasPermission('manpower.view')||(kind==='workers'&&!hasPermission('onboarding.view'))||!host.isConnected)return;
     const meta=paginationMeta(STATE,key,count||0);if(meta.page!==page){await renderManpowerSubmittedDetails();return;}
     MANPOWER_SUBMITTED_UI.record=request;MANPOWER_SUBMITTED_UI.rows=kind==='lines'?data||[]:[];
     document.getElementById('manpower-lifecycle-actions').innerHTML=lifecycleActionsHTML(request,hasPermission('manpower.update'),true);
