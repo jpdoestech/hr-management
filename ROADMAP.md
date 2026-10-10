@@ -618,3 +618,18 @@ Discard, retained capacity/missing-RPC errors, and desktop/tablet/mobile layouts
 (1440x900, 768x1024, 390x844) without document overflow. Mobile editor is fully
 revealed within its scroll region and inputs/actions have 44px touch height.
 Fixture service stopped; viewport override reset. No database runtime started.
+
+MP-A13 publication: implementation `50ea138` pushed to `origin/main`; remote
+HEAD verified. Only the inline quantity amendment feature's files were staged.
+
+Documentation follow-up: linked applicable SQL instructions from the approved
+manpower specification. Added reviewed proposal dependency order, read-only
+RPC/EXECUTE diagnostics, integrity references and authorization/release gates
+to `docs/MANPOWER-FULFILLMENT-QUANTITY-UI.md`. No SQL was executed, no migration
+promoted, and no database runtime or configuration changed. This does not mark
+the remaining specification features complete.
+
+Documentation validation: lint, all 268 tests, production build, explicit
+`node scripts/validate.mjs` and diff checks passed. SQL signatures/grants and
+verification filenames were checked against repository source; the diagnostic
+was not executed against a database. No new database validation is claimed.

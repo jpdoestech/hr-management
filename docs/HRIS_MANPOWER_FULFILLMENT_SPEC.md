@@ -368,4 +368,15 @@ New payroll/attendance modules; payroll recalculation; new approval engine; auto
 | D27 | Hiring category distinct from requisition Expansion/Replacement; employment distinct from deployment |
 | D28 | Preserve Supabase publishable key, current migrations, employee histories and working modules |
 
+## 16. Implementation SQL references
+
+Applicable SQL setup order, copy-ready read-only RPC/permission diagnostics,
+integrity-script links and release safeguards are documented in
+[SQL setup and verification](MANPOWER-FULFILLMENT-QUANTITY-UI.md#sql-setup-and-verification).
+The authoritative SQL remains in `supabase/proposals/` and
+`supabase/verification/`; proposals are not automatically deployed migrations.
+These operational references do not change the approved business requirements
+or authorize production SQL execution, database resets or PostgreSQL installation.
+Live baseline, authorization and end-to-end acceptance remain required.
+
 **End of master specification.**

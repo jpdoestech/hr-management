@@ -42,6 +42,86 @@ UI checks complement, not replace, server authorization. The full database
 capacity is never inferred from a paginated worker list. Read queries stay
 projected, scoped by RLS, and bounded to existing 10/25/50 page sizes.
 
+## SQL setup and verification
+
+These steps document the existing SQL requirements; they are not approval to
+deploy proposals. No SQL is executed by this document or the frontend. Do not
+install/start PostgreSQL for these steps. Supabase remains the current backend;
+PostgreSQL compatibility does not require changing it.
+
+1. Read [deployment procedures](DEPLOYMENT.md), inspect the target database's
+   actual schema/migration history, and reconcile existing PRFs and historical
+   commitments. Take a verified backup before an approved schema deployment.
+2. Review/rehearse the existing proposal dependency sequence in a safe test
+   environment: `0035_manpower_prf_registry.sql`,
+   `0036_manpower_submission.sql`, `0037_manpower_quantity_increases.sql`,
+   `0038_manpower_identity_reviews.sql`,
+   `0039_manpower_identity_review_revisions.sql`,
+   `0040_manpower_reservations.sql`, then
+   [0041_manpower_quantity_amendments.sql](../supabase/proposals/0041_manpower_quantity_amendments.sql).
+   These files live in `supabase/proposals/`, not automatic migrations. Do not
+   replay already-applied SQL or bypass a proposal's schema/constraint guards.
+   Unexpected baseline/legacy data requires reconciliation before proceeding.
+3. Only after human approval and the existing release gates, follow the
+   repository's ordered migration/release process for the reviewed changes.
+   Do not copy proposal files into automatic migrations merely to enable a UI.
+   Preserve RLS/RBAC, audit history and `SUPABASE_PUBLISHABLE_KEY` configuration.
+4. Run the following **read-only** diagnostic in the target Supabase SQL Editor.
+   It does not expose employee records or invoke a mutation RPC.
+
+```sql
+with expected(signature) as (
+  values
+    ('public.submit_manpower_request(text,bigint)'),
+    ('public.amend_manpower_quantity(text,text,bigint,integer,text)'),
+    ('public.change_manpower_lifecycle(text,bigint,text,text,text,integer)')
+), routines as (
+  select signature, to_regprocedure(signature) as oid
+  from expected
+)
+select signature,
+       oid is not null as installed,
+       case when oid is not null
+                 and to_regrole('authenticated') is not null
+            then has_function_privilege('authenticated', oid, 'EXECUTE')
+       end as authenticated_can_execute,
+       case when oid is not null and to_regrole('anon') is not null
+            then has_function_privilege('anon', oid, 'EXECUTE')
+       end as anon_can_execute
+from routines
+order by signature;
+```
+
+For an approved, installed Supabase release, the public RPCs should report
+`installed=true`, `authenticated_can_execute=true`, `anon_can_execute=false`.
+Missing functions mean the corresponding workflow is unavailable, not that
+permissions should be loosened. NULL privilege results can mean missing
+Supabase roles (for example, a homelab compatibility environment). An installed
+function or an EXECUTE grant alone does **not** prove tenant/scope authorization,
+correct function contents, integrity or release readiness.
+
+5. Run the applicable existing read-only integrity scripts only after their
+   prerequisite tables/functions have been verified:
+   [PRF registry baseline](../supabase/verification/manpower_prf_registry_baseline.sql),
+   [submission](../supabase/verification/manpower_submission_integrity.sql),
+   [quantity amendment history](../supabase/verification/manpower_quantity_increases_integrity.sql),
+   and [reservation/capacity integrity](../supabase/verification/manpower_reservation_integrity.sql).
+   Follow each file's documented expected results. Investigate violations;
+   do not delete history or reset data to make a check pass. Keep any diagnostic
+   identifiers/results private.
+6. Verify authorized and denied actions through authenticated test accounts
+   with synthetic data, including tenant/scope isolation, stale revisions,
+   capacity limits and atomic audit rollback. SQL Editor owner privileges are
+   not evidence of application RLS/RBAC behavior.
+
+Lifecycle additionally requires reviewed proposals through
+[0042_manpower_lifecycle.sql](../supabase/proposals/0042_manpower_lifecycle.sql)
+and [lifecycle integrity checks](../supabase/verification/manpower_lifecycle_integrity.sql).
+See [lifecycle prerequisites](MANPOWER-FULFILLMENT-LIFECYCLE.md). Its presence
+in the diagnostic does not mean lifecycle UI or overall specification work is
+complete. Later reservation/deployment workflows have their own dependencies
+and release gates; this section is not a full-system deployment script.
+
 ## Validation evidence
 
 Core/handler tests exercise payload validation, immutable baseline/cancellation,
