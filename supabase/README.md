@@ -12,6 +12,11 @@ This directory is the single source of truth for the HRIS database.
 
 ## Migration rules
 
+Proposal 0048 adds a controlled applicant/reservation handoff to an existing
+employee master without deployment credit. New-master creation and conversion
+UI remain unfinished; it is deployment gated. See
+`docs/MANPOWER-FULFILLMENT-EMPLOYEE-HANDOFF.md`.
+
 Proposal 0047 adds a tenant source-writer interlock and private transaction bodies
 while preserving public RPC signatures. It is deployment gated pending independent
 session testing, dependency/cache/isolation checks and deadlock/retry UX validation.

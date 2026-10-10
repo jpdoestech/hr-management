@@ -14,7 +14,7 @@ create table profiles(id uuid primary key,tenant_id uuid,full_name text,role tex
 create table access_permissions(permission_key text primary key,module_key text,action_key text,label text);
 create table hr_audit_logs(id uuid primary key default gen_random_uuid(),tenant_id uuid,user_id uuid,user_name text,action text);
 create table hr_settings(tenant_id uuid,id text,data jsonb,primary key(tenant_id,id));
-create table hr_records(tenant_id uuid,module text,record_id text,data jsonb,primary key(module,record_id));
+create table hr_records(tenant_id uuid,module text,record_id text,data jsonb,updated_at timestamptz default now(),updated_by uuid,primary key(module,record_id));
 create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('test.actor',true),'')::uuid$$;
 create function current_tenant_id() returns uuid language sql stable as $$select nullif(current_setting('test.tenant',true),'')::uuid$$;
 create function current_user_has_permission(text) returns boolean language sql stable as $$select $1<>coalesce(current_setting('test.denied',true),'')$$;
@@ -570,5 +570,77 @@ if(interlock){
   for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_source_interlock.sql',import.meta.url),'utf8')))
     assert.equal(check.rows.length,0);
   console.log('Source interlock rehearsal passed: private body/helper denial, source-only transaction lock, repeatable-read rejection, legacy slot/on-call conflicts and replaced-person distinction. Wrapped reservation, identity, schedule and confirmation behavior passes; independent connections, deadlock/retry UX and live baseline remain unverified.');
+}
+if(process.argv.includes('--handoff')){
+  if(!interlock)throw new Error('Handoff rehearsal requires --interlock');
+  await db.exec('reset role');
+  await db.exec(readFileSync(new URL('../../supabase/proposals/0048_manpower_employee_handoff.sql',import.meta.url),'utf8'));
+  const candidate={id:'handoff-candidate',name:'XAVIER AMELIA SUNSTONE',department:'Production',stage:'Ready to Hire',recommendation:'Hire',
+    proposedStartDate:'2026-10-10',birthDate:'1998-06-14',gender:'Female',checklist:{privacyNotice:true,interview:true,offer:true,contract:true,standards:true}};
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'onboardingCandidates',candidate.id,candidate]);
+  const separate={id:'handoff-separate-worker',employeeNo:'EMP-900002',name:candidate.name,department:'Production',status:'Active'};
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'employees',separate.id,separate]);
+  await db.exec('set role authenticated');await request('handoff',1);
+  const separatePair=(await db.query('select preview_manpower_identity_review($1,$2) result',[candidate.id,separate.id])).rows[0].result;
+  await db.query('select record_manpower_identity_review($1,$2,$3,$4,$5,$6,0)',[candidate.id,separate.id,'SeparatePersons','Reviewed same-name but separate synthetic employee',separatePair.candidate_fingerprint,separatePair.employee_fingerprint]);
+  const reserved=await reserve('handoff-reserve',[{candidate_id:candidate.id,line_id:'handoff-line',hiring_category:'New Hire'}]);
+  // Imported/directly-created employee exists before this transaction; no master creation is claimed.
+  const employee={id:'handoff-worker',employeeNo:'EMP-900001',name:candidate.name,department:'Production',status:'Active',sourceCandidateId:'earlier-applicant'};
+  await db.exec('reset role');await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'employees',employee.id,employee]);await db.exec('set role authenticated');
+  const preview=async()=>(await db.query('select preview_manpower_identity_review($1,$2) result',[candidate.id,employee.id])).rows[0].result;
+  const initial=await preview();
+  const handoff=async(token,pair=initial,reason='HR verified this is the same existing employee')=>
+    (await db.query('select handoff_manpower_employee($1,$2,$3,$4,$5,$6,$7) result',[token,pair.candidate_id,pair.employee_id,pair.candidate_fingerprint,pair.employee_fingerprint,reason,pair.review_revision])).rows[0].result;
+  const counters=async()=>(await db.query("select manpower_line_capacity('handoff-line') result")).rows[0].result;
+  for(const permission of ['onboarding.review_identity','onboarding.view','onboarding.update','employees.view','manpower.view']){
+    await db.query('select set_config($1,$2,false)',['test.denied',permission]);await denied(()=>handoff('denied-handoff'),'42501');
+  }
+  await db.exec("set test.denied='';set test.scope='Other'");await denied(()=>handoff('scope-handoff'),'42501');
+  await db.exec(`set test.scope='global';set test.tenant='${other}'`);await denied(()=>handoff('tenant-handoff'),'42501');await db.exec(`set test.tenant='${tenant}'`);
+  await denied(()=>handoff('missing-reason',initial,''),'23514');
+  await denied(()=>handoff('stale-preview',{...initial,candidate_fingerprint:'stale'}),'40001');
+  await denied(()=>handoff('stale-review',{...initial,review_revision:1}),'40001');
+  await db.exec('reset role');
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'employees','handoff-unknown-duplicate',{id:'handoff-unknown-duplicate',employeeNo:'EMP-900003',name:candidate.name,department:'Production'}]);
+  await db.exec('set role authenticated');await denied(()=>handoff('unknown-duplicate-handoff'),'23514');
+  await db.exec("reset role;delete from hr_records where record_id='handoff-unknown-duplicate';update hr_records set data=jsonb_set(data,'{birthDate}','\"2998-06-14\"') where record_id='handoff-candidate';set role authenticated");
+  await denied(async()=>handoff('invalid-date-handoff',await preview()),'23514');
+  await db.exec("reset role;update hr_records set data=jsonb_set(data,'{birthDate}','\"1998-06-14\"') where record_id='handoff-candidate';set role authenticated");
+  await db.exec("reset role;update hr_records set data=jsonb_set(data,'{checklist,contract}','false') where record_id='handoff-candidate';set role authenticated");
+  await denied(async()=>handoff('not-ready',await preview()),'23514');
+  await db.exec("reset role;update hr_records set data=jsonb_set(data,'{checklist,contract}','true') where record_id='handoff-candidate';alter table hr_audit_logs add constraint fail_handoff check(action not like '%Reason: handoff audit failure') not valid;set role authenticated");
+  await denied(async()=>handoff('audit-failure-handoff',await preview(),'handoff audit failure'),'23514');
+  assert.equal((await counters()).reserved,1);assert.equal((await counters()).fulfilled,0);
+  const identityBefore=await preview();assert.equal(identityBefore.review_revision,0);
+  await db.exec('reset role');
+  await db.exec("alter table manpower_private.handoff_batches add constraint fail_handoff_late check(token<>'late-handoff-failure') not valid;set role authenticated");
+  await denied(()=>handoff('late-handoff-failure',identityBefore),'23514');
+  assert.equal((await preview()).review_revision,0);
+  assert.equal((await db.query('select data from hr_records where record_id=$1',[candidate.id])).rows[0].data.stage,'Ready to Hire');
+  assert.equal((await db.query('select employee_id from hr_manpower_reservations where id=$1',[reserved.reservation_ids[0]])).rows[0].employee_id,null);
+  const result=await handoff('successful-handoff',identityBefore);assert.equal(result.replayed,false);assert.equal(result.reservation_id,reserved.reservation_ids[0]);
+  assert.equal((await counters()).reserved,1);assert.equal((await counters()).fulfilled,0);assert.equal((await counters()).available,0);
+  assert.equal((await db.query('select data from hr_records where record_id=$1',[candidate.id])).rows[0].data.employeeRecordId,employee.id);
+  assert.deepEqual((await db.query('select data from hr_records where record_id=$1',[employee.id])).rows[0].data,employee);
+  assert.equal((await handoff('successful-handoff',identityBefore)).replayed,true);
+  await denied(()=>handoff('successful-handoff',identityBefore,'Different facts'),'23514');
+  const current=await preview();assert.equal(current.review_revision,1);assert.equal(current.source_changed,false);
+  const refreshedSeparate=(await db.query('select preview_manpower_identity_review($1,$2) result',[candidate.id,separate.id])).rows[0].result;
+  assert.equal(refreshedSeparate.review_revision,2);assert.equal(refreshedSeparate.previous_decision,'SeparatePersons');assert.equal(refreshedSeparate.source_changed,false);
+  await db.exec('reset role');
+  assert.equal((await db.query('select * from manpower_private.source_intents')).rows.length,0);
+  assert.equal((await db.query('select * from hr_manpower_reservation_intents')).rows.length,0);
+  await denied(()=>db.exec("update hr_records set data=data||'{\"employeeRecordId\":\"bypass\"}' where record_id='handoff-candidate'"),'23514');
+  await db.exec('set role authenticated');
+  await denied(()=>db.exec('select * from manpower_private.handoff_batches'),'42501');
+  await db.query('select confirm_manpower_deployments($1,$2)',['handoff-actual',[{reservation_id:result.reservation_id,schedule_revision:0,actual_date:'2026-10-10',reason:'Actual reporting explicitly confirmed after handoff'}]]);
+  assert.equal((await counters()).reserved,0);assert.equal((await counters()).fulfilled,1);
+  assert.equal((await handoff('successful-handoff',identityBefore)).replayed,true);
+  await denied(async()=>handoff('new-handoff-after-deployment',await preview()),'23514');
+  await db.exec('reset role');
+  for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_handoff_integrity.sql',import.meta.url),'utf8')))
+    assert.equal(check.rows.length,0);
+  await db.exec('set role anon');await denied(()=>handoff('anonymous-handoff'),'42501');
+  console.log('Existing-master handoff rehearsal passed: scoped HR identity approval, readiness/stale preview checks, source and assignment exact intents, stable reservation/capacity, unchanged employee master/prior source reference, idempotent retry, audit and final-row rollback, and explicit later actual confirmation. New-master creation and historical/alias correction remain incomplete.');
 }
 await db.close();console.log('Reservation PostgreSQL rehearsal passed: 75-worker atomic batch, ineligible/capacity/duplicate rollback, bounded real assignments for 1000 demand, role/scope/tenant denial, order-independent idempotent replay, worker uniqueness, authoritative capacity and audit-failure rollback. Production and independent concurrency remain unverified.');
