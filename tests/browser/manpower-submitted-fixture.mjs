@@ -15,6 +15,7 @@ import {quantityAmendmentPayload,quantityAmendmentHTML,quantityAmendmentError} f
 import {LIFECYCLE_LABELS,lifecycleOperations,lifecycleActionsHTML,lifecyclePayload,lifecycleEditorHTML,lifecycleResultValid,lifecycleError} from '/js/manpower/lifecycle-editor.js';
 import {HEADER_AMENDMENT_FIELDS,readHeaderAmendment,headerAmendmentPayload,headerEditorHTML,headerAmendmentResultValid,headerAmendmentError} from '/js/manpower/header-editor.js';
 import {loadLineCapacity,lineCapacityHTML,capacityErrorHTML} from '/js/manpower/capacity-summary.js';
+import {loadLineWorkers,workerTableHTML,workerFiltersHTML} from '/js/manpower/worker-monitoring.js';
 const SESSION={id:'fixture-user'};const STATE={view:'manpowerSubmitted'};const hasPermission=()=>true;
 const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 const iSearch=()=>'';const iInfo=()=>'<span aria-hidden="true">i</span>';
@@ -40,6 +41,11 @@ const lifecycle=Array.from({length:31},(_,index)=>({request_id:'request0',reques
   operation:index%2?'Reopen':'Close',previous_state:index%2?'Closed':'Open',current_state:index%2?'Open':'Closed',
   reason:'Synthetic lifecycle reason '+(index+1)+'. '+('Historical fulfillment is preserved. '.repeat(8))}));
 const supabase={rpc:async(name,payload)=>{
+  if(name==='manpower_line_workers'){
+    if(location.search.includes('missing-workers'))return {error:{code:'PGRST202'}};
+    const rows=Array.from({length:31},(_,index)=>({id:'synthetic-reservation-'+index,candidate_id:'synthetic-applicant-'+index,name:'SYNTHETIC, Worker '+String(index).padStart(2,'0'),hiring_category:'New Hire',state:index%2?'Scheduled':'Reserved',created_at:'2026-10-01T00:00:00Z',scheduled_date:index%2?'2026-10-20':null})).filter(row=>(!payload.p_state||row.state===payload.p_state)&&(!payload.p_search||row.name.toLowerCase().includes(payload.p_search.toLowerCase())));
+    return {data:{data:rows.slice((payload.p_page-1)*payload.p_size,payload.p_page*payload.p_size),count:rows.length}};
+  }
   if(name==='manpower_line_capacity'){
     if(location.search.includes('missing-capacity'))return {error:{code:'PGRST202'}};
     const line=lines.find(row=>row.id===payload.p_line);

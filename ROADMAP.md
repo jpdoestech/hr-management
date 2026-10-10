@@ -725,3 +725,21 @@ Full specification remains incomplete and production release gates unchanged.
 MP-A16 publication: `f298fa0` pushed to `origin/main`; remote HEAD verified as
 `f298fa0fe3ae770e305baa3c4c6704348cb304d2`. Only this feature's files were
 staged; the unrelated skill cache remains untouched and excluded.
+
+- MP-A17: requisition-line worker monitoring. Read-only proposal 0059 uses
+  invoker RLS and existing manpower/onboarding access, tenant and line/request
+  checks. Scoped names/IDs, assignment states, age and scheduled/actual/ended
+  dates are server-searched/filtered before bounded paging. Typing retains focus,
+  errors retain filters, and return navigation preserves the previous line page.
+  SQL instructions are in `docs/MANPOWER-FULFILLMENT-WORKER-MONITORING.md`.
+  Five focused tests and the existing in-memory rehearsal with 31 synthetic
+  reservations passed; no read audit writes, unauthorized/input/tenant denials,
+  name/state search and paging verified. Synthetic browser checks passed at
+  390/768/1440 widths, including off-page search, typing focus, empty state,
+  return context and missing backend. No live SQL or configuration changes.
+  Source shortcuts/aging warnings, line amendments, authoritative transaction
+  UI, totals/timeline/reporting and live acceptance remain incomplete.
+
+MP-A17 project validation: lint, all 307 automated tests, production build,
+explicit repository validation and diff checks passed. Fixture shutdown/exit,
+temporary tab cleanup and viewport reset verified. No server was installed.

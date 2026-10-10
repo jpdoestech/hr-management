@@ -104,7 +104,32 @@ try{
   assert.equal((await db.query("select data->>'attachment' attachment from hr_records where record_id='legacy'")).rows[0].attachment,'synthetic-untouched.pdf');
   assert.equal((await db.query("select count(*)::int count from hr_audit_logs where action like 'Manpower header amended%'")).rows[0].count,3);
   await db.exec('set role anon');await denied(()=>amend({priority:'Low'},'Reason',8),'42501');await denied(()=>db.exec('select * from hr_manpower_header_amendments'),'42501');
-  console.log('Header amendment in-memory rehearsal passed: guarded setup, atomic registry/audit rollback, normalized duplicates, strict field/date/reason checks, tenant/scope/RLS denials, immutable baseline/links, lifecycle/quantity coexistence and zero integrity violations. No server or live database used.');
+  await db.exec('reset role');await db.exec(sql('proposals/0059_manpower_worker_monitoring.sql'));
+  await db.exec('set role authenticated');
+  await save('worker-request','Worker PRF',[{...lines[0],id:'worker-line'}]);await db.query('select submit_manpower_request($1,1)',['worker-request']);
+  await db.exec('reset role');
+  for(let index=0;index<31;index++)await db.query('insert into hr_records(tenant_id,module,record_id,data) values($1,$2,$3,$4)',[tenant,'onboardingCandidates','worker-'+index,{id:'worker-'+index,lastName:'Applicant',firstName:'Synthetic '+String(index).padStart(2,'0'),department:'Production',stage:'Applicant'}]);
+  await db.exec('set role authenticated');
+  await db.query('select reserve_manpower_applicants($1,$2)',['workers-batch',Array.from({length:31},(_,index)=>({candidate_id:'worker-'+index,line_id:'worker-line',hiring_category:'New Hire'}))]);
+  const workers=async(page=1,size=10,search='',state='')=>(await db.query('select manpower_line_workers($1,$2,$3,$4,$5,$6) result',['worker-request','worker-line',page,size,search,state])).rows[0].result;
+  const auditCount=async()=>{await db.exec('reset role');const count=(await db.query('select count(*) count from hr_audit_logs')).rows[0].count;await db.exec('set role authenticated');return count;};
+  const auditBefore=await auditCount();
+  assert.equal((await workers(2)).data.length,10);assert.equal((await workers()).count,31);assert.equal((await workers(4)).data.length,1);
+  const searched=await workers(1,10,'Synthetic 30');assert.equal(searched.count,1);assert.equal(searched.data[0].name,'Applicant, Synthetic 30');
+  assert.equal((await workers(1,10,'%')).count,0);assert.equal((await workers(1,10,'no match')).count,0);
+  assert.equal((await workers(1,10,'','Deployed')).count,0);
+  await db.query('select release_manpower_reservation($1,$2)',[(await workers()).data[0].id,'Synthetic release']);
+  assert.equal((await workers(1,10,'','Released')).count,1);
+  for(const args of [[0,10],[1,1000],[1,10,'x'.repeat(121)],[1,10,'','Invalid']])await denied(()=>workers(...args),'23514');
+  await denied(()=>db.query('select manpower_line_workers($1,$2)',['request','worker-line']),'42501');
+  for(const permission of ['manpower.view','onboarding.view']){await db.query('select set_config($1,$2,false)',['test.denied',permission]);await denied(()=>workers(),'42501');}
+  await db.exec("set test.denied='';set test.scope='Other'");await denied(()=>workers(),'42501');
+  await db.exec(`set test.scope='global';set test.tenant='${other}'`);await denied(()=>workers(),'42501');
+  await db.exec(`set test.tenant='${tenant}'`);
+  const auditAfterRelease=await auditCount();
+  assert.equal(Number(auditAfterRelease),Number(auditBefore)+1);await workers();assert.equal(await auditCount(),auditAfterRelease);
+  await db.exec('set role anon');await denied(()=>workers(),'42501');
+  console.log('Header and worker monitoring in-memory rehearsal passed: guarded transactions, scoped bounded worker paging/name/state search, literal wildcard search, access/input denials and read-only audit stability. No server or live database used.');
 }catch(error){
   console.error('Header rehearsal failed:',error.code||'assertion',error.message);process.exitCode=1;
 }finally{await db.close();}
