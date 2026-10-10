@@ -6,6 +6,7 @@ const {btree_gist}=await import(process.env.HRIS_PGLITE_MODULE?new URL('./contri
 import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
+import {readPhilippineAddressCatalog,addressCatalogSeedSQL} from '../../scripts/lib/philippine-address-catalog.mjs';
 const db=new PGlite({extensions:{fuzzystrmatch,btree_gist}});
 const tenant='00000000-0000-0000-0000-000000000001',other='00000000-0000-0000-0000-000000000002',actor='00000000-0000-0000-0000-000000000011',client='00000000-0000-0000-0000-000000000021';
 await db.exec(`create role authenticated;create role anon;create schema auth;
@@ -642,5 +643,39 @@ if(process.argv.includes('--handoff')){
     assert.equal(check.rows.length,0);
   await db.exec('set role anon');await denied(()=>handoff('anonymous-handoff'),'42501');
   console.log('Existing-master handoff rehearsal passed: scoped HR identity approval, readiness/stale preview checks, source and assignment exact intents, stable reservation/capacity, unchanged employee master/prior source reference, idempotent retry, audit and final-row rollback, and explicit later actual confirmation. New-master creation and historical/alias correction remain incomplete.');
+}
+if(process.argv.includes('--addresses')){
+  if(!interlock)throw new Error('Address rehearsal requires --interlock');
+  await db.exec('reset role');
+  await db.exec(readFileSync(new URL('../../supabase/proposals/0049_manpower_address_validation.sql',import.meta.url),'utf8'));
+  const catalog=readPhilippineAddressCatalog(),byCode=new Map(catalog.rows.map(row=>[row.code,row]));
+  const validate=async(value)=>(await db.query('select manpower_private.validate_employee_address($1) address',[JSON.stringify(value)])).rows[0].address;
+  const addressFor=code=>{
+    const barangay=byCode.get(code),city=byCode.get(barangay.parent_code),parent=byCode.get(city.parent_code);
+    const province=parent.kind==='province'?parent:null,region=province?byCode.get(province.parent_code):parent;
+    return {regionCode:region.code,regionName:region.name,provinceCode:province?.code||'',provinceName:province?.name||'',
+      cityCode:city.code,cityName:city.name,barangayCode:barangay.code,barangayName:barangay.name,addressLine:'Unit 2, Synthetic Address',zipCode:city.zip};
+  };
+  const address=addressFor('1130700002');
+  assert.equal((await validate({})).formattedAddress,'');
+  assert.equal((await validate('Complete imported address, later review')).addressLine,'Complete imported address, later review');
+  await denied(()=>validate(address),'23514');
+  try{await db.exec(addressCatalogSeedSQL(catalog));}catch(error){throw new Error('Address seed failed: '+error.code+' '+error.message);}
+  assert.equal((await db.query('select count(*)::int count from manpower_private.address_locations')).rows[0].count,catalog.rows.length);
+  assert.equal((await db.query('select sha256 from manpower_private.address_catalog_manifest')).rows[0].sha256,catalog.sha256);
+  const normalized=await validate({...address,cityName:address.cityName.toLowerCase(),formattedAddress:'Untrusted display text'});
+  assert.equal(normalized.cityName,address.cityName);assert.equal(normalized.barangayName,'Agdao');assert.ok(!normalized.formattedAddress.includes('Untrusted'));
+  for(const changes of [{regionName:'Unknown region'},{provinceCode:'1400100000'},{cityCode:'0000000000'},
+    {barangayCode:'0000000001'},{barangayName:'Unknown barangay'},{zipCode:'9999'},{regionCode:''},{barangayCode:123},
+    {regionName:'Unknown region',legacy:true},{legacy:'true'},{unknownField:'Not an address field'}])await denied(()=>validate({...address,...changes}),'23514');
+  const ncrBarangay=catalog.rows.find(row=>row.kind==='barangay'&&byCode.get(row.parent_code).parent_code==='1300000000');
+  const ncr=addressFor(ncrBarangay.code);assert.equal((await validate(ncr)).provinceCode,'');
+  await denied(()=>validate({...ncr,provinceCode:'1102400000',provinceName:'Davao del Sur'}),'23514');
+  await denied(()=>db.exec("update manpower_private.address_locations set name='Rewrite' where code='1130700002'"),'23514');
+  for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_address_catalog.sql',import.meta.url),'utf8')))
+    assert.equal(check.rows.length,0);
+  await db.exec('set role authenticated');await denied(()=>validate(address),'42501');
+  await denied(()=>db.exec('select * from manpower_private.address_locations'),'42501');
+  console.log('Authoritative address database rehearsal passed: complete reference seed, optional/free-text addresses, region/province/city/barangay hierarchy and names, NCR without province, known ZIP, forged legacy/display data, private access and immutable catalog. Atomic new employee creation remains incomplete.');
 }
 await db.close();console.log('Reservation PostgreSQL rehearsal passed: 75-worker atomic batch, ineligible/capacity/duplicate rollback, bounded real assignments for 1000 demand, role/scope/tenant denial, order-independent idempotent replay, worker uniqueness, authoritative capacity and audit-failure rollback. Production and independent concurrency remain unverified.');

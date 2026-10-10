@@ -15,6 +15,10 @@ This is the structured static build of the STRELLAS HR Management & Disciplinary
 
 Database portability notes for a possible standalone PostgreSQL deployment are in [`docs/DATABASE-PORTABILITY.md`](docs/DATABASE-PORTABILITY.md).
 
+Gated manpower backend address validation and reference-seed procedures are in
+[`docs/MANPOWER-FULFILLMENT-ADDRESS-VALIDATION.md`](docs/MANPOWER-FULFILLMENT-ADDRESS-VALIDATION.md).
+These proposals are not automatic migrations or production-enabled conversion.
+
 ## Deployment
 
 ### GitHub Pages
