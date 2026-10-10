@@ -11,6 +11,7 @@ const html=String.raw`<!doctype html><html lang="en"><head><meta charset="utf-8"
 <main style="height:100dvh;overflow:auto;padding:16px"><h2 id="fixture_title">Submitted Requests</h2><div id="content"></div><div id="fixture_status" role="status"></div></main><script type="module">
 import {loadSubmittedRequests,loadSubmittedRequest,loadSubmittedRows,submittedListRowsHTML,submittedHeaderHTML,submittedTableHTML} from '/js/manpower/submitted-workspace.js';
 import {paginationMeta,paginationHTML} from '/js/core/pagination.js';
+import {quantityAmendmentPayload,quantityAmendmentHTML,quantityAmendmentError} from '/js/manpower/quantity-editor.js';
 const SESSION={id:'fixture-user'};const STATE={view:'manpowerSubmitted'};const hasPermission=()=>true;
 const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 const iSearch=()=>'';const iInfo=()=>'<span aria-hidden="true">i</span>';
@@ -18,16 +19,30 @@ const fmtDate=value=>value||'Not recorded';const employeeBranchLocations=()=>['D
 const uniqueSettingNames=values=>[...new Set(values.filter(Boolean))];
 const setTitle=value=>document.getElementById('fixture_title').textContent=value;
 const requestPageNavigation=async()=>true;
+let PAGE_EDIT_STATE=null,PENDING_PAGE_NAVIGATION=null;
+const serializeEditor=()=>'';
+const toast=message=>document.getElementById('fixture_status').textContent=message;
+let confirmationChoice='confirm';
+const confirmDataChange=async()=>confirmationChoice;
 const openModal=()=>document.getElementById('fixture_status').textContent='Information requested (local fixture).';
 const requests=Array.from({length:31},(_,index)=>({id:'request'+index,prf_number:'PRF '+String(index+1).padStart(4,'0'),branch_reporting:index%2?'Manila':'Davao',date_requested:'2026-10-09',target_date:'2026-10-20',updated_at:'2026-10-10',state:'Open',requested_by:'Fixture HR',priority:'Normal',revision:2,submitted_at:'2026-10-10',remarks:'Synthetic requisition, not a real employee record.',hr_manpower_clients:{name:'Fixture Client'}}));
 const lines=Array.from({length:31},(_,index)=>({id:'line'+index,request_id:'request0',ordinal:index,department:'Production',position:'Operator',original_requested:1000,current_authorized:1000,cancelled_unfilled:0,demand_type:index%2?'Replacement':'Expansion',site:'Davao',purpose:'Synthetic line detail '+(index+1)}));
 const history=lines.map(line=>({...line,line_id:line.id,event_type:'Submitted',request_revision:2,hr_manpower_lines:{request_id:line.request_id,ordinal:line.ordinal,department:line.department,position:line.position}}));
 const amendments=history.map((row,index)=>({...row,previous_authorized:1000,current_authorized:1025,request_revision:index+3,reason:'Additional client demand. '+('Synthetic reason with sufficient detail for responsive wrapping. '.repeat(5))}));
 requests[0].state='Closed';requests[1].state='Cancelled';
+if(location.search.includes('quantity'))requests[0].state='Open';
 const lifecycle=Array.from({length:31},(_,index)=>({request_id:'request0',request_revision:index+3,
   operation:index%2?'Reopen':'Close',previous_state:index%2?'Closed':'Open',current_state:index%2?'Open':'Closed',
   reason:'Synthetic lifecycle reason '+(index+1)+'. '+('Historical fulfillment is preserved. '.repeat(8))}));
-const supabase={from(table){let predicates=[],sorts=[],first=0,last=9,single=false;
+const supabase={rpc:async(name,payload)=>{
+  if(location.search.includes('missing-amendment-rpc'))return {error:{code:'PGRST202'}};
+  if(location.search.includes('capacity-block'))return {error:{code:'23514',message:'Quantity would undercut reserved or fulfilled commitments. Release or reassign reservations first.'}};
+  const request=requests.find(row=>row.id===payload.p_id),line=lines.find(row=>row.id===payload.p_line_id);
+  if(!request||request.revision!==payload.p_expected_revision)return {error:{code:'40001'}};
+  const previous=line.current_authorized;line.current_authorized=payload.p_quantity;request.revision++;
+  amendments.unshift({...line,line_id:line.id,previous_authorized:previous,request_revision:request.revision,reason:payload.p_reason,hr_manpower_lines:{request_id:request.id,ordinal:line.ordinal,department:line.department,position:line.position}});
+  return {data:{request:{...request},line:{...line}}};
+},from(table){let predicates=[],sorts=[],first=0,last=9,single=false;
   const query={select(){return query;},in(key,values){predicates.push(row=>values.includes(row[key]));return query;},eq(key,value){predicates.push(row=>(key==='hr_manpower_lines.request_id'?row.hr_manpower_lines?.request_id:row[key])===value);return query;},order(key,options={}){sorts.push([key,options.ascending!==false]);return query;},range(start,end){first=start;last=end;return query;},single(){single=true;return query;},ilike(key,pattern){const text=pattern.slice(1,-1).replace(/\\([\\%_])/g,'$1').toLowerCase();predicates.push(row=>String(row[key]).toLowerCase().includes(text));return query;},then(resolve){
     if(table==='hr_manpower_quantity_history'&&location.search.includes('missing-history'))return Promise.resolve(resolve({error:{code:'42P01',message:'Missing history'}}));
     if(table==='hr_manpower_quantity_amendments'&&location.search.includes('missing-amendments'))return Promise.resolve(resolve({error:{code:'42P01',message:'Missing amendments'}}));

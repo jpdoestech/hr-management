@@ -600,3 +600,21 @@ The skill search generated an untracked Python cache, excluded from the commit;
 its cleanup was blocked by the execution policy. No existing user files changed.
 
 Release gates: verify the live migration baseline and legacy data, rehearse compatible proposals, validate independent concurrent transactions and production authorization, then coordinate database and application enablement. No completion claim until these gates and the specification acceptance criteria pass.
+
+- MP-A13: inline submitted-line quantity amendment UI implemented
+  (`docs/MANPOWER-FULFILLMENT-QUANTITY-UI.md`). Uses the existing reasoned
+  `amend_manpower_quantity` RPC; original quantity/cancelled demand stay
+  read-only. Save/Discard, dirty pagination/tab/line navigation, revision/access
+  checks, busy confirmation/write/refresh and focused retained errors preserve
+  the selected request/page. Missing backend fails closed. No SQL promotion,
+  server setup, production/configuration changes or new dependencies.
+  Next specification slice: request/line lifecycle UI. Submitted header/date
+  amendments, onboarding reservation/deployment, identity/on-call, monitoring,
+  reporting and live release acceptance still remain.
+
+MP-A13 validation: lint, 268 tests, build, explicit repository validation and
+diff checks pass. Synthetic browser checks verify same-request page-two Save,
+Discard, retained capacity/missing-RPC errors, and desktop/tablet/mobile layouts
+(1440x900, 768x1024, 390x844) without document overflow. Mobile editor is fully
+revealed within its scroll region and inputs/actions have 44px touch height.
+Fixture service stopped; viewport override reset. No database runtime started.

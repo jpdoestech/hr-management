@@ -1847,6 +1847,17 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
 .manpower-submission-review td{overflow-wrap:anywhere;}
 .manpower-submission-review button{min-height:44px;scroll-margin-block:100px;}
 .manpower-draft-editor #md_errors{white-space:pre-line;}
+.manpower-quantity-editor{width:280px;max-width:calc(100vw - 72px);white-space:normal;display:grid;gap:8px;}
+.manpower-quantity-editor .field{margin:0;}
+.manpower-quantity-editor input,.manpower-quantity-editor textarea{width:100%;min-width:0;font-size:13px;}
+.manpower-quantity-editor p{margin:0;}
+.manpower-quantity-editor [role="alert"]{white-space:pre-line;overflow-wrap:anywhere;}
+.manpower-quantity-editor [aria-invalid="true"]{border-color:var(--red);}
+.manpower-quantity-editor :focus-visible{outline:2px solid var(--accent);outline-offset:2px;scroll-margin-block:80px;}
+[data-quantity-line]>button{margin-inline-start:8px;}
+@media(max-width:1100px){.manpower-quantity-editor input,.manpower-quantity-editor button{min-height:44px;}}
+@media(max-width:1100px){[data-quantity-line]>button{min-height:44px;}}
+@media(max-width:520px){.manpower-quantity-editor input,.manpower-quantity-editor textarea{font-size:16px;}}
 .manpower-paste-panel{min-width:0;margin-bottom:12px;border:1px solid var(--border);border-radius:6px;}
 .manpower-paste-panel>summary{padding:10px 12px;font-size:13px;font-weight:600;cursor:pointer;}
 .manpower-paste-body{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:0 12px 12px;min-width:0;}

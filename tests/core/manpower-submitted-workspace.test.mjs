@@ -130,6 +130,7 @@ test('search resets preserve the selected bounded page size',()=>{
 test('draft editor and list cannot treat submitted requests as editable drafts',()=>{
   assert.match(app,/\.eq\('state','Draft'\)/);
   assert.match(app,/draft.request.state!=='Draft'\)\{STATE.manpowerSubmittedId=id;await go\('manpowerSubmittedDetails'/);
-  const readOnly=app.slice(app.indexOf('const MANPOWER_SUBMITTED_UI='),app.indexOf('function openManpowerRequestForm('));
-  assert.doesNotMatch(readOnly,/\.rpc\(|\.insert\(|\.update\(|\.delete\(/);
+  const reads=app.slice(app.indexOf('async function renderManpowerSubmittedDetails('),app.indexOf('async function manpowerSubmittedSetTab('));
+  assert.doesNotMatch(reads,/\.rpc\(|\.insert\(|\.update\(|\.delete\(/);
+  assert.match(reads,/canAmend:request.state==='Open'&&hasPermission\('manpower.update'\)/);
 });
