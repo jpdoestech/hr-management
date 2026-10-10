@@ -747,3 +747,24 @@ temporary tab cleanup and viewport reset verified. No server was installed.
 MP-A17 publication: `ec00be7` pushed to `origin/main`; remote HEAD verified.
 Follow-up review adds an explicit onboarding-permission recheck before painting
 an in-flight worker response. No database deployment was performed.
+
+MP-A17 permission follow-up `450eea2` pushed and remote HEAD verified. Lint,
+308 tests, build, explicit validation and staged diff checks passed.
+
+- MP-B20: manual identity-review UI in applicant details. Reuses current employee
+  autocomplete, minimal scoped comparison preview and the existing versioned
+  audited identity transaction. Requires three permissions; explicit decision,
+  bounded reason, fingerprints/revision, confirmation locking, duplicate guards
+  and saved-result verification. Stale errors retain entries, changed employee
+  selection resets decisions, and shared Save/Discard/Keep navigation returns to
+  the applicant. No source merge, SQL/configuration change or server installation.
+  Nine focused tests passed. Synthetic controller/form harness verified responsive
+  containment, validation, return and stale errors; picker/auth/confirmation/RPC
+  are stubbed, not production acceptance. SQL diagnostics/limits are in
+  `docs/MANPOWER-FULFILLMENT-IDENTITY-REVIEW-UI.md`. Automatic identity discovery,
+  authoritative reservation/deployment/on-call UI and broader specification gates
+  remain incomplete.
+
+MP-B20 project validation: lint, 317 automated tests, production build, explicit
+repository validation and diff checks passed. Synthetic fixture shutdown/exit,
+temporary browser tab cleanup and viewport reset verified. No live SQL executed.

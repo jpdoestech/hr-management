@@ -1850,6 +1850,11 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
 .manpower-quantity-editor{width:280px;max-width:calc(100vw - 72px);white-space:normal;display:grid;gap:8px;}
 .manpower-lifecycle-actions{margin-bottom:12px;}
 .manpower-lifecycle-actions:empty{display:none;}
+.modal:has(#onboarding_identity_review){width:min(680px,calc(100vw - 24px));}
+#onboarding_identity_review #oi_comparison{margin-block:12px;overflow-wrap:anywhere;}
+#onboarding_identity_review #oi_comparison b,#onboarding_identity_review #oi_comparison .small{display:block;}
+#onboarding_identity_review #oi_error{color:var(--red);margin-bottom:12px;overflow-wrap:anywhere;}
+@media(max-width:1100px){#onboarding_identity_review input,#onboarding_identity_review select{min-height:44px;font-size:16px;}#onboarding_identity_review textarea{font-size:16px;}#onboarding_identity_review button,.modal:has(#onboarding_identity_review) .modal-foot button{min-height:44px;}}
 @media(max-width:1100px){.manpower-submitted-data:has([data-worker-results]) .data-toolbar button,.manpower-submitted-data:has([data-worker-results]) .data-toolbar select{min-height:44px;}.manpower-submitted-data:has([data-worker-results]) .searchbox{min-height:44px;}.manpower-submitted-data:has([data-worker-results]) input{font-size:16px;min-height:40px;}}
 .manpower-line-capacity{white-space:normal;max-width:540px;overflow-wrap:anywhere;}
 .manpower-line-capacity dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0;}

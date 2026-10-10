@@ -20,6 +20,7 @@ import {LIFECYCLE_LABELS,lifecycleOperations,lifecycleActionsHTML,lifecyclePaylo
 import {HEADER_AMENDMENT_FIELDS,readHeaderAmendment,headerAmendmentPayload,headerEditorHTML,headerAmendmentResultValid,headerAmendmentError} from './manpower/header-editor.js?v=20261010-1';
 import {loadLineCapacity,lineCapacityHTML,capacityErrorHTML} from './manpower/capacity-summary.js?v=20261010-1';
 import {loadLineWorkers,workerTableHTML,workerFiltersHTML} from './manpower/worker-monitoring.js?v=20261010-1';
+import {identityPreviewValid,identityReviewPayload,identityComparisonHTML,identityReviewResultValid,identityReviewError} from './manpower/identity-review.js?v=20261010-1';
 import {readManpowerPaste,detectManpowerPasteMapping,previewManpowerPaste} from './core/manpower-paste.js?v=20261009-1';
 import {manpowerPasteMappingHTML,manpowerPastePreviewHTML} from './manpower/paste-preview.js?v=20261009-1';
 import { measureAsync, recordPerformance, performanceSnapshot } from './core/performance.js?v=20261002-1';
@@ -2654,7 +2655,9 @@ async function requestPageNavigation(view){
   return false;
 }
 async function requestCloseModal(trigger=null){
+  if(document.getElementById('onboarding_identity_review')&&ONBOARDING_IDENTITY_UI.busy)return false;
   const finishClose=async()=>{
+    if(document.getElementById('onboarding_identity_review')){const id=ONBOARDING_IDENTITY_UI.candidate;ONBOARDING_IDENTITY_UI.preview=null;await transitionModal(()=>openOnboardingDetails(id));return;}
     if(EMPLOYEE_TRANSACTION_RETURN){
       await returnFromEmployeeTransaction();
       return;
@@ -4045,7 +4048,49 @@ function renderOnboarding(){
 function openOnboardingDetails(id){
   const candidate=DB.onboardingCandidates.find(row=>row.id===id);if(!candidate)return;
   const score=onboardingAverageScore(candidate),readiness=onboardingReadiness(candidate),checks=onboardingChecklist(candidate),blockers=onboardingHireBlockers(candidate);
-  openModal(`<div class="modal-head"><div><h3>${esc(candidateDisplayName(candidate))}</h3><div class="small">${esc(candidate.positionApplied||'Applicant')} · ${esc(candidate.department||'Unassigned')}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="onboarding-detail-grid"><div><span>Stage</span>${statusBadge(candidate.stage||'Applicant',ONBOARDING_STAGE_MAP)}</div><div><span>Recommendation</span><b>${esc(candidate.recommendation||'Pending')}</b></div><div><span>Evaluation</span><b>${score?`${score}/5`:'Not scored'}</b></div><div><span>Readiness</span><b>${readiness.percent}%</b></div><div><span>PRF Number</span><b>${esc(candidate.prfNumber||'—')}</b></div><div><span>Proposed Start</span><b>${fmtDate(candidate.proposedStartDate)}</b></div></div><div class="onboarding-check-grid review">${ONBOARDING_CHECKLIST.map(item=>`<div class="onboarding-check ${checks[item.key]?'done':''}"><span class="checkmark">${checks[item.key]?'✓':'–'}</span><span><b>${esc(item.label)}</b><small>${esc(item.group)}</small></span></div>`).join('')}</div>${blockers.length&&candidate.stage!=='Hired'?`<div class="notice notice-soft"><b>Before conversion:</b> ${esc(blockers.join(', '))}.</div>`:''}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button>${canEdit()?`<button class="btn btn-ghost" onclick="openOnboardingForm('${candidate.id}')">Edit</button>${candidate.stage!=='Hired'?`<button class="btn btn-primary" onclick="openOnboardingHire('${candidate.id}')">Prepare Hire</button>`:''}`:''}</div>`);
+  openModal(`<div class="modal-head"><div><h3>${esc(candidateDisplayName(candidate))}</h3><div class="small">${esc(candidate.positionApplied||'Applicant')} · ${esc(candidate.department||'Unassigned')}</div></div><button onclick="closeModal()">&times;</button></div><div class="modal-body"><div class="onboarding-detail-grid"><div><span>Stage</span>${statusBadge(candidate.stage||'Applicant',ONBOARDING_STAGE_MAP)}</div><div><span>Recommendation</span><b>${esc(candidate.recommendation||'Pending')}</b></div><div><span>Evaluation</span><b>${score?`${score}/5`:'Not scored'}</b></div><div><span>Readiness</span><b>${readiness.percent}%</b></div><div><span>PRF Number</span><b>${esc(candidate.prfNumber||'—')}</b></div><div><span>Proposed Start</span><b>${fmtDate(candidate.proposedStartDate)}</b></div></div><div class="onboarding-check-grid review">${ONBOARDING_CHECKLIST.map(item=>`<div class="onboarding-check ${checks[item.key]?'done':''}"><span class="checkmark">${checks[item.key]?'✓':'–'}</span><span><b>${esc(item.label)}</b><small>${esc(item.group)}</small></span></div>`).join('')}</div>${blockers.length&&candidate.stage!=='Hired'?`<div class="notice notice-soft"><b>Before conversion:</b> ${esc(blockers.join(', '))}.</div>`:''}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Close</button>${canReviewOnboardingIdentity()?`<button type="button" class="btn btn-ghost" onclick="openOnboardingIdentityReview(${esc(JSON.stringify(candidate.id))})">Review Identity</button>`:''}${canEdit()?`<button class="btn btn-ghost" onclick="openOnboardingForm('${candidate.id}')">Edit</button>${candidate.stage!=='Hired'?`<button class="btn btn-primary" onclick="openOnboardingHire('${candidate.id}')">Prepare Hire</button>`:''}`:''}</div>`);
+}
+const ONBOARDING_IDENTITY_UI={candidate:'',preview:null,request:0,busy:false};
+function canReviewOnboardingIdentity(){return Boolean(SESSION&&hasPermission('onboarding.view')&&hasPermission('employees.view')&&hasPermission('onboarding.review_identity'));}
+async function openOnboardingIdentityReview(id){
+  if(!canReviewOnboardingIdentity()||ONBOARDING_IDENTITY_UI.busy||!DB.onboardingCandidates.some(row=>row.id===id))return;
+  ONBOARDING_IDENTITY_UI.candidate=id;ONBOARDING_IDENTITY_UI.preview=null;++ONBOARDING_IDENTITY_UI.request;
+  await transitionModal(()=>openModal(`<div class="modal-head"><h3>Review Applicant Identity</h3><button type="button" onclick="requestCloseModal()" aria-label="Back to applicant">&times;</button></div><div class="modal-body" id="onboarding_identity_review"><div id="oi_error" role="alert" tabindex="-1" hidden></div>${employeePickerHTML({id:'oi_employee',label:'Compare with employee',required:true,autofill:false,onSelect:'onboardingIdentityEmployeeChanged'})}<button type="button" class="btn btn-ghost btn-sm" onclick="loadOnboardingIdentityPreview()">Refresh comparison</button><div id="oi_comparison" aria-live="polite"><p class="small">Select an actual employee record to compare.</p></div><div class="formgrid"><div class="field full"><label for="oi_decision">Identity Decision</label><select id="oi_decision"><option value="">Select a decision</option><option value="SamePerson">Same person — link verified identity</option><option value="SeparatePersons">Different people — preserve separate identities</option></select></div><div class="field full"><label for="oi_reason">Review Reason</label><textarea id="oi_reason" rows="3" maxlength="1000"></textarea></div></div></div><div class="modal-foot"><button type="button" class="btn btn-ghost" onclick="requestCloseModal()">Back to Applicant</button><button id="oi_save" type="button" class="btn btn-primary" data-confirm-change="false" onclick="saveOnboardingIdentityReview()">Save Review</button></div>`));
+}
+function onboardingIdentityEmployeeChanged(){ONBOARDING_IDENTITY_UI.preview=null;document.getElementById('oi_decision').value='';document.getElementById('oi_reason').value='';loadOnboardingIdentityPreview();}
+function onboardingIdentityError(message){const error=document.getElementById('oi_error');if(!error)return;error.hidden=!message;error.textContent=message||'';if(message)error.focus();}
+async function loadOnboardingIdentityPreview(){
+  if(!canReviewOnboardingIdentity()||ONBOARDING_IDENTITY_UI.busy)return;
+  const root=document.getElementById('onboarding_identity_review'),employee=document.getElementById('oi_employee')?.value;
+  if(!root?.isConnected)return;
+  const candidate=ONBOARDING_IDENTITY_UI.candidate,token=++ONBOARDING_IDENTITY_UI.request,sessionId=SESSION.id;
+  ONBOARDING_IDENTITY_UI.preview=null;onboardingIdentityError('');
+  const host=document.getElementById('oi_comparison');if(!employee){host.innerHTML='<p class="small">Select an actual employee record to compare.</p>';return;}
+  host.innerHTML='<p role="status">Loading comparison...</p>';
+  const current=()=>token===ONBOARDING_IDENTITY_UI.request&&root.isConnected&&SESSION?.id===sessionId&&canReviewOnboardingIdentity()&&document.getElementById('oi_employee')?.value===employee;
+  try{
+    const {data,error}=await supabase.rpc('preview_manpower_identity_review',{p_candidate:candidate,p_employee:employee});if(error)throw error;
+    if(!current())return;if(!identityPreviewValid(data,candidate,employee))throw new Error('Unverified comparison');
+    ONBOARDING_IDENTITY_UI.preview=data;host.innerHTML=identityComparisonHTML(data);
+  }catch(error){if(current()){host.innerHTML='';onboardingIdentityError(identityReviewError(error));}}
+}
+async function saveOnboardingIdentityReview(){
+  if(!canReviewOnboardingIdentity()||ONBOARDING_IDENTITY_UI.busy)return false;
+  const root=document.getElementById('onboarding_identity_review');if(!root?.isConnected)return false;
+  const read=()=>identityReviewPayload(ONBOARDING_IDENTITY_UI.preview,document.getElementById('oi_employee').value,document.getElementById('oi_decision').value,document.getElementById('oi_reason').value);
+  const checked=read();onboardingIdentityError(Object.values(checked.errors).join(' '));if(Object.keys(checked.errors).length)return false;
+  const sessionId=SESSION.id,candidate=ONBOARDING_IDENTITY_UI.candidate,controls=[...document.getElementById('modal').querySelectorAll('input,textarea,select,button')];
+  ONBOARDING_IDENTITY_UI.busy=true;controls.forEach(control=>control.disabled=true);root.setAttribute('aria-busy','true');
+  try{
+    if(await confirmDataChange({title:'Confirm identity review',message:checked.payload.p_decision==='SamePerson'?'Record this verified identity link? Source records and assignment history will not be merged.':'Record that these are different people? Existing conversion and assignment evidence must remain consistent.',confirmLabel:'Record review'})!=='confirm')return false;
+    if(SESSION?.id!==sessionId||!root.isConnected||!canReviewOnboardingIdentity()||candidate!==ONBOARDING_IDENTITY_UI.candidate)return false;
+    if(JSON.stringify(read())!==JSON.stringify(checked))throw new Error('Review changed during confirmation');
+    const {data,error}=await supabase.rpc('record_manpower_identity_review',checked.payload);if(error)throw error;
+    if(!identityReviewResultValid(data,checked.payload))throw new Error('Unconfirmed review result');
+    if(SESSION?.id!==sessionId||!root.isConnected||!canReviewOnboardingIdentity())return false;
+    ONBOARDING_IDENTITY_UI.preview=null;toast('Identity review recorded.');await transitionModal(()=>openOnboardingDetails(candidate));return true;
+  }catch(error){if(SESSION?.id===sessionId&&root.isConnected)onboardingIdentityError(identityReviewError(error));return false;}
+  finally{ONBOARDING_IDENTITY_UI.busy=false;if(root.isConnected){controls.forEach(control=>control.disabled=false);root.removeAttribute('aria-busy');}}
 }
 function openOnboardingHire(id){
   const candidate=DB.onboardingCandidates.find(row=>row.id===id);if(!candidate)return;
@@ -10957,6 +11002,7 @@ Object.assign(window, {
   openManpowerHeaderAmendment,saveManpowerHeaderAmendment,
   showManpowerLineCapacity,
   showManpowerLineWorkers,manpowerWorkerSearch,manpowerWorkerState,
+  openOnboardingIdentityReview,onboardingIdentityEmployeeChanged,loadOnboardingIdentityPreview,saveOnboardingIdentityReview,
   renderClientCatalog, clientCatalogPageGo, clientCatalogPageSize, openClientAccountForm, saveClientAccount,
   syncEmployeeStatusReason,
   renderAttendance, attendanceFilter, exportAttendance,
