@@ -678,4 +678,88 @@ if(process.argv.includes('--addresses')){
   await denied(()=>db.exec('select * from manpower_private.address_locations'),'42501');
   console.log('Authoritative address database rehearsal passed: complete reference seed, optional/free-text addresses, region/province/city/barangay hierarchy and names, NCR without province, known ZIP, forged legacy/display data, private access and immutable catalog. Atomic new employee creation remains incomplete.');
 }
+if(process.argv.includes('--new-employee')){
+  if(!process.argv.includes('--addresses')||!process.argv.includes('--handoff'))throw new Error('New employee rehearsal requires --interlock --handoff --addresses');
+  await db.exec('reset role');
+  await db.exec("create unique index hr_records_employee_number_unique_idx on hr_records(upper(data->>'employeeNo')) where module='employees'");
+  await db.exec("update hr_settings set data=data||'{\"allowanceTypes\":[\"Meal Allowance\"]}'");
+  await db.exec(readFileSync(new URL('../../supabase/proposals/0050_manpower_new_employee.sql',import.meta.url),'utf8'));
+  const candidate={id:'new-hire-candidate',name:'QUILL, ZEPHYR VELORUM',lastName:'QUILL',firstName:'ZEPHYR',middleName:'VELORUM',
+    department:'Production',positionApplied:'Operator',stage:'Ready to Hire',recommendation:'Hire',
+    proposedStartDate:'2026-10-10',birthDate:'1998-06-14',gender:'Female',sssNumber:'0954214559',
+    checklist:{privacyNotice:true,interview:true,offer:true,contract:true,standards:true},attachments:[{id:'synthetic-retained-reference'}]};
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'onboardingCandidates',candidate.id,candidate]);
+  await db.exec('set role authenticated');await request('new-hire',1);
+  const reserved=await reserve('new-hire-reserve',[{candidate_id:candidate.id,line_id:'new-hire-line',hiring_category:'New Hire'}]);
+  const fingerprint=async()=>(await db.query('select md5(data::text) fingerprint from hr_records where record_id=$1',[candidate.id])).rows[0].fingerprint;
+  const originalFingerprint=await fingerprint();
+  const details={employmentType:'Probationary',branchReporting:'Davao',dailyRate:500.25,allowances:{'Meal Allowance':20.5},homeAddress:'Complete imported address',presentAddress:{}};
+  const create=async(token,options=details,reason='HR verified new employee creation',hash=originalFingerprint)=>
+    (await db.query('select create_manpower_employee($1,$2,$3,$4,$5) result',[token,candidate.id,hash,options,reason])).rows[0].result;
+  const masterCount=async()=>(await db.query("select count(*)::int count from hr_records where module='employees'")).rows[0].count;
+  const before=await masterCount();
+  const nextNumber=(await db.query("select coalesce(max(substr(data->>'employeeNo',5)::int),0)+1 next from hr_records where module='employees' and data->>'employeeNo' ~ '^EMP-[0-9]{6}$'")).rows[0].next;
+  for(const permission of ['employees.create','employees.view','onboarding.view','onboarding.update','onboarding.review_identity','manpower.view']){
+    await db.query('select set_config($1,$2,false)',['test.denied',permission]);await denied(()=>create('denied-new-hire'),'42501');
+  }
+  await db.exec("set test.denied='';set test.scope='Other'");await denied(()=>create('scope-new-hire'),'42501');
+  await db.exec(`set test.scope='global';set test.tenant='${other}'`);await denied(()=>create('tenant-new-hire'),'42501');await db.exec(`set test.tenant='${tenant}'`);
+  await denied(()=>create('stale-new-hire',details,'HR verified','stale'),'40001');
+  await denied(()=>create('reason-new-hire',details,''),'23514');
+  for(const changes of [{employeeNo:'EMP-000001'},{employmentType:'Unknown'},{branchReporting:'Unknown'},
+    {dailyRate:-1},{dailyRate:'500'},{dailyRate:500.123},{allowances:{Unknown:10}},{allowances:{'Meal Allowance':-1}},
+    {homeAddress:{regionCode:'0000000000',regionName:'Unknown'}}])await denied(()=>create('invalid-new-hire',{...details,...changes}),'23514');
+  await db.exec('reset role');
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[tenant,'employees','new-hire-unknown-duplicate',{id:'new-hire-unknown-duplicate',name:candidate.name,department:'Production'}]);
+  await db.exec('set role authenticated');await denied(()=>create('duplicate-new-hire'),'23514');assert.equal(await masterCount(),before+1);
+  await db.exec("reset role;delete from hr_records where record_id='new-hire-unknown-duplicate'");
+  await db.query('insert into hr_records values($1,$2,$3,$4)',[other,'employees','global-number-fixture',{id:'global-number-fixture',employeeNo:'EMP-999999',name:'SYNTHETIC OTHER TENANT SEQUENCE'}]);
+  await db.exec('set role authenticated');await denied(()=>create('exhausted-new-hire'),'23514');assert.equal(await fingerprint(),originalFingerprint);
+  await db.exec("reset role;delete from hr_records where record_id='global-number-fixture'");
+  await db.exec("update hr_records set data=data||'{\"sssNumber\":\"123\"}' where record_id='new-hire-candidate'");
+  await db.exec('set role authenticated');await denied(async()=>create('bad-id-new-hire',details,'HR verified',await fingerprint()),'23514');
+  for(const [key,value] of [['contract',false],['proposedStartDate','2026-02-30'],['positionApplied','Unknown']]){
+    await db.exec('reset role');
+    const changed=key==='contract'?{...candidate,checklist:{...candidate.checklist,contract:value}}:{...candidate,[key]:value};
+    await db.query('update hr_records set data=$1 where record_id=$2',[changed,candidate.id]);
+    await db.exec('set role authenticated');await denied(async()=>create('not-ready-new-hire',details,'HR verified',await fingerprint()),'23514');
+    assert.equal(await masterCount(),before);
+  }
+  await db.exec('reset role');await db.query('update hr_records set data=$1 where record_id=$2',[candidate,candidate.id]);
+  await db.exec("alter table hr_audit_logs add constraint fail_new_hire_audit check(action not like 'New employee created%Reason: new hire audit failure') not valid");
+  await db.exec('set role authenticated');await denied(()=>create('audit-new-hire',details,'new hire audit failure'),'23514');
+  assert.equal(await masterCount(),before);assert.equal(await fingerprint(),originalFingerprint);
+  assert.equal((await db.query('select employee_id from hr_manpower_reservations where id=$1',[reserved.reservation_ids[0]])).rows[0].employee_id,null);
+  await db.exec('reset role');
+  await db.exec("alter table manpower_private.new_employee_batches add constraint fail_new_hire_late check(token<>'late-new-hire') not valid");
+  await db.exec('set role authenticated');await denied(()=>create('late-new-hire'),'23514');
+  assert.equal(await masterCount(),before);assert.equal(await fingerprint(),originalFingerprint);
+  const result=await create('successful-new-hire');assert.equal(result.replayed,false);assert.equal(result.reservation_id,reserved.reservation_ids[0]);
+  assert.equal(await masterCount(),before+1);
+  const employee=(await db.query('select data,updated_by from hr_records where record_id=$1',[result.employee_id])).rows[0];
+  assert.match(employee.data.employeeNo,/^EMP-[0-9]{6}$/);assert.equal(employee.data.name,candidate.name);
+  assert.equal(employee.data.employeeNo,'EMP-'+String(nextNumber).padStart(6,'0'));
+  assert.equal(employee.data.statusDate,'');assert.equal(employee.data.dateHired,candidate.proposedStartDate);
+  assert.equal(employee.data.sssNumber,'09-5421455-9');assert.equal(employee.data.prfNumber,'new-hire');
+  assert.equal(employee.data.homeAddress.addressLine,details.homeAddress);assert.equal(employee.data.sourceCandidateId,candidate.id);
+  assert.equal(employee.data.dailyRate,500.25);assert.equal(employee.updated_by,actor);assert.equal(employee.data.createdBy,actor);
+  assert.equal(employee.data.allowances['Meal Allowance'],20.5);
+  const saved=(await db.query('select data from hr_records where record_id=$1',[candidate.id])).rows[0].data;
+  assert.equal(saved.stage,'Hired');assert.deepEqual(saved.attachments,candidate.attachments);
+  const capacity=(await db.query("select manpower_line_capacity('new-hire-line') result")).rows[0].result;
+  assert.equal(capacity.reserved,1);assert.equal(capacity.fulfilled,0);
+  assert.equal((await create('successful-new-hire')).replayed,true);assert.equal(await masterCount(),before+1);
+  await denied(()=>create('successful-new-hire',{...details,dailyRate:600}),'23514');
+  await denied(async()=>create('second-new-hire',details,'HR verified',await fingerprint()),'23514');
+  await db.exec('reset role');
+  await denied(()=>db.exec("update manpower_private.new_employee_batches set payload='{}'"),'23514');
+  assert.equal((await db.query('select * from manpower_private.source_intents')).rows.length,0);
+  assert.equal((await db.query('select * from hr_manpower_reservation_intents')).rows.length,0);
+  for(const check of await db.exec(readFileSync(new URL('../../supabase/verification/manpower_new_employee_integrity.sql',import.meta.url),'utf8')))
+    assert.equal(check.rows.length,0);
+  await db.exec('set role authenticated');await denied(()=>db.exec('select * from manpower_private.new_employee_batches'),'42501');
+  await db.exec("set test.denied='employees.create'");await denied(()=>create('successful-new-hire'),'42501');await db.exec("set test.denied=''");
+  await db.exec('set role anon');await denied(()=>create('anonymous-new-hire'),'42501');
+  console.log('Atomic new employee rehearsal passed: canonical numbering, scoped permissions, catalog/contract/rate/address/government-ID validation, same reservation, audit and final-row rollback, retained applicant attachments, actor metadata and idempotent replay. No actual deployment or production enablement.');
+}
 await db.close();console.log('Reservation PostgreSQL rehearsal passed: 75-worker atomic batch, ineligible/capacity/duplicate rollback, bounded real assignments for 1000 demand, role/scope/tenant denial, order-independent idempotent replay, worker uniqueness, authoritative capacity and audit-failure rollback. Production and independent concurrency remain unverified.');
