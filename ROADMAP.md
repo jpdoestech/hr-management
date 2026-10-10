@@ -765,6 +765,10 @@ MP-A17 permission follow-up `450eea2` pushed and remote HEAD verified. Lint,
   authoritative reservation/deployment/on-call UI and broader specification gates
   remain incomplete.
 
+MP-B20 publication: `cbe4740` pushed to `origin/main`; remote HEAD matched
+`cbe4740173b2ea21c6a4af952861483bb1d94805`. Only identity-review UI, tests,
+setup notes and related progress records were staged; the skill cache is excluded.
+
 MP-B20 project validation: lint, 317 automated tests, production build, explicit
 repository validation and diff checks passed. Synthetic fixture shutdown/exit,
 temporary browser tab cleanup and viewport reset verified. No live SQL executed.
