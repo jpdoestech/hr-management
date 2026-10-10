@@ -633,3 +633,30 @@ Documentation validation: lint, all 268 tests, production build, explicit
 `node scripts/validate.mjs` and diff checks passed. SQL signatures/grants and
 verification filenames were checked against repository source; the diagnostic
 was not executed against a database. No new database validation is claimed.
+
+SQL documentation publication: `99a28c9` pushed to `origin/main`; remote HEAD
+verified. Specification scope and proposal release gates remain unchanged.
+
+- MP-A14: submitted request/line lifecycle UI connected to the existing
+  `change_manpower_lifecycle` RPC (`docs/MANPOWER-FULFILLMENT-LIFECYCLE-TRANSACTIONS-UI.md`).
+  State/permission-based Close, Cancel, Reopen and selected-line cancellation
+  use compact reasoned inline entry, explicit confirmation, stable revisions,
+  retained request/section/page and shared Save/Discard/Keep navigation.
+  Missing/stale/denied/reservation errors retain input; busy guards cover
+  confirmation/write/refresh. No proposal promotion, SQL execution, database
+  runtime, production record, configuration or new dependency changes.
+
+MP-A14 browser evidence: synthetic page-two cancellation, Close, Reopen without
+restored demand, Discard, retained reservation and missing-RPC errors verified.
+390x844, 768x1024 and 1440x900 had no document overflow; the panel remains
+bounded to 640px, with 44px mobile/tablet actions. No live database/RLS test
+claim. Submitted header/date/numbering amendments and authoritative onboarding
+reservation/deployment UI follow; identity/on-call, timeline/reporting, legacy
+reconciliation and coordinated live release/acceptance remain unfinished.
+
+MP-A14 validation: lint, all 282 automated tests, production build, explicit
+`node scripts/validate.mjs` and diff checks passed. Inputs/actions lock during
+confirmation/write and unlock on retained errors/cancel; the shared quantity
+editor receives the same protection. Fixture server shutdown verified and
+temporary browser tab closed/viewport reset. Historical read-only lifecycle
+documentation is preserved separately from the new transaction UI evidence.

@@ -12,6 +12,7 @@ const html=String.raw`<!doctype html><html lang="en"><head><meta charset="utf-8"
 import {loadSubmittedRequests,loadSubmittedRequest,loadSubmittedRows,submittedListRowsHTML,submittedHeaderHTML,submittedTableHTML} from '/js/manpower/submitted-workspace.js';
 import {paginationMeta,paginationHTML} from '/js/core/pagination.js';
 import {quantityAmendmentPayload,quantityAmendmentHTML,quantityAmendmentError} from '/js/manpower/quantity-editor.js';
+import {LIFECYCLE_LABELS,lifecycleOperations,lifecycleActionsHTML,lifecyclePayload,lifecycleEditorHTML,lifecycleResultValid,lifecycleError} from '/js/manpower/lifecycle-editor.js';
 const SESSION={id:'fixture-user'};const STATE={view:'manpowerSubmitted'};const hasPermission=()=>true;
 const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 const iSearch=()=>'';const iInfo=()=>'<span aria-hidden="true">i</span>';
@@ -30,11 +31,28 @@ const lines=Array.from({length:31},(_,index)=>({id:'line'+index,request_id:'requ
 const history=lines.map(line=>({...line,line_id:line.id,event_type:'Submitted',request_revision:2,hr_manpower_lines:{request_id:line.request_id,ordinal:line.ordinal,department:line.department,position:line.position}}));
 const amendments=history.map((row,index)=>({...row,previous_authorized:1000,current_authorized:1025,request_revision:index+3,reason:'Additional client demand. '+('Synthetic reason with sufficient detail for responsive wrapping. '.repeat(5))}));
 requests[0].state='Closed';requests[1].state='Cancelled';
-if(location.search.includes('quantity'))requests[0].state='Open';
+if(location.search.includes('quantity')||location.search.includes('lifecycle-open'))requests[0].state='Open';
 const lifecycle=Array.from({length:31},(_,index)=>({request_id:'request0',request_revision:index+3,
   operation:index%2?'Reopen':'Close',previous_state:index%2?'Closed':'Open',current_state:index%2?'Open':'Closed',
   reason:'Synthetic lifecycle reason '+(index+1)+'. '+('Historical fulfillment is preserved. '.repeat(8))}));
 const supabase={rpc:async(name,payload)=>{
+  if(name==='change_manpower_lifecycle'){
+    if(location.search.includes('missing-lifecycle-rpc'))return {error:{code:'PGRST202'}};
+    if(location.search.includes('reservation-block'))return {error:{code:'23514',message:'Release or reassign all reservations on affected lines before cancellation or closure.'}};
+    const request=requests.find(row=>row.id===payload.p_id);
+    if(!request||request.revision!==payload.p_expected_revision)return {error:{code:'40001'}};
+    const previous=request.state,changes=[];
+    if(payload.p_operation!=='Reopen')for(const line of lines.filter(row=>row.request_id===request.id&&(payload.p_operation!=='CancelLine'||row.id===payload.p_line_id))){
+      const delta=payload.p_operation==='CancelLine'?payload.p_cancel_quantity:line.current_authorized-line.cancelled_unfilled;
+      if(!delta)continue;
+      const before=line.cancelled_unfilled;line.cancelled_unfilled+=delta;
+      changes.push({line_id:line.id,previous_cancelled:before,current_cancelled:line.cancelled_unfilled,current_authorized:line.current_authorized,original_requested:line.original_requested});
+    }
+    request.state={Close:'Closed',Cancel:'Cancelled',Reopen:'Open',CancelLine:'Open'}[payload.p_operation];request.revision++;
+    lifecycle.unshift({request_id:request.id,request_revision:request.revision,operation:payload.p_operation,previous_state:previous,current_state:request.state,reason:payload.p_reason});
+    return {data:{request:{...request},line_changes:changes}};
+  }
+  if(name!=='amend_manpower_quantity')return {error:{code:'PGRST202'}};
   if(location.search.includes('missing-amendment-rpc'))return {error:{code:'PGRST202'}};
   if(location.search.includes('capacity-block'))return {error:{code:'23514',message:'Quantity would undercut reserved or fulfilled commitments. Release or reassign reservations first.'}};
   const request=requests.find(row=>row.id===payload.p_id),line=lines.find(row=>row.id===payload.p_line_id);

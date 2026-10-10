@@ -2,6 +2,11 @@
 
 Status: locally validated read-only slice. Overall fulfillment release remains incomplete.
 
+Later mutation controls are documented separately in
+[MP-A14 lifecycle transactions UI](MANPOWER-FULFILLMENT-LIFECYCLE-TRANSACTIONS-UI.md).
+The results below describe the earlier read-only history slice, not the current
+mutation workflow or a production release.
+
 ## Changes
 
 - Submitted request browsing now includes Open, Closed and Cancelled records, with an optional database-filtered state selector. Drafts remain excluded and retain their separate editor.

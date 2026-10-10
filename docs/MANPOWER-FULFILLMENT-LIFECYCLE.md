@@ -2,6 +2,11 @@
 
 Status: locally rehearsed proposal. Production deployment and mutation UI remain gated.
 
+Application follow-up: [MP-A14 lifecycle UI](MANPOWER-FULFILLMENT-LIFECYCLE-TRANSACTIONS-UI.md)
+connects the existing RPC with reasoned confirmation and retained context.
+Production database release and live acceptance remain gated; the historical
+rehearsal results below are not a claim that the proposal has been deployed.
+
 ## Controlled Operations
 
 `supabase/proposals/0042_manpower_lifecycle.sql` follows verified proposals 0035-0041 and remains outside automatic migrations. It introduces `change_manpower_lifecycle(request, revision, operation, reason, line?, cancelledQuantity?)`:

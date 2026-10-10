@@ -142,7 +142,9 @@ Live database/RLS/end-to-end acceptance is not claimed by synthetic UI tests.
 
 ## Remaining specification work
 
-Reasoned close/cancel/reopen and line cancellation UI; submitted header/date/
+Reasoned close/cancel/reopen and line cancellation UI is now connected in
+[MP-A14](MANPOWER-FULFILLMENT-LIFECYCLE-TRANSACTIONS-UI.md), still subject to backend release
+and live acceptance. Remaining: submitted header/date/
 numbering amendments; authoritative applicant reservation and deployment
 workflows; identity and on-call UI; worker lists, timeline, reporting/exports;
 legacy reconciliation and verified production release/security acceptance.
