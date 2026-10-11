@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {readFileSync} from 'node:fs';
+import {employeeTemplateBytes} from '../../js/core/employee-template-validation.js';
+const context={};vm.createContext(context);vm.runInContext(readFileSync(new URL('../../js/vendor/xlsx.full.min.js',import.meta.url),'utf8'),context);
+const XLSX=context.XLSX;
+test('generated XLSX contains stop validations, dependent named ranges, hidden lists and no address dropdown',()=>{
+  const columns=[{key:'department',options:['Production','HR']},{key:'position'},{key:'status',options:['Active','Separated']},{key:'statusReason'},{key:'gender',options:['Male','Female']},{key:'address'}];
+  const workbook=XLSX.utils.book_new();XLSX.utils.book_append_sheet(workbook,XLSX.utils.aoa_to_sheet([columns.map(column=>column.key)]),'Employees');
+  const bytes=employeeTemplateBytes(XLSX,workbook,columns,[{name:'Operator',department:'Production'}],{Active:['Active / Normal'],Separated:['Resigned']});
+  const zip=XLSX.CFB.read(bytes,{type:'buffer'}),get=path=>new TextDecoder().decode(new Uint8Array(XLSX.CFB.find(zip,'/'+path).content));
+  const sheet=get('xl/worksheets/sheet1.xml'),meta=get('xl/workbook.xml');
+  assert.match(sheet,/<dataValidations count="5">/);assert.match(sheet,/errorStyle="stop"/);
+  assert.match(sheet,/VLOOKUP\(\$A2,_DepartmentMap/);assert.match(sheet,/VLOOKUP\(\$C2,_StatusMap/);
+  assert.match(sheet,/sqref="B2:B10001"/);assert.doesNotMatch(sheet,/sqref="F2:/);
+  assert.match(meta,/name="_Validation"[^>]*state="hidden"/);assert.match(meta,/definedName name="_DepartmentMap"/);
+  const reopened=XLSX.read(bytes,{type:'buffer'});assert.equal(reopened.SheetNames[0],'Employees');
+  assert.ok(get('xl/worksheets/sheet2.xml').includes('Operator'));
+});

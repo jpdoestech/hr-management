@@ -29,6 +29,8 @@ import { filterTdaRecords, normalizeTdaScope, normalizeTdaText, parseTdaMatrix, 
 import { CASE_WORKFLOW_STAGES, CASE_TERMINAL_STAGES, LEGACY_CASE_STAGES, CASE_RESPONSE_STATUSES, CASE_HEARING_STATUSES, CASE_DECISION_STATUSES, CASE_DECISION_OUTCOMES, CASE_NOD_STATUSES, actionRequiresImplementation, canTransitionCase, caseStageOptions, caseTransitionValidation, caseDueProcessReadiness, caseDecisionValidation, caseResponseChronology, caseImplementationReadiness, caseImplementationValidation, caseLifecycleWorkItem, caseProgressModel, employeeRelationsMetrics, employeeRelationsValidationIssues, employeeRelationsWorkItems, isCaseReportSource, isCaseTerminalStage, qualifyingDisciplinaryHistory } from './core/employee-relations.js?v=20261008-6';
 import { addressComponentHTML, addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom, addressDetailInput, initializeAddressComponents, readAddressComponent } from './address/address-component.js?v=20260930-2';
 import { formatPhilippineAddress, normalizeAddress } from './address/address-models.js?v=20260930-2';
+import {parseOrganizationImport} from './core/organization-import.js?v=20261011-1';
+import {employeeTemplateBytes} from './core/employee-template-validation.js?v=20261011-1';
 
 if(!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('YOUR_PROJECT_REF')){
   document.body.innerHTML = '<div style="font-family:system-ui;padding:40px;max-width:760px;margin:auto"><h2>Supabase configuration missing</h2><p>Edit <b>supabase-config.js</b> with your Supabase project URL and publishable key.</p></div>';
@@ -287,7 +289,7 @@ function employeeBranchLocations(){
 function employeeAllowanceTypes(){return uniqueSettingNames(DB.settings?.allowanceTypes);}
 function normalizeDepartmentCatalog(values){
   const seen=new Set();
-  return (Array.isArray(values)?values:[]).map(value=>typeof value==='string'?{name:value,active:true}:value).map(value=>({name:String(value?.name||'').trim(),active:value?.active!==false})).filter(value=>{
+  return (Array.isArray(values)?values:[]).map(value=>typeof value==='string'?{name:value,active:true}:value).map(value=>({name:String(value?.name||'').trim(),active:value?.active!==false,...(Array.isArray(value?.clientIds)?{clientIds:[...value.clientIds]}:{})})).filter(value=>{
     const key=value.name.toLowerCase();if(!key||seen.has(key))return false;seen.add(key);return true;
   });
 }
@@ -309,7 +311,7 @@ function employeeDepartmentNames(current=''){
 }
 function normalizePositionCatalog(values){
   const seen=new Set();
-  return (Array.isArray(values)?values:[]).map(value=>typeof value==='string'?{name:value,department:'',active:true}:value).map(value=>({name:String(value?.name||'').trim(),department:String(value?.department||'').trim(),active:value?.active!==false})).filter(value=>{
+  return (Array.isArray(values)?values:[]).map(value=>typeof value==='string'?{name:value,department:'',active:true}:value).map(value=>({name:String(value?.name||'').trim(),department:String(value?.department||'').trim(),active:value?.active!==false,...(Array.isArray(value?.clientIds)?{clientIds:[...value.clientIds]}:{})})).filter(value=>{
     const key=`${value.department.toLowerCase()}|${value.name.toLowerCase()}`;if(!value.name||seen.has(key))return false;seen.add(key);return true;
   });
 }
@@ -2655,6 +2657,7 @@ async function requestPageNavigation(view){
   return false;
 }
 async function requestCloseModal(trigger=null){
+  if(document.getElementById('organization_import')&&ORGANIZATION_IMPORT.busy)return false;
   if(document.getElementById('onboarding_identity_review')&&ONBOARDING_IDENTITY_UI.busy)return false;
   const finishClose=async()=>{
     if(document.getElementById('onboarding_identity_review')){const id=ONBOARDING_IDENTITY_UI.candidate;ONBOARDING_IDENTITY_UI.preview=null;await transitionModal(()=>openOnboardingDetails(id));return;}
@@ -5009,7 +5012,10 @@ function downloadEmployeeImportTemplate(){
   const referenceSheet=window.XLSX.utils.aoa_to_sheet(reference);referenceSheet['!cols']=[{wch:30},{wch:95}];
   const workbook=window.XLSX.utils.book_new();
   window.XLSX.utils.book_append_sheet(workbook,employeeSheet,'Employees');window.XLSX.utils.book_append_sheet(workbook,instructionSheet,'Instructions');window.XLSX.utils.book_append_sheet(workbook,referenceSheet,'Reference');
-  window.XLSX.writeFile(workbook,'SLSC_Employee_Import_Template.xlsx');toast('Employee import template downloaded.');
+  const bytes=employeeTemplateBytes(window.XLSX,workbook,columns,positionCatalog().filter(item=>item.active),STATUS_REASONS);
+  const url=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  const link=document.createElement('a');link.href=url;link.download='SLSC_Employee_Import_Template.xlsx';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  toast('Employee import template with dropdown validation downloaded.');
 }
 const EMP_FORM_SECTIONS = [
   {title:'Employee Record',description:'Core identifiers and approved hiring reference.',keys:['employeeNo','prfNumber']},
@@ -9500,10 +9506,58 @@ async function saveClientAccount(id='',revision=0){
     toast(error.code==='23505'?'That client name already exists.':error.code==='40001'?'Another user changed this client. Close this form and reload before editing again.':error.message||'Client account could not be saved.',true);
   }finally{CLIENT_CATALOG.saving=false;if(button?.isConnected)button.disabled=false;}
 }
+let ORGANIZATION_IMPORT={rows:[],clients:[],busy:false};
+async function openOrganizationImport(){
+  if(!hasPermission('organization.manage')||!employeeSpreadsheetReady())return;
+  const session=SESSION?.id;
+  try{
+    const {data,error}=await supabase.rpc('organization_import_clients');if(error)throw error;
+    if(!session||SESSION?.id!==session||!hasPermission('organization.manage'))return;
+    ORGANIZATION_IMPORT={rows:[],clients:data,busy:false};
+    openModal(`<div id="organization_import"><div class="modal-head"><h3>Import Departments & Positions</h3><button type="button" onclick="closeModal()" aria-label="Close import">&times;</button></div><div class="modal-body"><div class="formgrid">${data.length>1?`<div class="field full"><label for="org_import_client">Client</label><select id="org_import_client"><option value="">All clients / shared catalog</option>${data.map(item=>`<option value="${esc(item.id)}">${esc(item.name)}</option>`).join('')}</select></div>`:''}<div class="field full"><label for="org_import_file">Excel or CSV file</label><input id="org_import_file" type="file" accept=".xlsx,.xls,.csv" onchange="readOrganizationImport(this)"></div><div id="org_import_summary" class="field full" role="status" tabindex="-1">Choose a file to validate.</div></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-ghost" onclick="downloadOrganizationTemplate()">${iDownload(13)} Template</button><button id="org_import_save" class="btn btn-primary" data-confirm-change="false" onclick="commitOrganizationImport()" disabled>Import</button></div></div>`);
+  }catch(error){toast('Organization import is unavailable. Apply migration 0060 and retry. '+(error.message||''),true);}
+}
+function downloadOrganizationTemplate(){
+  if(!hasPermission('organization.manage')||!employeeSpreadsheetReady())return;
+  const workbook=window.XLSX.utils.book_new();window.XLSX.utils.book_append_sheet(workbook,window.XLSX.utils.aoa_to_sheet([['Department','Position']]),'Organization');
+  window.XLSX.writeFile(workbook,'SLSC_Organization_Import_Template.xlsx');
+}
+async function readOrganizationImport(input){
+  const file=input.files?.[0],context=ORGANIZATION_IMPORT,session=SESSION?.id;
+  if(!file||context.busy||!hasPermission('organization.manage'))return;
+  context.rows=[];context.busy=true;document.getElementById('org_import_save').disabled=true;
+  const summary=document.getElementById('org_import_summary');summary.textContent='Validating file...';
+  try{
+    if(file.size>5*1024*1024)throw new Error('Choose a file smaller than 5 MB.');
+    const workbook=window.XLSX.read(await file.arrayBuffer(),{sheetRows:2002});
+    const matrix=window.XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]],{header:1,defval:'',raw:false});
+    const rows=parseOrganizationImport(matrix);
+    if(ORGANIZATION_IMPORT!==context||SESSION?.id!==session||!summary.isConnected||!hasPermission('organization.manage'))return;
+    context.rows=rows;summary.textContent=`${rows.length} valid rows. Duplicate departments and department-position pairs will be skipped; existing inactive entries stay inactive.`;
+    document.getElementById('org_import_save').disabled=false;
+  }catch(error){if(summary.isConnected){summary.textContent=error.message||'Could not read this file.';summary.setAttribute('role','alert');summary.focus();}}
+  finally{context.busy=false;}
+}
+async function commitOrganizationImport(){
+  const context=ORGANIZATION_IMPORT,session=SESSION?.id,root=document.getElementById('organization_import');
+  if(!root||context.busy||!context.rows.length||!hasPermission('organization.manage'))return;
+  const client=document.getElementById('org_import_client')?.value||null,rows=structuredClone(context.rows);
+  context.busy=true;root.querySelectorAll('button,input,select').forEach(control=>control.disabled=true);
+  try{
+    if(!(await confirmDataChange({title:'Import organization structure',message:`Import ${rows.length} rows, skipping duplicates?`,confirmLabel:'Import'})))return;
+    if(SESSION?.id!==session||!hasPermission('organization.manage')||!root.isConnected)return;
+    const {data,error}=await supabase.rpc('import_organization_structure',{p_rows:rows,p_client_id:client});if(error)throw error;
+    if(SESSION?.id!==session||!root.isConnected)return;
+    DB.settings={...DB.settings,...data.settings};context.rows=[];
+    root.querySelector('.modal-body').innerHTML=`<div role="status"><b>Import complete</b><p>${Number(data.departmentsAdded)} departments and ${Number(data.positionsAdded)} positions added.</p><p>${Number(data.departmentsSkipped)} department duplicates and ${Number(data.positionsSkipped)} position duplicates skipped.</p><p>${Number(data.assignmentsAdded)} client assignments added.</p></div>`;
+    root.querySelector('.modal-foot').innerHTML='<button class="btn btn-primary" onclick="closeModal();renderSettings()">Done</button>';
+  }catch(error){const summary=document.getElementById('org_import_summary');if(summary){summary.textContent=error.message||'Import failed. No changes were saved.';summary.setAttribute('role','alert');summary.focus();}}
+  finally{context.busy=false;if(root.isConnected){root.querySelectorAll('button,input,select').forEach(control=>control.disabled=false);const save=document.getElementById('org_import_save');if(save)save.disabled=!context.rows.length;}}
+}
 function settingsOrganizationHTML(canManage){
   const departments=departmentCatalog();
   const positions=positionCatalog();
-  return `<div class="settings-section-head"><div><h3>Organization Structure</h3><p>Departments and their approved positions drive employee, applicant, transfer, import, and HR transaction forms.</p></div>${canManage?`<div class="page-header-actions"><button class="btn btn-ghost btn-sm" onclick="openDepartmentSetting()">${iPlus(13)} Department</button><button class="btn btn-primary btn-sm" onclick="openPositionSetting()">${iPlus(13)} Position</button></div>`:''}</div>
+  return `<div class="settings-section-head"><div><h3>Organization Structure</h3><p>Departments and their approved positions drive employee, applicant, transfer, import, and HR transaction forms.</p></div>${canManage?`<div class="page-header-actions"><button class="btn btn-ghost btn-sm" onclick="openOrganizationImport()">${iUpload(13)} Import</button><button class="btn btn-ghost btn-sm" onclick="openDepartmentSetting()">${iPlus(13)} Department</button><button class="btn btn-primary btn-sm" onclick="openPositionSetting()">${iPlus(13)} Position</button></div>`:''}</div>
     <div class="settings-master-grid">
       <section class="settings-master-block"><div class="settings-master-title"><div><b>Departments</b><span>${departments.filter(item=>item.active).length} active of ${departments.length}</span></div></div><div class="tablewrap"><table class="data-table settings-table"><thead><tr><th>Department</th><th>Employees</th><th>Status</th>${canManage?'<th class="actions-head">Action</th>':''}</tr></thead><tbody>${departments.map((item,index)=>`<tr><td><b>${esc(item.name)}</b></td><td>${DB.employees.filter(employee=>String(employee.department).toLowerCase()===item.name.toLowerCase()).length}</td><td>${settingsCatalogStatus(item.active)}</td>${canManage?`<td class="actions-head"><button class="iconbtn" title="Edit department" onclick="openDepartmentSetting(${index})">${iEdit(14)}</button></td>`:''}</tr>`).join('')}</tbody></table></div></section>
       <section class="settings-master-block"><div class="settings-master-title"><div><b>Positions</b><span>${positions.filter(item=>item.active).length} active of ${positions.length}</span></div></div><div class="tablewrap"><table class="data-table settings-table"><thead><tr><th>Position</th><th>Department</th><th>Employees</th><th>Status</th>${canManage?'<th class="actions-head">Action</th>':''}</tr></thead><tbody>${positions.length?positions.map((item,index)=>`<tr><td><b>${esc(item.name)}</b></td><td>${esc(item.department||'Unassigned')}</td><td>${DB.employees.filter(employee=>String(employee.department).toLowerCase()===item.department.toLowerCase()&&String(employee.position).toLowerCase()===item.name.toLowerCase()).length}</td><td>${settingsCatalogStatus(item.active)}</td>${canManage?`<td class="actions-head"><button class="iconbtn" title="Edit position" onclick="openPositionSetting(${index})">${iEdit(14)}</button></td>`:''}</tr>`).join(''):`<tr><td colspan="${canManage?5:4}"><div class="empty"><b>No positions configured</b><span>Add approved positions before creating or importing employees.</span></div></td></tr>`}</tbody></table></div></section>
@@ -9530,7 +9584,7 @@ async function saveDepartmentSetting(index=-1){
   if(!active&&catalog.filter(item=>item.active).length===1&&original?.active){toast('At least one department must remain active.',true);return;}
   const before=JSON.parse(JSON.stringify(DB));
   if(original){
-    catalog[index]={name,active};
+    catalog[index]={...original,name,active};
     if(original.name!==name){
       RECORD_MODULES.forEach(module=>(DB[module]||[]).forEach(record=>['department','fromDepartment','toDepartment'].forEach(key=>{if(String(record[key]||'').toLowerCase()===original.name.toLowerCase())record[key]=name;})));
       DB.settings.positions=positionCatalog().map(position=>position.department.toLowerCase()===original.name.toLowerCase()?{...position,department:name}:position);
@@ -9562,7 +9616,7 @@ async function savePositionSetting(index=-1){
   if(catalog.some((item,itemIndex)=>itemIndex!==index&&item.name.toLowerCase()===name.toLowerCase()&&item.department.toLowerCase()===department.toLowerCase())){toast('That position already exists in this department.',true);return;}
   const before=JSON.parse(JSON.stringify(DB));
   if(original){
-    catalog[index]={name,department,active};
+    catalog[index]={...original,name,department,active};
     if(original.name!==name||original.department!==department){
       RECORD_MODULES.forEach(module=>(DB[module]||[]).forEach(record=>{
         if(String(record.department||'').toLowerCase()!==original.department.toLowerCase())return;
@@ -10995,6 +11049,7 @@ PAGE_INTRO_OBSERVER.observe(document.getElementById('content'),{childList:true,s
 // handlers. Expose the application handlers on window so GitHub Pages/Vercel
 // can execute those handlers normally.
 Object.assign(window, {
+  openOrganizationImport,readOrganizationImport,commitOrganizationImport,downloadOrganizationTemplate,
   renderManpowerDrafts,renderManpowerDraftEditor,openManpowerDraft,manpowerDraftInfo,manpowerDraftPageGo,manpowerDraftPageSize,manpowerDraftAddLine,manpowerDraftRemoveLine,manpowerDraftDepartmentChanged,manpowerDraftToggleDetails,manpowerDraftPasteChanged,manpowerDraftClearPaste,manpowerDraftPreviewPaste,manpowerDraftPastePage,manpowerDraftApplyPaste,saveManpowerDraft,reviewManpowerDraftSubmission,manpowerDraftCloseReview,submitManpowerDraft,
   renderManpowerSubmitted,renderManpowerSubmittedDetails,openManpowerSubmitted,manpowerSubmittedSetTab,manpowerSubmittedPageGo,manpowerSubmittedPageSize,manpowerSubmittedInfo,
   openManpowerQuantityAmendment,saveManpowerQuantityAmendment,discardManpowerQuantityAmendment,

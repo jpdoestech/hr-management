@@ -33,6 +33,7 @@ const orderedMigrations=[
   '0032_employee_employment_model.sql',
   '0033_manpower_client_catalog.sql',
   '0034_manpower_draft_transactions.sql',
+  '0060_organization_import.sql',
 ];
 const migrationPath=name=>path.join(root,'supabase','migrations',migrationFiles[name]||name);
 const readMigration=name=>fs.readFileSync(migrationPath(name),'utf8');
