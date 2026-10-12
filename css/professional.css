@@ -1919,3 +1919,10 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
   #organization_import select { font-size: 16px; }
   #organization_import .modal-foot .btn { min-height: 44px; }
 }
+.employee-import-body{align-content:start;}
+.employee-import-summary>button{display:flex;align-items:center;justify-content:space-between;min-height:54px;padding:10px 12px;border:1px solid var(--border);border-radius:7px;background:#fff;cursor:pointer;text-align:left;font:inherit;}
+.employee-import-summary>button[aria-pressed="true"]{outline:2px solid var(--accent);outline-offset:2px;}
+.employee-import-row-edit{border:0;background:none;color:var(--text);font:inherit;font-weight:700;text-align:left;cursor:pointer;padding:6px 0;white-space:normal;}
+.employee-import-preview tbody tr{cursor:pointer;}
+.employee-import-row-edit:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+@media(max-width:640px){.employee-import-row-edit{min-height:44px;}.employee-import-summary span{font-size:12px;}}

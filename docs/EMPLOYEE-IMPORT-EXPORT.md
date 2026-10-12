@@ -24,8 +24,11 @@ The template is generated from the current settings, so its department reference
 9. Use the optional **Remarks** column for HR context that should remain on the employee master record.
 10. Return to Employee Information and select **Import**.
 11. Choose the completed `.xlsx`, `.xls`, or `.csv` file.
-12. Review every validation result. The system does not save partial imports; all errors must be corrected first.
-13. Review any yellow possible-duplicate warnings, then confirm the import.
+12. Review every validation result. Select **Ready**, **Errors**, or **Warnings** to filter the preview, or **All rows** to restore it. Ready includes rows with warnings but no errors; error and warning totals count individual issues.
+13. Click an employee row (or focus its name and press Enter) to correct it using the existing Employee editor. **Apply Corrections** updates the preview and revalidates the entire batch, including duplicate checks. Back returns to the same preview filter and scroll position; unsaved edits use the existing Save/Discard/Keep editing confirmation.
+14. Review any yellow possible-duplicate warnings, then confirm the import. Filtering never limits which rows are imported. The system does not save partial imports; all errors must be corrected first.
+
+Preview corrections do not save employee records or change organization settings. Records are saved only after the final import confirmation. Workbook-level errors, such as missing or duplicate headers, still require correcting the workbook and choosing it again. No database migration is required for preview editing.
 
 The importer validates required fields, dates, allowed department and status values, email and phone formats, government ID formats, and duplicate employee numbers. Employee numbers use a six-digit numeric sequence in the canonical form `EMP-000001`; a blank value generates the next number, while a numeric or legacy value is normalized during validation. Similar employee names are warnings and require an explicit confirmation.
 

@@ -31,6 +31,7 @@ import { addressComponentHTML, addressAutocompleteFocus, addressAutocompleteInpu
 import { formatPhilippineAddress, normalizeAddress } from './address/address-models.js?v=20260930-2';
 import {parseOrganizationImport} from './core/organization-import.js?v=20261011-1';
 import {employeeTemplateBytes} from './core/employee-template-validation.js?v=20261012-1';
+import {revalidateEmployeeImport,employeeImportPreviewHTML,employeeImportCorrection} from './core/employee-import-preview.js?v=20261012-1';
 
 if(!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('YOUR_PROJECT_REF')){
   document.body.innerHTML = '<div style="font-family:system-ui;padding:40px;max-width:760px;margin:auto"><h2>Supabase configuration missing</h2><p>Edit <b>supabase-config.js</b> with your Supabase project URL and publishable key.</p></div>';
@@ -2657,9 +2658,11 @@ async function requestPageNavigation(view){
   return false;
 }
 async function requestCloseModal(trigger=null){
+  if(document.getElementById('employee_import_edit')&&EMPLOYEE_IMPORT_EDIT?.busy)return false;
   if(document.getElementById('organization_import')&&ORGANIZATION_IMPORT.busy)return false;
   if(document.getElementById('onboarding_identity_review')&&ONBOARDING_IDENTITY_UI.busy)return false;
   const finishClose=async()=>{
+    if(document.getElementById('employee_import_edit')){await returnEmployeeImportPreview();return;}
     if(document.getElementById('onboarding_identity_review')){const id=ONBOARDING_IDENTITY_UI.candidate;ONBOARDING_IDENTITY_UI.preview=null;await transitionModal(()=>openOnboardingDetails(id));return;}
     if(EMPLOYEE_TRANSACTION_RETURN){
       await returnFromEmployeeTransaction();
@@ -4632,6 +4635,7 @@ const EMPLOYEE_IMPORT_HEADER_ALIASES = {
   pagibig:'pagIbigNumber',pagibigmid:'pagIbigNumber'
 };
 let EMPLOYEE_IMPORT_PREVIEW=null;
+let EMPLOYEE_IMPORT_EDIT=null;
 
 function employeeSpreadsheetReady(){
   if(window.XLSX) return true;
@@ -4767,6 +4771,7 @@ function parseEmployeeImportWorksheet(workbook,fileName){
     if(!cells.some(cell=>String(cell??'').trim())) return;
     const values={};keys.forEach((key,columnIndex)=>{if(key)values[key]=cells[columnIndex];});
     const result=validateEmployeeImportRow(values,index+2,accepted);
+    result.sourceValues={...values,employeeNo:values.employeeNo||result.values.employeeNo};
     rows.push(result);if(!result.errors.length)accepted.push(result.values);
   });
   if(!rows.length) fileErrors.push('No populated employee rows were found.');
@@ -4974,22 +4979,68 @@ async function handleEmployeeImportFile(input){
 function renderEmployeeImportPreview(){
   if(!EMPLOYEE_IMPORT_PREVIEW)return;
   const summary=employeeImportSummary(EMPLOYEE_IMPORT_PREVIEW);
-  const issues=[...EMPLOYEE_IMPORT_PREVIEW.fileErrors];
-  openEmployeeWorkspaceModal(`<div class="modal-head"><div><h3>Review Employee Import</h3><div class="small">${esc(EMPLOYEE_IMPORT_PREVIEW.fileName)} · ${summary.total} populated rows</div></div><button type="button" onclick="closeModal()" aria-label="Close import preview">&times;</button></div><div class="modal-body employee-import-body"><div class="employee-import-summary"><div><span>Ready</span><b>${summary.valid}</b></div><div class="${summary.errors?'has-error':''}"><span>Errors</span><b>${summary.errors}</b></div><div class="${summary.warnings?'has-warning':''}"><span>Warnings</span><b>${summary.warnings}</b></div></div>${issues.length?`<div class="employee-import-file-errors"><b>Workbook errors</b>${issues.map(issue=>`<span>${esc(issue)}</span>`).join('')}</div>`:''}<div class="tablewrap employee-import-preview"><table class="data-table"><thead><tr><th>Row</th><th>Employee No.</th><th>Employee</th><th>Department</th><th>Branch Reporting</th><th>Validation</th></tr></thead><tbody>${EMPLOYEE_IMPORT_PREVIEW.rows.map(row=>`<tr><td class="mono">${row.rowNumber}</td><td class="mono">${esc(row.values.employeeNo||'—')}</td><td><b>${esc(row.values.name||'Incomplete name')}</b><div class="small">${esc(row.values.position||'—')}</div></td><td>${esc(row.values.department||'—')}</td><td>${esc(row.values.branchReporting||'—')}</td><td>${row.errors.length?`<div class="import-issues error">${row.errors.map(issue=>`<span>${esc(issue)}</span>`).join('')}</div>`:row.warnings.length?`<div class="import-issues warning">${row.warnings.map(issue=>`<span>${esc(issue)}</span>`).join('')}</div>`:'<span class="badge b-green"><span class="dot"></span>Ready</span>'}</td></tr>`).join('')}</tbody></table></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="openEmployeeImport()">Choose Another File</button><div class="toolbar-spacer"></div><button class="btn btn-primary" ${summary.errors||!summary.valid?'disabled':''} onclick="commitEmployeeImport()">Import ${summary.valid} Employee${summary.valid===1?'':'s'}</button></div>`);
+  openEmployeeWorkspaceModal(`<div class="modal-head"><div><h3>Review Employee Import</h3><div class="small">${esc(EMPLOYEE_IMPORT_PREVIEW.fileName)} · ${summary.total} populated rows</div></div><button type="button" onclick="closeModal()" aria-label="Close import preview">&times;</button></div><div class="modal-body employee-import-body">${employeeImportPreviewHTML(EMPLOYEE_IMPORT_PREVIEW,summary,esc)}</div><div class="modal-foot"><button class="btn btn-ghost" onclick="openEmployeeImport()">Choose Another File</button><div class="toolbar-spacer"></div><button class="btn btn-primary" ${summary.errors||!summary.valid?'disabled':''} onclick="commitEmployeeImport()">Import ${summary.valid} Employee${summary.valid===1?'':'s'}</button></div>`);
+}
+function filterEmployeeImport(filter){
+  if(!requireEmployeeImportAdmin()||!EMPLOYEE_IMPORT_PREVIEW||!['all','ready','errors','warnings'].includes(filter))return;
+  EMPLOYEE_IMPORT_PREVIEW.filter=filter;
+  const body=document.querySelector('.employee-import-body');
+  if(body)body.innerHTML=employeeImportPreviewHTML(EMPLOYEE_IMPORT_PREVIEW,employeeImportSummary(EMPLOYEE_IMPORT_PREVIEW),esc);
+  body?.querySelector(`button[onclick="filterEmployeeImport('${filter}')"]`)?.focus();
+}
+async function openEmployeeImportRow(rowNumber){
+  if(!requireEmployeeImportAdmin()||!EMPLOYEE_IMPORT_PREVIEW)return;
+  const row=EMPLOYEE_IMPORT_PREVIEW.rows.find(item=>item.rowNumber===rowNumber);if(!row)return;
+  EMPLOYEE_IMPORT_EDIT={rowNumber,preview:EMPLOYEE_IMPORT_PREVIEW,sessionId:SESSION.id,busy:false,scrollTop:document.querySelector('.employee-import-body')?.scrollTop||0,tableScrollTop:document.querySelector('.employee-import-preview')?.scrollTop||0};
+  const record={...row.values};
+  await transitionModal(()=>openEmployeeWorkspaceModal(`<div class="modal-head employee-workspace-head"><div><div class="employee-workspace-breadcrumb"><span>Employee Import</span><span>›</span><span>Row ${rowNumber}</span><span>›</span><b>Edit Employee</b></div><h3>Edit Employee</h3><div class="small">${esc(row.values.name||'Incomplete name')}</div></div><button type="button" onclick="requestCloseModal()" aria-label="Back to import preview">&times;</button></div><div class="modal-body employee-form-body" id="employee_import_edit"><div id="employee_import_edit_error" role="alert" tabindex="-1">${row.errors.map(esc).join('<br>')}</div>${employeeFormSectionsHTML(record,{importRow:true})}</div><div class="modal-foot employee-workspace-foot"><button type="button" class="btn btn-ghost" onclick="requestCloseModal()">Back to Preview</button><button type="button" class="btn btn-primary" data-confirm-label="Apply corrections to import preview" onclick="saveEmployeeImportRow()">Apply Corrections</button></div>`));
+  if(EMPLOYEE_IMPORT_EDIT)EMPLOYEE_IMPORT_EDIT.baseline={...readFields(EMP_FIELDS),allowances:readEmployeeAllowances()};
+}
+async function returnEmployeeImportPreview(){
+  const context=EMPLOYEE_IMPORT_EDIT;
+  EMPLOYEE_IMPORT_EDIT=null;
+  await transitionModal(()=>renderEmployeeImportPreview());
+  requestAnimationFrame(()=>{
+    const body=document.querySelector('.employee-import-body'),table=document.querySelector('.employee-import-preview');
+    if(body)body.scrollTop=context?.scrollTop||0;
+    if(table)table.scrollTop=context?.tableScrollTop||0;
+    (body?.querySelector(`button[onclick="openEmployeeImportRow(${context?.rowNumber})"]`)||body?.querySelector('button[aria-pressed="true"]'))?.focus({preventScroll:true});
+  });
+}
+async function saveEmployeeImportRow(){
+  const context=EMPLOYEE_IMPORT_EDIT;
+  if(!context||context.busy||!requireEmployeeImportAdmin()||context.preview!==EMPLOYEE_IMPORT_PREVIEW||context.sessionId!==SESSION?.id)return;
+  context.busy=true;
+  const errorBox=document.getElementById('employee_import_edit_error');
+  try{
+    const values=readFields(EMP_FIELDS);values.allowances=readEmployeeAllowances();
+    const home=await readAddressComponent('emp_home'),present=await readAddressComponent('emp_present');
+    if(EMPLOYEE_IMPORT_EDIT!==context||context.preview!==EMPLOYEE_IMPORT_PREVIEW||context.sessionId!==SESSION?.id||!requireEmployeeImportAdmin())return;
+    if(!home.valid||!present.valid){errorBox.textContent=home.message||present.message;errorBox.focus();return;}
+    Object.assign(values,{homeAddress:home.address,presentAddress:present.address,address:formatPhilippineAddress(home.address),presentAddressText:formatPhilippineAddress(present.address)});
+    const row=context.preview.rows.find(item=>item.rowNumber===context.rowNumber);if(!row)return;
+    row.sourceValues=employeeImportCorrection(row,values,context.baseline);
+    revalidateEmployeeImport(context.preview,validateEmployeeImportRow);
+    await returnEmployeeImportPreview();toast('Corrections applied to the preview. No employee has been saved yet.');
+  }catch(error){if(errorBox?.isConnected){errorBox.textContent='Could not apply corrections. Please retry.';errorBox.focus();}}
+  finally{context.busy=false;}
 }
 async function commitEmployeeImport(){
   if(SESSION?.role!=='Administrator'){toast('Only a System Administrator can import employee records.',true);return;}
   if(!requireEmployeeImportAdmin()||!EMPLOYEE_IMPORT_PREVIEW)return;
+  revalidateEmployeeImport(EMPLOYEE_IMPORT_PREVIEW,validateEmployeeImportRow);
+  const preview=EMPLOYEE_IMPORT_PREVIEW,sessionId=SESSION?.id;
   const summary=employeeImportSummary(EMPLOYEE_IMPORT_PREVIEW);
   if(summary.errors||!summary.valid){toast('Resolve every import error before continuing.',true);return;}
   const confirmed=await confirmDataChange({title:'Import employee records',message:`Add ${summary.valid} employees to the live directory${summary.warnings?` with ${summary.warnings} possible duplicate-name warning${summary.warnings===1?'':'s'}`:''}? This change will be recorded under your account.`,confirmLabel:'Import employees',cancelLabel:'Cancel',warning:Boolean(summary.warnings)});
   if(!confirmed)return;
+  if(EMPLOYEE_IMPORT_PREVIEW!==preview||SESSION?.id!==sessionId||!requireEmployeeImportAdmin())return;
   const now=new Date().toISOString();const actorName=SESSION?.fullName||'System';const added=[];
   EMPLOYEE_IMPORT_PREVIEW.rows.forEach(row=>{
     const employee={id:uid(),...row.values,employmentHistory:[],recordHistory:[],createdAt:now,createdBy:SESSION?.id||null,createdByName:actorName,updatedAt:now,updatedBy:SESSION?.id||null,updatedByName:actorName};
-    employee.homeAddress=normalizeAddress(null,employee.address||'');
-    employee.presentAddress=normalizeAddress(null,employee.address||'');
-    employee.presentAddressText=employee.address||'';
+    if(!employee.homeAddress)employee.homeAddress=normalizeAddress(null,employee.address||'');
+    if(!employee.presentAddress)employee.presentAddress=normalizeAddress(null,employee.address||'');
+    employee.presentAddressText=employee.presentAddressText||employee.address||'';
     employee.recordHistory.push({action:'Imported',at:now,by:actorName,byId:SESSION?.id||null,detail:`Employee record imported from ${EMPLOYEE_IMPORT_PREVIEW.fileName}`});
     employee.employmentHistory.push({type:'Hiring',from:'',to:employee.status,statusReason:employee.statusReason,employmentType:employee.employmentType,effectiveDate:employee.dateHired,remarks:'Initial employee record imported from Excel',exitClassification:employee.exitClassification||'',exitFactor:employee.exitFactor||'',exitReason:employee.exitReason||'',changedAt:now,changedBy:actorName});
     DB.employees.push(employee);added.push(employee);
@@ -5032,18 +5083,24 @@ function employeeFormFieldValue(field,record){
   if(field.key==='statusReason') return 'Active / Normal';
   return '';
 }
-function employeeFormSectionsHTML(record){
+function employeeFormSectionsHTML(record,options={}){
   const fieldSections=EMP_FORM_SECTIONS.map((section,index)=>`<section class="employee-form-section">
     <div class="employee-form-section-head"><span>${String(index+1).padStart(2,'0')}</span><div><h4>${esc(section.title)}</h4><p>${esc(section.description)}</p></div></div>
     <div class="employee-form-grid">${section.keys.map(key=>{
       const field=EMP_FIELDS.find(item=>item.key===key);
       if(!field)return '';
       let resolved=field;
+      if(key==='employeeNo'&&options.importRow)resolved={...field,readonly:false};
       if(key==='branchReporting')resolved={...field,options:['',...uniqueSettingNames([...employeeBranchLocations(),record?.branchReporting||''])]};
       if(key==='department')resolved={...field,options:()=>employeeDepartmentNames(record?.department||'')};
       if(key==='position')resolved={...field,options:()=>employeePositionNames(record?.department||'',record?.position||'')};
       if(key==='statusReason')resolved={...field,options:STATUS_REASONS[record?.status||'Active']};
       if(key==='employmentType'&&record?.employmentType===REVIEW_TYPE)resolved={...field,options:[REVIEW_TYPE,...EMPLOYMENT_TYPES]};
+      if(options.importRow&&resolved.type==='select'){
+        const current=employeeFormFieldValue(resolved,record)||'';
+        const choices=typeof resolved.options==='function'?resolved.options(current):resolved.options||[];
+        resolved={...resolved,catalog:undefined,options:[...new Set(['',...choices,...(current?[current]:[])])]};
+      }
       return fieldHTML(resolved,employeeFormFieldValue(resolved,record));
     }).join('')}${section.allowances?employeeAllowanceFieldsHTML(record):''}</div>
   </section>`).join('');
@@ -11049,6 +11106,7 @@ PAGE_INTRO_OBSERVER.observe(document.getElementById('content'),{childList:true,s
 // handlers. Expose the application handlers on window so GitHub Pages/Vercel
 // can execute those handlers normally.
 Object.assign(window, {
+  filterEmployeeImport,openEmployeeImportRow,saveEmployeeImportRow,
   openOrganizationImport,readOrganizationImport,commitOrganizationImport,downloadOrganizationTemplate,
   renderManpowerDrafts,renderManpowerDraftEditor,openManpowerDraft,manpowerDraftInfo,manpowerDraftPageGo,manpowerDraftPageSize,manpowerDraftAddLine,manpowerDraftRemoveLine,manpowerDraftDepartmentChanged,manpowerDraftToggleDetails,manpowerDraftPasteChanged,manpowerDraftClearPaste,manpowerDraftPreviewPaste,manpowerDraftPastePage,manpowerDraftApplyPaste,saveManpowerDraft,reviewManpowerDraftSubmission,manpowerDraftCloseReview,submitManpowerDraft,
   renderManpowerSubmitted,renderManpowerSubmittedDetails,openManpowerSubmitted,manpowerSubmittedSetTab,manpowerSubmittedPageGo,manpowerSubmittedPageSize,manpowerSubmittedInfo,
