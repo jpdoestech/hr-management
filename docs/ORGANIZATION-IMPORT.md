@@ -28,6 +28,10 @@ Excel rejects invalid typed values, but pasting can bypass validation and changi
 
 ## Verification
 
+### Template Repair (2026-10-12)
+
+The original dropdown exporter inserted `dataValidations` after `ignoredErrors` when a worksheet had no page margins. That violates SpreadsheetML element ordering and can trigger Excel repair/open errors. The exporter now inserts validation before the first following worksheet element. Regression tests cover autofilters with and without page margins. Re-download the template after refreshing the app; existing downloaded files are not changed. All 321 tests, lint, production build and structural validation passed. Native Excel opening was not tested in this session.
+
 - `npm run lint`, `npm run build`, and `node scripts/validate.mjs` passed.
 - `npm test`: 320 tests passed, including the generated XLSX package and import parsing tests.
 - `tests/database/organization-import-rehearsal.mjs`: actual RPC SQL passed synthetic in-memory duplicate replay, assignment, cross-tenant client denial, permission denial, rollback and audit checks. No PostgreSQL server was installed or started.

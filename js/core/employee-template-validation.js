@@ -35,8 +35,12 @@ export function employeeTemplateBytes(XLSX,workbook,columns,positions,statusReas
   if(!entry)throw new Error('Employee worksheet was not generated.');
   const content=new TextDecoder().decode(new Uint8Array(entry.content));
   const validations=`<dataValidations count="${rules.length}">${rules.map(rule=>`<dataValidation type="list" allowBlank="1" showErrorMessage="1" showInputMessage="1" errorStyle="stop" errorTitle="Invalid selection" error="Choose a value from the dropdown." promptTitle="Approved values" prompt="Select an approved value." sqref="${XLSX.utils.encode_col(rule.column)}2:${XLSX.utils.encode_col(rule.column)}10001"><formula1>${xml(rule.formula)}</formula1></dataValidation>`).join('')}</dataValidations>`;
-  // The template has an autofilter: OOXML validation must follow it, before margins.
-  const marker=content.includes('<pageMargins')?'<pageMargins':'</worksheet>';
-  XLSX.CFB.utils.cfb_add(zip,'/xl/worksheets/sheet1.xml',new TextEncoder().encode(content.replace(marker,validations+marker)));
+  // OOXML requires validations before all following worksheet elements, including
+  // ignoredErrors (which SheetJS emits even when pageMargins is absent).
+  const following=/<(?:hyperlinks|printOptions|pageMargins|pageSetup|headerFooter|rowBreaks|colBreaks|customProperties|cellWatches|ignoredErrors|smartTags|drawing|legacyDrawing|legacyDrawingHF|picture|oleObjects|controls|webPublishItems|tableParts|extLst)\b/.exec(content);
+  const offset=following?.index??content.lastIndexOf('</worksheet>');
+  if(offset<0)throw new Error('Employee worksheet XML is incomplete.');
+  const updated=content.slice(0,offset)+validations+content.slice(offset);
+  XLSX.CFB.utils.cfb_add(zip,'/xl/worksheets/sheet1.xml',new TextEncoder().encode(updated));
   return new Uint8Array(XLSX.CFB.write(zip,{type:'buffer',fileType:'zip'}));
 }
