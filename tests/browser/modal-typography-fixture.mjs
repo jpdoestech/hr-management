@@ -11,8 +11,10 @@ const DB={employees:[employee]},EMP_STATUS=['Active','Inactive','Separated'],STA
 const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),canEdit=()=>true,selectEmployeeDirectoryRow=()=>{},ensureRecordModules=async()=>{},todayISO=()=> '2026-10-13';
 const employeeDisplayName=record=>record.name,employeeDepartmentNames=()=>['Synthetic Department','Another Department'],employeePositionNames=()=>[employee.position],employeeCompleteness=()=>60,classify=record=>record.employmentType,fmtDate=value=>value||'Not recorded',isSeparated=()=>false,employeeTenureText=()=> 'Synthetic tenure';
 const lifecycleEventTypeChanged=()=>{},lifecycleEmployeePreview=()=>{},syncPositionSelect=()=>{},syncEmployeeStatusReason=()=>{};
-const tabs=['Overview','Edit','Status','Lifecycle','Transfer','Incident','Access'];
-const employeeWorkspaceNav=()=>'<div class="employee-workspace-nav">'+tabs.map(label=>'<button type="button" data-view="'+label+'" onclick="show(this.dataset.view)">'+label+'</button>').join('')+'</div>';
+${[...source.matchAll(/^function i\w+\(s\)\{.*$/gm)].map(match=>match[0]).join('\n')}
+function employeeWorkspaceNavigate(id,target){return show({overview:'Overview',edit:'Edit',status:'Status',lifecycle:'Lifecycle',transfer:'Transfer'}[target]);}
+function openEmployeeOperation(){return show('Incident');}
+${section('function employeeWorkspaceNav(','function employeeWorkspaceFooter(')}
 const employeeWorkspaceHeader=(record,title)=>'<div class="modal-head employee-workspace-head"><div><div class="employee-workspace-breadcrumb">Employees › '+title+'</div><h3>'+esc(title==='Overview'?record.name:title)+'</h3><div class="small">'+esc(title==='Overview'?record.employeeNo:record.position)+'</div></div><button type="button" aria-label="Close">×</button></div>';
 const employeeWorkspaceFooter=(record,label)=>'<div class="modal-foot employee-workspace-foot"><button class="btn btn-ghost">Back</button><button class="btn btn-primary">'+label+'</button></div>';
 const openEmployeeWorkspaceModal=markup=>document.getElementById('modal').innerHTML=markup;
@@ -25,10 +27,10 @@ function show(view){
   if(view==='Status')return openEmployeeStatusForm(employee.id);
   if(view==='Transfer')return openTransferForEmployee(employee.id);
   if(view==='Lifecycle')return openEmployeeLifecycleEventForm(employee.id);
-  const overview='<div class="employee-profile-detailbar"><div class="employee-profile-tabs"><button class="employee-profile-tab">Details</button><button class="employee-profile-tab">Personal</button><button class="employee-profile-tab">Pay & IDs</button><button class="employee-profile-tab">History</button></div><button class="btn btn-ghost btn-sm profile-er-action">Report ER Matter</button></div>'+employeeProfileSummaryHTML(employee,null);
+  const overview='<div class="employee-profile-detailbar"><div class="employee-profile-tabs"><button class="employee-profile-tab active">Details</button><button class="employee-profile-tab">Personal</button><button class="employee-profile-tab">Pay & IDs</button><button class="employee-profile-tab">History</button></div></div>'+employeeProfileSummaryHTML(employee,null);
   const fields='<div class="field"><label for="sample_name">Employee Name</label><input id="sample_name" value="'+esc(employee.name)+'"></div><div class="field"><label for="sample_department">Department</label><select id="sample_department"><option>'+esc(employee.department)+'</option></select></div><div class="field full"><label for="sample_remarks">Remarks</label><textarea id="sample_remarks">Synthetic text for layout testing only.</textarea></div>';
   const form=view==='Edit'?'<section class="employee-form-section"><div class="employee-form-section-head"><span>01</span><div><h4>Personal & Employment</h4><p>Employee record details</p></div></div><div class="employee-form-grid">'+fields+'</div></section><section class="address-component"><div class="address-component-head"><h5>Home Address</h5></div><div class="address-grid"><div class="field"><label for="sample_street">Street / House / Unit</label><input id="sample_street" value="Synthetic street"></div></div></section>':'<div class="formgrid">'+fields+'</div><div class="computed-note">Synthetic shared-form note.</div>';
-  openEmployeeWorkspaceModal(employeeWorkspaceHeader(employee,view)+'<div class="modal-body '+(view==='Overview'?'employee-profile-workspace':view==='Edit'?'employee-form-body':'')+'">'+employeeWorkspaceNav()+ (view==='Overview'?overview:form)+'</div>'+employeeWorkspaceFooter(employee,'Save'));
+  openEmployeeWorkspaceModal(employeeWorkspaceHeader(employee,view)+'<div class="modal-body '+(view==='Overview'?'employee-profile-workspace':view==='Edit'?'employee-form-body':'')+'">'+employeeWorkspaceNav(employee,view==='Overview'?'overview':'edit')+ (view==='Overview'?overview:form)+'</div>'+employeeWorkspaceFooter(employee,'Save'));
 }
 show('Overview');
 </script></body></html>`;

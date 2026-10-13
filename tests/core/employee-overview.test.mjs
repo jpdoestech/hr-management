@@ -23,7 +23,8 @@ test('Overview safely preserves missing values and separated employee details',(
 test('Overview retains details navigation and role-gated ER action without a repeated profile banner',()=>{
   const profile=source.slice(source.indexOf('async function openEmployeeProfile(id)'),source.indexOf('function renderLeaves('));
   assert.match(profile,/employeeWorkspaceNav\(employee,'overview'\)/);assert.match(profile,/employeeProfileSetTab/);
-  assert.match(profile,/canEdit\(\)\?`<button[^\n]*openEmployeeOperation\('cases'/);
+  const actions=source.slice(source.indexOf('function employeeWorkspaceNav('),source.indexOf('function employeeWorkspaceFooter('));
+  assert.match(actions,/if\(!canEdit\(\)\) return ''/);assert.match(actions,/openEmployeeOperation\('cases'/);
   assert.doesNotMatch(profile,/employee-profile-hero|profile-chips|Selected employee:/);
   assert.match(source,/!isOverview\?` · \$\{esc\(emp.position/);
 });

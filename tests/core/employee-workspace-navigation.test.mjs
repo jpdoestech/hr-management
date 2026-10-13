@@ -25,6 +25,13 @@ test('workspace transitions expose a stable busy state',()=>{
   assert.match(styles,/employee-workspace-modal\[aria-busy="true"\]/);
 });
 
+test('employee actions are separate from detail tabs and More actions has an Escape route',()=>{
+  assert.match(source,/<details class="employee-actions-menu"><summary>More actions/);
+  assert.match(source,/active!=='overview'\?actionButton\(actions\[0\]\)/);
+  assert.match(source,/if\(actionMenu\)\{actionMenu.open=false;actionMenu.querySelector\('summary'\)\?\.focus/);
+  assert.match(styles,/employee-profile-tab.active\{border-bottom-color:var\(--accent\)/);
+});
+
 test('employee transactions return to the selected overview on cancel or save',()=>{
   assert.match(source,/let EMPLOYEE_TRANSACTION_RETURN=null/);
   assert.match(source,/EMPLOYEE_TRANSACTION_RETURN=returnToEmployee\?\{employeeId:emp\.id,module,returnTarget:'overview'\}:null/);

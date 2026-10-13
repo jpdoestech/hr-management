@@ -1932,6 +1932,19 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
 @media(max-width:640px){.employee-import-row-edit{min-height:44px;}.employee-import-summary span{font-size:12px;}}
 
 /* Employee Overview: one readable location for each master-record detail. */
+.modal .employee-action-toolbar{position:static;margin:0 0 12px;padding:0;border:0;border-radius:0;background:transparent;}
+.modal .employee-action-toolbar>button{min-height:38px;padding:7px 11px;border:1px solid var(--border);background:#fff;color:var(--text);}
+.modal .employee-action-toolbar>button.active{color:var(--muted);box-shadow:none;background:var(--paper);}
+.employee-actions-menu{position:relative;font-size:13px;}
+.employee-actions-menu summary{display:flex;align-items:center;gap:8px;min-height:38px;padding:7px 11px;border:1px solid var(--border);border-radius:6px;cursor:pointer;list-style:none;}
+.employee-actions-menu summary::-webkit-details-marker{display:none;}.employee-actions-menu summary svg{transform:rotate(-90deg);}
+.employee-actions-menu-list{position:absolute;z-index:20;top:calc(100% + 6px);left:0;width:210px;max-width:calc(100vw - 48px);padding:5px;border:1px solid var(--border);border-radius:7px;background:#fff;box-shadow:var(--shadow-md);}
+.modal .employee-actions-menu-list button{display:flex;justify-content:flex-start;width:100%;min-height:40px;text-align:left;}
+.employee-actions-menu summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.modal .employee-profile-detailbar .employee-profile-tabs{padding:0;border:0;border-bottom:1px solid var(--border);border-radius:0;background:transparent;gap:16px;}
+.modal .employee-profile-detailbar .employee-profile-tab{padding:9px 0;border-radius:0;border-bottom:2px solid transparent;background:transparent;box-shadow:none;}
+.modal .employee-profile-detailbar .employee-profile-tab.active{border-bottom-color:var(--accent);background:transparent;box-shadow:none;}
+@media(max-width:720px){.modal .employee-action-toolbar{gap:8px;}.modal .employee-action-toolbar>button,.employee-actions-menu summary{min-height:44px;}.modal .employee-profile-detailbar .employee-profile-tab{flex:0 0 auto;}.modal .employee-profile-detailbar .employee-profile-tabs{gap:16px;}}
 .employee-profile-detailbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
 .employee-profile-detailbar .employee-profile-tabs{margin:0;flex:1 1 auto;}
 .employee-profile-detailbar .profile-er-action{flex:0 0 auto;}

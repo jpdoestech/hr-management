@@ -32,6 +32,7 @@ import { formatPhilippineAddress, normalizeAddress } from './address/address-mod
 import {parseOrganizationImport} from './core/organization-import.js?v=20261011-1';
 import {employeeTemplateBytes} from './core/employee-template-validation.js?v=20261012-1';
 import {revalidateEmployeeImport,employeeImportPreviewHTML,employeeImportCorrection} from './core/employee-import-preview.js?v=20261012-1';
+import {regularizationWorkItems,regularizationToday} from './core/regularization.js?v=20261013-1';
 
 if(!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('YOUR_PROJECT_REF')){
   document.body.innerHTML = '<div style="font-family:system-ui;padding:40px;max-width:760px;margin:auto"><h2>Supabase configuration missing</h2><p>Edit <b>supabase-config.js</b> with your Supabase project URL and publishable key.</p></div>';
@@ -464,8 +465,15 @@ async function saveDBInternal(state,modules=[...LOADED_RECORD_MODULES]){
   const changes=buildRecordChanges(DB_SNAPSHOT||blankDB(),state,modules);
   const rows=changes.upserts.map(({module,recordId,record})=>({module,record_id:recordId,data:{...record,_dataResetAt:clientResetAt},updated_at:now,updated_by:SESSION?.id||null}));
   for(let index=0;index<rows.length;index+=250){
-    const {error}=await supabase.from('hr_records').upsert(rows.slice(index,index+250),{onConflict:'module,record_id'});
+    const batch=rows.slice(index,index+250);
+    let query=supabase.from('hr_records').upsert(batch,{onConflict:'module,record_id'});
+    if(batch.some(row=>row.module==='employees'))query=query.select('module,record_id,data');
+    const {data:saved,error}=await query;
     if(error) throw error;
+    (saved||[]).filter(row=>row.module==='employees').forEach(row=>{
+      const employee=state.employees.find(item=>String(item.id)===String(row.record_id));
+      if(employee)Object.assign(employee,normalizeEmployment(recordFromRow(row)));
+    });
   }
   const deletesByModule=changes.deletes.reduce((map,change)=>{
     if(!map.has(change.module))map.set(change.module,[]);
@@ -1204,6 +1212,7 @@ async function bootAuthenticated(user){
     if(profile) SESSION=profile;
     await loadOwnEffectiveAccess();
     await loadUserPreferences();
+    await syncAutomaticRegularization();
     if(isHRRole()){
       ensureAutomationSettings();
     }
@@ -1218,6 +1227,7 @@ function revealSessionUI(){
 }
 
 async function doLogout(){
+  REGULARIZATION_LAST_SYNC=0;
   if(NOTIFICATION_TIMER) clearInterval(NOTIFICATION_TIMER);
   NOTIFICATION_TIMER=null;
   if(AUTOMATION_TIMER) clearInterval(AUTOMATION_TIMER);
@@ -1315,12 +1325,14 @@ function goFromNotifications(view){ closeNotificationPanel(); go(view); }
 function notificationLevelRank(level){ return level==='danger'?0:level==='warning'?1:2; }
 function notificationItem(id,level,title,meta,view,recordId='',recordKind=''){ return {id:String(id),level,title,meta,view,recordId,recordKind}; }
 async function buildNotificationItems(){
+  await syncAutomaticRegularization();
   const today=todayISO();
   const next7=addDaysISO(today,7);
   const next14=addDaysISO(today,14);
   const items=[];
 
   let employeeRelationsQueue={items:[]};
+  regularizationAlerts().forEach(item=>items.push(notificationItem(item.id,item.level,item.title,item.detail,'employees',item.employeeId,'employee')));
   try{
     employeeRelationsQueue=await loadEmployeeRelationsWorkQueue();
   }catch(e){ console.warn('Notification case query failed',e); }
@@ -1398,6 +1410,7 @@ async function openNotification(id,view,recordId,recordKind=''){
   if(recordId && view==='cases' && recordKind==='intake'){ STATE.caseWorkspaceTab='intake'; await go('cases'); return; }
   if(recordId && view==='cases'){ await openCaseDetails(recordId); return; }
   if(recordId && view==='workflow'){ openWorkflowTask(recordId); return; }
+  if(recordId && view==='employees'){await go('employees');await openEmployeeProfile(recordId);return;}
   go(view);
 }
 
@@ -1742,6 +1755,7 @@ function actionCenterItems(employeeRelationsItems=[]){
   const next7=addDaysISO(today,7);
   const next14=addDaysISO(today,14);
   const items=[];
+  items.push(...regularizationAlerts().map(item=>({...item,view:'employees',id:item.employeeId,recordKind:'employee'})));
   employeeRelationsItems.forEach(item=>items.push({level:item.level,title:item.title,detail:item.detail,meta:item.meta||['Employee Relations'],view:'cases',id:item.caseId||item.intakeId,recordKind:item.recordKind||'case'}));
 
   const pendingLeaves=DB.leaves.filter(l=>l.status==='Pending').sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
@@ -1770,6 +1784,7 @@ function actionCenterItems(employeeRelationsItems=[]){
   return items.sort((a,b)=>(rank[a.level]??9)-(rank[b.level]??9) || (a.title||'').localeCompare(b.title||''));
 }
 async function openActionCenterItem(view,id='',recordKind=''){
+  if(view==='employees'&&id){await go('employees');await openEmployeeProfile(id);return;}
   if(view==='cases'&&recordKind==='intake'){STATE.caseWorkspaceTab='intake';await go('cases');return;}
   if(view==='cases'&&id){await openCaseDetails(id);return;}
   go(view);
@@ -1804,6 +1819,7 @@ function actionCenterPageSize(_scope,size){
   renderActionCenter();
 }
 async function renderActionCenter(){
+  await syncAutomaticRegularization();
   setTitle('Action Center','A prioritized work queue for follow-ups, deadlines, and records needing attention.');
   document.getElementById('content').innerHTML='<div class="panel"><div class="desc">Loading action items…</div></div>';
   try{
@@ -2556,6 +2572,48 @@ function openModuleInformation(module){
 }
 
 /* ---------------- classification ---------------- */
+let REGULARIZATION_SYNC=null;
+let REGULARIZATION_LAST_SYNC=0;
+async function syncAutomaticRegularization(){
+  if(!SESSION||!hasPermission('employees.update')||!hasPermission('employees.view'))return;
+  if(REGULARIZATION_SYNC)return REGULARIZATION_SYNC;
+  if(Date.now()-REGULARIZATION_LAST_SYNC<60000||modalHasUnsavedChanges()||pageHasUnsavedChanges())return;
+  const sessionId=SESSION.id;
+  REGULARIZATION_SYNC=(async()=>{
+    const {data,error}=await supabase.rpc('regularize_probationary_employees');
+    if(SESSION?.id!==sessionId)return;
+    if(error){
+      if(!['42883','PGRST202'].includes(error.code))toast('Automatic regularization could not be completed. Eligible employees remain flagged for review.',true);
+      REGULARIZATION_LAST_SYNC=Date.now();return;
+    }
+    if(!Array.isArray(data))return;
+    const today=regularizationToday();
+    const unresolved=regularizationWorkItems(DB.employees,today).filter(item=>!item.completed&&item.date<=today&&!data.some(row=>String(row.record_id)===String(item.employeeId))).map(item=>String(item.employeeId));
+    // A scheduled job may have already applied the change while this browser was open.
+    for(let index=0;index<unresolved.length;index+=100){
+      const {data:current,error:readError}=await supabase.from('hr_records').select('record_id,data').eq('module','employees').in('record_id',unresolved.slice(index,index+100));
+      if(readError||SESSION?.id!==sessionId)return;
+      data.push(...(current||[]));
+    }
+    if(modalHasUnsavedChanges()||pageHasUnsavedChanges())return;
+    data.forEach(row=>{
+      const employee=DB.employees.find(item=>String(item.id)===String(row.record_id));
+      if(employee)Object.assign(employee,normalizeEmployment(recordFromRow(row)));
+      const snapshot=DB_SNAPSHOT?.employees?.find(item=>String(item.id)===String(row.record_id));
+      if(snapshot)Object.assign(snapshot,normalizeEmployment(recordFromRow(row)));
+    });
+    REGULARIZATION_LAST_SYNC=Date.now();
+    if(data.length){invalidateEmployeeDirectoryCache();EMPLOYEE_PROFILE_CACHE.clear();}
+  })().catch(()=>{if(SESSION?.id===sessionId)toast('Automatic regularization is temporarily unavailable.',true);}).finally(()=>{REGULARIZATION_SYNC=null;});
+  return REGULARIZATION_SYNC;
+}
+function regularizationAlerts(){
+  if(!hasPermission('employees.view'))return [];
+  return regularizationWorkItems(DB.employees,regularizationToday()).map(item=>{
+    const employee=DB.employees.find(row=>String(row.id)===String(item.employeeId));
+    return {...item,title:`${item.title}: ${employeeDisplayName(employee)}`,detail:`${item.completed?'Regular / Permanent effective':'Six-month anniversary'} ${fmtDate(item.date)}`,meta:['Regularization',item.completed?'Completed':item.level==='danger'?'Due':'Upcoming']};
+  });
+}
 function classify(emp){
   return normalizeEmployment(emp).employmentType;
 }
@@ -2823,6 +2881,8 @@ document.getElementById('overlay').addEventListener('click',e=>{if(e.target.id==
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape') return;
   if(document.getElementById('data-confirm-overlay')?.classList.contains('on')) return;
+  const actionMenu=document.querySelector('.employee-actions-menu[open]');
+  if(actionMenu){actionMenu.open=false;actionMenu.querySelector('summary')?.focus();e.preventDefault();return;}
   if(document.getElementById('overlay').classList.contains('on')) requestCloseModal();
 });
 
@@ -4551,7 +4611,12 @@ function employeeWorkspaceNav(emp,active='overview'){
     ['lifecycle','Lifecycle',iPlus(14),`openEmployeeLifecycleEventForm('${emp.id}')`],
     ['transfer','Transfer',iSwap(14),`openTransferForEmployee('${emp.id}')`],
   ];
-  return `<nav class="employee-workspace-nav" aria-label="Employee transactions">${actions.map(([key,label,icon])=>`<button type="button" class="${key===active?'active':''}" ${key===active?'disabled aria-current="page"':`onclick="employeeWorkspaceNavigate('${emp.id}','${key}')"`}>${icon}<span>${label}</span></button>`).join('')}</nav>`;
+  const actionButton=([key,label,icon])=>`<button type="button" class="${key===active?'active':''}" ${key===active?'disabled aria-current="page"':`onclick="employeeWorkspaceNavigate('${emp.id}','${key}')"`}><span aria-hidden="true">${icon}</span><span>${key==='overview'?'Back to Overview':label}</span></button>`;
+  return `<nav class="employee-workspace-nav employee-action-toolbar" aria-label="Employee actions">
+    ${active!=='overview'?actionButton(actions[0]):''}${actionButton(actions[1])}
+    <details class="employee-actions-menu"><summary>More actions ${iArrowLeft(12)}</summary><div class="employee-actions-menu-list">${actions.slice(2).map(actionButton).join('')}</div></details>
+    ${active==='overview'?`<div class="toolbar-spacer"></div><button type="button" class="profile-er-action" onclick="openEmployeeOperation('cases','${emp.id}')">${iShield(14)}<span>Report ER Matter</span></button>`:''}
+  </nav>`;
 }
 function employeeWorkspaceFooter(emp,saveLabel,saveHandler){
   return `<div class="modal-foot employee-workspace-foot"><button class="btn btn-ghost" onclick="employeeWorkspaceNavigate('${emp.id}','overview')">Back to Employee</button><div class="toolbar-spacer"></div><button class="btn btn-primary" onclick="${saveHandler}">${esc(saveLabel)}</button></div>`;
@@ -5072,7 +5137,7 @@ function downloadEmployeeImportTemplate(){
   const employeeSheet=window.XLSX.utils.aoa_to_sheet([headers]);
   employeeSheet['!cols']=columns.map(column=>({wch:Math.max(15,column.header.length+3)}));
   employeeSheet['!autofilter']={ref:`A1:${window.XLSX.utils.encode_col(headers.length-1)}1`};
-  const instructions=[['SLSC Employee Import Template'],['Instructions'],['1. Enter one employee per row in the Employees sheet.'],['2. Do not rename or remove required columns.'],['3. Leave Employee No. blank to generate the next available number.'],['4. Dates may use YYYY-MM-DD or MM/DD/YYYY.'],['5. PRF Number and government IDs are optional.'],['6. Branch Reporting must match an Administrator-configured branch.'],['7. Home Address accepts a complete free-text address and is imported into Street / House / Unit details. Select its official Region through Barangay when the employee is next edited.'],['8. Import validates the entire workbook before saving any employee.'],['9. Employment Type is required and must reflect the actual contract; service length is not used to infer it.'],['10. Leave Status Effective Date blank for Active unless a real status event occurred. Inactive and Separated require it and a matching Status Reason.'],[],['Column','Required','Allowed values / guidance'],...columns.map(column=>[column.header,column.required?'Yes':'No',column.options?.join(' | ')||column.note||''])];
+  const instructions=[['SLSC Employee Import Template'],['Instructions'],['1. Enter one employee per row in the Employees sheet.'],['2. Do not rename or remove required columns.'],['3. Leave Employee No. blank to generate the next available number.'],['4. Dates may use YYYY-MM-DD or MM/DD/YYYY.'],['5. PRF Number and government IDs are optional.'],['6. Branch Reporting must match an Administrator-configured branch.'],['7. Home Address accepts a complete free-text address and is imported into Street / House / Unit details. Select its official Region through Barangay when the employee is next edited.'],['8. Import validates the entire workbook before saving any employee.'],['9. Employment Type is required and must reflect the actual contract; still-employed Probationary employees automatically regularize after six calendar months. Other employment types are unchanged.'],['10. Leave Status Effective Date blank for Active unless a real status event occurred. Inactive and Separated require it and a matching Status Reason.'],[],['Column','Required','Allowed values / guidance'],...columns.map(column=>[column.header,column.required?'Yes':'No',column.options?.join(' | ')||column.note||''])];
   const instructionSheet=window.XLSX.utils.aoa_to_sheet(instructions);instructionSheet['!cols']=[{wch:34},{wch:12},{wch:95}];
   const reference=[['Field','Allowed values'],['Department',employeeDepartmentNames().join(' | ')],['Position',positionCatalog().filter(item=>item.active).map(item=>`${item.name} (${item.department})`).join(' | ')||'Configure positions in Settings'],['Branch Reporting',employeeBranchLocations().join(' | ')],['Allowance Types',employeeAllowanceTypes().join(' | ')||'No allowance types configured'],['Gender','Male | Female'],['Civil Status','Single | Married | Widowed | Separated | Other'],['Employment Status',EMP_STATUS.join(' | ')],['Employment Type',EMPLOYMENT_TYPES.join(' | ')],['Status Reason',Object.entries(STATUS_REASONS).map(([status,reasons])=>`${status}: ${reasons.join(' | ')}`).join('; ')],['SSS Number','10 digits; example 09-5421455-9'],['PhilHealth PIN','12 digits; 2-9-1 format'],['Pag-IBIG MID','12 digits; 4-4-4 format'],['BIR TIN','9 digits plus optional 3-digit branch code']];
   const referenceSheet=window.XLSX.utils.aoa_to_sheet(reference);referenceSheet['!cols']=[{wch:30},{wch:95}];
@@ -5844,7 +5909,6 @@ async function openEmployeeProfile(id){
     ${employeeWorkspaceNav(employee,'overview')}
     <div class="employee-profile-detailbar">
     <div class="employee-profile-tabs" role="tablist" aria-label="Employee profile details">${tabs.map(([key,label],index)=>`<button type="button" class="employee-profile-tab ${index===0?'active':''}" data-profile-tab="${key}" role="tab" aria-selected="${index===0?'true':'false'}" tabindex="${index===0?'0':'-1'}" onclick="employeeProfileSetTab('${employee.id}','${key}')">${label}</button>`).join('')}</div>
-      ${canEdit()?`<button class="btn btn-ghost btn-sm profile-er-action" onclick="openEmployeeOperation('cases','${employee.id}')">${iShield(13)} <span>Report ER Matter</span></button>`:''}
     </div>
     <div class="employee-profile-tab-content">${employeeProfileTabContent(employee,'summary',snapshot)}</div>
   </div><div class="modal-foot employee-workspace-foot"><button class="btn btn-ghost" onclick="closeModal()">Back to Directory</button></div>`);
@@ -7561,12 +7625,16 @@ async function runAutomationEngine({manual=false,silent=false}={}){
   const stats=automationRuleStateMap();
   const errors=[];
   try{
+    await syncAutomaticRegularization();
     let settingsChanged=ensureAutomationSettings();
     if(settingsChanged) await saveDB();
     await workflowSyncTasks({silent:true});
     const today=todayISO();
 
     // 1) Probation milestone preparation.
+    DB.employees.filter(employee=>employee.employmentType==='Regular / Permanent'&&employee.automaticRegularization).forEach(employee=>EVAL_MILESTONES.forEach(milestone=>{
+      if(automationCloseTask('probation_milestones',`${employee.id}:${milestone.key}`,'Employee automatically regularized'))stats.probation_milestones.closed++;
+    }));
     if(automationRuleEnabled('probation_milestones')){
       const rstat=stats.probation_milestones;
       DB.employees.filter(e=>isEmployed(e)&&classify(e)==='Probationary' && e.dateHired).forEach(emp=>EVAL_MILESTONES.forEach(m=>{
