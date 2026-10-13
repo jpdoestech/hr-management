@@ -12,6 +12,7 @@ export function employmentFormPreview(record=null){
     isHRRole:()=>false,employeeAllowanceFieldsHTML:()=>'',normalizeAddress:()=>({}),addressComponentHTML:()=>'',
     formatGovernmentId:(_,value)=>value,esc:value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;')};
   vm.createContext(scope);
+  vm.runInContext(source.slice(source.indexOf('function employeeOptionLabel('),source.indexOf('function syncEmployeeStatusReason(')),scope);
   vm.runInContext(source.slice(source.indexOf('function fieldHTML('),source.indexOf('function readFields(')),scope);
   vm.runInContext(source.slice(source.indexOf('const EMP_FIELDS = ['),source.indexOf('const EMPLOYEE_IMPORT_COLUMNS = [')),scope);
   vm.runInContext(source.slice(source.indexOf('const EMP_FORM_SECTIONS = ['),source.indexOf('function syncPositionSelect(')),scope);
@@ -23,6 +24,8 @@ test('employee form renders separate contract, operational status and dependent 
   assert.match(html,/id="f_statusDate" value=""/);
   assert.match(html,/syncEmployeeStatusReason\('f_statusReason',this.value\)/);
   assert.doesNotMatch(html,/value="Newly Hired"|id="f_classOverride"/);
+  assert.match(html,/value="Regular \/ Permanent" >Regular<\/option>/);
+  assert.match(html,/value="Active \/ Normal" selected>Active<\/option>/);
 });
 test('editing an inactive employee loads its recorded reason and contract type',()=>{
   const html=employmentFormPreview({status:'Inactive',statusReason:'Floating Status',employmentType:'Seasonal',dateHired:'2020-01-01',statusDate:'2026-10-01'});

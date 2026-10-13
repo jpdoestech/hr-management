@@ -32,7 +32,7 @@ test('Excel import requires explicit tenure and validates status reason and date
 });
 test('dependent reason control clears incompatible options while keeping valid reasons',()=>{
   const input={value:'Active / Normal',innerHTML:''},scope={document:{getElementById:()=>input},STATUS_REASONS,esc:value=>value};vm.createContext(scope);
-  vm.runInContext(source.slice(source.indexOf('function syncEmployeeStatusReason('),source.indexOf('/* ---------------- CSV export')),scope);
+  vm.runInContext(source.slice(source.indexOf('function employeeOptionLabel('),source.indexOf('/* ---------------- CSV export')),scope);
   scope.syncEmployeeStatusReason('reason','Inactive');assert.match(input.innerHTML,/AWOL \(Pending Review\)/);assert.doesNotMatch(input.innerHTML,/Active \/ Normal/);
   input.value='On Leave';scope.syncEmployeeStatusReason('reason','Inactive');assert.match(input.innerHTML,/On Leave" selected/);
 });

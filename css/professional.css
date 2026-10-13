@@ -1958,6 +1958,32 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
 .employee-overview .profile-detail dd{margin:3px 0 0;}
 @media(max-width:720px){.employee-profile-detailbar{gap:10px;}.employee-profile-detailbar .employee-profile-tabs{flex-basis:100%;}.employee-profile-detailbar .profile-er-action{min-height:44px;}.employee-overview .employee-profile-columns{gap:16px;}}
 
+/* Compact employee sections retain the shared dialog typography and shell size. */
+.employee-overview .employee-profile-columns{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start;}
+.employee-overview .employee-profile-section{padding:16px;border:1px solid var(--border);border-radius:8px;background:var(--surface,#fff);min-width:0;}
+.employee-overview .profile-detail{display:block;margin:0;}
+.employee-overview .profile-detail .item{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:12px;padding:6px 0;align-items:baseline;}
+.employee-overview .profile-detail dd{margin:0;text-align:right;overflow-wrap:anywhere;}
+.employee-overview .profile-detail dt{overflow-wrap:anywhere;}
+.employee-editor-sections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start;}
+.employee-editor-sections .employee-form-section{padding:16px;border:1px solid var(--border);border-radius:8px;min-width:0;}
+.employee-editor-sections .employee-form-section-head{display:block;}
+.employee-editor-sections .employee-form-section-head>span,.employee-editor-sections .employee-form-section-head p{display:none;}
+.employee-editor-sections .employee-form-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+.employee-editor-sections .employee-form-grid .field{margin:0;}
+.employee-overview .profile-detail .label{text-transform:none;font-weight:400;}
+.employee-overview .profile-detail .value{font-weight:500;}
+.employee-overview-identifiers{margin-top:12px;}
+.employee-overview-identifiers summary{cursor:pointer;color:var(--accent);padding:8px 0;}
+.employee-overview-identifiers summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
+.employee-editor-sections .employee-address-section{grid-column:1/-1;}
+@media(max-width:1000px){.employee-overview .employee-profile-columns{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:720px){
+  .employee-overview .employee-profile-columns,.employee-editor-sections{grid-template-columns:1fr;}
+  .employee-editor-sections .employee-form-grid{grid-template-columns:1fr;}
+  .employee-overview .employee-profile-section,.employee-editor-sections .employee-form-section{padding:14px;}
+}
+
 /* Shared dialog typography. Employee values are 30% larger than the compact 11px form baseline. */
 .modal{--modal-label-size:12.35px;--modal-value-size:14.3px;--modal-help-size:12px;--modal-heading-size:19.5px;--modal-section-size:15px;}
 .modal :is(input,select,textarea,button){font-family:inherit;}

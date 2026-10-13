@@ -2617,10 +2617,13 @@ function regularizationAlerts(){
 function classify(emp){
   return normalizeEmployment(emp).employmentType;
 }
+function employeeOptionLabel(value){
+  return value==='Regular / Permanent'?'Regular':value==='Active / Normal'?'Active':value;
+}
 function syncEmployeeStatusReason(id,status){
   const input=document.getElementById(id);if(!input)return;
   const value=input.value;
-  input.innerHTML=STATUS_REASONS[status].map(reason=>`<option value="${esc(reason)}" ${reason===value?'selected':''}>${esc(reason)}</option>`).join('');
+  input.innerHTML=STATUS_REASONS[status].map(reason=>`<option value="${esc(reason)}" ${reason===value?'selected':''}>${esc(employeeOptionLabel(reason))}</option>`).join('');
 }
 
 /* ---------------- CSV export ---------------- */
@@ -3089,7 +3092,7 @@ function fieldHTML(f, val){
     const quickAdd=catalogButton?`<div id="${selectId}_catalog_editor" class="catalog-quick-add" hidden data-catalog-type="${catalogType}" data-select-id="${selectId}" data-department-id="${f.catalogDepartmentId||''}" data-position-id="${f.catalogPositionId||''}"><input id="${selectId}_catalog_name" type="text" maxlength="${catalogType==='department'?60:80}" placeholder="New ${catalogType} name" onkeydown="catalogQuickAddKeydown(event,'${selectId}')"><button type="button" class="btn btn-primary btn-sm" data-confirm-change="false" onclick="saveCatalogQuickAdd('${selectId}')">Add</button><button type="button" class="btn btn-ghost btn-sm" onclick="toggleCatalogQuickAdd('${catalogType}','${selectId}')">Cancel</button></div>`:'';
     return `<div class="field ${f.full?'full':''}"><label>${f.label}${f.required?' *':''}</label>
       <div class="catalog-select-row"><select id="${selectId}" ${f.required?'required':''} ${f.onchange?`onchange="${f.onchange}"`:''}>
-        ${f.placeholder?`<option value="">${esc(f.placeholder)}</option>`:''}${options.map(o=>`<option value="${esc(o)}" ${o===v?'selected':''}>${esc(o)}</option>`).join('')}
+        ${f.placeholder?`<option value="">${esc(f.placeholder)}</option>`:''}${options.map(o=>`<option value="${esc(o)}" ${o===v?'selected':''}>${esc(f.optionLabel?f.optionLabel(o):o)}</option>`).join('')}
       </select>${catalogButton}</div>${quickAdd}</div>`;
   }
   if(f.type==='textarea'){
@@ -5150,7 +5153,8 @@ function downloadEmployeeImportTemplate(){
 }
 const EMP_FORM_SECTIONS = [
   {title:'Employee Record',description:'Core identifiers and approved hiring reference.',keys:['employeeNo','prfNumber']},
-  {title:'Personal & Employment',description:'Legal name, assignment, and current employment details.',keys:['lastName','firstName','middleName','department','position','dateHired','birthDate','gender','civilStatus','employmentType','status','statusReason','statusDate','remarks']},
+  {title:'Personal Information',description:'Legal name and personal details.',keys:['lastName','firstName','middleName','birthDate','gender','civilStatus']},
+  {title:'Employment Details',description:'Assignment and current employment details.',keys:['department','position','dateHired','employmentType','status','statusReason','statusDate','remarks']},
   {title:'Assignment & Compensation',description:'Required reporting location and current employee rate or allowances.',keys:['branchReporting','dailyRate'],allowances:true},
   {title:'Contact & Emergency',description:'Private contact information used by HR when needed.',keys:['mobileNumber','personalEmail','emergencyContactName','emergencyContactRelationship','emergencyContactPhone']},
   {title:'Government IDs',description:'Optional statutory identifiers with format validation.',keys:['tin','sssNumber','philHealthNumber','pagIbigNumber']},
@@ -5170,12 +5174,13 @@ function employeeFormSectionsHTML(record,options={}){
       const field=EMP_FIELDS.find(item=>item.key===key);
       if(!field)return '';
       let resolved=field;
+      if(key==='employmentType'||key==='statusReason')resolved={...field,optionLabel:employeeOptionLabel};
       if(key==='employeeNo'&&options.importRow)resolved={...field,readonly:false};
       if(key==='branchReporting')resolved={...field,options:['',...uniqueSettingNames([...employeeBranchLocations(),record?.branchReporting||''])]};
       if(key==='department')resolved={...field,options:()=>employeeDepartmentNames(record?.department||'')};
       if(key==='position')resolved={...field,options:()=>employeePositionNames(record?.department||'',record?.position||'')};
-      if(key==='statusReason')resolved={...field,options:STATUS_REASONS[record?.status||'Active']};
-      if(key==='employmentType'&&record?.employmentType===REVIEW_TYPE)resolved={...field,options:[REVIEW_TYPE,...EMPLOYMENT_TYPES]};
+      if(key==='statusReason')resolved={...resolved,options:STATUS_REASONS[record?.status||'Active']};
+      if(key==='employmentType'&&record?.employmentType===REVIEW_TYPE)resolved={...resolved,options:[REVIEW_TYPE,...EMPLOYMENT_TYPES]};
       if(options.importRow&&resolved.type==='select'){
         const current=employeeFormFieldValue(resolved,record)||'';
         const choices=typeof resolved.options==='function'?resolved.options(current):resolved.options||[];
@@ -5186,10 +5191,10 @@ function employeeFormSectionsHTML(record,options={}){
   </section>`).join('');
   const homeAddress=normalizeAddress(record?.homeAddress,record?.address||'');
   const presentAddress=normalizeAddress(record?.presentAddress,record?.presentAddressText||record?.address||'');
-  return `${fieldSections}<section class="employee-form-section employee-address-section">
+  return `<div class="employee-editor-sections">${fieldSections}<section class="employee-form-section employee-address-section">
     <div class="employee-form-section-head"><span>${String(EMP_FORM_SECTIONS.length+1).padStart(2,'0')}</span><div><h4>Addresses</h4><p>Validated Philippine home and present addresses with PSGC location codes.</p></div></div>
     <div class="employee-address-stack">${addressComponentHTML({prefix:'emp_home',label:'Home Address',value:homeAddress})}${addressComponentHTML({prefix:'emp_present',label:'Present Address',value:presentAddress,showCopy:true,copyFromPrefix:'emp_home'})}</div>
-  </section>`;
+  </section></div>`;
 }
 function syncPositionSelect(id,department){
   const select=document.getElementById(id);if(!select)return;
@@ -5787,23 +5792,48 @@ function employeeProfileLoadingCards(){
 function employeeProfileSummaryHTML(employee,snapshot){
   const completion=employeeCompleteness(employee);
   const detail=(label,value,full=false)=>`<div class="item${full?' full':''}"><dt class="label">${esc(label)}</dt><dd class="value">${esc(value||'Not recorded')}</dd></div>`;
+  const maskedId=value=>String(value||'').replace(/\d(?=(?:\D*\d){4})/g,'*');
+  const allowances=employeeAllowanceEntries(employee);
   return `<div class="employee-overview">
     <div class="employee-overview-completion"><span>Profile completeness</span><progress max="100" value="${completion}" aria-label="Profile completeness"></progress><b>${completion}%</b></div>
     <div class="employee-profile-columns">
-      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Assignment</h3></div><dl class="profile-detail">
+      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Personal Information</h3></div><dl class="profile-detail">
+        ${detail('Birthdate',fmtDate(employee.birthDate))}
+        ${detail('Gender',employee.gender)}
+        ${detail('Civil Status',employee.civilStatus)}
+        ${detail('Mobile',employee.mobileNumber)}
+        ${detail('Email',employee.personalEmail)}
+        ${detail('Home Address',formatPhilippineAddress(employee.homeAddress)||employee.address)}
+      </dl></section>
+      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Employment Details</h3></div><dl class="profile-detail">
         ${detail('Position',employee.position)}
         ${detail('Department',employee.department)}
         ${detail('Reporting Branch',employee.branchReporting)}
         ${detail('PRF Number',employee.prfNumber)}
-      </dl></section>
-      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Employment</h3></div><dl class="profile-detail">
-        ${detail('Employment Type',classify(employee))}
+        ${detail('Employment Type',employeeOptionLabel(classify(employee)))}
         ${detail('Employment Status',employee.status)}
-        ${detail('Status Reason',employee.statusReason)}
+        ${detail('Status Reason',employeeOptionLabel(employee.statusReason))}
         ${detail('Date Hired',fmtDate(employee.dateHired))}
         ${detail('Status Effective Date',fmtDate(employee.statusDate))}
         ${detail('Tenure',employeeTenureText(employee))}
       </dl></section>
+      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Government IDs</h3></div><dl class="profile-detail">
+        ${detail('SSS',maskedId(formatGovernmentId('sss',employee.sssNumber)))}
+        ${detail('PhilHealth',maskedId(formatGovernmentId('philHealth',employee.philHealthNumber)))}
+        ${detail('Pag-IBIG',maskedId(formatGovernmentId('pagIbig',employee.pagIbigNumber)))}
+        ${detail('TIN',maskedId(formatGovernmentId('tin',employee.tin)))}
+      </dl><details class="employee-overview-identifiers"><summary>Show full identifiers</summary><dl class="profile-detail">
+        ${detail('SSS',formatGovernmentId('sss',employee.sssNumber))}
+        ${detail('PhilHealth',formatGovernmentId('philHealth',employee.philHealthNumber))}
+        ${detail('Pag-IBIG',formatGovernmentId('pagIbig',employee.pagIbigNumber))}
+        ${detail('TIN',formatGovernmentId('tin',employee.tin))}
+      </dl></details></section>
+      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Compensation</h3></div><dl class="profile-detail">
+        ${detail('Daily Rate',employee.dailyRate===''||employee.dailyRate==null?'Not recorded':peso(employee.dailyRate))}
+        ${allowances.length?allowances.map(item=>detail(item.name,peso(item.amount))).join(''):detail('Allowances','Not recorded')}
+        ${detail('Total Allowances',peso(employeeAllowanceTotal(employee)))}
+      </dl></section>
+      ${employee.remarks?`<section class="employee-profile-section full"><div class="employee-profile-section-head"><h3>Remarks</h3></div><p class="employee-profile-remarks">${esc(employee.remarks)}</p></section>`:''}
       ${isSeparated(employee)?`<section class="employee-profile-section full"><div class="employee-profile-section-head"><h3>Leaving Details</h3></div><dl class="profile-detail">
         ${detail('Leaving Classification',employee.exitClassification)}
         ${detail('Leaving Factor',employee.exitFactor)}
@@ -5825,14 +5855,6 @@ function employeeProfilePersonalHTML(employee){
     </div></section>
   </div>`;
 }
-function employeeProfilePayHTML(employee){
-  const allowances=employeeAllowanceEntries(employee);
-  return `<div class="employee-profile-columns">
-    <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Compensation</h3><p>Current rate and allowances</p></div></div><div class="profile-detail"><div class="item"><div class="label">Daily Rate</div><div class="value">${employee.dailyRate!==''&&employee.dailyRate!=null?peso(employee.dailyRate):'—'}</div></div>${allowances.map(item=>`<div class="item"><div class="label">${esc(item.name)}</div><div class="value">${peso(item.amount)}</div></div>`).join('')||'<div class="item"><div class="label">Allowances</div><div class="value">None recorded</div></div>'}<div class="item full"><div class="label">Total Allowances</div><div class="value">${peso(employeeAllowanceTotal(employee))}</div></div></div></section>
-    <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Government IDs</h3><p>Validated statutory identifiers</p></div></div><div class="profile-detail"><div class="item"><div class="label">BIR TIN</div><div class="value mono">${esc(formatGovernmentId('tin',employee.tin)||'—')}</div></div><div class="item"><div class="label">SSS Number</div><div class="value mono">${esc(formatGovernmentId('sss',employee.sssNumber)||'—')}</div></div><div class="item"><div class="label">PhilHealth PIN</div><div class="value mono">${esc(formatGovernmentId('philHealth',employee.philHealthNumber)||'—')}</div></div><div class="item"><div class="label">Pag-IBIG MID</div><div class="value mono">${esc(formatGovernmentId('pagIbig',employee.pagIbigNumber)||'—')}</div></div></div></section>
-    ${employee.remarks?`<section class="employee-profile-section full"><div class="employee-profile-section-head"><div><h3>Remarks</h3></div></div><p class="employee-profile-remarks">${esc(employee.remarks)}</p></section>`:''}
-  </div>`;
-}
 function employeeProfileHistoryHTML(employee,snapshot){
   if(!snapshot)return `<div class="employee-profile-history-loading"><span></span><h3>Loading employee history</h3><p>The profile remains usable while connected records are retrieved.</p></div>`;
   const employmentHistory=Array.isArray(employee.employmentHistory)?employee.employmentHistory.slice().reverse().slice(0,12):[];
@@ -5846,7 +5868,6 @@ function employeeProfileHistoryHTML(employee,snapshot){
 }
 function employeeProfileTabContent(employee,tab,snapshot){
   if(tab==='personal')return employeeProfilePersonalHTML(employee);
-  if(tab==='pay')return employeeProfilePayHTML(employee);
   if(tab==='history')return employeeProfileHistoryHTML(employee,snapshot);
   return employeeProfileSummaryHTML(employee,snapshot);
 }
@@ -5904,7 +5925,7 @@ async function openEmployeeProfile(id){
   selectEmployeeDirectoryRow(employee.id);
   const cached=EMPLOYEE_PROFILE_CACHE.get(String(employee.id));
   const snapshot=cached?.snapshot||null;
-  const tabs=[['summary','Details'],['personal','Personal'],['pay','Pay & IDs'],['history','History']];
+  const tabs=[['summary','Overview'],['personal','Personal'],['history','History']];
   openEmployeeWorkspaceModal(`${employeeWorkspaceHeader(employee,'Overview')}<div class="modal-body employee-profile-workspace ${snapshot?'':'loading-activity'}" data-employee-profile-id="${esc(employee.id)}" data-active-tab="summary">
     ${employeeWorkspaceNav(employee,'overview')}
     <div class="employee-profile-detailbar">
