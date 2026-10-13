@@ -1962,11 +1962,11 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
 .employee-overview .employee-profile-columns{display:flex;flex-direction:column;gap:24px;}
 .employee-overview .employee-profile-section{width:100%;padding:0;border:0;border-radius:0;background:transparent;min-width:0;}
 .employee-overview .employee-profile-section-head{padding:0 0 10px;margin:0 0 12px;border-bottom:1px solid var(--border);gap:14px;flex-wrap:wrap;}
-.employee-overview .profile-detail{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 32px;margin:0;}
+.employee-overview .profile-detail{--employee-detail-label-width:160px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 32px;margin:0;}
 .employee-overview .profile-detail.single-column{grid-template-columns:1fr;}
-.employee-overview .profile-detail .item{display:grid;grid-template-columns:minmax(120px,0.8fr) minmax(0,1.6fr);gap:16px;padding:3px 0;align-items:baseline;}
+.employee-overview .profile-detail .item{display:grid;grid-template-columns:var(--employee-detail-label-width) minmax(0,1fr);gap:16px;padding:3px 0;align-items:baseline;}
 .employee-overview .profile-detail dd{margin:0;text-align:left;overflow-wrap:anywhere;}
-.employee-overview .profile-detail.single-column .item,.employee-overview .profile-detail .item.full{grid-template-columns:180px minmax(0,1fr);}
+.employee-overview .profile-detail.single-column .item,.employee-overview .profile-detail .item.full{grid-template-columns:var(--employee-detail-label-width) minmax(0,1fr);}
 .employee-overview .profile-detail dt{overflow-wrap:anywhere;}
 .employee-record-pay{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;width:100%;}
 .employee-overview .employee-id-toggle{min-height:36px;gap:7px;}

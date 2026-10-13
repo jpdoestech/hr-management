@@ -47,6 +47,12 @@ test('Employee edit uses display labels without changing stored select values',(
   assert.match(source,/optionLabel:employeeOptionLabel/);
   assert.match(source,/resolved=\{\.\.\.resolved,options:STATUS_REASONS/);
 });
+test('Overview uses the same label width for regular rows and full-width addresses',()=>{
+  const css=readFileSync(new URL('../../css/professional.css',import.meta.url),'utf8');
+  assert.match(css,/\.employee-overview \.profile-detail \.item\{[^}]*grid-template-columns:var\(--employee-detail-label-width\) minmax\(0,1fr\)/);
+  assert.match(css,/\.employee-overview \.profile-detail \.item\.full\{grid-template-columns:var\(--employee-detail-label-width\) minmax\(0,1fr\)/);
+  assert.match(css,/\.employee-overview \.profile-detail \.item\.full\{grid-template-columns:1fr;gap:4px/);
+});
 test('Overview safely preserves missing values and separated employee details',()=>{
   const html=render({...employee,status:'Separated',exitClassification:'Voluntary',exitFactor:'Personal',exitReason:'<script>synthetic</script>',prfNumber:''},null);
   assert.match(html,/Leaving Details/);assert.match(html,/Voluntary/);assert.match(html,/Personal/);assert.match(html,/&lt;script&gt;/);
