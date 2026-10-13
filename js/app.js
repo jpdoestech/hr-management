@@ -3781,6 +3781,7 @@ const ONCALL_STATUS_MAP = {'Active':'b-green','Completed':'b-grey','Cancelled':'
    PHASE 10 — EMPLOYEE LIFECYCLE
    ================================================================ */
 const LIFECYCLE_EVENT_TYPES = [
+  'Employment Status Change',
   'Onboarding Completed','Probation Started','30-Day Review','90-Day Review','Regularization',
   'Promotion / Position Change','Return to Work','Resignation','Separation','AWOL (Pending Review)','Leave of Absence',
   'Rehire','Return to Agency','Other'
@@ -3827,19 +3828,23 @@ function lifecycleRecentEvents(limit=12){
   (DB.transfers||[]).forEach(t=>events.push({employeeName:t.employeeName,date:t.toDate,type:'Department Transfer',title:`${t.fromDepartment} → ${t.toDepartment}`,meta:t.remarks||'',changedBy:'HR'}));
   return events.filter(e=>e.date && e.date>=cutoff && e.date<=todayISO()).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,limit);
 }
-function openEmployeeLifecycleEventForm(id){
+function openEmployeeLifecycleEventForm(id,initialEvent=''){
   if(!canEdit()) return;
   const existingEmp=id?DB.employees.find(e=>e.id===id):null;
   if(id&&!existingEmp){toast('Employee record could not be found.',true);return;}
   if(existingEmp) selectEmployeeDirectoryRow(existingEmp.id);
   openEmployeeWorkspaceModal(`
-    ${existingEmp?employeeWorkspaceHeader(existingEmp,'Lifecycle Event'):`<div class="modal-head employee-workspace-head"><div><div class="employee-workspace-breadcrumb"><span>Employment Lifecycle</span><span>›</span><b>Record Event</b></div><h3>Record Employment Lifecycle Event</h3><div class="small">Add a verified employment milestone or status event.</div></div><button type="button" onclick="closeModal()" aria-label="Close lifecycle form">&times;</button></div>`}
+    ${existingEmp?employeeWorkspaceHeader(existingEmp,'Movement'):`<div class="modal-head employee-workspace-head"><div><div class="employee-workspace-breadcrumb"><span>Employment Lifecycle</span><span>›</span><b>Record Movement</b></div><h3>Record Employee Movement</h3><div class="small">Add a verified employment milestone or status event.</div></div><button type="button" onclick="closeModal()" aria-label="Close movement form">&times;</button></div>`}
     <div class="modal-body">
       ${existingEmp?employeeWorkspaceNav(existingEmp,'lifecycle'):''}
       <div class="formgrid">
         ${existingEmp?`<div class="field full"><label>Employee</label><input value="${esc(employeeDisplayName(existingEmp))}" disabled><input type="hidden" id="lc_employee" value="${esc(existingEmp.id)}"></div>`:employeePickerHTML({id:'lc_employee',label:'Employee',selectedId:'',required:true,full:true,onSelect:'lifecycleEmployeePreview'})}
-        <div class="field"><label>Event Type *</label><select id="lc_eventType" onchange="lifecycleEventTypeChanged()">${LIFECYCLE_EVENT_TYPES.map(x=>`<option>${esc(x)}</option>`).join('')}</select></div>
+        <div class="field"><label for="lc_eventType">Movement Type *</label><select id="lc_eventType" onchange="lifecycleEventTypeChanged()">${LIFECYCLE_EVENT_TYPES.map(x=>`<option ${x===initialEvent?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
         <div class="field"><label>Effective Date *</label><input type="date" id="lc_date" value="${todayISO()}"></div>
+        <div class="field full" id="lc_status_wrap" hidden><div class="formgrid">
+          <div class="field"><label for="es_status">Employment Status *</label><select id="es_status" onchange="syncEmployeeStatusReason('es_reason',this.value);lifecycleEventTypeChanged()">${EMP_STATUS.map(status=>`<option ${status===(existingEmp?.status||'Active')?'selected':''}>${esc(status)}</option>`).join('')}</select></div>
+          <div class="field"><label for="es_reason">Status Reason *</label><select id="es_reason">${STATUS_REASONS[existingEmp?.status||'Active'].map(reason=>`<option value="${esc(reason)}" ${reason===existingEmp?.statusReason?'selected':''}>${esc(employeeOptionLabel(reason))}</option>`).join('')}</select></div>
+        </div></div>
         <div class="field" id="lc_position_wrap" style="display:none"><label>New Position</label><input id="lc_position" placeholder="e.g. HR Officer II"></div>
         <div class="field"><label>Leaving Classification</label><select id="lc_exit_class"><option value="">Select classification</option>${EXIT_CLASSIFICATIONS.map(v=>`<option>${esc(v)}</option>`).join('')}</select></div>
         <div class="field"><label>Primary Leaving Factor</label><select id="lc_exit_factor"><option value="">Select factor</option>${WORKFORCE_FACTORS.map(v=>`<option>${esc(v)}</option>`).join('')}</select></div>
@@ -3848,7 +3853,7 @@ function openEmployeeLifecycleEventForm(id){
       </div>
       <div id="lc_preview" class="lifecycle-helper">Select an employee to see the current employment state.</div>
     </div>
-    ${existingEmp?employeeWorkspaceFooter(existingEmp,'Save Lifecycle Event','saveEmployeeLifecycleEvent()'):`<div class="modal-foot employee-workspace-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><div class="toolbar-spacer"></div><button class="btn btn-primary" onclick="saveEmployeeLifecycleEvent()">Save Lifecycle Event</button></div>`}
+    ${existingEmp?employeeWorkspaceFooter(existingEmp,'Save Movement','saveEmployeeLifecycleEvent()'):`<div class="modal-foot employee-workspace-foot"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><div class="toolbar-spacer"></div><button class="btn btn-primary" onclick="saveEmployeeLifecycleEvent()">Save Movement</button></div>`}
   `);
   lifecycleEventTypeChanged(); lifecycleEmployeePreview();
 }
@@ -3856,6 +3861,10 @@ function lifecycleEventTypeChanged(){
   const type=document.getElementById('lc_eventType')?.value;
   const wrap=document.getElementById('lc_position_wrap');
   if(wrap) wrap.style.display=type==='Promotion / Position Change'?'block':'none';
+  const statusWrap=document.getElementById('lc_status_wrap');
+  if(statusWrap)statusWrap.hidden=type!=='Employment Status Change';
+  const leaving=['Resignation','Separation'].includes(type)||(type==='Employment Status Change'&&document.getElementById('es_status')?.value==='Separated');
+  ['lc_exit_class','lc_exit_factor','lc_exit_reason'].forEach(id=>{const field=document.getElementById(id)?.closest('.field');if(field)field.hidden=!leaving;});
   const preview=document.getElementById('lc_preview');
   if(preview && type==='Regularization') preview.textContent='This event records Regular / Permanent employment type without changing operational status.';
   else if(preview && type==='Resignation') preview.textContent='This event records Separated with Status Reason Resigned.';
@@ -3868,6 +3877,14 @@ function lifecycleEmployeePreview(){
   const id=document.getElementById('lc_employee')?.value; const emp=DB.employees.find(e=>e.id===id); const preview=document.getElementById('lc_preview');
   if(!preview) return;
   if(!emp){ preview.textContent='Select an employee to see the current employment state.'; return; }
+  const statusInput=document.getElementById('es_status');
+  if(statusInput&&statusInput.dataset.employeeId!==String(emp.id)){
+    statusInput.dataset.employeeId=String(emp.id);statusInput.value=emp.status||'Active';
+    syncEmployeeStatusReason('es_reason',statusInput.value);
+    const reasonInput=document.getElementById('es_reason');if(reasonInput)reasonInput.value=emp.statusReason||STATUS_REASONS[statusInput.value][0];
+    [['lc_exit_class','exitClassification'],['lc_exit_factor','exitFactor'],['lc_exit_reason','exitReason']].forEach(([id,key])=>{const input=document.getElementById(id);if(input)input.value=emp[key]||'';});
+    lifecycleEventTypeChanged();
+  }
   const next=lifecycleNextMilestone(emp);
   preview.innerHTML=`Current: <b>${esc(emp.status||'—')}</b> · ${esc(emp.position||'—')} · ${esc(emp.department||'—')}${next?` · Next milestone: <b>${esc(next.label)}</b>${next.date?' due '+fmtDate(next.date):''}`:''}`;
 }
@@ -3880,6 +3897,9 @@ async function saveEmployeeLifecycleEvent(){
   const newPosition=document.getElementById('lc_position')?.value.trim()||'';
   const emp=DB.employees.find(e=>e.id===id);
   if(!emp||!eventType||!effectiveDate){ toast('Please complete employee, event type, and effective date.'); return; }
+  if(eventType==='Employment Status Change'){
+    return saveEmployeeStatus(id);
+  }
   if(effectiveDate<emp.dateHired){ toast('Lifecycle event date cannot be before Date Hired.'); return; }
   if(effectiveDate>todayISO()){ toast('Lifecycle event date cannot be in the future.'); return; }
   if(eventType==='Promotion / Position Change' && !newPosition){ toast('Enter the new position for a promotion or position change.'); return; }
@@ -4604,6 +4624,8 @@ async function employeeWorkspaceNavigate(employeeId,target='overview'){
     status:()=>openEmployeeStatusForm(employee.id),
     lifecycle:()=>openEmployeeLifecycleEventForm(employee.id),
     transfer:()=>openTransferForEmployee(employee.id),
+    history:async()=>{await openEmployeeProfile(employee.id);employeeProfileSetTab(employee.id,'history');},
+    report:()=>openEmployeeOperation('cases',employee.id),
   };
   const destination=destinations[target]||destinations.overview;
   EMPLOYEE_WORKSPACE_NAVIGATING=true;
@@ -4619,19 +4641,18 @@ async function employeeWorkspaceNavigate(employeeId,target='overview'){
   }
 }
 function employeeWorkspaceNav(emp,active='overview'){
-  if(!canEdit()) return '';
   const actions=[
     ['overview','Overview',iUser(14),`openEmployeeProfile('${emp.id}')`],
     ['edit','Edit',iEdit(14),`openEmployeeForm('${emp.id}')`],
-    ['status','Status',iShield(14),`openEmployeeStatusForm('${emp.id}')`],
-    ['lifecycle','Lifecycle',iPlus(14),`openEmployeeLifecycleEventForm('${emp.id}')`],
     ['transfer','Transfer',iSwap(14),`openTransferForEmployee('${emp.id}')`],
+    ['lifecycle','Movement',iPlus(14),`openEmployeeLifecycleEventForm('${emp.id}')`],
+    ['history','History',iInfo(14),''],
   ];
-  const actionButton=([key,label,icon])=>`<button type="button" class="${key===active?'active':''}" ${key===active?'disabled aria-current="page"':`onclick="employeeWorkspaceNavigate('${emp.id}','${key}')"`}><span aria-hidden="true">${icon}</span><span>${key==='overview'?'Back to Overview':label}</span></button>`;
+  const current=active==='status'?'lifecycle':active;
+  const actionButton=([key,label,icon])=>`<button type="button" data-workspace-target="${key}" class="${key===current?'active':''}" ${key===current?'disabled aria-current="page"':`onclick="employeeWorkspaceNavigate('${emp.id}','${key}')"`}><span aria-hidden="true">${icon}</span><span>${label}</span></button>`;
   return `<nav class="employee-workspace-nav employee-action-toolbar" aria-label="Employee actions">
-    ${active!=='overview'?actionButton(actions[0]):''}${actionButton(actions[1])}
-    <details class="employee-actions-menu"><summary>More actions ${iArrowLeft(12)}</summary><div class="employee-actions-menu-list">${actions.slice(2).map(actionButton).join('')}</div></details>
-    ${active==='overview'?`<div class="toolbar-spacer"></div><button type="button" class="profile-er-action" onclick="openEmployeeOperation('cases','${emp.id}')">${iShield(14)}<span>Report ER Matter</span></button>`:''}
+    ${actions.filter(([key])=>canEdit()||['overview','history'].includes(key)).map(actionButton).join('')}
+    ${canEdit()?`<div class="toolbar-spacer"></div><button type="button" class="profile-er-action" onclick="employeeWorkspaceNavigate('${emp.id}','report')">${iShield(14)}<span>Report ER Matter</span></button>`:''}
   </nav>`;
 }
 function employeeWorkspaceFooter(emp,saveLabel,saveHandler){
@@ -5537,43 +5558,24 @@ function employeeTenureText(emp){
   return years? `${years} yr${years===1?'':'s'}${rem?` ${rem} mo${rem===1?'':'s'}`:''} in service` : `${rem} mo${rem===1?'':'s'} in service`;
 }
 function openEmployeeStatusForm(id){
-  if(!canEdit()) return;
-  const emp=DB.employees.find(e=>e.id===id); if(!emp) return;
-  selectEmployeeDirectoryRow(emp.id);
-  openEmployeeWorkspaceModal(`
-    ${employeeWorkspaceHeader(emp,'Employment Status')}
-    <div class="modal-body">
-      ${employeeWorkspaceNav(emp,'status')}
-      <div class="formgrid">
-        <div class="field"><label>Current Status</label><input value="${esc(emp.status||'—')}" disabled style="background:var(--paper);"></div>
-        <div class="field"><label>New Status *</label><select id="es_status" onchange="syncEmployeeStatusReason('es_reason',this.value)">${EMP_STATUS.map(s=>`<option value="${esc(s)}" ${s===emp.status?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
-        <div class="field"><label>Status Reason *</label><select id="es_reason">${STATUS_REASONS[emp.status].map(reason=>`<option value="${esc(reason)}" ${reason===emp.statusReason?'selected':''}>${esc(reason)}</option>`).join('')}</select></div>
-        <div class="field"><label>Effective Date *</label><input type="date" id="es_date" value="${esc(emp.statusDate||'')}"></div>
-        <div class="field"><label>Leaving Classification</label><select id="es_exit_class"><option value="">Select classification</option>${EXIT_CLASSIFICATIONS.map(v=>`<option ${emp.exitClassification===v?'selected':''}>${esc(v)}</option>`).join('')}</select></div>
-        <div class="field"><label>Primary Leaving Factor</label><select id="es_exit_factor"><option value="">Select factor</option>${WORKFORCE_FACTORS.map(v=>`<option ${emp.exitFactor===v?'selected':''}>${esc(v)}</option>`).join('')}</select></div>
-        <div class="field full"><label>Reason for Leaving</label><textarea id="es_exit_reason" rows="2" maxlength="1000">${esc(emp.exitReason||'')}</textarea></div>
-        <div class="field full"><label>Remarks</label><textarea id="es_remarks" rows="3" placeholder="Reason, supporting note, or HR reference…"></textarea></div>
-      </div>
-      <div class="computed-note">This update becomes part of the employee's employment history. Department transfers should continue to be recorded through the Transfer workflow.</div>
-    </div>
-    ${employeeWorkspaceFooter(emp,'Save Status',`saveEmployeeStatus('${id}')`)}
-  `);
+  return openEmployeeLifecycleEventForm(id,'Employment Status Change');
 }
 async function saveEmployeeStatus(id){
   if(!canEdit()) return;
   const emp=DB.employees.find(e=>e.id===id); if(!emp) return;
   const status=document.getElementById('es_status').value;
   const statusReason=document.getElementById('es_reason').value;
-  const effectiveDate=document.getElementById('es_date').value;
-  const remarks=document.getElementById('es_remarks').value.trim();
-  const exitClassification=document.getElementById('es_exit_class').value;
-  const exitFactor=document.getElementById('es_exit_factor').value;
-  const exitReason=document.getElementById('es_exit_reason').value.trim();
+  const effectiveDate=(document.getElementById('es_date')||document.getElementById('lc_date')).value;
+  const remarks=(document.getElementById('es_remarks')||document.getElementById('lc_remarks')).value.trim();
+  const exitClassification=(document.getElementById('es_exit_class')||document.getElementById('lc_exit_class')).value;
+  const exitFactor=(document.getElementById('es_exit_factor')||document.getElementById('lc_exit_factor')).value;
+  const exitReason=(document.getElementById('es_exit_reason')||document.getElementById('lc_exit_reason')).value.trim();
   const employmentError=employmentValidation({...emp,status,statusReason,statusDate:effectiveDate},{allowLegacy:true});
   if(employmentError){toast(employmentError,true);return;}
   if(status==='Separated'&&(!exitClassification||!exitFactor||!exitReason)){toast('Enter the leaving classification, primary factor, and reason.',true);return;}
   if(!effectiveDate){ toast('Please set an effective date.'); return; }
   if(effectiveDate<emp.dateHired){ toast('Status Effective Date cannot be before Date Hired.'); return; }
+  if(effectiveDate>todayISO()){toast('Status Effective Date cannot be in the future.',true);return;}
   if(status===emp.status && statusReason===emp.statusReason&&effectiveDate===(emp.statusDate||'')&&exitClassification===(emp.exitClassification||'')&&exitFactor===(emp.exitFactor||'')&&exitReason===(emp.exitReason||'')){ toast('No status change was made.'); return; }
   const from=emp.status||'';
   const original=JSON.parse(JSON.stringify(emp));
@@ -5904,6 +5906,11 @@ function employeeProfileSetTab(employeeId,tab='summary'){
   const workspace=document.querySelector('.employee-profile-workspace');
   if(!employee||!workspace||String(workspace.dataset.employeeProfileId)!==String(employeeId))return false;
   workspace.dataset.activeTab=tab;
+  workspace.querySelectorAll('[data-workspace-target]').forEach(button=>{
+    const active=button.dataset.workspaceTarget===(tab==='history'?'history':'overview');
+    button.classList.toggle('active',active);button.disabled=active;
+    if(active)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');
+  });
   workspace.querySelectorAll('.employee-profile-tab').forEach(button=>{
     const active=button.dataset.profileTab===tab;
     button.classList.toggle('active',active);
@@ -5953,12 +5960,8 @@ async function openEmployeeProfile(id){
   selectEmployeeDirectoryRow(employee.id);
   const cached=EMPLOYEE_PROFILE_CACHE.get(String(employee.id));
   const snapshot=cached?.snapshot||null;
-  const tabs=[['summary','Overview'],['history','History']];
   openEmployeeWorkspaceModal(`${employeeWorkspaceHeader(employee,'Overview')}<div class="modal-body employee-profile-workspace ${snapshot?'':'loading-activity'}" data-employee-profile-id="${esc(employee.id)}" data-active-tab="summary">
     ${employeeWorkspaceNav(employee,'overview')}
-    <div class="employee-profile-detailbar">
-    <div class="employee-profile-tabs" role="tablist" aria-label="Employee profile details">${tabs.map(([key,label],index)=>`<button type="button" class="employee-profile-tab ${index===0?'active':''}" data-profile-tab="${key}" role="tab" aria-selected="${index===0?'true':'false'}" tabindex="${index===0?'0':'-1'}" onclick="employeeProfileSetTab('${employee.id}','${key}')">${label}</button>`).join('')}</div>
-    </div>
     <div class="employee-profile-tab-content">${employeeProfileTabContent(employee,'summary',snapshot)}</div>
   </div><div class="modal-foot employee-workspace-foot"><button class="btn btn-ghost" onclick="closeModal()">Back to Directory</button></div>`);
 }

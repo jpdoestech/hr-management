@@ -25,11 +25,13 @@ test('workspace transitions expose a stable busy state',()=>{
   assert.match(styles,/employee-workspace-modal\[aria-busy="true"\]/);
 });
 
-test('employee actions are separate from detail tabs and More actions has an Escape route',()=>{
-  assert.match(source,/<details class="employee-actions-menu"><summary>More actions/);
-  assert.match(source,/active!=='overview'\?actionButton\(actions\[0\]\)/);
-  assert.match(source,/if\(actionMenu\)\{actionMenu.open=false;actionMenu.querySelector\('summary'\)\?\.focus/);
-  assert.match(styles,/employee-profile-tab.active\{border-bottom-color:var\(--accent\)/);
+test('employee workspace has one navigation row with direct actions and no separate Status tab',()=>{
+  const nav=source.slice(source.indexOf('function employeeWorkspaceNav('),source.indexOf('function employeeWorkspaceFooter('));
+  for(const label of ['Overview','Edit','Transfer','Movement','History','Report ER Matter'])assert.ok(nav.includes(label));
+  assert.doesNotMatch(nav,/More actions|\['status','Status'/);
+  const profile=source.slice(source.indexOf('async function openEmployeeProfile(id)'),source.indexOf('function renderLeaves('));
+  assert.doesNotMatch(profile,/employee-profile-detailbar|role="tablist"/);
+  assert.match(nav,/canEdit\(\)\|\|\['overview','history'\]/);
 });
 
 test('employee transactions return to the selected overview on cancel or save',()=>{
