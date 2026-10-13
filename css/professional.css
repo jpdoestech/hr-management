@@ -1980,7 +1980,18 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
 .employee-overview .profile-detail .label{text-transform:none;font-weight:400;}
 .employee-overview .profile-detail .value{font-weight:500;}
 .employee-editor-sections .employee-address-section{grid-column:1/-1;}
+.employee-editor-sections{grid-template-columns:1fr;}
+.employee-editor-sections .employee-address-stack{margin-top:16px;}
+.modal.employee-workspace-modal>.modal-body{display:flex;flex-direction:column;overflow:hidden;min-height:0;padding:0!important;}
+.overlay:has(>.employee-workspace-modal){padding:0;}
+.employee-workspace-controls{flex:none;padding:10px 18px 0;background:var(--surface,#fff);border-bottom:1px solid var(--border);position:relative;z-index:6;}
+.employee-workspace-controls>.employee-workspace-nav{position:static;margin:0 0 8px;}
+.employee-workspace-controls>.employee-profile-detailbar{margin:0;}
+.employee-workspace-scroll{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;padding:14px 18px 18px;scroll-padding-top:12px;}
+.modal.employee-workspace-modal>.modal-head,.modal.employee-workspace-modal>.modal-foot{flex-shrink:0;}
 @media(max-width:720px){
+  .employee-workspace-controls{padding:8px 12px 0;}
+  .employee-workspace-scroll{padding:12px;}
   .employee-editor-sections,.employee-overview .profile-detail,.employee-record-pay{grid-template-columns:1fr;}
   .employee-editor-sections .employee-form-grid{grid-template-columns:1fr;}
   .employee-editor-sections .employee-form-section{padding:14px;}

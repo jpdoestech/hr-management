@@ -4521,7 +4521,20 @@ function renderEmployees(){
 }
 function openEmployeeWorkspaceModal(html){
   openModal(html);
-  document.getElementById('modal')?.classList.add('employee-workspace-modal');
+  const modal=document.getElementById('modal');
+  modal?.classList.add('employee-workspace-modal');
+  const body=modal?.querySelector(':scope > .modal-body');
+  if(!body)return;
+  const controls=document.createElement('div');controls.className='employee-workspace-controls';
+  const content=document.createElement('div');content.className='employee-workspace-scroll';
+  content.tabIndex=0;
+  content.setAttribute('role','region');content.setAttribute('aria-label','Employee record content');
+  [...body.childNodes].forEach(node=>{
+    if(node.nodeType===1&&node.matches('.employee-workspace-nav,.employee-profile-detailbar'))controls.append(node);
+    else content.append(node);
+  });
+  if(controls.childElementCount)body.append(controls);
+  body.append(content);
 }
 async function returnFromEmployeeTransaction(keepUploads=[]){
   const context=EMPLOYEE_TRANSACTION_RETURN;
@@ -5152,12 +5165,13 @@ function downloadEmployeeImportTemplate(){
   toast('Employee import template with dropdown validation downloaded.');
 }
 const EMP_FORM_SECTIONS = [
-  {title:'Employee Record',description:'Core identifiers and approved hiring reference.',keys:['employeeNo','prfNumber']},
-  {title:'Personal Information',description:'Legal name and personal details.',keys:['lastName','firstName','middleName','birthDate','gender','civilStatus']},
-  {title:'Employment Details',description:'Assignment and current employment details.',keys:['department','position','dateHired','employmentType','status','statusReason','statusDate','remarks']},
-  {title:'Assignment & Compensation',description:'Required reporting location and current employee rate or allowances.',keys:['branchReporting','dailyRate'],allowances:true},
-  {title:'Contact & Emergency',description:'Private contact information used by HR when needed.',keys:['mobileNumber','personalEmail','emergencyContactName','emergencyContactRelationship','emergencyContactPhone']},
-  {title:'Government IDs',description:'Optional statutory identifiers with format validation.',keys:['tin','sssNumber','philHealthNumber','pagIbigNumber']},
+  {title:'Personal Information',description:'Legal name, personal details and addresses.',keys:['lastName','firstName','middleName','birthDate','mobileNumber','personalEmail','gender','civilStatus'],addresses:true},
+  {title:'Emergency Information',description:'Primary emergency contact.',keys:['emergencyContactName','emergencyContactRelationship','emergencyContactPhone']},
+  {title:'Government IDs',description:'Optional statutory identifiers with format validation.',keys:['sssNumber','philHealthNumber','pagIbigNumber','tin']},
+  {title:'Employment Details',description:'Identifiers, assignment and current employment details.',keys:['employeeNo','prfNumber','department','position','branchReporting','employmentType','status','statusReason','dateHired','statusDate']},
+  {title:'Compensation',description:'Current employee rate.',keys:['dailyRate']},
+  {title:'Allowances',description:'Configured employee allowances.',keys:[],allowances:true},
+  {title:'Remarks',description:'Additional record notes.',keys:['remarks']},
   {title:'Leaving Details',description:'Classify departures and record contributing factors.',keys:['exitClassification','exitFactor','exitReason']},
 ];
 function employeeFormFieldValue(field,record){
@@ -5168,6 +5182,8 @@ function employeeFormFieldValue(field,record){
   return '';
 }
 function employeeFormSectionsHTML(record,options={}){
+  const homeAddress=normalizeAddress(record?.homeAddress,record?.address||'');
+  const presentAddress=normalizeAddress(record?.presentAddress,record?.presentAddressText||record?.address||'');
   const fieldSections=EMP_FORM_SECTIONS.map((section,index)=>`<section class="employee-form-section">
     <div class="employee-form-section-head"><span>${String(index+1).padStart(2,'0')}</span><div><h4>${esc(section.title)}</h4><p>${esc(section.description)}</p></div></div>
     <div class="employee-form-grid">${section.keys.map(key=>{
@@ -5188,13 +5204,9 @@ function employeeFormSectionsHTML(record,options={}){
       }
       return fieldHTML(resolved,employeeFormFieldValue(resolved,record));
     }).join('')}${section.allowances?employeeAllowanceFieldsHTML(record):''}</div>
+    ${section.addresses?`<div class="employee-address-stack">${addressComponentHTML({prefix:'emp_home',label:'Home Address',value:homeAddress})}${addressComponentHTML({prefix:'emp_present',label:'Current Address',value:presentAddress,showCopy:true,copyFromPrefix:'emp_home'})}</div>`:''}
   </section>`).join('');
-  const homeAddress=normalizeAddress(record?.homeAddress,record?.address||'');
-  const presentAddress=normalizeAddress(record?.presentAddress,record?.presentAddressText||record?.address||'');
-  return `<div class="employee-editor-sections">${fieldSections}<section class="employee-form-section employee-address-section">
-    <div class="employee-form-section-head"><span>${String(EMP_FORM_SECTIONS.length+1).padStart(2,'0')}</span><div><h4>Addresses</h4><p>Validated Philippine home and present addresses with PSGC location codes.</p></div></div>
-    <div class="employee-address-stack">${addressComponentHTML({prefix:'emp_home',label:'Home Address',value:homeAddress})}${addressComponentHTML({prefix:'emp_present',label:'Present Address',value:presentAddress,showCopy:true,copyFromPrefix:'emp_home'})}</div>
-  </section></div>`;
+  return `<div class="employee-editor-sections">${fieldSections}</div>`;
 }
 function syncPositionSelect(id,department){
   const select=document.getElementById(id);if(!select)return;
@@ -5817,10 +5829,10 @@ function employeeProfileSummaryHTML(employee,snapshot){
         ${[['SSS','sss','sssNumber'],['PhilHealth','philHealth','philHealthNumber'],['Pag-IBIG','pagIbig','pagIbigNumber'],['TIN','tin','tin']].map(([label,kind,key])=>`<div class="item"><dt class="label">${label}</dt><dd class="value" data-government-id="${key}">${esc(maskedId(formatGovernmentId(kind,employee[key]))||'Not recorded')}</dd></div>`).join('')}
       </dl></section>
       <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Employment Details</h3></div><dl class="profile-detail">
-        ${detail('Position',employee.position)}
-        ${detail('Department',employee.department)}
-        ${detail('Reporting Branch',employee.branchReporting)}
         ${detail('PRF Number',employee.prfNumber)}
+        ${detail('Department',employee.department)}
+        ${detail('Position',employee.position)}
+        ${detail('Reporting Branch',employee.branchReporting)}
         ${detail('Employment Type',employeeOptionLabel(classify(employee)))}
         ${detail('Employment Status',employee.status)}
         ${detail('Status Reason',employeeOptionLabel(employee.statusReason))}

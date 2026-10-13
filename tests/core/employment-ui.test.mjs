@@ -32,3 +32,24 @@ test('editing an inactive employee loads its recorded reason and contract type',
   assert.match(html,/value="Seasonal" selected/);assert.match(html,/value="Floating Status" selected/);
   assert.match(html,/id="f_statusDate" value="2026-10-01"/);assert.doesNotMatch(html,/value="Active \/ Normal"/);
 });
+test('Edit groups and sequence match Overview without scattering related fields',()=>{
+  const html=employmentFormPreview();
+  const headings=[...html.matchAll(/<h4>([^<]+)<\/h4>/g)].map(match=>match[1]);
+  assert.deepEqual(headings,['Personal Information','Emergency Information','Government IDs','Employment Details','Compensation','Allowances','Remarks','Leaving Details']);
+  const employment=html.slice(html.indexOf('<h4>Employment Details'),html.indexOf('<h4>Compensation'));
+  const keys=['employeeNo','prfNumber','department','position','branchReporting','employmentType','status','statusReason','dateHired','statusDate'];
+  let previous=-1;for(const key of keys){const index=employment.indexOf(`id="f_${key}"`);assert.ok(index>previous,key);previous=index;}
+  assert.equal((html.match(/id="f_mobileNumber"/g)||[]).length,1);
+  const personal=html.slice(0,html.indexOf('<h4>Emergency Information'));
+  assert.match(personal,/id="f_personalEmail"/);assert.match(personal,/employee-address-stack/);
+});
+test('Employee workspace separates fixed controls from accessible scroll content',()=>{
+  const shell=source.slice(source.indexOf('function openEmployeeWorkspaceModal('),source.indexOf('async function returnFromEmployeeTransaction('));
+  assert.match(shell,/employee-workspace-controls/);assert.match(shell,/employee-workspace-scroll/);
+  assert.match(shell,/node\.matches\('\.employee-workspace-nav,\.employee-profile-detailbar'\)/);
+  assert.match(shell,/content\.setAttribute\('aria-label','Employee record content'\)/);
+  assert.match(shell,/else content\.append\(node\)/);
+  const css=readFileSync(new URL('../../css/professional.css',import.meta.url),'utf8');
+  assert.match(css,/employee-workspace-controls\{flex:none/);
+  assert.match(css,/employee-workspace-scroll\{flex:1 1 auto;min-height:0;overflow:auto/);
+});

@@ -28,7 +28,8 @@ function openEmployeeOperation(){return show('Incident');}
 ${section('function employeeWorkspaceNav(','function employeeWorkspaceFooter(')}
 const employeeWorkspaceHeader=(record,title)=>'<div class="modal-head employee-workspace-head"><div><div class="employee-workspace-breadcrumb">Employees › '+title+'</div><h3>'+esc(title==='Overview'?record.name:title)+'</h3><div class="small">'+esc(title==='Overview'?record.employeeNo:record.position)+'</div></div><button type="button" aria-label="Close">×</button></div>';
 const employeeWorkspaceFooter=(record,label)=>'<div class="modal-foot employee-workspace-foot"><button class="btn btn-ghost">Back</button><button class="btn btn-primary">'+label+'</button></div>';
-const openEmployeeWorkspaceModal=markup=>document.getElementById('modal').innerHTML=markup;
+const openModal=markup=>document.getElementById('modal').innerHTML=markup;
+${section('function openEmployeeWorkspaceModal(','async function returnFromEmployeeTransaction(')}
 ${section('function employeeProfileSummaryHTML(','function employeeProfilePersonalHTML(')}
 ${section('function openEmployeeStatusForm(','async function saveEmployeeStatus(')}
 ${section('async function openTransferForEmployee(','async function saveEmployeeTransfer(')}
