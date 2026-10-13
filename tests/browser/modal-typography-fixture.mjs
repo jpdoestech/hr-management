@@ -1,0 +1,42 @@
+// Synthetic typography/layout harness. No production records, persistence, or Supabase requests.
+import {createServer} from 'node:http';
+import {readFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+import {resolve,sep} from 'node:path';
+const root=fileURLToPath(new URL('../../',import.meta.url)),source=readFileSync(resolve(root,'js/app.js'),'utf8');
+const section=(start,end)=>source.slice(source.indexOf(start),source.indexOf(end,source.indexOf(start)));
+const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic modal typography</title><link rel="stylesheet" href="/css/app.css"><link rel="stylesheet" href="/css/professional.css"></head><body><div class="overlay on"><div id="modal" class="modal employee-workspace-modal"></div></div><script>
+const employee={id:'synthetic',name:'SYNTHETIC-LONG-FAMILY-NAME, Sample Employee',employeeNo:'EMP-000001',department:'Synthetic Department',position:'Synthetic Position With A Long Descriptive Name',status:'Active',employmentType:'Probationary',statusReason:'Active / Normal',branchReporting:'Synthetic Branch',dateHired:'2026-10-01'};
+const DB={employees:[employee]},EMP_STATUS=['Active','Inactive','Separated'],STATUS_REASONS={'Active':['Active / Normal']},EXIT_CLASSIFICATIONS=['Voluntary'],WORKFORCE_FACTORS=['Personal'],LIFECYCLE_EVENT_TYPES=['Regularization','Return to Work'];
+const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),canEdit=()=>true,selectEmployeeDirectoryRow=()=>{},ensureRecordModules=async()=>{},todayISO=()=> '2026-10-13';
+const employeeDisplayName=record=>record.name,employeeDepartmentNames=()=>['Synthetic Department','Another Department'],employeePositionNames=()=>[employee.position],employeeCompleteness=()=>60,classify=record=>record.employmentType,fmtDate=value=>value||'Not recorded',isSeparated=()=>false,employeeTenureText=()=> 'Synthetic tenure';
+const lifecycleEventTypeChanged=()=>{},lifecycleEmployeePreview=()=>{},syncPositionSelect=()=>{},syncEmployeeStatusReason=()=>{};
+const tabs=['Overview','Edit','Status','Lifecycle','Transfer','Incident','Access'];
+const employeeWorkspaceNav=()=>'<div class="employee-workspace-nav">'+tabs.map(label=>'<button type="button" data-view="'+label+'" onclick="show(this.dataset.view)">'+label+'</button>').join('')+'</div>';
+const employeeWorkspaceHeader=(record,title)=>'<div class="modal-head employee-workspace-head"><div><div class="employee-workspace-breadcrumb">Employees › '+esc(record.name)+' › '+title+'</div><h3>'+title+'</h3><div class="small">'+esc(record.position)+'</div></div><button type="button" aria-label="Close">×</button></div>';
+const employeeWorkspaceFooter=(record,label)=>'<div class="modal-foot employee-workspace-foot"><button class="btn btn-ghost">Back</button><button class="btn btn-primary">'+label+'</button></div>';
+const openEmployeeWorkspaceModal=markup=>document.getElementById('modal').innerHTML=markup;
+${section('function employeeProfileSummaryHTML(','function employeeProfilePersonalHTML(')}
+${section('function openEmployeeStatusForm(','async function saveEmployeeStatus(')}
+${section('async function openTransferForEmployee(','async function saveEmployeeTransfer(')}
+${section('function openEmployeeLifecycleEventForm(','function lifecycleEventTypeChanged(')}
+function show(view){
+  const modal=document.getElementById('modal');modal.className='modal'+(['Incident','Access'].includes(view)?' relations-modal entry-modal':' employee-workspace-modal');
+  if(view==='Status')return openEmployeeStatusForm(employee.id);
+  if(view==='Transfer')return openTransferForEmployee(employee.id);
+  if(view==='Lifecycle')return openEmployeeLifecycleEventForm(employee.id);
+  const overview='<div class="profile-hero employee-profile-hero"><div class="profile-avatar">SE</div><div class="employee-profile-identity"><div class="profile-title">'+esc(employee.name)+'</div><div class="profile-sub">'+esc(employee.position)+'</div></div></div><div class="employee-profile-tabs"><button class="employee-profile-tab">Summary</button><button class="employee-profile-tab">Personal & Contact</button><button class="employee-profile-tab">Compensation & IDs</button><button class="employee-profile-tab">History</button></div>'+employeeProfileSummaryHTML(employee,null);
+  const fields='<div class="field"><label for="sample_name">Employee Name</label><input id="sample_name" value="'+esc(employee.name)+'"></div><div class="field"><label for="sample_department">Department</label><select id="sample_department"><option>'+esc(employee.department)+'</option></select></div><div class="field full"><label for="sample_remarks">Remarks</label><textarea id="sample_remarks">Synthetic text for layout testing only.</textarea></div>';
+  const form=view==='Edit'?'<section class="employee-form-section"><div class="employee-form-section-head"><span>01</span><div><h4>Personal & Employment</h4><p>Employee record details</p></div></div><div class="employee-form-grid">'+fields+'</div></section><section class="address-component"><div class="address-component-head"><h5>Home Address</h5></div><div class="address-grid"><div class="field"><label for="sample_street">Street / House / Unit</label><input id="sample_street" value="Synthetic street"></div></div></section>':'<div class="formgrid">'+fields+'</div><div class="computed-note">Synthetic shared-form note.</div>';
+  openEmployeeWorkspaceModal(employeeWorkspaceHeader(employee,view)+'<div class="modal-body '+(view==='Overview'?'employee-profile-workspace':view==='Edit'?'employee-form-body':'')+'">'+employeeWorkspaceNav()+ (view==='Overview'?overview:form)+'</div>'+employeeWorkspaceFooter(employee,'Save'));
+}
+show('Overview');
+</script></body></html>`;
+const server=createServer((req,res)=>{
+  const path=new URL(req.url,'http://localhost').pathname;
+  if(path==='/shutdown'){res.end('Stopped');server.close();server.closeAllConnections();return;}
+  if(path==='/'){res.setHeader('Content-Type','text/html');res.end(html);return;}
+  const file=resolve(root,'.'+decodeURIComponent(path));if(!file.startsWith(resolve(root,'css')+sep)){res.writeHead(403);res.end();return;}
+  try{res.setHeader('Content-Type','text/css');res.end(readFileSync(file));}catch{res.writeHead(404);res.end();}
+});
+server.listen(4187,'127.0.0.1',()=>console.log('Synthetic modal typography: http://127.0.0.1:4187/'));

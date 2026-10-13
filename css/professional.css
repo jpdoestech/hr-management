@@ -1930,3 +1930,37 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
 .employee-import-preview tbody tr{cursor:pointer;}
 .employee-import-row-edit:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 @media(max-width:640px){.employee-import-row-edit{min-height:44px;}.employee-import-summary span{font-size:12px;}}
+
+/* Shared dialog typography. Employee values are 30% larger than the compact 11px form baseline. */
+.modal{--modal-label-size:12.35px;--modal-value-size:14.3px;--modal-help-size:12px;--modal-heading-size:19.5px;--modal-section-size:15px;}
+.modal :is(input,select,textarea,button){font-family:inherit;}
+.modal .modal-head h3{font-size:var(--modal-heading-size);line-height:1.3;overflow-wrap:anywhere;}
+.modal .modal-head .small,.modal .modal-body .field-help,.modal .modal-body .computed-note,.modal .modal-body .lifecycle-helper{font-size:var(--modal-help-size);line-height:1.5;overflow-wrap:anywhere;}
+.modal .modal-body .field label{font-size:var(--modal-label-size);line-height:1.4;}
+.modal .modal-body .field :is(input,select,textarea){font-size:var(--modal-value-size);line-height:1.4;}
+.modal .modal-body .field :is(input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),select){min-height:40px;}
+.modal .modal-foot .btn,.modal .employee-workspace-nav button,.modal .employee-profile-tab,.modal .modal-form-tablist button{font-size:13px;line-height:1.4;white-space:normal;}
+.modal .employee-workspace-breadcrumb,.modal .modal-context-breadcrumb{font-size:12px;line-height:1.4;}
+.modal .employee-workspace-nav{top:0;flex-wrap:wrap;}
+.modal .employee-profile-tabs{position:static;flex-wrap:wrap;}
+.modal .employee-form-section-head h4,.modal .employee-profile-section-head h3,.modal .address-component-head h5{font-size:var(--modal-section-size);line-height:1.4;}
+.modal .employee-form-section-head p,.modal .employee-profile-section-head p,.modal .address-component-head p,.modal .address-copy,.modal .employee-form-guidance,.modal .employee-allowance-empty{font-size:var(--modal-help-size);line-height:1.5;}
+.modal .employee-form-guidance b,.modal .employee-form-section-head>span,.modal .money-input>span{font-size:13px;}
+.modal .employee-profile-hero .profile-title{font-size:20.8px;line-height:1.3;white-space:normal;overflow-wrap:anywhere;}
+.modal .employee-profile-hero .profile-sub{font-size:13px;line-height:1.5;white-space:normal;overflow-wrap:anywhere;}
+.modal .employee-profile-hero .profile-chips>span,.modal .employee-profile-workspace .profile-kpi .k,.modal .employee-profile-workspace .profile-kpi .s,.modal .employee-profile-workspace .employee-completeness :is(b,span){font-size:12px;}
+.modal .employee-profile-section .profile-detail .label{font-size:var(--modal-label-size);line-height:1.4;}
+.modal .employee-profile-section .profile-detail .value,.modal .employee-profile-remarks{font-size:13.65px;line-height:1.5;overflow-wrap:anywhere;}
+.modal .employee-profile-workspace .profile-kpi .v{font-size:23.4px;}
+.modal .employee-profile-workspace .profile-kpi .v.text-value{font-size:14.3px;white-space:normal;overflow-wrap:anywhere;}
+.modal .employee-record-history :is(small,time),.modal .address-options :is(small,b),.modal .address-option-state{font-size:12px;line-height:1.5;}
+.modal .employee-record-history b{font-size:13.65px;}
+.modal .address-options button{flex-wrap:wrap;}
+.modal .employee-workspace-foot>.small{white-space:normal;overflow-wrap:anywhere;}
+@media(max-width:720px){
+  .modal .modal-body .field :is(input,select,textarea){font-size:16px;}
+  .modal .modal-body .field :is(input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),select),.modal .employee-workspace-nav button,.modal .employee-profile-tab,.modal .modal-form-tablist button,.modal .modal-foot .btn{min-height:44px;}
+  .modal .employee-workspace-nav{overflow-x:visible;}
+  .modal .employee-profile-tab{flex:1 1 auto;}
+  .modal .employee-profile-section .profile-detail .value{font-size:16px;}
+}
