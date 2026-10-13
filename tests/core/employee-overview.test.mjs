@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
+import {ageOn} from '../../js/core/workforce-metrics.js';
 const source=readFileSync(new URL('../../js/app.js',import.meta.url),'utf8');
 const summary=source.slice(source.indexOf('function employeeProfileSummaryHTML('),source.indexOf('function employeeProfilePersonalHTML('));
 const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
 const labels=source.slice(source.indexOf('function employeeOptionLabel('),source.indexOf('function syncEmployeeStatusReason('));
-const render=runInNewContext(labels+summary+'\nemployeeProfileSummaryHTML',{esc,employeeAllowanceEntries:()=>[{name:'Synthetic Allowance',amount:100}],employeeAllowanceTotal:()=>100,peso:value=>'PHP '+value,formatGovernmentId:(_kind,value)=>value||'',formatPhilippineAddress:()=>'',employeeCompleteness:()=>60,classify:employee=>employee.employmentType,fmtDate:value=>value||'Not recorded',isSeparated:employee=>employee.status==='Separated',employeeTenureText:()=> 'Synthetic tenure'});
+const scope={ageOn,todayISO:()=> '2026-10-13',iShield:()=>'',esc,employeeAllowanceEntries:()=>[{name:'Synthetic Allowance',amount:100}],employeeAllowanceTotal:()=>100,peso:value=>'PHP '+value,formatGovernmentId:(_kind,value)=>value||'',formatPhilippineAddress:()=>'',employeeCompleteness:()=>60,classify:employee=>employee.employmentType,fmtDate:value=>value||'Not recorded',isSeparated:employee=>employee.status==='Separated',employeeTenureText:()=> 'Synthetic tenure'};
+const render=runInNewContext(labels+summary+'\nemployeeProfileSummaryHTML',scope);
 const employee={position:'Synthetic Position',department:'Synthetic Department',branchReporting:'Synthetic Branch',employmentType:'Probationary',status:'Active',statusReason:'Active / Normal',dateHired:'2026-10-01',prfNumber:'PRF-TEST'};
 test('Overview shows each assignment and employment field once without duplicate cards',()=>{
   const html=render(employee,null);
@@ -21,10 +23,22 @@ test('Overview masks government identifiers and displays short employment labels
   assert.match(html,/Government IDs/);assert.match(html,/Personal Information/);
   assert.match(html,/Employment Type<\/dt><dd class="value">Regular<\/dd>/);
   assert.match(html,/\*\*-\*\*\*1234-5|\*\*-\*\*\*\*234-5/);
-  assert.doesNotMatch(html.split('<details')[0],/00-0001234-5|Regular \/ Permanent/);
-  assert.match(html,/<details class="employee-overview-identifiers"><summary>Show full identifiers/);
+  assert.doesNotMatch(html,/00-0001234-5|Regular \/ Permanent/);
+  assert.match(html,/aria-pressed="false"/);assert.match(html,/Unmask Government IDs/);
   assert.match(html,/Compensation/);assert.match(html,/Synthetic Allowance/);
   assert.doesNotMatch(source,/\['pay','Pay & IDs'\]/);
+});
+test('Overview consolidates personal, current address and emergency information',()=>{
+  const html=render({...employee,birthDate:'2000-10-13',presentAddressText:'Synthetic current address',emergencyContactName:'Synthetic Contact',emergencyContactRelationship:'Parent',emergencyContactPhone:'Synthetic Phone'},null);
+  for(const value of ['26 years old','Synthetic current address','Synthetic Contact','Synthetic Phone'])assert.equal(html.split(value).length-1,1);
+  assert.match(html,/Emergency Information/);assert.doesNotMatch(source,/\['personal','Personal'\]/);
+});
+test('Government ID toggle reveals and remasks in place without replacing the form',()=>{
+  const node={dataset:{governmentId:'sssNumber'},textContent:''},label={textContent:''};
+  const button={pressed:'false',closest:()=>({dataset:{employeeId:'synthetic'},querySelectorAll:()=>[node]}),getAttribute(){return this.pressed;},setAttribute(_key,value){this.pressed=value;},querySelector:()=>label};
+  const toggle=runInNewContext(summary+'\nemployeeProfileToggleIds',{...scope,DB:{employees:[{id:'synthetic',sssNumber:'00-0001234-5'}]}});
+  toggle(button);assert.equal(node.textContent,'00-0001234-5');assert.equal(button.pressed,'true');
+  toggle(button);assert.doesNotMatch(node.textContent,/00-0001234-5/);assert.equal(button.pressed,'false');assert.equal(label.textContent,'Unmask Government IDs');
 });
 test('Employee edit uses display labels without changing stored select values',()=>{
   const label=runInNewContext(labels+'\nemployeeOptionLabel');

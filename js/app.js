@@ -4,7 +4,7 @@ import { ALL_ROWS_SIZE, paginationMeta, paginationHTML, paginationReset, paginat
 import { installTableEnhancer } from './core/table-enhancer.js?v=20261013-1';
 import { employeeDirectoryProjection } from './core/employee-directory.js?v=20261009-2';
 import { isValidEmployeeNumber, nextEmployeeNumber, normalizeEmployeeNumber } from './core/employee-number.js?v=20261008-1';
-import { workforceAgeMix, validateAttendance, fillRateSummary, EXIT_CLASSIFICATIONS, WORKFORCE_FACTORS, ATTENDANCE_STATUSES, ABSENCE_CLASSIFICATIONS } from './core/workforce-metrics.js?v=20261009-2';
+import { ageOn, workforceAgeMix, validateAttendance, fillRateSummary, EXIT_CLASSIFICATIONS, WORKFORCE_FACTORS, ATTENDANCE_STATUSES, ABSENCE_CLASSIFICATIONS } from './core/workforce-metrics.js?v=20261009-2';
 import {EMPLOYMENT_TYPES,EMPLOYMENT_STATUSES,STATUS_REASONS,REVIEW_TYPE,canonicalEmploymentType,normalizeEmployment,employmentValidation,isSeparated,isEmployed} from './core/employment.js?v=20261009-2';
 import { compactRedundantPageIntros } from './core/content-layout.js?v=20260928-4';
 import { buildRecordChanges, valuesEqual } from './core/record-diff.js?v=20260930-1';
@@ -5793,17 +5793,28 @@ function employeeProfileSummaryHTML(employee,snapshot){
   const completion=employeeCompleteness(employee);
   const detail=(label,value,full=false)=>`<div class="item${full?' full':''}"><dt class="label">${esc(label)}</dt><dd class="value">${esc(value||'Not recorded')}</dd></div>`;
   const maskedId=value=>String(value||'').replace(/\d(?=(?:\D*\d){4})/g,'*');
+  const age=ageOn(employee.birthDate,todayISO());
   const allowances=employeeAllowanceEntries(employee);
-  return `<div class="employee-overview">
+  return `<div class="employee-overview employee-record-overview" data-employee-id="${esc(employee.id||'')}">
     <div class="employee-overview-completion"><span>Profile completeness</span><progress max="100" value="${completion}" aria-label="Profile completeness"></progress><b>${completion}%</b></div>
     <div class="employee-profile-columns">
       <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Personal Information</h3></div><dl class="profile-detail">
         ${detail('Birthdate',fmtDate(employee.birthDate))}
+        ${detail('Mobile',employee.mobileNumber)}
+        ${detail('Age',age===null?'Not recorded':`${age} years old`)}
+        ${detail('Email',employee.personalEmail)}
         ${detail('Gender',employee.gender)}
         ${detail('Civil Status',employee.civilStatus)}
-        ${detail('Mobile',employee.mobileNumber)}
-        ${detail('Email',employee.personalEmail)}
-        ${detail('Home Address',formatPhilippineAddress(employee.homeAddress)||employee.address)}
+        ${detail('Home Address',formatPhilippineAddress(employee.homeAddress)||employee.address,true)}
+        ${detail('Current Address',formatPhilippineAddress(employee.presentAddress)||employee.presentAddressText,true)}
+      </dl></section>
+      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Emergency Information</h3></div><dl class="profile-detail single-column">
+        ${detail('Name',employee.emergencyContactName)}
+        ${detail('Relationship',employee.emergencyContactRelationship)}
+        ${detail('Contact',employee.emergencyContactPhone)}
+      </dl></section>
+      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Government IDs</h3><button type="button" class="btn btn-ghost btn-sm employee-id-toggle" aria-pressed="false" onclick="employeeProfileToggleIds(this)"><span aria-hidden="true">${iShield(14)}</span><span class="employee-id-toggle-label">Unmask Government IDs</span></button></div><dl class="profile-detail single-column employee-government-ids">
+        ${[['SSS','sss','sssNumber'],['PhilHealth','philHealth','philHealthNumber'],['Pag-IBIG','pagIbig','pagIbigNumber'],['TIN','tin','tin']].map(([label,kind,key])=>`<div class="item"><dt class="label">${label}</dt><dd class="value" data-government-id="${key}">${esc(maskedId(formatGovernmentId(kind,employee[key]))||'Not recorded')}</dd></div>`).join('')}
       </dl></section>
       <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Employment Details</h3></div><dl class="profile-detail">
         ${detail('Position',employee.position)}
@@ -5815,24 +5826,16 @@ function employeeProfileSummaryHTML(employee,snapshot){
         ${detail('Status Reason',employeeOptionLabel(employee.statusReason))}
         ${detail('Date Hired',fmtDate(employee.dateHired))}
         ${detail('Status Effective Date',fmtDate(employee.statusDate))}
-        ${detail('Tenure',employeeTenureText(employee))}
+        ${detail('Length of Service',employeeTenureText(employee))}
       </dl></section>
-      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Government IDs</h3></div><dl class="profile-detail">
-        ${detail('SSS',maskedId(formatGovernmentId('sss',employee.sssNumber)))}
-        ${detail('PhilHealth',maskedId(formatGovernmentId('philHealth',employee.philHealthNumber)))}
-        ${detail('Pag-IBIG',maskedId(formatGovernmentId('pagIbig',employee.pagIbigNumber)))}
-        ${detail('TIN',maskedId(formatGovernmentId('tin',employee.tin)))}
-      </dl><details class="employee-overview-identifiers"><summary>Show full identifiers</summary><dl class="profile-detail">
-        ${detail('SSS',formatGovernmentId('sss',employee.sssNumber))}
-        ${detail('PhilHealth',formatGovernmentId('philHealth',employee.philHealthNumber))}
-        ${detail('Pag-IBIG',formatGovernmentId('pagIbig',employee.pagIbigNumber))}
-        ${detail('TIN',formatGovernmentId('tin',employee.tin))}
-      </dl></details></section>
-      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Compensation</h3></div><dl class="profile-detail">
+      <div class="employee-record-pay">
+      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Compensation</h3></div><dl class="profile-detail single-column">
         ${detail('Daily Rate',employee.dailyRate===''||employee.dailyRate==null?'Not recorded':peso(employee.dailyRate))}
+      </dl></section>
+      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Allowances</h3></div><dl class="profile-detail single-column">
         ${allowances.length?allowances.map(item=>detail(item.name,peso(item.amount))).join(''):detail('Allowances','Not recorded')}
         ${detail('Total Allowances',peso(employeeAllowanceTotal(employee)))}
-      </dl></section>
+      </dl></section></div>
       ${employee.remarks?`<section class="employee-profile-section full"><div class="employee-profile-section-head"><h3>Remarks</h3></div><p class="employee-profile-remarks">${esc(employee.remarks)}</p></section>`:''}
       ${isSeparated(employee)?`<section class="employee-profile-section full"><div class="employee-profile-section-head"><h3>Leaving Details</h3></div><dl class="profile-detail">
         ${detail('Leaving Classification',employee.exitClassification)}
@@ -5841,6 +5844,20 @@ function employeeProfileSummaryHTML(employee,snapshot){
       </dl></section>`:''}
     </div>
   </div>`;
+}
+function employeeProfileToggleIds(button){
+  const overview=button.closest('.employee-record-overview');
+  const employee=DB.employees.find(record=>String(record.id)===overview?.dataset.employeeId);
+  if(!employee)return;
+  const reveal=button.getAttribute('aria-pressed')!=='true';
+  const kinds={sssNumber:'sss',philHealthNumber:'philHealth',pagIbigNumber:'pagIbig',tin:'tin'};
+  overview.querySelectorAll('[data-government-id]').forEach(node=>{
+    const kind=kinds[node.dataset.governmentId];if(!kind)return;
+    const value=formatGovernmentId(kind,employee[node.dataset.governmentId]);
+    node.textContent=(reveal?value:String(value||'').replace(/\d(?=(?:\D*\d){4})/g,'*'))||'Not recorded';
+  });
+  button.setAttribute('aria-pressed',String(reveal));
+  button.querySelector('.employee-id-toggle-label').textContent=reveal?'Mask Government IDs':'Unmask Government IDs';
 }
 function employeeProfilePersonalHTML(employee){
   return `<div class="employee-profile-columns">
@@ -5867,7 +5884,6 @@ function employeeProfileHistoryHTML(employee,snapshot){
   </div>`;
 }
 function employeeProfileTabContent(employee,tab,snapshot){
-  if(tab==='personal')return employeeProfilePersonalHTML(employee);
   if(tab==='history')return employeeProfileHistoryHTML(employee,snapshot);
   return employeeProfileSummaryHTML(employee,snapshot);
 }
@@ -5925,7 +5941,7 @@ async function openEmployeeProfile(id){
   selectEmployeeDirectoryRow(employee.id);
   const cached=EMPLOYEE_PROFILE_CACHE.get(String(employee.id));
   const snapshot=cached?.snapshot||null;
-  const tabs=[['summary','Overview'],['personal','Personal'],['history','History']];
+  const tabs=[['summary','Overview'],['history','History']];
   openEmployeeWorkspaceModal(`${employeeWorkspaceHeader(employee,'Overview')}<div class="modal-body employee-profile-workspace ${snapshot?'':'loading-activity'}" data-employee-profile-id="${esc(employee.id)}" data-active-tab="summary">
     ${employeeWorkspaceNav(employee,'overview')}
     <div class="employee-profile-detailbar">
@@ -11245,7 +11261,7 @@ Object.assign(window, {
   fieldHTML, fmtDate, formatGovernmentIdInput, getEvalRecord, go, handleFileInput, incidentTypeOccurrence, incidentTypeSummaryHTML, filterIncidentClassifications, refreshIncidentClassificationSummary, addIncidentClassification,
   toggleSidebar, closeSidebar, applyReportFilters, exportReportEmployees, exportReportActivity, exportReportATD, exportReportCases,
   loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
-  openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, employeeProfileSetTab, employeeWorkspaceNavigate, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
+  openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, employeeProfileSetTab, employeeProfileToggleIds, employeeWorkspaceNavigate, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard, dashboardOpenEmployees, dashboardOpenCases,
   renderDisciplinary, setDisciplinaryHistoryTab, exportDisciplinaryHistoryCSV, exportLegacyDisciplinaryHistoryCSV, openLegacyDisciplinaryReview, saveLegacyDisciplinaryReview, refreshLegacyReviewContext, legacyReviewActionChanged, openEmployeeDisciplinaryHistory, renderCorrespondence, exportCaseCorrespondenceCSV, downloadCaseCorrespondenceAttachment, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, toggleEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, openTableViewSettings, saveTableViewPreferences, resetTableViewPreferences, tableViewDragStart, tableViewDragOver, tableViewDrop, tableViewDragEnd, tableViewMove, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, closeNavGroupPanel, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts, actionCenterSetLevel, actionCenterResetFilters, actionCenterPageGo, actionCenterPageSize, openActionCenterItem,
