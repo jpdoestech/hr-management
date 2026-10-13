@@ -22,6 +22,10 @@ Labels have a readability floor rather than scaling tiny 8px labels by only 30%.
 
 ## Verification
 
+### Employee Overview Layout
+
+Overview uses an identity header (name and employee number), a Details/Personal/Pay & IDs/History navigation row with the existing permission-gated ER action, and unframed Assignment and Employment sections. Each master-record field appears once; separated employees retain Leaving Details. A single native progress indicator shows profile completeness. The duplicate profile banner, status/assignment KPI cards and completion percentages have been removed. Larger record fonts and the existing dialog dimensions are preserved. Semantic definition lists pair labels with values, and long values wrap on narrow screens.
+
 Automated tests cover the shared scale, unchanged dialog dimensions in the typography rules, and mobile rules. The synthetic browser harness measures actual computed fonts in Overview, Edit, Status, Lifecycle and Transfer, plus representative shared entry controls at mobile/tablet widths. It uses synthetic records and no Supabase calls; it is not a production authentication or save-flow test. Employee Status, Lifecycle, Transfer and Overview summary markup are extracted from the application; Edit and additional shared-form examples use representative existing classes.
 
 Commit remark: `fix(ui): normalize modal typography and enlarge employee record text`.

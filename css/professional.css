@@ -1931,6 +1931,20 @@ body.session-pending #auth-screen,body.session-pending #app{visibility:hidden;}
 .employee-import-row-edit:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 @media(max-width:640px){.employee-import-row-edit{min-height:44px;}.employee-import-summary span{font-size:12px;}}
 
+/* Employee Overview: one readable location for each master-record detail. */
+.employee-profile-detailbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+.employee-profile-detailbar .employee-profile-tabs{margin:0;flex:1 1 auto;}
+.employee-profile-detailbar .profile-er-action{flex:0 0 auto;}
+.employee-overview-completion{display:flex;align-items:center;gap:12px;margin-bottom:18px;color:var(--muted);font-size:12px;}
+.employee-overview-completion progress{width:100px;max-width:30%;height:6px;accent-color:var(--accent);}
+.employee-overview-completion b{color:var(--text);}
+.employee-overview .employee-profile-columns{gap:24px;}
+.employee-overview .employee-profile-section{padding:0 0 18px;border:0;border-bottom:1px solid var(--border);border-radius:0;background:transparent;}
+.employee-overview .profile-detail{margin:0;}
+.employee-overview .profile-detail .item{min-width:0;padding:8px 0;border:0;background:transparent;border-radius:0;}
+.employee-overview .profile-detail dd{margin:3px 0 0;}
+@media(max-width:720px){.employee-profile-detailbar{gap:10px;}.employee-profile-detailbar .employee-profile-tabs{flex-basis:100%;}.employee-profile-detailbar .profile-er-action{min-height:44px;}.employee-overview .employee-profile-columns{gap:16px;}}
+
 /* Shared dialog typography. Employee values are 30% larger than the compact 11px form baseline. */
 .modal{--modal-label-size:12.35px;--modal-value-size:14.3px;--modal-help-size:12px;--modal-heading-size:19.5px;--modal-section-size:15px;}
 .modal :is(input,select,textarea,button){font-family:inherit;}

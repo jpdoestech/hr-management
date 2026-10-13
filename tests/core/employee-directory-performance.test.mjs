@@ -99,7 +99,7 @@ test('employee profile uses stable employee ids and tabbed detail rendering',()=
   assert.match(source,/supabase\.from\('hr_records'\)[\s\S]*\.or\(identityFilter\)/);
   assert.match(source,/await ensureRecordModules\(EMPLOYEE_PROFILE_MODULES\)/);
   assert.match(source,/function employeeProfileSetTab/);
-  assert.match(source,/\['summary','Overview'\],\['personal','Personal'\],\['pay','Pay & IDs'\],\['history','History'\]/);
+  assert.match(source,/\['summary','Details'\],\['personal','Personal'\],\['pay','Pay & IDs'\],\['history','History'\]/);
   assert.match(source,/EMPLOYEE_PROFILE_CACHE_TTL/);
 });
 

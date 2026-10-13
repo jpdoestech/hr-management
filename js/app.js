@@ -4499,7 +4499,7 @@ async function renderEmployeeOrigin(){
 }
 function employeeWorkspaceHeader(emp,section='Overview'){
   const isOverview=section==='Overview';
-  return `<div class="modal-head employee-workspace-head"><div class="employee-workspace-heading">${!isOverview?`<button type="button" class="employee-workspace-back" title="Back to employee" aria-label="Back to ${esc(employeeDisplayName(emp))}" onclick="employeeWorkspaceNavigate('${emp.id}','overview')">${iArrowLeft(17)}</button>`:''}<div><div class="employee-workspace-breadcrumb"><span>Employees</span><span>›</span><span>${esc(employeeDisplayName(emp))}</span>${!isOverview?`<span>›</span><b>${esc(section)}</b>`:''}</div><h3>${esc(section==='Overview'?employeeDisplayName(emp):section)}</h3><div class="small">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div></div></div><button type="button" onclick="closeModal()" aria-label="Close employee workspace">&times;</button></div>`;
+  return `<div class="modal-head employee-workspace-head"><div class="employee-workspace-heading">${!isOverview?`<button type="button" class="employee-workspace-back" title="Back to employee" aria-label="Back to ${esc(employeeDisplayName(emp))}" onclick="employeeWorkspaceNavigate('${emp.id}','overview')">${iArrowLeft(17)}</button>`:''}<div><div class="employee-workspace-breadcrumb"><span>Employees</span><span>›</span><span>${isOverview?'Overview':esc(employeeDisplayName(emp))}</span>${!isOverview?`<span>›</span><b>${esc(section)}</b>`:''}</div><h3>${esc(section==='Overview'?employeeDisplayName(emp):section)}</h3><div class="small">${esc(emp.employeeNo||'—')}${!isOverview?` · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}`:''}</div></div></div><button type="button" onclick="closeModal()" aria-label="Close employee workspace">&times;</button></div>`;
 }
 let EMPLOYEE_WORKSPACE_NAVIGATING=false;
 async function employeeWorkspaceNavigate(employeeId,target='overview'){
@@ -5721,30 +5721,31 @@ function employeeProfileLoadingCards(){
 }
 function employeeProfileSummaryHTML(employee,snapshot){
   const completion=employeeCompleteness(employee);
-  const activityCards=`<div class="profile-kpis">
-    <div class="profile-kpi"><div class="k">Status</div><div class="v text-value">${esc(employee.status||'—')}</div><div class="s">Current employment state</div></div>
-    <div class="profile-kpi"><div class="k">Employment Type</div><div class="v text-value">${esc(classify(employee))}</div><div class="s">Recorded employment type</div></div>
-    <div class="profile-kpi"><div class="k">Reporting Branch</div><div class="v text-value">${esc(employee.branchReporting||'—')}</div><div class="s">Assigned workplace</div></div>
-    <div class="profile-kpi"><div class="k">Master Data</div><div class="v">${completion}%</div><div class="s">Profile completion</div></div>
-  </div>`;
-  return `<div class="employee-completeness"><div><b>Master data</b><span>${completion}% complete</span></div><div class="bar"><div class="fill" style="width:${completion}%"></div></div><div class="pct">${completion}%</div></div>
-    ${activityCards}
+  const detail=(label,value,full=false)=>`<div class="item${full?' full':''}"><dt class="label">${esc(label)}</dt><dd class="value">${esc(value||'Not recorded')}</dd></div>`;
+  return `<div class="employee-overview">
+    <div class="employee-overview-completion"><span>Profile completeness</span><progress max="100" value="${completion}" aria-label="Profile completeness"></progress><b>${completion}%</b></div>
     <div class="employee-profile-columns">
-      <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Employment</h3><p>Current assignment and status</p></div></div><div class="profile-detail">
-        <div class="item"><div class="label">Employee No.</div><div class="value mono">${esc(employee.employeeNo||'—')}</div></div>
-        <div class="item"><div class="label">PRF Number</div><div class="value">${esc(employee.prfNumber||'—')}</div></div>
-        <div class="item"><div class="label">Position</div><div class="value">${esc(employee.position||'—')}</div></div>
-        <div class="item"><div class="label">Department</div><div class="value">${esc(employee.department||'—')}</div></div>
-        <div class="item"><div class="label">Reporting Branch</div><div class="value">${esc(employee.branchReporting||'Not assigned')}</div></div>
-        <div class="item"><div class="label">Date Hired</div><div class="value">${fmtDate(employee.dateHired)}</div></div>
-        <div class="item"><div class="label">Employment Status</div><div class="value">${esc(employee.status||'—')}</div></div><div class="item"><div class="label">Status Reason</div><div class="value">${esc(employee.statusReason||'—')}</div></div><div class="item"><div class="label">Employment Type</div><div class="value">${esc(classify(employee))}</div></div>
-        <div class="item"><div class="label">Effective Date</div><div class="value">${fmtDate(employee.statusDate)}</div></div>
-        ${isSeparated(employee)?`<div class="item"><div class="label">Leaving Classification</div><div class="value">${esc(employee.exitClassification||'Not recorded')}</div></div><div class="item"><div class="label">Leaving Factor</div><div class="value">${esc(employee.exitFactor||'Not recorded')}</div></div><div class="item full"><div class="label">Reason for Leaving</div><div class="value">${esc(employee.exitReason||'Not recorded')}</div></div>`:''}
-      </div></section>
-      <section class="employee-profile-section"><div class="employee-profile-section-head"><div><h3>Assignment</h3><p>Current organizational placement</p></div></div><div class="profile-detail">
-        <div class="item"><div class="label">Department</div><div class="value">${esc(employee.department||'—')}</div></div><div class="item"><div class="label">Position</div><div class="value">${esc(employee.position||'—')}</div></div><div class="item"><div class="label">Reporting Branch</div><div class="value">${esc(employee.branchReporting||'Not assigned')}</div></div><div class="item"><div class="label">Tenure</div><div class="value">${esc(employeeTenureText(employee))}</div></div>
-      </div></section>
-    </div>`;
+      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Assignment</h3></div><dl class="profile-detail">
+        ${detail('Position',employee.position)}
+        ${detail('Department',employee.department)}
+        ${detail('Reporting Branch',employee.branchReporting)}
+        ${detail('PRF Number',employee.prfNumber)}
+      </dl></section>
+      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Employment</h3></div><dl class="profile-detail">
+        ${detail('Employment Type',classify(employee))}
+        ${detail('Employment Status',employee.status)}
+        ${detail('Status Reason',employee.statusReason)}
+        ${detail('Date Hired',fmtDate(employee.dateHired))}
+        ${detail('Status Effective Date',fmtDate(employee.statusDate))}
+        ${detail('Tenure',employeeTenureText(employee))}
+      </dl></section>
+      ${isSeparated(employee)?`<section class="employee-profile-section full"><div class="employee-profile-section-head"><h3>Leaving Details</h3></div><dl class="profile-detail">
+        ${detail('Leaving Classification',employee.exitClassification)}
+        ${detail('Leaving Factor',employee.exitFactor)}
+        ${detail('Reason for Leaving',employee.exitReason,true)}
+      </dl></section>`:''}
+    </div>
+  </div>`;
 }
 function employeeProfilePersonalHTML(employee){
   return `<div class="employee-profile-columns">
@@ -5838,13 +5839,15 @@ async function openEmployeeProfile(id){
   selectEmployeeDirectoryRow(employee.id);
   const cached=EMPLOYEE_PROFILE_CACHE.get(String(employee.id));
   const snapshot=cached?.snapshot||null;
-  const tabs=[['summary','Overview'],['personal','Personal'],['pay','Pay & IDs'],['history','History']];
+  const tabs=[['summary','Details'],['personal','Personal'],['pay','Pay & IDs'],['history','History']];
   openEmployeeWorkspaceModal(`${employeeWorkspaceHeader(employee,'Overview')}<div class="modal-body employee-profile-workspace ${snapshot?'':'loading-activity'}" data-employee-profile-id="${esc(employee.id)}" data-active-tab="summary">
     ${employeeWorkspaceNav(employee,'overview')}
-    <div class="profile-hero employee-profile-hero"><div class="profile-avatar">${esc(opsInitials(employeeDisplayName(employee)))}</div><div class="employee-profile-identity"><div class="profile-title">${esc(employeeDisplayName(employee))}</div><div class="profile-sub">${esc(employee.employeeNo||'—')} · ${esc(employee.position||'—')} · ${esc(employee.department||'Unassigned')}</div><div class="profile-chips">${statusBadge(employee.status,EMP_STATUS_MAP)} ${statusBadge(classify(employee),classify(employee)==='Regular / Permanent'?{'Regular / Permanent':'b-green'}:{'Probationary':'b-amber'})}<span>${esc(employeeTenureText(employee))}</span></div></div>${canEdit()?`<button class="btn btn-ghost btn-sm profile-er-action" onclick="openEmployeeOperation('cases','${employee.id}')">${iShield(13)} <span>Report ER Matter</span></button>`:''}</div>
+    <div class="employee-profile-detailbar">
     <div class="employee-profile-tabs" role="tablist" aria-label="Employee profile details">${tabs.map(([key,label],index)=>`<button type="button" class="employee-profile-tab ${index===0?'active':''}" data-profile-tab="${key}" role="tab" aria-selected="${index===0?'true':'false'}" tabindex="${index===0?'0':'-1'}" onclick="employeeProfileSetTab('${employee.id}','${key}')">${label}</button>`).join('')}</div>
+      ${canEdit()?`<button class="btn btn-ghost btn-sm profile-er-action" onclick="openEmployeeOperation('cases','${employee.id}')">${iShield(13)} <span>Report ER Matter</span></button>`:''}
+    </div>
     <div class="employee-profile-tab-content">${employeeProfileTabContent(employee,'summary',snapshot)}</div>
-  </div><div class="modal-foot employee-workspace-foot"><span class="small">Selected employee: ${esc(employeeDisplayName(employee))}</span><div class="toolbar-spacer"></div><button class="btn btn-ghost" onclick="closeModal()">Back to Directory</button></div>`);
+  </div><div class="modal-foot employee-workspace-foot"><button class="btn btn-ghost" onclick="closeModal()">Back to Directory</button></div>`);
 }
 
 /* ================================================================
