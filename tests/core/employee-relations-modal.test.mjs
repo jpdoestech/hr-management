@@ -12,7 +12,7 @@ test('profile-originated HR cases retain the selected employee',()=>{
   assert.match(source,/id="case_employee_locked"/);
   assert.match(source,/employeePickerSelected\('case_employee'\)\|\|DB\.employees\.find/);
   assert.match(source,/const title=existing\?'Edit HR Case':'New HR Case'/);
-  assert.match(source,/Employee Information[\s\S]*employeeDisplayName\(lockedEmployee\)/);
+  assert.match(source,/Employees[\s\S]*employeeDisplayName\(lockedEmployee\)/);
 });
 
 test('Employee Relations uses intake-first navigation and stage-guided actions',()=>{

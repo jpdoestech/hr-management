@@ -11,7 +11,7 @@ export const EMPLOYEE_RELATIONS_CAPABILITIES=[
 
 export const ACCESS_MODULES=[
   {key:'dashboard',label:'Dashboard',actions:['view']},
-  {key:'employees',label:'Employee Information',actions:['view','create','update','delete','export','manage']},
+  {key:'employees',label:'Employees',actions:['view','create','update','delete','export','manage']},
   {key:'onboarding',label:'Onboarding & Applicants',actions:['view','create','update','delete','approve','export']},
   {key:'lifecycle',label:'Employment Lifecycle',actions:['view','create','update','approve','manage']},
   {key:'leave',label:'Leave Management',actions:['view','create','update','delete','export','approve']},

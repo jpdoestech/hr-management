@@ -24,7 +24,7 @@ import {identityPreviewValid,identityReviewPayload,identityComparisonHTML,identi
 import {readManpowerPaste,detectManpowerPasteMapping,previewManpowerPaste} from './core/manpower-paste.js?v=20261009-1';
 import {manpowerPasteMappingHTML,manpowerPastePreviewHTML} from './manpower/paste-preview.js?v=20261009-1';
 import { measureAsync, recordPerformance, performanceSnapshot } from './core/performance.js?v=20261002-1';
-import { ACCESS_ACTIONS, ACCESS_MODULES, ACCESS_PERMISSION_KEYS, EMPLOYEE_RELATIONS_CAPABILITIES, evaluateEffectiveAccess, hasEffectivePermission, legacyPermissions, permissionLabel } from './core/access-control.js?v=20261009-1';
+import { ACCESS_ACTIONS, ACCESS_MODULES, ACCESS_PERMISSION_KEYS, EMPLOYEE_RELATIONS_CAPABILITIES, evaluateEffectiveAccess, hasEffectivePermission, legacyPermissions, permissionLabel } from './core/access-control.js?v=20261013-1';
 import { filterTdaRecords, normalizeTdaScope, normalizeTdaText, parseTdaMatrix, selectApplicableTdaRecord, tdaDuplicateKey, tdaRecordApplies, tdaScopeKey } from './core/tda-import.js?v=20261007-2';
 import { CASE_WORKFLOW_STAGES, CASE_TERMINAL_STAGES, LEGACY_CASE_STAGES, CASE_RESPONSE_STATUSES, CASE_HEARING_STATUSES, CASE_DECISION_STATUSES, CASE_DECISION_OUTCOMES, CASE_NOD_STATUSES, actionRequiresImplementation, canTransitionCase, caseStageOptions, caseTransitionValidation, caseDueProcessReadiness, caseDecisionValidation, caseResponseChronology, caseImplementationReadiness, caseImplementationValidation, caseLifecycleWorkItem, caseProgressModel, employeeRelationsMetrics, employeeRelationsValidationIssues, employeeRelationsWorkItems, isCaseReportSource, isCaseTerminalStage, qualifyingDisciplinaryHistory } from './core/employee-relations.js?v=20261008-6';
 import { addressComponentHTML, addressAutocompleteFocus, addressAutocompleteInput, addressAutocompleteBlur, addressAutocompleteKeydown, addressSelectOption, addressCopyFrom, addressDetailInput, initializeAddressComponents, readAddressComponent } from './address/address-component.js?v=20260930-2';
@@ -2149,13 +2149,16 @@ async function renderOperationsWorkspace(){
 }
 
 const NAV = [
+  {sec:'',direct:true,items:[
+    {v:'dashboard',label:'Dashboard',icon:iGrid},
+    {v:'employees',label:'Employees',icon:iUsers},
+  ]},
   {sec:'My Workspace',items:[
     {v:'selfService',label:'My HR Portal',icon:iUser,roles:['Employee','Manager']},
     {v:'teamApprovals',label:'Requests & Approvals',icon:iCheck,roles:['Administrator','HR Staff','Manager'],count:()=>pendingServiceRequestCount()},
     {v:'lifecycleChecklists',label:'Lifecycle Checklists',icon:iCheck,roles:['Administrator','HR Staff','Manager'],count:()=>lifecycleChecklistPendingCount()},
   ]},
   {sec:'Overview',items:[
-    {v:'dashboard',label:'Dashboard',icon:iGrid},
     {v:'actionCenter',label:'Action Center',icon:iShield},
     {v:'workflow',label:'Workflow & Approvals',icon:iCheck,count:()=>workflowPendingCount()},
     {v:'automation',label:'Automation Center',icon:iChart,count:()=>automationPendingCount()},
@@ -2164,7 +2167,6 @@ const NAV = [
     {v:'weeklyReport',label:'Weekly Report',icon:iChart},
   ]},
   {sec:'People & Records',items:[
-    {v:'employees',label:'Employee Information',icon:iUsers},
     {v:'onboarding',label:'Onboarding & Applicants',icon:iCheck,roles:['Administrator','HR Staff'],count:()=>onboardingOpenCount()},
     {v:'employeeLifecycle',label:'Employment Lifecycle',icon:iSwap},
     {v:'leaves',label:'Leave Tracker',icon:iCal},
@@ -2184,6 +2186,8 @@ const NAV = [
     {v:'documents',label:'Document Center',icon:iDoc},
     {v:'dataQuality',label:'Data Quality & Governance',icon:iCheck},
     {v:'reports',label:'Reports',icon:iChart},
+  ]},
+  {sec:'Administration',items:[
     {v:'users',label:'Access Control',icon:iShield},
     {v:'settings',label:'Settings',icon:iGear,roles:['Administrator','HR Staff']},
   ]},
@@ -2194,6 +2198,7 @@ const NAV_SECTION_ICONS={
   'People & Records':iUsers,
   'Employee Relations':iShield,
   'Documents & Governance':iDoc,
+  'Administration':iGear,
 };
 function navItemVisible(item){
   const role=SESSION?.role||'HR Staff';
@@ -2237,6 +2242,16 @@ function renderNav(){
   NAV.forEach(group=>{
     const items=group.items.filter(navItemVisible);
     if(!items.length) return;
+    if(group.direct){
+      items.forEach(item=>{
+        const g=document.createElement('section');g.className='navgroup';
+        const link=document.createElement('button');link.type='button';link.className='navgroup-head nav-direct';
+        if(STATE.view===item.v)link.setAttribute('aria-current','page');
+        link.innerHTML=`<span class="navgroup-head-main"><span class="navgroup-icon">${item.icon(15)}</span><span class="navgroup-title">${esc(item.label)}</span></span>`;
+        link.onclick=()=>{closeNavGroupPanel();go(item.v);};g.appendChild(link);nav.appendChild(g);
+      });
+      return;
+    }
     const active=items.some(it=>STATE.view===it.v);
     const sectionIcon=NAV_SECTION_ICONS[group.sec]||iGrid;
     const g=document.createElement('section');g.className='navgroup'+(active?' has-active':'');
@@ -4126,7 +4141,7 @@ async function convertOnboardingCandidate(id){
   DB.employees.push(employee);Object.assign(candidate,{stage:'Hired',employeeRecordId:employee.id,hiredAt:new Date().toISOString(),updatedAt:new Date().toISOString()});linkedSlots.forEach(slot=>{slot.employeeId=employee.id;if(['Open','Sourcing','Candidate Identified'].includes(slot.status))slot.status='For Onboarding';slot.updatedAt=createdAt;slot.updatedBy=SESSION?.id||null;});
   if(!(await saveDB())){DB.employees=DB.employees.filter(row=>row!==employee);Object.keys(candidate).forEach(key=>delete candidate[key]);Object.assign(candidate,original);originalSlots.forEach(({slot,data})=>{Object.keys(slot).forEach(key=>delete slot[key]);Object.assign(slot,data);});return;}
   if(linkedSlots.length)await workflowSyncTasks({silent:true});
-  logAudit(`Converted applicant to employee: ${employeeDisplayName(employee)}`);await closeModal();renderNav();renderOnboarding();toast(`${employeeDisplayName(employee)} is now in Employee Information.`);
+  logAudit(`Converted applicant to employee: ${employeeDisplayName(employee)}`);await closeModal();renderNav();renderOnboarding();toast(`${employeeDisplayName(employee)} is now in Employees.`);
 }
 
 function employeeSearchInput(value){
@@ -4346,7 +4361,7 @@ function applyEmployeeDirectoryPage(pageResult,signature){
   else if(currentFooter)currentFooter.remove();
   else if(footerHTML)surface.insertAdjacentHTML('beforeend',footerHTML);
   const metadata=employeeDirectoryMetadata();
-  setTitle('Employee Information',`${pageResult.meta.total} of ${DB.employees.length} employees · ${metadata.departments.length} departments`);
+  setTitle('Employees',`${pageResult.meta.total} of ${DB.employees.length} employees · ${metadata.departments.length} departments`);
   employeeDirectoryStatus(`${pageResult.meta.total} employees found. Showing ${pageResult.meta.start} to ${pageResult.meta.end}.`,false);
 }
 function employeeDirectoryStatus(message,busy){
@@ -4397,7 +4412,7 @@ function renderEmployees(){
   const {departments:depts,branches,statuses:statusOptions}=employeeDirectoryMetadata();
   const columns=query.columns;
   const tableMinWidth=columns.reduce((sum,c)=>sum+c.width,0)+58;
-  setTitle('Employee Information', `${filteredTotal} of ${DB.employees.length} employees · ${depts.length} departments`);
+  setTitle('Employees', `${filteredTotal} of ${DB.employees.length} employees · ${depts.length} departments`);
   document.getElementById('content')?.classList.add('employee-directory-content');
 
   const html = `
@@ -4484,7 +4499,7 @@ async function renderEmployeeOrigin(){
 }
 function employeeWorkspaceHeader(emp,section='Overview'){
   const isOverview=section==='Overview';
-  return `<div class="modal-head employee-workspace-head"><div class="employee-workspace-heading">${!isOverview?`<button type="button" class="employee-workspace-back" title="Back to employee" aria-label="Back to ${esc(employeeDisplayName(emp))}" onclick="employeeWorkspaceNavigate('${emp.id}','overview')">${iArrowLeft(17)}</button>`:''}<div><div class="employee-workspace-breadcrumb"><span>Employee Information</span><span>›</span><span>${esc(employeeDisplayName(emp))}</span>${!isOverview?`<span>›</span><b>${esc(section)}</b>`:''}</div><h3>${esc(section==='Overview'?employeeDisplayName(emp):section)}</h3><div class="small">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div></div></div><button type="button" onclick="closeModal()" aria-label="Close employee workspace">&times;</button></div>`;
+  return `<div class="modal-head employee-workspace-head"><div class="employee-workspace-heading">${!isOverview?`<button type="button" class="employee-workspace-back" title="Back to employee" aria-label="Back to ${esc(employeeDisplayName(emp))}" onclick="employeeWorkspaceNavigate('${emp.id}','overview')">${iArrowLeft(17)}</button>`:''}<div><div class="employee-workspace-breadcrumb"><span>Employees</span><span>›</span><span>${esc(employeeDisplayName(emp))}</span>${!isOverview?`<span>›</span><b>${esc(section)}</b>`:''}</div><h3>${esc(section==='Overview'?employeeDisplayName(emp):section)}</h3><div class="small">${esc(emp.employeeNo||'—')} · ${esc(emp.position||'—')} · ${esc(emp.department||'Unassigned')}</div></div></div><button type="button" onclick="closeModal()" aria-label="Close employee workspace">&times;</button></div>`;
 }
 let EMPLOYEE_WORKSPACE_NAVIGATING=false;
 async function employeeWorkspaceNavigate(employeeId,target='overview'){
@@ -5200,7 +5215,7 @@ function openEmployeeForm(id){
   if(id&&!existing){toast('Employee record could not be found.',true);return;}
   if(existing) selectEmployeeDirectoryRow(existing.id);
   openEmployeeWorkspaceModal(`
-    ${existing?employeeWorkspaceHeader(existing,'Edit Employee'):`<div class="modal-head employee-workspace-head"><div><div class="employee-workspace-breadcrumb"><span>Employee Information</span><span>›</span><b>Add Employee</b></div><h3>Add Employee</h3><div class="small">Create a complete employee master record.</div></div><button type="button" onclick="closeModal()" aria-label="Close employee form">&times;</button></div>`}
+    ${existing?employeeWorkspaceHeader(existing,'Edit Employee'):`<div class="modal-head employee-workspace-head"><div><div class="employee-workspace-breadcrumb"><span>Employees</span><span>›</span><b>Add Employee</b></div><h3>Add Employee</h3><div class="small">Create a complete employee master record.</div></div><button type="button" onclick="closeModal()" aria-label="Close employee form">&times;</button></div>`}
     <div class="modal-body employee-form-body">
       ${existing?employeeWorkspaceNav(existing,'edit'):''}
       ${employeeFormSectionsHTML(formRecord)}
@@ -7883,7 +7898,7 @@ const MODULES = {
   },
   transfers:{ title:'Department Transfers', subtitle:'Track employees moved between departments, with the date of each move.', singular:'Transfer Record', addLabel:'Add Transfer Record',
     searchFields:['employeeName','fromDepartment','toDepartment'], sortKey:'toDate',
-    notice:"Use the transfer icon on an employee's row in Employee Information to record a move — that also updates the employee's current department automatically. Adding a record here manually logs history only and does not change the employee record.",
+    notice:"Use the transfer icon on an employee's row in Employees to record a move — that also updates the employee's current department automatically. Adding a record here manually logs history only and does not change the employee record.",
     fields:[
       {key:'employeeName', label:'Employee Name', type:'text', required:true},
       {key:'fromDepartment', label:'Transferred From', type:'select', options:employeeDepartmentNames, required:true},
@@ -10555,7 +10570,7 @@ async function saveCaseIntake(intakeId=''){
   const employee=existing.data?DB.employees.find(row=>String(row.id)===String(existing.data.employee_record_id)):employeePickerSelected('intake_employee')||DB.employees.find(row=>String(row.id)===String(lockedEmployeeId));
   const employeeRecordId=existing.data?.employee_record_id||employee?.id||'',employeeName=existing.data?.employee_name||(employee?employeeDisplayName(employee):''),department=existing.data?.department||employee?.department||'';
   const subject=(document.getElementById('intake_subject')?.value||'').trim(),narrative=(document.getElementById('intake_narrative')?.value||'').trim(),received=document.getElementById('intake_received')?.value||'';
-  if(!employeeRecordId){switchModalFormTab('case_intake_tabs','report');toast('Select an employee from Employee Information.',true);return;}
+  if(!employeeRecordId){switchModalFormTab('case_intake_tabs','report');toast('Select an employee from Employees.',true);return;}
   if(!subject||!narrative||!received){switchModalFormTab('case_intake_tabs','report');toast('Complete the subject, reported matter, and received date.',true);return;}
   const attachmentName=document.getElementById('f_caseIntakeAttachment')?.value||'',attachmentRef=document.getElementById('f_caseIntakeAttachment_data')?.value||'';
   const payload={report_type:document.getElementById('intake_type').value,employee_record_id:employeeRecordId,employee_name:employeeName,department,subject,narrative,incident_at:document.getElementById('intake_incident').value?new Date(document.getElementById('intake_incident').value).toISOString():null,received_at:new Date(received).toISOString(),source_name:(document.getElementById('intake_source').value||'').trim()||null,source_contact:(document.getElementById('intake_contact').value||'').trim()||null,confidential:document.getElementById('intake_confidential').checked,status:existing.data?.status&&['Converted to Case','Linked to Case'].includes(existing.data.status)?existing.data.status:document.getElementById('intake_status').value,triage_notes:(document.getElementById('intake_notes').value||'').trim()||null,attachment_name:attachmentName||null,attachment_ref:attachmentRef||null,updated_by:SESSION?.id||null};
@@ -10631,7 +10646,7 @@ function caseEmployeeContextHTML(employee){
 function openCaseFormMarkup(existing,lockedEmployee=null){
   const assigned=DB.users.filter(u=>u.role==='Administrator'||u.role==='HR Staff');
   const title=existing?'Edit HR Case':'New HR Case';
-  const lockedTrail=lockedEmployee?`<div class="modal-context-breadcrumb" aria-label="Current location"><span>Employee Information</span><span aria-hidden="true">›</span><span>${esc(employeeDisplayName(lockedEmployee))}</span><span aria-hidden="true">›</span><b>${esc(title)}</b></div>`:'';
+  const lockedTrail=lockedEmployee?`<div class="modal-context-breadcrumb" aria-label="Current location"><span>Employees</span><span aria-hidden="true">›</span><span>${esc(employeeDisplayName(lockedEmployee))}</span><span aria-hidden="true">›</span><b>${esc(title)}</b></div>`:'';
   const defaultStatus=existing?.status||(CASE_DOMAIN_READY===false?'Open':'Reported / Created');
   const overview=`<div class="formgrid">${lockedEmployee?caseEmployeeContextHTML(lockedEmployee):employeePickerHTML({id:'case_employee',label:'Employee',selectedId:existing?.employee_record_id||'',required:true,full:true,autofill:false,onSelect:'refreshCaseTdaRules'})}<input type="hidden" id="case_department" value="${esc(existing?.department||lockedEmployee?.department||'')}"><div class="field"><label>Case Number</label><input value="${esc(existing?.case_number||'Generated on save')}" disabled></div><div class="field"><label>Case Type</label><input id="case_type" value="${esc(existing?.case_type||'Employee Relations')}" maxlength="100"></div><div class="field"><label>Current Stage</label><select id="case_status">${caseStatusOptionsHTML(defaultStatus)}</select></div><div class="field"><label>Priority</label><select id="case_priority">${['Low','Normal','High','Urgent'].map(x=>`<option ${existing?.priority===x||(!existing&&x==='Normal')?'selected':''}>${esc(x)}</option>`).join('')}</select></div><div class="field"><label>Opened Date *</label><input type="date" id="case_opened" value="${esc(existing?.opened_at||todayISO())}"></div><div class="field"><label>Due Date</label><input type="date" id="case_due" value="${esc(existing?.due_date||'')}"></div><div class="field"><label>Closed Date</label><input type="date" id="case_closed" value="${esc(existing?.closed_at||'')}"></div><div class="field"><label>Case Outcome</label><select id="case_outcome"><option value="">Not yet determined</option>${CASE_OUTCOMES.map(value=>`<option value="${esc(value)}" ${existing?.outcome===value?'selected':''}>${esc(value)}</option>`).join('')}</select></div><div class="field full"><label>Assigned To</label><select id="case_assigned"><option value="">Unassigned</option>${assigned.map(u=>`<option value="${esc(u.id)}" ${existing?.assigned_to===u.id?'selected':''}>${esc(u.fullName)} · ${esc(u.role)}</option>`).join('')}</select></div><label class="checkrow full case-confidential-toggle"><input type="checkbox" id="case_confidential" ${existing?.confidential===false?'':'checked'}><span><b>Confidential case</b><small>Limit the case, normalized child records, and case attachments to assigned owners and users with confidential-record access.</small></span></label></div><div class="computed-note">Only valid next stages are shown. Advancing a case is checked against its reports, allegations, notices, findings, decision, and closure requirements.</div>${CASE_DOMAIN_READY===false?'<div class="notice warning"><b>Legacy case mode:</b> Run the Phase 23 Employee Relations migration to enable controlled stages and allegations.</div>':''}`;
   const policy=`<div class="formgrid"><div class="field full"><label>Subject / Matter</label><input id="case_subject" value="${esc(existing?.subject||'')}" placeholder="e.g. Attendance violation — repeated unauthorized absence"></div>${tdaRuleSelectorHTML('case','cases',existing?.tdaRule||null,lockedEmployee||DB.employees.find(employee=>String(employee.id)===String(existing?.employee_record_id||'')),existing?.department||lockedEmployee?.department||'',existing?.id||'')}</div>`;

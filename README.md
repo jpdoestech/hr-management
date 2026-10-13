@@ -21,6 +21,10 @@ These proposals are not automatic migrations or production-enabled conversion.
 
 ## Deployment
 
+### Navigation
+
+Dashboard and Employees are direct sidebar links. Access Control and Settings are grouped under Administration, separately from Documents & Governance. Existing per-workspace permissions still determine visibility and access, including restricted Organization Structure access for HR Staff.
+
 ### GitHub Pages
 
 Upload/push the contents of this folder to the repository root and publish the `main` branch (or the configured Pages source). `.nojekyll` is included.
