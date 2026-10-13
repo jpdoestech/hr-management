@@ -11,7 +11,7 @@ test('worker query sends stable request/line IDs and bounded server filters',asy
   assert.equal(calls.length,1);
 });
 test('worker query rejects missing or inconsistent results and propagates denied access',async()=>{
-  for(const data of [null,{data:[],count:-1},{data:[{}],count:0},{data:Array(11).fill({}),count:11}])await assert.rejects(()=>loadLineWorkers({rpc:async()=>({data})},'r','l'),/could not be verified/);
+  for(const data of [null,{data:[],count:-1},{data:[{}],count:0},{data:Array(11).fill({}),count:11}])await assert.rejects(()=>loadLineWorkers({rpc:async()=>({data})},'r','l',{size:10}),/could not be verified/);
   await assert.rejects(()=>loadLineWorkers({rpc:async()=>({error:{code:'42501'}})},'r','l'),error=>error.code==='42501');
 });
 test('worker table escapes source names, separates scheduled/actual dates and ages only active reservations',()=>{

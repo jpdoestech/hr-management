@@ -53,7 +53,7 @@ test('lines and history have separate bounded queries and request-linked history
   const history=clientFixture();await loadSubmittedRows(history.client,'request','history',{size:100000});
   assert.match(history.calls.find(call=>call[0]==='select')[1],/hr_manpower_lines!inner/);
   assert.deepEqual(history.calls.find(call=>call[0]==='eq'),['eq','hr_manpower_lines.request_id','request']);
-  assert.deepEqual(history.calls.find(call=>call[0]==='range'),['range',0,9]);
+  assert.deepEqual(history.calls.find(call=>call[0]==='range'),['range',0,24]);
 });
 test('amendment reads are lazy, request-filtered and independently paginated',async()=>{
   const {client,calls}=clientFixture();await loadSubmittedRows(client,'request','amendments',{page:2,size:25});
@@ -125,7 +125,7 @@ test('search resets preserve the selected bounded page size',()=>{
   const {context}=controllerFixture();context.STATE.tablePageSizes={'manpower:submitted':25};context.STATE.tablePages={};
   assert.equal(context.manpowerSubmittedPageSettings('manpower:submitted').size,25);
   context.STATE.tablePageSizes['manpower:submitted']=100000;context.STATE.tablePages={};
-  assert.equal(context.manpowerSubmittedPageSettings('manpower:submitted').size,10);
+  assert.equal(context.manpowerSubmittedPageSettings('manpower:submitted').size,25);
 });
 test('draft editor and list cannot treat submitted requests as editable drafts',()=>{
   assert.match(app,/\.eq\('state','Draft'\)/);

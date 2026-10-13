@@ -1,4 +1,4 @@
-import { ALL_ROWS_SIZE, paginationHTML, paginationMeta } from './pagination.js?v=20261008-6';
+import { ALL_ROWS_SIZE, paginationHTML, paginationMeta } from './pagination.js?v=20261013-1';
 import { columnKey, moveColumn, normalizeFrozenColumns, reconcileColumnOrder } from './table-layout.js?v=20260930-1';
 import { compareTableValues, normalizeTableValue, valueMatchesFilter } from './table-query.js?v=20261001-1';
 
@@ -334,8 +334,8 @@ export function installTableEnhancer({getState, getContent, getAdditionalRoots=(
     if(!visibleRows.length){if(footer?.classList?.contains('table-pagination-wrap')) footer.remove();return;}
     const key=getTablePageKey(table,index);const state=getState();state.tablePages ||= {};
     const sig=tableSignature(table);const stored=state.tablePages[key];
-    if(!stored||stored.signature!==sig){const preferredSize=stored?.size||state.tablePageSizes?.[key]||10;state.tablePages[key]={page:1,size:preferredSize,signature:sig};}
-    const meta=paginationMeta(state,key,visibleRows.length,10);
+    if(!stored||stored.signature!==sig){const preferredSize=stored?.size||state.tablePageSizes?.[key]||25;state.tablePages[key]={page:1,size:preferredSize,signature:sig};}
+    const meta=paginationMeta(state,key,visibleRows.length,25);
     visibleRows.forEach((row,idx)=>{row.style.display=(idx>=meta.start-1&&idx<meta.end)?'':'none';});
     const newFooter=`<div class="table-pagination-meta">${meta.total?`${meta.start}–${meta.end} of ${meta.total}`:'0'} <span>records</span></div>${paginationHTML(meta,key)}`;
     const footerState=[meta.key,meta.total,meta.size,meta.pages,meta.page,meta.start,meta.end].join('|');
@@ -352,8 +352,8 @@ export function installTableEnhancer({getState, getContent, getAdditionalRoots=(
     layoutTables.forEach((table,index)=>enhanceTableLayout(table,index));
     contentTables.forEach((table,index)=>applyTablePagination(table,index));
   }
-  function tablePageGo(key,page){const state=getState();state.tablePages ||= {};const current=state.tablePages[key]||{page:1,size:10,signature:''};state.tablePages[key]={...current,page:Math.max(1,Number(page)||1)};enhanceDataTables();}
-  function tablePageSize(key,size){const state=getState();state.tablePages ||= {};state.tablePageSizes ||= {};const current=state.tablePages[key]||{page:1,size:10,signature:''};const nextSize=Number(size)||10;state.tablePageSizes[key]=nextSize;state.tablePages[key]={...current,page:1,size:nextSize};enhanceDataTables();}
+  function tablePageGo(key,page){const state=getState();state.tablePages ||= {};const current=state.tablePages[key]||{page:1,size:25,signature:''};state.tablePages[key]={...current,page:Math.max(1,Number(page)||1)};enhanceDataTables();}
+  function tablePageSize(key,size){const state=getState();state.tablePages ||= {};state.tablePageSizes ||= {};const current=state.tablePages[key]||{page:1,size:25,signature:''};const nextSize=Number(size)||25;state.tablePageSizes[key]=nextSize;state.tablePages[key]={...current,page:1,size:nextSize};enhanceDataTables();}
   function resetAllTablePages(){getState().tablePages={};enhanceDataTables();}
   function getTableInfo(key){
     enhanceDataTables();const entry=registry.get(key);

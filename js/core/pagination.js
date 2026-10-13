@@ -1,6 +1,6 @@
 export const ALL_ROWS_SIZE=100000;
 
-export function paginationMeta(state,key,total,defaultSize=10){
+export function paginationMeta(state,key,total,defaultSize=25){
   state.tablePages ||= {};
   state.tablePageSizes ||= {};
   const allowed=[10,25,50,100,ALL_ROWS_SIZE];
@@ -13,7 +13,7 @@ export function paginationMeta(state,key,total,defaultSize=10){
   state.tablePages[key]={...current,page,size};
   return {key,total,size,pages,page,start:total?((page-1)*size+1):0,end:Math.min(total,page*size)};
 }
-export function paginateRows(rows,state,key,defaultSize=10){
+export function paginateRows(rows,state,key,defaultSize=25){
   const meta=paginationMeta(state,key,rows.length,defaultSize);
   return {rows:rows.slice(meta.start?meta.start-1:0,meta.end),meta};
 }

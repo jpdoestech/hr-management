@@ -24,13 +24,13 @@ export function clientCatalogPreview({role='Administrator',fail=false}={}){
 test('client catalog searches and paginates on the database without replacing search input',async()=>{
   const fixture=clientCatalogPreview();fixture.context.STATE.clientSearch='A_100%';
   await fixture.run('renderClientCatalog()');
-  assert.deepEqual(fixture.calls.find(call=>call.range).range,[0,9]);
+  assert.deepEqual(fixture.calls.find(call=>call.range).range,[0,24]);
   assert.equal(fixture.calls.find(call=>call.search).search,'%A\\_100\\%%');
-  assert.match(fixture.host.innerHTML,/1-10 of 26/);assert.match(fixture.host.innerHTML,/Example Client/);
+  assert.match(fixture.host.innerHTML,/1-25 of 26/);assert.match(fixture.host.innerHTML,/Example Client/);
   assert.doesNotMatch(fixture.host.innerHTML,/value="100000"/);
-  fixture.run("clientCatalogPageSize('settings:clients',25)");
+  fixture.run("clientCatalogPageSize('settings:clients',10)");
   await new Promise(resolve=>setImmediate(resolve));
-  assert.deepEqual(fixture.calls.filter(call=>call.range).at(-1).range,[0,24]);
+  assert.deepEqual(fixture.calls.filter(call=>call.range).at(-1).range,[0,9]);
 });
 test('non-administrator cannot load or open client mutations even with permission override',async()=>{
   const fixture=clientCatalogPreview({role:'HR Staff'});

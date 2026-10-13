@@ -1,6 +1,6 @@
 const escape=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
 export const WORKER_STATES=['Reserved','Scheduled','Deployed','Ended','Released','Reversed'];
-export async function loadLineWorkers(client,request,line,{page=1,size=10,search='',state=''}={}){
+export async function loadLineWorkers(client,request,line,{page=1,size=25,search='',state=''}={}){
   if(!request||!line||!Number.isSafeInteger(page)||page<1||![10,25,50].includes(size)||search.length>120||!['',...WORKER_STATES].includes(state))throw new Error('Invalid worker list filters');
   const {data,error}=await client.rpc('manpower_line_workers',{p_request:request,p_line:line,p_page:page,p_size:size,p_search:search.trim(),p_state:state});
   if(error)throw error;

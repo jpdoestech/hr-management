@@ -1,7 +1,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '../supabase-config.js';
-import { ALL_ROWS_SIZE, paginationMeta, paginationHTML, paginationReset, paginateRows } from './core/pagination.js?v=20261008-6';
-import { installTableEnhancer } from './core/table-enhancer.js?v=20261009-2';
+import { ALL_ROWS_SIZE, paginationMeta, paginationHTML, paginationReset, paginateRows } from './core/pagination.js?v=20261013-1';
+import { installTableEnhancer } from './core/table-enhancer.js?v=20261013-1';
 import { employeeDirectoryProjection } from './core/employee-directory.js?v=20261009-2';
 import { isValidEmployeeNumber, nextEmployeeNumber, normalizeEmployeeNumber } from './core/employee-number.js?v=20261008-1';
 import { workforceAgeMix, validateAttendance, fillRateSummary, EXIT_CLASSIFICATIONS, WORKFORCE_FACTORS, ATTENDANCE_STATUSES, ABSENCE_CLASSIFICATIONS } from './core/workforce-metrics.js?v=20261009-2';
@@ -14,12 +14,12 @@ import {manpowerCSV} from './core/manpower-export.js?v=20261010-1';
 import {newManpowerDraft,validateManpowerDraft} from './core/manpower-draft.js?v=20261009-1';
 import {manpowerDraftEditorHTML,manpowerDraftLinesHTML,manpowerDraftPositionOptionsHTML,readManpowerDraft} from './manpower/draft-editor.js?v=20261010-1';
 import {reviewManpowerSubmission,manpowerSubmissionReviewHTML,manpowerSubmissionError} from './manpower/submission-review.js?v=20261010-1';
-import {loadSubmittedRequests,loadSubmittedRequest,loadSubmittedRows,submittedListRowsHTML,submittedHeaderHTML,submittedTableHTML} from './manpower/submitted-workspace.js?v=20261010-8';
+import {loadSubmittedRequests,loadSubmittedRequest,loadSubmittedRows,submittedListRowsHTML,submittedHeaderHTML,submittedTableHTML} from './manpower/submitted-workspace.js?v=20261013-1';
 import {quantityAmendmentPayload,quantityAmendmentHTML,quantityAmendmentError} from './manpower/quantity-editor.js?v=20261010-1';
 import {LIFECYCLE_LABELS,lifecycleOperations,lifecycleActionsHTML,lifecyclePayload,lifecycleEditorHTML,lifecycleResultValid,lifecycleError} from './manpower/lifecycle-editor.js?v=20261010-2';
 import {HEADER_AMENDMENT_FIELDS,readHeaderAmendment,headerAmendmentPayload,headerEditorHTML,headerAmendmentResultValid,headerAmendmentError} from './manpower/header-editor.js?v=20261010-1';
 import {loadLineCapacity,lineCapacityHTML,capacityErrorHTML} from './manpower/capacity-summary.js?v=20261010-1';
-import {loadLineWorkers,workerTableHTML,workerFiltersHTML} from './manpower/worker-monitoring.js?v=20261010-1';
+import {loadLineWorkers,workerTableHTML,workerFiltersHTML} from './manpower/worker-monitoring.js?v=20261013-1';
 import {identityPreviewValid,identityReviewPayload,identityComparisonHTML,identityReviewResultValid,identityReviewError} from './manpower/identity-review.js?v=20261010-1';
 import {readManpowerPaste,detectManpowerPasteMapping,previewManpowerPaste} from './core/manpower-paste.js?v=20261009-1';
 import {manpowerPasteMappingHTML,manpowerPastePreviewHTML} from './manpower/paste-preview.js?v=20261009-1';
@@ -523,7 +523,7 @@ function invalidateEmployeeDirectoryCache(){
 function serverRecordQueryUnavailable(error){
   return ['42883','PGRST202','PGRST205'].includes(error?.code)||/search_hr_records|schema cache|function.*not find/i.test(error?.message||'');
 }
-function requestedPageState(scope,defaultSize=10){
+function requestedPageState(scope,defaultSize=25){
   STATE.tablePages||={};STATE.tablePageSizes||={};
   const allowed=scope==='records:employees'?[10,25,50]:[10,25,50,100,ALL_ROWS_SIZE];
   const stored=STATE.tablePages[scope]||{};
@@ -535,7 +535,7 @@ function requestedPageState(scope,defaultSize=10){
   }
   return {page,size};
 }
-async function queryRecordPage({module,scope,search='',searchFields=[],filters={},classification='',sortKey='',defaultSize=10}){
+async function queryRecordPage({module,scope,search='',searchFields=[],filters={},classification='',sortKey='',defaultSize=25}){
   if(!SERVER_RECORD_QUERY_READY)return null;
   const requested=requestedPageState(scope,defaultSize);
   const run=async(offset,limit)=>supabase.rpc('search_hr_records',{
@@ -571,7 +571,7 @@ let EMPLOYEE_DIRECTORY_QUERY_READY=true;
 function employeeDirectoryQueryUnavailable(error){
   return ['42883','PGRST202','PGRST205'].includes(error?.code)||/search_employee_directory|schema cache|function.*not find/i.test(error?.message||'');
 }
-async function queryEmployeeDirectoryPage({scope,search='',department='',branch='',status='',classification='',fields=[],defaultSize=10}){
+async function queryEmployeeDirectoryPage({scope,search='',department='',branch='',status='',classification='',fields=[],defaultSize=25}){
   if(!EMPLOYEE_DIRECTORY_QUERY_READY)return null;
   const requested=requestedPageState(scope,defaultSize);
   const run=async(offset,limit)=>measureAsync('employee-directory.query',()=>supabase.rpc('search_employee_directory',{
@@ -1790,14 +1790,14 @@ function actionCenterResetFilters(){
 }
 function actionCenterPageGo(_scope,page){
   STATE.tablePages ||= {};
-  const cur=STATE.tablePages['action-center:list']||{page:1,size:10,signature:''};
+  const cur=STATE.tablePages['action-center:list']||{page:1,size:25,signature:''};
   STATE.tablePages['action-center:list']={...cur,page:Math.max(1,Number(page)||1)};
   renderActionCenter();
 }
 function actionCenterPageSize(_scope,size){
   STATE.tablePages ||= {};
   STATE.tablePageSizes ||= {};
-  const nextSize=Number(size)||10;
+  const nextSize=Number(size)||25;
   const cur=STATE.tablePages['action-center:list']||{page:1,size:nextSize,signature:''};
   STATE.tablePageSizes['action-center:list']=nextSize;
   STATE.tablePages['action-center:list']={...cur,page:1,size:nextSize,signature:''};
@@ -1812,7 +1812,7 @@ async function renderActionCenter(){
     const counts=actionCenterCounts(items);
     const q=String(STATE.actionSearch||'').trim().toLowerCase();
     const filtered=items.filter(item=>(STATE.actionLevel==='all'||item.level===STATE.actionLevel)&&(!q||[item.title,item.detail,...(item.meta||[])].some(value=>String(value||'').toLowerCase().includes(q))));
-    const page=paginateRows(filtered,STATE,'action-center:list',10);
+    const page=paginateRows(filtered,STATE,'action-center:list',25);
     const visible=page.rows;
     const html=`
       <div class="action-center-hero">
@@ -3379,9 +3379,9 @@ async function renderModuleView(key){
   const pageScope=`records:${key}`;
   let pageResult;
   try{
-    pageResult=await queryRecordPage({module:key,scope:pageScope,search:STATE.search,searchFields:cfg.searchFields||[],filters:{department:STATE.filterDept,status:STATE.filterStatus,[cfg.filterField||'']:STATE.filter},sortKey:cfg.sortKey||'',defaultSize:10});
+    pageResult=await queryRecordPage({module:key,scope:pageScope,search:STATE.search,searchFields:cfg.searchFields||[],filters:{department:STATE.filterDept,status:STATE.filterStatus,[cfg.filterField||'']:STATE.filter},sortKey:cfg.sortKey||'',defaultSize:25});
   }catch(error){toast('Server filtering failed; showing locally cached records: '+error.message,true);pageResult=null;}
-  if(!pageResult){const local=paginateRows(filteredRows,STATE,pageScope,10);pageResult={...local,server:false};}
+  if(!pageResult){const local=paginateRows(filteredRows,STATE,pageScope,25);pageResult={...local,server:false};}
   const rows=pageResult.rows;
   const total=pageResult.meta.total;
   const legacyOptions=cfg.filterOptions||[];
@@ -4299,7 +4299,7 @@ function employeeDirectoryRequestedFields(columns){
 }
 function employeeDirectoryQueryState(){
   const pageScope='records:employees';
-  const page=requestedPageState(pageScope,10);
+  const page=requestedPageState(pageScope,25);
   const columns=employeeVisibleColumns();
   return {
     pageScope,page,columns,fields:employeeDirectoryRequestedFields(columns),
@@ -4374,8 +4374,8 @@ function refreshEmployeeDirectoryPage(query,signature){
   employeeDirectoryStatus('Loading employee results.',true);
   if(EMPLOYEE_DIRECTORY_PENDING.has(signature))return;
   const token=++EMPLOYEE_DIRECTORY_REQUEST_TOKEN;
-  const request=queryEmployeeDirectoryPage({scope:query.pageScope,search:query.search,department:query.department,branch:query.branch,status:query.status,classification:query.classification,fields:query.fields,defaultSize:10})
-    .then(pageResult=>pageResult||queryRecordPage({module:'employees',scope:query.pageScope,search:query.search,searchFields:EMPLOYEE_DIRECTORY_SEARCH_FIELDS,filters:{department:query.department,branchReporting:query.branch,status:query.status},classification:query.classification,sortKey:'lastName',defaultSize:10}))
+  const request=queryEmployeeDirectoryPage({scope:query.pageScope,search:query.search,department:query.department,branch:query.branch,status:query.status,classification:query.classification,fields:query.fields,defaultSize:25})
+    .then(pageResult=>pageResult||queryRecordPage({module:'employees',scope:query.pageScope,search:query.search,searchFields:EMPLOYEE_DIRECTORY_SEARCH_FIELDS,filters:{department:query.department,branchReporting:query.branch,status:query.status},classification:query.classification,sortKey:'lastName',defaultSize:25}))
     .then(pageResult=>{
       if(!pageResult){
         if(STATE.view==='employees'&&employeeDirectorySignature()===signature)employeeDirectoryStatus('Showing locally cached employee results.',false);
@@ -4405,7 +4405,7 @@ function renderEmployees(){
   const activeFilterCount=[deptFilter,branchFilter,statusFilter,classFilter].filter(Boolean).length;
   const pageScope=query.pageScope;
   const cached=EMPLOYEE_DIRECTORY_PAGE_CACHE.get(signature);
-  const local=cached?null:paginateRows(localEmployeeDirectoryRows(query),STATE,pageScope,10);
+  const local=cached?null:paginateRows(localEmployeeDirectoryRows(query),STATE,pageScope,25);
   const pageResult=cached?.pageResult||{...local,server:false};
   const rows=pageResult.rows;
   const filteredTotal=pageResult.meta.total;
@@ -6014,7 +6014,7 @@ async function renderDisciplinary(){
   }
   if(filter)rows=rows.filter(record=>tab==='legacy'?[record.department,record.migration_status,record.verification_status].includes(filter):[record.department,record.status,record.implementation_status].includes(filter));
   const scope=`disciplinary:${tab}`;
-  const page=paginateRows(rows,STATE,scope,10);
+  const page=paginateRows(rows,STATE,scope,25);
   const filterOptions=tab==='legacy'?uniqueSettingNames([...legacySource.map(row=>row.department),...legacySource.map(row=>row.migration_status),...legacySource.map(row=>row.verification_status)]):uniqueSettingNames([...verifiedSource.map(row=>row.department),...verifiedSource.map(row=>row.implementation_status),...verifiedSource.map(row=>row.status)]);
   const verifiedTable=`<div class="tablewrap"><table class="data-table" data-server-paginated="true" data-page-scope="${scope}"><thead><tr><th>Employee</th><th>Policy / Finding</th><th>Occurrence</th><th>Final Action</th><th>Finalized</th><th>Implementation</th><th class="actions-head">Case</th></tr></thead><tbody>${page.rows.length?page.rows.map(row=>{const occurrenceLabel=row.confirmed_occurrence?tdaOrdinal(row.confirmed_occurrence-1):'';return `<tr><td><b>${esc(row.employee_name)}</b><div class="cell-secondary mono">${esc(row.employee_record_id)} · ${esc(row.department||'Unassigned')}</div></td><td><b>${esc(disciplinaryHistoryPolicy(row))}</b><div class="cell-secondary">${esc(row.finding)}${row.tda_rule_id?` · ${esc(row.tda_rule_id)}`:''}</div></td><td>${occurrenceLabel?statusBadge(occurrenceLabel,{[occurrenceLabel]:'b-blue'}):'<span class="small">Not policy-counted</span>'}</td><td><b>${esc(row.disciplinary_action)}</b><div class="cell-secondary">${row.effective_date?`Effective ${fmtDate(row.effective_date)}`:'No effective date'}</div></td><td>${fmtDate(row.finalization_date)}<div class="cell-secondary">${esc(row.source_type==='case_generated'?'Approved case outcome':'Reviewed legacy record')}</div></td><td>${statusBadge(row.implementation_status,{Pending:'b-amber','Not Required':'b-grey','In Progress':'b-blue',Completed:'b-green',Cancelled:'b-grey'})}<div class="cell-secondary">${statusBadge(row.status,{Active:'b-green',Superseded:'b-grey',Reversed:'b-red',Void:'b-red'})}</div></td><td>${row.case_id?`<button class="iconbtn" title="Open source HR case" onclick="openCaseDetails('${row.case_id}')">${iShield(14)}</button>`:'<span class="small">No case</span>'}</td></tr>`;}).join(''):`<tr><td colspan="7"><div class="empty"><b>${DISCIPLINARY_HISTORY_READY===false?'Phase 25 migration required':'No verified disciplinary history'}</b>${DISCIPLINARY_HISTORY_READY===false?'Run the Phase 25 disciplinary-history migration to enable authoritative outcomes.':'Approved decisions and explicitly verified legacy records appear here.'}</div></td></tr>`}</tbody></table></div>`;
   const legacyTable=`<div class="tablewrap"><table class="data-table legacy-review-table" data-server-paginated="true" data-page-scope="${scope}"><thead><tr><th>Employee</th><th>Recorded Matter</th><th>Review State</th><th>Date</th><th>Historical Action</th><th>Source Context</th><th class="actions-head">Actions</th></tr></thead><tbody>${page.rows.length?page.rows.map(row=>{const source=legacyHistorySource(row);const sourceId=legacyHistoryRecordId(row);const sourceRecord=(DB.disciplinary||[]).find(item=>String(item.id)===String(sourceId));const historicalLevel=source.tdaRule?.offenseLevel||source.historicalLevel||'';const reviewMap={'Reviewed Verified':'b-green','Reviewed Rejected':'b-red','Pending Employee Match':'b-amber','Ambiguous Case Links':'b-red','Source Removed':'b-grey','Pending Review':'b-amber','Reviewed Unverified':'b-blue','Migration Required':'b-amber'};return `<tr><td><b>${esc(row.employee_name||source.employeeName||'Unknown employee')}</b><div class="cell-secondary mono">${esc(row.employee_record_id||'Employee match required')} · ${esc(row.department||source.department||'Unassigned')}</div></td><td><b>${esc(source.violation||'Not recorded')}</b>${historicalLevel?`<div class="cell-secondary legacy-count-warning">Historical label: ${esc(historicalLevel)} · not counted</div>`:''}</td><td>${statusBadge(row.migration_status||'Pending Review',reviewMap)}<div class="cell-secondary">${esc(row.verification_status||'Legacy Unverified')}</div></td><td>${fmtDate(source.dateOfIncident)}</td><td>${esc(source.action||row.disciplinary_action||'—')}</td><td>${esc(source.sourceType||'legacy')}<div class="cell-secondary">${esc(row.migration_note||source.sourceReason||source.remarks||'Source snapshot preserved')}</div></td><td><div class="rowactions">${!row._legacyFallback&&(hasPermission('employee_relations.manage')||hasPermission('employee_relations.approve'))?`<button class="iconbtn" title="Review legacy record" onclick="openLegacyDisciplinaryReview('${row.id}')">${iEdit(14)}</button>`:''}${row.case_id?`<button class="iconbtn" title="Open linked HR case" onclick="openCaseDetails('${row.case_id}')">${iShield(14)}</button>`:sourceRecord&&hasPermission('employee_relations.manage')?`<button class="iconbtn" title="Link to an HR case" onclick="openRecordCaseDialog('disciplinary','${sourceId}')">${iShield(14)}</button>`:''}${sourceRecord&&hasPermission('employee_relations.manage')?`<button class="iconbtn" title="Edit preserved source" onclick="openRecordForm('disciplinary','${sourceId}')">${iEdit(14)}</button><button class="iconbtn" title="Remove preserved source" onclick="deleteRecord('disciplinary','${sourceId}')">${iTrash(14)}</button>`:''}${!sourceRecord&&!row.case_id?'<span class="small">Snapshot only</span>':''}</div></td></tr>`;}).join(''):'<tr><td colspan="7"><div class="empty"><b>No legacy entries found</b>Preserved records appear here without affecting occurrence counts until explicitly verified.</div></td></tr>'}</tbody></table></div>`;
@@ -6107,7 +6107,7 @@ async function renderCorrespondence(){
     const searchOk=!q||[row.employee_name,row.employee_record_id,row.department,row.subject,row.action_text,row.remarks,row.attachment_name].some(value=>String(value||'').toLowerCase().includes(q));
     return searchOk&&(!STATE.filterDept||row.department===STATE.filterDept)&&(!STATE.filterStatus||row.migration_status===STATE.filterStatus);
   });
-  const page=paginateRows(rows,STATE,'correspondence:list',10);
+  const page=paginateRows(rows,STATE,'correspondence:list',25);
   const showClear=STATE.search||STATE.filterDept||STATE.filterStatus;
   const migrationMap={'Migrated Linked':'b-green','Migrated Unlinked':'b-blue','Pending Employee Match':'b-amber','Ambiguous Case Links':'b-red',Reviewed:'b-green','Source Removed':'b-grey'};
   const html=`<div class="sectionhead"><div><h2>Legacy Memoranda / Correspondence</h2><p>${all.length} preserved correspondence record${all.length===1?'':'s'} · source JSON and attachment references retained.</p></div></div>
@@ -7061,7 +7061,7 @@ async function renderOffenseSummary(){
   if(filter==='confirmed')rows=rows.filter(row=>row.confirmed>0);
   if(filter==='legacy')rows=rows.filter(row=>row.legacy>0);
   if(filter==='reports')rows=rows.filter(row=>row.reports>0);
-  const page=paginateRows(rows,STATE,'offense-summary:list',10);
+  const page=paginateRows(rows,STATE,'offense-summary:list',25);
   const html = `
   <div class="sectionhead"><div><h2>Employee Relations History Review</h2><p>${rows.length} employee${rows.length===1?'':'s'} with confirmed, legacy, or reported Employee Relations activity.</p></div><div class="page-header-actions">${informationNoteButton('offenseSummary')}</div></div>
   <div class="toolbar"><div class="search">${iSearch(15)}<input data-search-key="search" type="search" autocomplete="off" placeholder="Search employee, department, policy, or reported matter…" value="${esc(STATE.search)}" oninput="queueSearchRender(this,'search',renderOffenseSummary)"></div><select onchange="STATE.offenseSummaryFilter=this.value;STATE.tablePages={};renderOffenseSummary()"><option value="all">All activity</option><option value="confirmed" ${filter==='confirmed'?'selected':''}>With confirmed findings</option><option value="legacy" ${filter==='legacy'?'selected':''}>With legacy records</option><option value="reports" ${filter==='reports'?'selected':''}>With CVR reports</option></select><button class="btn btn-ghost btn-sm" onclick="STATE.offenseSummaryFilter='all';STATE.search='';STATE.tablePages={};renderOffenseSummary()">Clear</button></div>
@@ -7419,8 +7419,8 @@ async function saveWorkflowManualTask(){
   const task={id:uid(),workflowKey:`manual:${uid()}`,createdAt:new Date().toISOString(),createdBy:SESSION?.id||null,workflowType:'Task',title,description:document.getElementById('wf_new_desc')?.value.trim()||'',module:'manual',recordId:'',employeeName:'',department:'',priority:document.getElementById('wf_new_priority')?.value||'Normal',dueDate:document.getElementById('wf_new_due')?.value||'',assigneeId:document.getElementById('wf_new_assignee')?.value||'',actionType:'manual',status:'Pending'};
   DB.workflowTasks.push(task); await saveDB(); logAudit(`Created workflow task: ${title}`); toast('HR task created.'); closeModal(); renderNav(); renderWorkflowCenter();
 }
-function workflowPageGo(_scope,page){ STATE.tablePages ||= {}; const cur=STATE.tablePages['workflow:list']||{page:1,size:10,signature:''}; STATE.tablePages['workflow:list']={...cur,page:Math.max(1,Number(page)||1)}; renderWorkflowCenter(); }
-function workflowPageSize(_scope,size){ STATE.tablePages ||= {}; STATE.tablePageSizes ||= {}; const nextSize=Number(size)||10; const cur=STATE.tablePages['workflow:list']||{page:1,size:nextSize,signature:''}; STATE.tablePageSizes['workflow:list']=nextSize; STATE.tablePages['workflow:list']={...cur,page:1,size:nextSize,signature:''}; renderWorkflowCenter(); }
+function workflowPageGo(_scope,page){ STATE.tablePages ||= {}; const cur=STATE.tablePages['workflow:list']||{page:1,size:25,signature:''}; STATE.tablePages['workflow:list']={...cur,page:Math.max(1,Number(page)||1)}; renderWorkflowCenter(); }
+function workflowPageSize(_scope,size){ STATE.tablePages ||= {}; STATE.tablePageSizes ||= {}; const nextSize=Number(size)||25; const cur=STATE.tablePages['workflow:list']||{page:1,size:nextSize,signature:''}; STATE.tablePageSizes['workflow:list']=nextSize; STATE.tablePages['workflow:list']={...cur,page:1,size:nextSize,signature:''}; renderWorkflowCenter(); }
 function workflowSetQuickFilter(scope){
   STATE.workflowFilter=scope;
   STATE.workflowStatus='Pending';
@@ -7437,8 +7437,8 @@ function workflowResetFilters(){
   paginationReset(STATE,'workflow:list');
   renderWorkflowCenter();
 }
-function automationPageGo(_scope,page){ STATE.tablePages ||= {}; const cur=STATE.tablePages['automation:tasks']||{page:1,size:10,signature:''}; STATE.tablePages['automation:tasks']={...cur,page:Math.max(1,Number(page)||1)}; renderAutomationCenter({skipEngine:true}); }
-function automationPageSize(_scope,size){ STATE.tablePages ||= {}; STATE.tablePageSizes ||= {}; const nextSize=Number(size)||10; const cur=STATE.tablePages['automation:tasks']||{page:1,size:nextSize,signature:''}; STATE.tablePageSizes['automation:tasks']=nextSize; STATE.tablePages['automation:tasks']={...cur,page:1,size:nextSize,signature:''}; renderAutomationCenter({skipEngine:true}); }
+function automationPageGo(_scope,page){ STATE.tablePages ||= {}; const cur=STATE.tablePages['automation:tasks']||{page:1,size:25,signature:''}; STATE.tablePages['automation:tasks']={...cur,page:Math.max(1,Number(page)||1)}; renderAutomationCenter({skipEngine:true}); }
+function automationPageSize(_scope,size){ STATE.tablePages ||= {}; STATE.tablePageSizes ||= {}; const nextSize=Number(size)||25; const cur=STATE.tablePages['automation:tasks']||{page:1,size:nextSize,signature:''}; STATE.tablePageSizes['automation:tasks']=nextSize; STATE.tablePages['automation:tasks']={...cur,page:1,size:nextSize,signature:''}; renderAutomationCenter({skipEngine:true}); }
 
 async function renderWorkflowCenter(){
   setTitle('Workflow & Approvals','A unified work queue for approvals, reviews, deadlines, and HR tasks.');
@@ -7474,7 +7474,7 @@ async function renderWorkflowCenter(){
     if((pa[a.priority]??2)!==(pa[b.priority]??2)) return (pa[a.priority]??2)-(pa[b.priority]??2);
     return String(a.dueDate||'9999').localeCompare(String(b.dueDate||'9999'));
   });
-  const page=paginateRows(rows,STATE,'workflow:list',10);
+  const page=paginateRows(rows,STATE,'workflow:list',25);
   const pageRows=page.rows;
   const hasFilters=STATE.search||STATE.workflowFilter!=='queue'||STATE.workflowStatus!=='Pending'||STATE.workflowType||STATE.workflowPriority||STATE.workflowDepartment;
   const workflowStatusMap={Pending:'b-amber',Completed:'b-green',Rejected:'b-red',Cancelled:'b-grey'};
@@ -7694,7 +7694,7 @@ async function renderAutomationCenter({skipEngine=false}={}){
   const enabled=AUTOMATION_RULES.filter(r=>automationRuleEnabled(r.id)).length;
   const q=(STATE.automationSearch||'').toLowerCase().trim();
   const visibleTasks=pending.filter(t=>!q||[t.title,t.description,t.employeeName,t.department,t.automationRuleId].some(v=>String(v||'').toLowerCase().includes(q)));
-  const taskPage=paginateRows(visibleTasks,STATE,'automation:tasks',10);
+  const taskPage=paginateRows(visibleTasks,STATE,'automation:tasks',25);
   const runs=(DB.automationRuns||[]).slice().sort((a,b)=>String(b.runAt||'').localeCompare(String(a.runAt||''))).slice(0,8);
   const byRule={}; pending.forEach(t=>byRule[t.automationRuleId]=(byRule[t.automationRuleId]||0)+1);
   const tab=['overview','rules','work','history'].includes(STATE.automationTab)?STATE.automationTab:'overview';
@@ -8010,7 +8010,7 @@ function renderLegacyPrfWorkspace(){
   const rows=DB.prf||[];
   const q=String(STATE.manpowerSearch||'').trim().toLowerCase();
   const filtered=rows.filter(row=>!q||[row.prfNumber,row.employeeName,row.department,row.employeeReplaced,row.reasonForRequest].some(value=>String(value||'').toLowerCase().includes(q)));
-  const page=paginateRows(filtered,STATE,'manpower:legacy',10);
+  const page=paginateRows(filtered,STATE,'manpower:legacy',25);
   return `<div class="manpower-legacy-note"><span>${iInfo(16)}</span><div><b>Legacy PRF records</b><small>These flat records are preserved for reconciliation. New manpower work should be recorded in Requests.</small></div></div>
     <div class="data-toolbar record-directory-toolbar"><div class="searchbox">${iSearch(15)}<input data-search-key="manpowerSearch" type="search" autocomplete="off" placeholder="Search legacy PRF records…" value="${esc(STATE.manpowerSearch)}" oninput="queueSearchRender(this,'manpowerSearch',renderManpowerFulfillment)"></div>${q?`<button class="btn btn-ghost btn-sm" onclick="manpowerResetFilters()">Clear</button>`:''}<div class="toolbar-spacer"></div>${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportModuleCSV('prf')">${iDownload(14)} Export</button>`:''}</div>
     <div class="table-card"><div class="table-card-head"><div class="table-meta"><b>${filtered.length}</b> legacy record${filtered.length===1?'':'s'}</div></div><div class="tablewrap"><table class="data-table"><thead><tr><th>PRF</th><th>Employee</th><th>Department</th><th>Employment Type</th><th>Replacing</th><th>Date</th><th>Status</th><th class="actions-head">Action</th></tr></thead><tbody>${page.rows.length?page.rows.map(row=>`<tr><td class="mono">${esc(row.prfNumber||'—')}</td><td><b>${esc(row.employeeName||'—')}</b></td><td>${esc(row.department||'—')}</td><td>${esc(row.classification||'—')}</td><td>${esc(row.employeeReplaced||'—')}</td><td>${fmtDate(row.dateOfRequest)}</td><td>${statusBadge(row.status||'Draft',PRF_STATUS_MAP)}</td><td><div class="rowactions">${canEdit()?`<button class="iconbtn" title="Edit legacy PRF" onclick="openRecordForm('prf','${row.id}')">${iEdit(14)}</button>`:'<span class="small">View only</span>'}</div></td></tr>`).join(''):`<tr><td colspan="8"><div class="empty"><b>No legacy PRF records</b><span>Existing flat PRF entries will remain available here.</span></div></td></tr>`}</tbody></table></div>${filtered.length?`<div class="table-pagination-wrap"><div class="table-pagination-meta">${page.meta.start}–${page.meta.end} <span>of ${filtered.length}</span></div>${paginationHTML(page.meta,'manpower:legacy')}</div>`:''}</div>`;
@@ -8040,7 +8040,7 @@ function renderManpowerFulfillment(){
       const typeOk=!STATE.manpowerType||needs.some(need=>need.requestType===STATE.manpowerType);
       return searchOk&&statusOk&&riskOk&&typeOk;
     }).sort((a,b)=>String(b.request.dateRequested||'').localeCompare(String(a.request.dateRequested||'')));
-    const page=paginateRows(rows,STATE,'manpower:requests',10);
+    const page=paginateRows(rows,STATE,'manpower:requests',25);
     const hasFilters=q||branch||STATE.manpowerStatus||STATE.manpowerRisk||STATE.manpowerType;
     const branches=uniqueSettingNames([...employeeBranchLocations(),...requests.map(request=>request.branchSite)]);
     body=`<div class="manpower-kpis"><button type="button" onclick="STATE.manpowerStatus='';STATE.manpowerRisk='';renderManpowerFulfillment()"><span>Active Requests</span><b>${totals.active}</b><small>Open fulfillment work</small></button><button type="button" onclick="STATE.manpowerStatus='';STATE.manpowerRisk='';renderManpowerFulfillment()"><span>Requested HC</span><b>${totals.requested}</b><small>Total demand</small></button><button type="button" onclick="STATE.manpowerStatus='';STATE.manpowerRisk='';renderManpowerFulfillment()"><span>Onboarded HC</span><b>${totals.onboarded}</b><small>Ready or deployed</small></button><button type="button" onclick="STATE.manpowerStatus='';STATE.manpowerRisk='';renderManpowerFulfillment()"><span>Deployed HC</span><b>${totals.deployed}</b><small>Confirmed deployments</small></button><button type="button" onclick="STATE.manpowerStatus='';STATE.manpowerRisk='';renderManpowerFulfillment()"><span>Remaining HC</span><b>${totals.remaining}</b><small>Still to fulfill</small></button><button type="button" onclick="STATE.manpowerRisk='At Risk';STATE.tablePages={};renderManpowerFulfillment()"><span>At Risk</span><b>${totals.atRisk}</b><small>Due within 3 days</small></button><button type="button" onclick="STATE.manpowerRisk='Overdue';STATE.tablePages={};renderManpowerFulfillment()"><span>Overdue</span><b>${totals.overdue}</b><small>Past target date</small></button></div>
@@ -8063,8 +8063,8 @@ async function renderManpowerDrafts(){
   const host=document.getElementById('manpower-drafts-results');const token=++MANPOWER_DRAFT_UI.request;
   const sessionId=SESSION.id;
   host.innerHTML='<div class="empty">Loading drafts...</div>';
-  STATE.tablePages||={};const key='manpower:drafts';const current=STATE.tablePages[key]||{page:1,size:10};
-  const size=[10,25,50].includes(Number(current.size))?Number(current.size):10;const page=Math.max(1,Number(current.page)||1);
+  STATE.tablePages||={};const key='manpower:drafts';const current=STATE.tablePages[key]||{page:1,size:25};
+  const size=[10,25,50].includes(Number(current.size))?Number(current.size):25;const page=Math.max(1,Number(current.page)||1);
   try{
     let query=supabase.from('hr_manpower_requests').select('id,prf_number,branch_reporting,date_requested,target_date,updated_at,revision',{count:'exact'}).eq('state','Draft').order('updated_at',{ascending:false}).order('id').range((page-1)*size,page*size-1);
     const search=(STATE.manpowerDraftSearch||'').trim();if(search)query=query.ilike('prf_number',`%${search.replace(/[\\%_]/g,'\\$&')}%`);
@@ -8256,13 +8256,13 @@ function manpowerSubmittedErrorHTML(error,retry,kind=''){
 }
 function manpowerSubmittedPageSettings(key){
   STATE.tablePages||={};const current=STATE.tablePages[key]||{size:STATE.tablePageSizes?.[key]};
-  const size=[10,25,50].includes(Number(current.size))?Number(current.size):10;
+  const size=[10,25,50].includes(Number(current.size))?Number(current.size):25;
   const page=Math.max(1,Math.floor(Number(current.page)||1));STATE.tablePages[key]={page,size};return {page,size};
 }
 async function renderManpowerSubmitted(){
   if(!SESSION||!hasPermission('manpower.view'))return;
   const content=document.getElementById('content');setTitle('Manpower Fulfillment / Submitted Requests','Submitted quantity requests');
-  if(!document.getElementById('manpower-submitted-results'))content.innerHTML=`${manpowerQuantityNavigationHTML('submitted')}<div class="data-toolbar manpower-submitted-toolbar"><button type="button" class="btn btn-ghost btn-sm" onclick="go('prf')">Back to Requests</button><div class="searchbox">${iSearch(15)}<input type="search" data-search-key="manpowerSubmittedSearch" aria-label="Search submitted PRF" placeholder="Search submitted PRF..." value="${esc(STATE.manpowerSubmittedSearch||'')}" oninput="queueSearchRender(this,'manpowerSubmittedSearch',renderManpowerSubmitted)"></div><select aria-label="Filter reporting branch" onchange="STATE.manpowerSubmittedBranch=this.value;STATE.tablePages['manpower:submitted']={page:1,size:STATE.tablePages['manpower:submitted']?.size||10};renderManpowerSubmitted()"><option value="">All Branches</option>${uniqueSettingNames([...employeeBranchLocations(),STATE.manpowerSubmittedBranch]).map(branch=>`<option value="${esc(branch)}" ${branch===STATE.manpowerSubmittedBranch?'selected':''}>${esc(branch)}</option>`).join('')}</select><select aria-label="Filter request state" onchange="STATE.manpowerSubmittedState=this.value;STATE.tablePages['manpower:submitted']={page:1,size:STATE.tablePages['manpower:submitted']?.size||10};renderManpowerSubmitted()"><option value="">All Submitted States</option>${['Open','Closed','Cancelled'].map(state=>`<option value="${state}" ${state===STATE.manpowerSubmittedState?'selected':''}>${state}</option>`).join('')}</select><button type="button" class="iconbtn" title="About quantities" aria-label="About quantities" onclick="manpowerSubmittedInfo()">${iInfo(15)}</button></div><div id="manpower-submitted-results" class="manpower-submitted-data" aria-live="polite"></div>`;
+  if(!document.getElementById('manpower-submitted-results'))content.innerHTML=`${manpowerQuantityNavigationHTML('submitted')}<div class="data-toolbar manpower-submitted-toolbar"><button type="button" class="btn btn-ghost btn-sm" onclick="go('prf')">Back to Requests</button><div class="searchbox">${iSearch(15)}<input type="search" data-search-key="manpowerSubmittedSearch" aria-label="Search submitted PRF" placeholder="Search submitted PRF..." value="${esc(STATE.manpowerSubmittedSearch||'')}" oninput="queueSearchRender(this,'manpowerSubmittedSearch',renderManpowerSubmitted)"></div><select aria-label="Filter reporting branch" onchange="STATE.manpowerSubmittedBranch=this.value;STATE.tablePages['manpower:submitted']={page:1,size:STATE.tablePages['manpower:submitted']?.size||25};renderManpowerSubmitted()"><option value="">All Branches</option>${uniqueSettingNames([...employeeBranchLocations(),STATE.manpowerSubmittedBranch]).map(branch=>`<option value="${esc(branch)}" ${branch===STATE.manpowerSubmittedBranch?'selected':''}>${esc(branch)}</option>`).join('')}</select><select aria-label="Filter request state" onchange="STATE.manpowerSubmittedState=this.value;STATE.tablePages['manpower:submitted']={page:1,size:STATE.tablePages['manpower:submitted']?.size||25};renderManpowerSubmitted()"><option value="">All Submitted States</option>${['Open','Closed','Cancelled'].map(state=>`<option value="${state}" ${state===STATE.manpowerSubmittedState?'selected':''}>${state}</option>`).join('')}</select><button type="button" class="iconbtn" title="About quantities" aria-label="About quantities" onclick="manpowerSubmittedInfo()">${iInfo(15)}</button></div><div id="manpower-submitted-results" class="manpower-submitted-data" aria-live="polite"></div>`;
   const host=document.getElementById('manpower-submitted-results'),token=++MANPOWER_SUBMITTED_UI.request,sessionId=SESSION.id;
   const key='manpower:submitted',{page,size}=manpowerSubmittedPageSettings(key);host.innerHTML='<div class="empty">Loading submitted requests...</div>';
   try{
@@ -9533,8 +9533,8 @@ async function renderClientCatalog(){
   host.innerHTML='<div class="empty">Loading client accounts...</div>';
   const key='settings:clients';
   STATE.tablePages||={};
-  const current=STATE.tablePages[key]||{page:1,size:10};
-  const size=[10,25,50].includes(Number(current.size))?Number(current.size):10;
+  const current=STATE.tablePages[key]||{page:1,size:25};
+  const size=[10,25,50].includes(Number(current.size))?Number(current.size):25;
   const page=Math.max(1,Number(current.page)||1);
   try{
     let query=supabase.from('hr_manpower_clients').select('id,name,active,revision',{count:'exact'}).order('name').order('id').range((page-1)*size,page*size-1);
@@ -10542,7 +10542,7 @@ async function renderCaseIntake(ready=CASE_INTAKE_READY===true){
   const {data,error}=await query;if(error){document.getElementById('content').innerHTML=`${caseWorkspaceTabsHTML('intake',true)}<div class="notice"><b>Could not load Reports &amp; Intake.</b> ${esc(error.message)}</div>`;return;}
   const q=String(STATE.search||'').toLowerCase();
   const rows=(data||[]).filter(item=>!q||[item.intake_number,item.report_type,item.employee_name,item.department,item.subject,item.source_name,item.status].some(value=>String(value||'').toLowerCase().includes(q)));
-  const page=paginateRows(rows,STATE,'case-intake:list',10);
+  const page=paginateRows(rows,STATE,'case-intake:list',25);
   const statuses=['Submitted','Under Triage','Needs Information','Converted to Case','Linked to Case','Closed - No Action','Duplicate'];
   const statusMap={'Submitted':'b-blue','Under Triage':'b-amber','Needs Information':'b-amber','Converted to Case':'b-green','Linked to Case':'b-green','Closed - No Action':'b-grey','Duplicate':'b-grey'};
   document.getElementById('content').innerHTML=`${caseWorkspaceTabsHTML('intake',true)}${employeeRelationsProcessHTML('intake')}
@@ -10611,7 +10611,7 @@ async function renderCases(){
   const rows=(cases||[]).filter(c=>(!q || [c.case_number,c.employee_name,c.department,c.subject,c.status,c.priority,c.outcome,c.case_type].some(v=>String(v||'').toLowerCase().includes(q)))
     &&(!STATE.casePriority||c.priority===STATE.casePriority)&&(!STATE.caseOutcome||c.outcome===STATE.caseOutcome)&&(!STATE.caseOwner||c.assigned_to===STATE.caseOwner)
     &&(!STATE.caseOverdue||(STATE.caseOverdue==='overdue'?(!caseIsClosedStatus(c.status)&&c.due_date&&c.due_date<today):(STATE.caseOverdue==='30plus'&&!caseIsClosedStatus(c.status)&&analyticsDaysOpen(c.opened_at)>=30))));
-  const casePage=paginateRows(rows,STATE,'cases:list',10);
+  const casePage=paginateRows(rows,STATE,'cases:list',25);
   const hasExtraFilters=STATE.casePriority||STATE.caseOutcome||STATE.caseOwner||STATE.caseOverdue;
   document.getElementById('content').innerHTML=`${caseWorkspaceTabsHTML('cases',intakeReady)}${employeeRelationsProcessHTML('cases')}
     <div class="sectionhead"><div><h2>HR Cases</h2><p>${rows.length} case${rows.length===1?'':'s'} shown${STATE.filter?' · filtered by status':''}.</p></div></div>

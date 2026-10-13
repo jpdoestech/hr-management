@@ -1,12 +1,12 @@
 import {headerHistoryChangesHTML} from './header-editor.js?v=20261010-1';
 const escape=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
 function bounds(page,size){
-  size=[10,25,50].includes(Number(size))?Number(size):10;
+  size=[10,25,50].includes(Number(size))?Number(size):25;
   page=Math.max(1,Math.floor(Number(page)||1));
   return [(page-1)*size,page*size-1];
 }
 function checked(result){if(result.error)throw result.error;return result;}
-export async function loadSubmittedRequests(client,{page=1,size=10,search='',branch='',state=''}={}){
+export async function loadSubmittedRequests(client,{page=1,size=25,search='',branch='',state=''}={}){
   let query=client.from('hr_manpower_requests').select('id,prf_number,branch_reporting,date_requested,target_date,updated_at,state',{count:'exact'})
     .in('state',['Open','Closed','Cancelled']).order('updated_at',{ascending:false}).order('id').range(...bounds(page,size));
   if(['Open','Closed','Cancelled'].includes(state))query=query.eq('state',state);
@@ -20,7 +20,7 @@ export async function loadSubmittedRequest(client,id){
     .eq('id',id).in('state',['Open','Closed','Cancelled']).single());
   return result.data;
 }
-export async function loadSubmittedRows(client,id,kind,{page=1,size=10}={}){
+export async function loadSubmittedRows(client,id,kind,{page=1,size=25}={}){
   let query;
   if(kind==='header-amendments')query=client.from('hr_manpower_header_amendments')
     .select('request_revision,before_header,after_header,reason',{count:'exact'})
