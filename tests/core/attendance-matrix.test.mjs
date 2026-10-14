@@ -1,8 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {cutoffDates,matrixInput,assumedTransaction,compatibleTimeInputs,dutyMetrics,createMatrixDraft,rectangleCells,dayClassification} from '../../js/core/attendance-matrix.js';
+import {cutoffDates,matrixInput,assumedTransaction,compatibleTimeInputs,dutyMetrics,createMatrixDraft,rectangleCells,dayClassification,matrixPeriod,matrixSummary} from '../../js/core/attendance-matrix.js';
 const duties=[{start:480,end:720,breakMinutes:0},{start:780,end:1020,breakMinutes:0}];
 const cell=(date='2024-01-02',extra={})=>({employeeId:'synthetic',date,hash:'',context:{ready:true,hash:'v1',holiday:'ordinary',restDay:false,segments:duties},...extra});
+
+test('direct month/cutoff controls resolve month-end and leap years',()=>{
+  assert.deepEqual(matrixPeriod('2024-02','second'),{start:'2024-02-16',end:'2024-02-29'});
+  assert.deepEqual(matrixPeriod('2026-10','first'),{start:'2026-10-01',end:'2026-10-15'});
+  assert.deepEqual(matrixPeriod('2026-12','month'),{start:'2026-12-01',end:'2026-12-31'});
+  assert.throws(()=>matrixPeriod('2026-13','first'));assert.throws(()=>matrixPeriod('2026-10','unknown'));
+});
+
+test('matrix totals use saved/staged actual records, never assumed blanks',()=>{
+  const a=cell(),b=cell('2024-01-03',{record:{status:'Absent',transaction:'AWOL/AWOP'}}),c=cell('2024-01-04',{record:{status:'Approved Leave',leaveTreatment:'Paid'}});
+  const row={id:'synthetic',days:{[a.date]:a,[b.date]:b,[c.date]:c}};
+  assert.deepEqual(matrixSummary(row),{absent:0,dayOff:0,leave:1,awol:1,lost:0,present:0});
+  assert.equal(matrixSummary(row,{[`${row.id}:${a.date}`]:matrixInput(a,'Late/Undertime',[{start:495,end:720,breakMinutes:0},duties[1]])}).lost,15);
+});
 test('cutoffs cross months and years and reject impossible or oversized ranges',()=>{
   assert.equal(cutoffDates('2023-12-25','2024-01-10').length,17);assert.equal(cutoffDates('2024-02-28','2024-03-01').length,3);
   assert.throws(()=>cutoffDates('2024-02-30','2024-03-01'));assert.throws(()=>cutoffDates('2024-01-01','2024-02-01'));

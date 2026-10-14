@@ -26,6 +26,7 @@ try{
   `);
   await db.exec(readFileSync(new URL('../../supabase/migrations/0031_workforce_attendance.sql',import.meta.url),'utf8'));
   await db.exec(readFileSync(new URL('../../supabase/migrations/0062_attendance_preparation.sql',import.meta.url),'utf8'));
+  await db.exec(readFileSync(new URL('../../supabase/migrations/0063_attendance_direct_matrix.sql',import.meta.url),'utf8'));
   const rpc=async(sql,args=[])=>(await db.query(sql,args)).rows[0]?.value;
   const saveConfig=async(kind,key,data,id=crypto.randomUUID(),revision=0)=>rpc('select save_attendance_configuration($1,$2,$3,$4,$5) value',[id,kind,key,revision,data]);
   const duty=[{start:480,end:720,breakMinutes:0},{start:780,end:1020,breakMinutes:0}];
@@ -85,5 +86,21 @@ try{
   await assert.rejects(()=>save([{...input,workDate:candidate.date,sourceHash:candidate.context.hash}]),/deployment dependency interlock/);
   await db.exec('reset role');
   assert.equal((await db.query('select count(*)::int n from hr_audit_logs')).rows[0].n,8);
-  console.log('PASS: bounded roster, dated labels, atomic rollback, stale records/calendar, preserved approval, protected posting locks, duplicate declarations, client restrictions, holiday KPIs, half-open deployments and dependency interlocks.');
+  const client2='00000000-0000-0000-0000-000000000022';
+  await db.exec(`set test.interlock='open';insert into hr_manpower_clients values('${tenant}','${client2}','Synthetic Second Client',true);
+    insert into hr_records values('${tenant}','employees','synthetic2','{"name":"Synthetic Second Employee","dateHired":"2020-01-01","status":"Active"}',now(),null);
+    insert into manpower_private.primary_intervals values('${tenant}','operational','00000000-0000-0000-0000-000000000032','synthetic2','2024-01-01',null);
+    insert into hr_manpower_operational_deployments values('${tenant}','00000000-0000-0000-0000-000000000032','${client2}','Synthetic Other Branch','Dated Department','Synthetic Position','Deployed');set role authenticated;`);
+  await saveConfig('schedule','synthetic2',{...schedule,employeeId:'synthetic2',clientId:client2,branchReporting:'Synthetic Other Branch'});
+  const allCutoff={...cutoff,clientId:'',branch:''},allQuery=()=>rpc('select query_attendance_matrix($1) value',[allCutoff]);
+  const all=await allQuery();assert.equal(all.total,2);assert.equal(all.rows.length,2);assert.equal(Object.keys(all.rows[0].days).length,7);
+  const batch=all.rows.map(row=>{const c=row.days['2024-01-03'];assert.equal(c.context.ready,true);return {...input,employeeId:row.id,workDate:c.date,expectedHash:c.hash,sourceHash:c.context.hash};});
+  await assert.rejects(()=>rpc('select save_attendance_matrix($1,$2,$3) value',[allCutoff,[batch[0],{...batch[1],sourceHash:'stale'}],'Synthetic cross-client batch']),/Schedule\/calendar changed/);
+  assert.equal((await allQuery()).rows[0].days['2024-01-03'].record,null);
+  assert.equal((await rpc('select save_attendance_matrix($1,$2,$3) value',[allCutoff,batch,'Synthetic cross-client batch'])).saved,2);
+  await db.exec(`reset role;insert into access_resource_assignments values('${tenant}','${actor}','attendance_client','${client}','view');set role authenticated;`);
+  const restricted=await allQuery();assert.equal(restricted.total,1);assert.equal(restricted.rows[0].days['2024-01-03'].context.writable,false);
+  await assert.rejects(()=>rpc('select save_attendance_matrix($1,$2,$3) value',[allCutoff,batch,'Denied client write']),/Client outside assigned edit access/);
+  await assert.rejects(()=>rpc('select attendance_private.save_attendance_matrix($1,$2,$3) value',[cutoff,batch,'Private writer bypass']),/permission denied/);
+  console.log('PASS: matrix scope, all-location pagination, mixed-client atomic rollback/save, view-only clients, private writer protection, dated labels, stale records/calendar, approval/posting, holidays and deployment interlocks.');
 }finally{await db.close();}

@@ -11,6 +11,25 @@ export function cutoffDates(start,end){
   return Array.from({length:count},(_,i)=>new Date(Date.parse(start)+i*86400000).toISOString().slice(0,10));
 }
 export const attendanceKey=(employeeId,date)=>`${employeeId}:${date}`;
+export function matrixPeriod(month,period){
+  if(!/^\d{4}-\d{2}$/.test(month)||!validDate(`${month}-01`))throw Error('Select a valid attendance month.');
+  const [year,number]=month.split('-').map(Number),last=new Date(Date.UTC(year,number,0)).getUTCDate();
+  if(!['first','second','month'].includes(period))throw Error('Select a valid cutoff.');
+  return {start:`${month}-${period==='second'?'16':'01'}`,end:`${month}-${String(period==='first'?15:last).padStart(2,'0')}`};
+}
+export function matrixSummary(row,edits={}){
+  const summary={absent:0,dayOff:0,leave:0,awol:0,lost:0,present:0};
+  for(const cell of Object.values(row.days)){
+    const record=edits[attendanceKey(row.id,cell.date)]||cell.record;if(!record)continue;
+    if(record.transaction==='AWOL/AWOP')summary.awol++;
+    else if(record.status==='Absent')summary.absent++;
+    if(record.status==='Approved Leave')summary.leave++;
+    if(record.transaction==='Day-off'||record.status==='Rest Day / Holiday'&&cell.context?.restDay)summary.dayOff++;
+    if(record.status==='Present')summary.present++;
+    summary.lost+=(Number(record.lateMinutes)||0)+(Number(record.undertimeMinutes)||0);
+  }
+  return summary;
+}
 export function validateSegments(segments){
   if(!Array.isArray(segments)||!segments.length||segments.length>12)throw Error('Enter 1 to 12 duty segments.');
   const sorted=segments.map(s=>({...s})).sort((a,b)=>a.start-b.start);

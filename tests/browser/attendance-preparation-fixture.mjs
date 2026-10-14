@@ -12,7 +12,7 @@ const cutoff={id:'synthetic-cutoff',data:{start:'2024-01-01',end:'2024-01-10',br
 const records=new Map(),duties=[{start:480,end:720,breakMinutes:0},{start:780,end:1020,breakMinutes:0}];
 let version=0,mode='present';
 const supabase={rpc:async(name,args)=>{
- if(name==='attendance_preparation_options')return {data:{clients:[{id:client,name:'Synthetic Client'}]}};
+ if(name==='attendance_preparation_options')return {data:{clients:[{id:client,name:'Synthetic Client'}],locations:[{branch:'Synthetic Branch',client_id:client}]}};
  if(name==='query_attendance_matrix'){
   let rows=[{id:'synthetic-a',name:'SYNTHETIC, ALPHA',employeeNo:'EMP-000001'},{id:'synthetic-b',name:'SYNTHETIC, BETA',employeeNo:'EMP-000002'}].filter(r=>String(args.p_search||'').toLowerCase().replaceAll(',',' ').split(/\\s+/).every(word=>r.name.toLowerCase().includes(word)));
   rows=rows.map(row=>({...row,days:Object.fromEntries(cutoffDates(args.p_cutoff.start,args.p_cutoff.end).map(date=>{const key=row.id+':'+date,saved=records.get(key);return [date,{employeeId:row.id,date,hash:saved?.hash||'',record:saved?.data||null,posted:date==='2024-01-10',context:{ready:true,hash:'source-v1',holiday:date==='2024-01-06'?'regular_holiday':'ordinary',restDay:date==='2024-01-07',segments:duties,reason:''}}];}))}));return {data:{rows,total:rows.length}};
@@ -27,7 +27,7 @@ const supabase={rpc:async(name,args)=>{
 const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');
 window.closeModal=async()=>document.getElementById('overlay').classList.remove('on');
 const controller=createAttendancePreparation({supabase,esc,permission:()=>true,actor:()=>actor,today:()=> '2024-01-10',confirm:async()=>true,toast:(text)=>document.getElementById('fixture-notice').textContent=text,
- content:()=>document.getElementById('content'),records:()=>document.getElementById('fixture-notice').textContent='Back to original attendance records',departments:()=>['Synthetic Department'],positions:()=>['Synthetic Position'],
+ content:()=>document.getElementById('content'),records:()=>document.getElementById('fixture-notice').textContent='Back to original attendance records',departments:()=>['Synthetic Department'],positions:()=>['Synthetic Position'],canExport:()=>true,exportMatrix:rows=>document.getElementById('fixture-notice').textContent='Exported '+rows.length+' synthetic employees',
  openModal:markup=>{document.getElementById('modal').innerHTML=markup;document.getElementById('overlay').classList.add('on');},closeModal:window.closeModal,employeePicker:()=>'<div>Synthetic employee selector</div>',selectedEmployee:()=>({id:'synthetic-a'}),
  icons:{back:'Back',search:'',plus:'+',settings:'Settings',refresh:'Reload',undo:'Undo',redo:'Redo',save:'Save',lock:'Locked'}
 });await controller.open();

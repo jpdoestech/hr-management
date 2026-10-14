@@ -23,3 +23,12 @@ test('application navigation and reload protect staged attendance drafts',()=>{
   assert.match(app,/const attendanceDirty=.*ATTENDANCE_PREPARATION\?\.dirty\|\|ATTENDANCE_PREPARATION\?\.busy/);
   assert.match(app,/if\(!attendanceDirty&&!modalHasUnsavedChanges\(\)&&!pageHasUnsavedChanges\(\)\) return/);
 });
+
+test('attendance opens directly with month/cutoff controls, transaction buttons and actual totals',()=>{
+  assert.match(ui,/if\(active\(\)\).*matrixPeriod.*await load\(\)/);
+  for(const text of ['Attendance month','Attendance cutoff','All assignment locations','data-brush','matrixSummary(row,edits)','Attendance quick transactions'])assert.ok(ui.includes(text));
+  const allSql=readFileSync(new URL('../../supabase/migrations/0063_attendance_direct_matrix.sql',import.meta.url),'utf8');
+  assert.match(allSql,/alter function public.save_attendance_matrix\(jsonb,jsonb,text\) set schema attendance_private/);
+  assert.match(allSql,/revoke all on function attendance_private.save_attendance_matrix/);
+  assert.match(allSql,/public.attendance_client_access\(c.data->>'clientId',false\)/);
+});

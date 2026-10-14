@@ -23,7 +23,7 @@ Search, date, department, branch and status filters apply to both records and KP
 
 The Attendance permission matrix supports View, Create, Update, Delete, Export and Manage. Administrator and HR Staff system roles receive these permissions; Viewer receives View only. Custom roles require explicit grants. Existing tenant isolation, record scopes, reset markers, file management and audit logs apply.
 
-Preparation adds an inline paginated cutoff matrix, reviewed dated schedules and calendars, paid/unpaid leave treatment, atomic staged saves and separate protected review/posting boundaries. It uses the same canonical attendance records and preserves existing files. Prepared duty/status corrections use Preparation; the record editor remains available for supporting documents and annotations. See [Attendance preparation](ATTENDANCE-PREPARATION.md) for migration 0062, setup, KPI compatibility, security and unfinished payroll integrations.
+Attendance opens directly in a compact paginated month/cutoff matrix with transaction buttons, dated schedules/calendars, paid/unpaid leave treatment, atomic staged saves and separate protected review/posting boundaries. It uses the same canonical attendance records and preserves existing files. Records & KPIs remains a separate view; prepared duty/status corrections use the matrix, while the record editor maintains supporting documents and annotations. See [Attendance preparation](ATTENDANCE-PREPARATION.md) for migrations 0062/0063, setup, KPI compatibility, security and unfinished payroll integrations.
 
 ## Reasons for leaving
 

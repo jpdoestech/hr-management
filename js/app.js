@@ -33,7 +33,7 @@ import {parseOrganizationImport} from './core/organization-import.js?v=20261011-
 import {employeeTemplateBytes} from './core/employee-template-validation.js?v=20261012-1';
 import {revalidateEmployeeImport,employeeImportPreviewHTML,employeeImportCorrection} from './core/employee-import-preview.js?v=20261012-1';
 import {regularizationWorkItems,regularizationToday} from './core/regularization.js?v=20261013-1';
-import {createAttendancePreparation} from './core/attendance-preparation.js?v=20261014-1';
+import {createAttendancePreparation} from './core/attendance-preparation.js?v=20261015-1';
 
 if(!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('YOUR_PROJECT_REF')){
   document.body.innerHTML = '<div style="font-family:system-ui;padding:40px;max-width:760px;margin:auto"><h2>Supabase configuration missing</h2><p>Edit <b>supabase-config.js</b> with your Supabase project URL and publishable key.</p></div>';
@@ -3366,6 +3366,7 @@ let ATTENDANCE_PREPARATION=null,ATTENDANCE_PREPARATION_ACTOR='';
 async function openAttendancePreparation(){
   if(!hasPermission('attendance.view'))return;
   ++ATTENDANCE_REQUEST;
+  STATE.attendanceView='matrix';
   STATE.attendancePreparation=true;
   setTitle('Attendance & KPIs','');
   if(!ATTENDANCE_PREPARATION||ATTENDANCE_PREPARATION_ACTOR!==SESSION?.id){
@@ -3375,7 +3376,10 @@ async function openAttendancePreparation(){
       isActive:()=>STATE.view==='attendance'&&STATE.attendancePreparation&&ATTENDANCE_PREPARATION_ACTOR===SESSION?.id,
       employeePicker:employeePickerHTML,selectedEmployee:employeePickerSelected,departments:employeeDepartmentNames,
       positions:()=>positionCatalog().filter(item=>item.active).map(item=>item.name),
-      records:()=>{STATE.attendancePreparation=false;renderAttendance();},
+      records:()=>{STATE.attendanceView='records';STATE.attendancePreparation=false;renderAttendance();},
+      canExport:()=>canExport()&&hasPermission('attendance.export'),
+      exportMatrix:(rows,dates,cutoff)=>downloadCSV(`attendance_${cutoff.start}_${cutoff.end}.csv`,toCSV(rows,[{label:'Employee No.',get:r=>r.employeeNo},{label:'Employee',get:r=>r.name},...dates.map(date=>({label:date,get:r=>r.days[date]?.record?.transaction||r.days[date]?.record?.status||''}))])),
+      prepareEmployeePicker:()=>ensureRecordModules(['employees']),
       icons:{back:iArrowLeft(14),search:iSearch(14),plus:iPlus(14),settings:iColumns(14),refresh:iSwap(14),undo:iArrowLeft(14),redo:`<span class="attendance-redo-icon">${iArrowLeft(14)}</span>`,save:iCheck(14),lock:iShield(12)},
     });
   }
@@ -3383,7 +3387,7 @@ async function openAttendancePreparation(){
 }
 async function renderAttendance(){
   if(!hasPermission('attendance.view'))return;
-  if(STATE.attendancePreparation)return openAttendancePreparation();
+  if(STATE.attendanceView!=='records')return openAttendancePreparation();
   await ensureRecordModules(['employees']);
   if(STATE.view!=='attendance')return;
   setTitle('Attendance & KPIs','');

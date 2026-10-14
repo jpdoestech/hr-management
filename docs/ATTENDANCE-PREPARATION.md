@@ -2,7 +2,7 @@
 
 ## Scope and architecture
 
-Attendance & KPIs > Preparation opens an inline cutoff workspace. The existing paginated record list, KPI reporting, supporting-document workflow and exports remain available through Records & KPIs.
+Attendance & KPIs opens directly into the attendance matrix: month, 1-15 / 16-End / full-month / custom cutoff controls, employee search, assignment location, department and position filters. Present, Absent, Leave, Day-off, AWOL/P and Late/UT are visible one-click transaction buttons. Weekday/date headers, frozen employee names and right-side totals keep encoding compact. Secondary controls and saved/custom cutoffs are under More; there is no mandatory create/open cutoff screen. The existing paginated record list, KPI reporting, supporting-document workflow and exports remain available through Records & KPIs.
 
 The implementation adapts the read-only `coop-sys` attendance interactions into this application's vanilla JavaScript modules. It does not import its framework, payroll permissions or database model.
 
@@ -11,21 +11,22 @@ The implementation adapts the read-only `coop-sys` attendance interactions into 
 - `js/core/attendance-wage-rules.js`: independently testable basic daily-rate and entitlement building blocks; not payroll certification.
 - `css/attendance.css`: scoped responsive layout using existing controls and tokens.
 - `supabase/migrations/0062_attendance_preparation.sql`: additive configuration, cutoff, preference, review and guarded-write boundaries.
+- `supabase/migrations/0063_attendance_direct_matrix.sql`: scoped all-location reads and one transactional wrapper around the existing canonical writer. Migration 0062 is unchanged.
 
 Attendance is still stored once in `hr_records`, module `attendance`, for each tenant/employee/work date. Overlapping cutoffs read and update that same record. Cutoffs do not copy attendance into a separate ledger. Existing records and attachments are not backfilled or deleted.
 
 ## Rollout and setup
 
-1. Review migration 0062 with the existing ordered migrations and `docs/DEPLOYMENT.md`. Apply it first to an authorized development/staging Supabase project. No production migration was executed during implementation.
+1. Review migrations 0062 and 0063 with the existing ordered migrations and `docs/DEPLOYMENT.md`. Apply pending migrations first to an authorized development/staging Supabase project. No production migration was executed during implementation.
 2. Test authenticated HR and restricted accounts in staging. Preparation needs both `attendance.view` and `employees.view`; writes separately require attendance Create/Update, and approval/configuration require Manage. Wage configuration additionally requires `settings.manage`; statutory review requires the tenant's superadministrator.
 3. Ensure the existing Settings Client Accounts catalog contains the relevant client. The client must be active to create a cutoff.
 4. In Preparation > Configuration, add reviewed employee schedules with client, dated branch/department/position, worksite and region/province/city scope codes. Use consistent PSGC codes for calendar matching, and explicit `N/A` for an inapplicable province. The form supports weekly split/overnight duties and unpaid breaks. An effective end is the first day no longer assigned.
 5. Record reviewed calendar coverage for the period and official holiday declarations/references for all applicable national and local scopes. Coverage means HR has checked the calendar; it does not automatically import official declarations. Deduplicated holiday identities prevent overlapping declarations from creating a double holiday. Two distinct regular holidays resolve as a double regular holiday. Unsupported/mixed classifications require review.
 6. Add one-day reviewed rest overrides when necessary. Sunday is not automatically a rest day. A special working holiday remains an ordinary working-day classification.
 7. If wage building blocks will be consumed by a future integration, have the superadministrator review a statutory version for employer/date applicability, then create a reviewed effective-dated client policy. The seeded handbook register is deliberately unreviewed, not a runtime fallback. Reviewed wage versions are immutable: create a new identity/version for changes.
-8. Create a cutoff with inclusive start/end (maximum 31 calendar days), branch, client and optional payout date. Cross-month/year cutoffs are supported. Open it to fetch the scoped roster and only that period's attendance.
+8. Select a month and cutoff directly in the matrix. All assignment locations is scoped server-side to accessible dated assignments, not unrestricted access. Choose a specific client/branch location when needed. Custom dates support cross-month/year cutoffs up to 31 inclusive days; saving named cutoff metadata with an optional payout remains available under More.
 9. Select a transaction, then paint cells or a rectangle. Shift+arrow keys select a keyboard rectangle; Enter/Space stages it. One gesture is one undo operation. On touch layouts, switch between Paint and Scroll modes.
-10. Review staged changes and supply a DTR/reference before Save. A conflict leaves drafts intact for review; reload only after deciding whether to discard them. No batch is partially committed.
+10. Review staged changes and supply a DTR/reference before Save. A conflict leaves drafts intact for review; reload only after deciding whether to discard them. No batch is partially committed, including a batch spanning multiple clients/branches. Right-side totals count actual saved/staged records only, never assumed blanks. Export retrieves all filtered roster pages and exports saved daily attendance; save or discard drafts first. There is no attendance spreadsheet-import engine or inert Import button in this revision.
 
 Client restrictions reuse Access Control resource assignments: resource type `attendance_client`, resource ID the Client Account UUID, and access level `view`, `edit` or `manage`. These are optional narrowing restrictions on existing tenant/employee/branch scopes, never additional grants. An account with any such assignments cannot access unassigned clients, including legacy attendance without a client. No new payroll permission namespace is introduced.
 
@@ -41,7 +42,7 @@ Approval is stored in a protected review registry. Old arbitrary JSON review fla
 
 ## Persistence and security
 
-`save_attendance_matrix` validates the batch server-side, including current permissions, client/record scope, dated schedule/calendar hashes and existing-record hashes. It acquires the existing manpower source lock when installed, then attendance and employee locks in a consistent order. Changes, before/after snapshots and audit entries share one transaction. Existing canonical validation and downstream write/dependency triggers still run.
+`save_attendance_matrix` validates the batch server-side, including current permissions, client/record scope, dated schedule/calendar hashes and existing-record hashes. It acquires the existing manpower source lock when installed, then attendance and employee locks in a consistent order. Migration 0063 moves the original scoped writer into the protected private schema and calls it for each trusted assignment group inside one transaction, not browser upsert loops. Changes, before/after snapshots and audit entries share that transaction. Existing canonical validation and downstream write/dependency triggers still run.
 
 Prepared status/time fields must be corrected through Preparation. The existing record editor can still maintain supporting files, remarks, factors and absence classification without overwriting the prepared duty snapshot. Those changes are audited. Direct browser changes cannot forge review, preparation or posting metadata.
 
@@ -67,7 +68,7 @@ The pure resolver uses integer centavos and basis points with exact BigInt multi
 ## Validation and remaining integrations
 
 - Automated core tests cover painting/undo, blank defaults, paid/unpaid mapping, split duties, compatible schedules, classifications, exact arithmetic, dated policy changes and preceding entitlement evidence.
-- `tests/database/attendance-preparation-rehearsal.mjs` applies actual migrations 0031 and 0062 to a synthetic in-memory PGlite fixture. It covers rollback, stale hashes, permissions/client restrictions, preserved approval, posting protection, holiday deduplication/conflicts, dated labels, holiday KPIs and a synthetic promoted-deployment/interlock adapter.
+- `tests/database/attendance-preparation-rehearsal.mjs` applies actual migrations 0031, 0062 and 0063 to a synthetic in-memory PGlite fixture. It covers rollback, mixed-client atomic batches, scoped all-location reads, private-writer protection, stale hashes, permissions/client restrictions, preserved approval, posting protection, holiday deduplication/conflicts, dated labels, holiday KPIs and a synthetic promoted-deployment/interlock adapter.
 - Run the SQL rehearsal with an already available PGlite module via `HRIS_PGLITE_MODULE`, or a development PGlite dependency. It does not install or start PostgreSQL, contact Supabase or execute production SQL.
 - `tests/browser/attendance-preparation-fixture.mjs` serves synthetic rows and mocked RPC responses on port 4189. Browser checks exercised painting, one-gesture drag undo, keyboard rectangle/focus, defaults, split-duty editor, retained drafts on conflict and 390px/mobile, 768px/tablet and desktop layouts. This fixture is not proof of authenticated end-to-end Supabase integration or physical-device touch testing.
 - Real PostgreSQL independent-session races, full production migration-chain compatibility, authenticated staging acceptance and enterprise load testing still require an authorized staging database. The synthetic rehearsal does not replace them.
