@@ -15,7 +15,7 @@ export async function attendancePreview({permissions=true,fail=false}={}){
     MODULES:{attendance:{columns:['employeeName','department','branchReporting','workDate','status','classification','lateMinutes','undertimeMinutes','absenceClassification','factor'].map(key=>({key,label:key}))}},
     supabase:{rpc:async(name,params)=>{calls.push({name,params});return fail?{error:{message:'Migration unavailable'}}:{data:{records:records.slice(0,10),total:14,metrics:attendanceMetrics(records),absenceGroups:[{absenceClassification:'Unauthorized',count:1}],factorGroups:[{factor:'Transport / Location',count:2}]}};}},
   };
-  for(const name of ['iSearch','iInfo','iDownload','iPlus','iEdit','iTrash'])context[name]=()=>'<span aria-hidden="true"></span>';
+  for(const name of ['iSearch','iInfo','iDownload','iPlus','iEdit','iTrash','iCal'])context[name]=()=>'<span aria-hidden="true"></span>';
   vm.createContext(context);
   vm.runInContext(source.slice(source.indexOf('function workforceAgeTableHTML('),source.indexOf('function attendanceFilter(')),context);
   await vm.runInContext('renderAttendance()',context);

@@ -16,12 +16,14 @@ People & Records > Attendance & KPIs records one employee per work date. Select 
 - Absence rate: absent employee-days / recorded scheduled employee-days.
 - Late and undertime rates: affected present employee-days / present employee-days.
 - Lost-time rate: absence minutes plus late and undertime minutes / scheduled minutes.
-- Approved leave is tracked separately but remains in recorded scheduled days. Rest days and holidays are excluded.
+- Approved leave is tracked separately but remains in recorded scheduled days. Unworked rest days and holidays are excluded; actual worked holiday/rest duty remains Present and counts in recorded scheduled days.
 - Missing records are unknown and never inferred as absences.
 
 Search, date, department, branch and status filters apply to both records and KPIs. PostgreSQL calculates the full filtered summary and returns at most 100 records per page. Export explicitly retrieves every filtered page. Duplicate employee/date entries and invalid minute totals are checked in the browser and PostgreSQL.
 
 The Attendance permission matrix supports View, Create, Update, Delete, Export and Manage. Administrator and HR Staff system roles receive these permissions; Viewer receives View only. Custom roles require explicit grants. Existing tenant isolation, record scopes, reset markers, file management and audit logs apply.
+
+Preparation adds an inline paginated cutoff matrix, reviewed dated schedules and calendars, paid/unpaid leave treatment, atomic staged saves and separate protected review/posting boundaries. It uses the same canonical attendance records and preserves existing files. Prepared duty/status corrections use Preparation; the record editor remains available for supporting documents and annotations. See [Attendance preparation](ATTENDANCE-PREPARATION.md) for migration 0062, setup, KPI compatibility, security and unfinished payroll integrations.
 
 ## Reasons for leaving
 

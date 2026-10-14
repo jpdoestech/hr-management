@@ -33,6 +33,7 @@ import {parseOrganizationImport} from './core/organization-import.js?v=20261011-
 import {employeeTemplateBytes} from './core/employee-template-validation.js?v=20261012-1';
 import {revalidateEmployeeImport,employeeImportPreviewHTML,employeeImportCorrection} from './core/employee-import-preview.js?v=20261012-1';
 import {regularizationWorkItems,regularizationToday} from './core/regularization.js?v=20261013-1';
+import {createAttendancePreparation} from './core/attendance-preparation.js?v=20261014-1';
 
 if(!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('YOUR_PROJECT_REF')){
   document.body.innerHTML = '<div style="font-family:system-ui;padding:40px;max-width:760px;margin:auto"><h2>Supabase configuration missing</h2><p>Edit <b>supabase-config.js</b> with your Supabase project URL and publishable key.</p></div>';
@@ -2318,6 +2319,8 @@ async function ensureViewRecordModules(view){
   return ensureRecordModules(missing);
 }
 async function go(view,{skipUnsaved=false}={}){
+  if(STATE.view==='attendance'&&STATE.attendancePreparation&&ATTENDANCE_PREPARATION&&!(await ATTENDANCE_PREPARATION.canLeave()))return;
+  if(view!=='attendance')STATE.attendancePreparation=false;
   if(STATE.view==='manpowerDraftEditor'&&MANPOWER_DRAFT_UI.saving){toast('Please wait for the draft save to finish.',true);return;}
   if(STATE.view==='manpowerSubmittedDetails'&&MANPOWER_SUBMITTED_UI.saving){toast('Please wait for the request change to finish.',true);return;}
   const navigationStarted=performance.now();
@@ -3008,7 +3011,8 @@ document.addEventListener('change',async event=>{
   }
 },true);
 window.addEventListener('beforeunload',event=>{
-  if(!modalHasUnsavedChanges()&&!pageHasUnsavedChanges()) return;
+  const attendanceDirty=STATE.view==='attendance'&&STATE.attendancePreparation&&(ATTENDANCE_PREPARATION?.dirty||ATTENDANCE_PREPARATION?.busy);
+  if(!attendanceDirty&&!modalHasUnsavedChanges()&&!pageHasUnsavedChanges()) return;
   event.preventDefault();
   event.returnValue='';
 });
@@ -3358,8 +3362,28 @@ function workforceFactorTableHTML(rows,key,title){
   return `<section class="panel"><div class="dashboard-panel-head"><h3>${esc(title)}</h3></div><div class="tablewrap"><table class="data-table"><thead><tr><th>Category</th><th>Records</th><th>Share</th></tr></thead><tbody>${[...groups].sort((a,b)=>b[1]-a[1]).map(([label,count])=>`<tr><td>${esc(label)}</td><td>${count}</td><td>${Math.round(count/total*1000)/10}%</td></tr>`).join('')||'<tr><td colspan="3">No records in this scope.</td></tr>'}</tbody></table></div></section>`;
 }
 let ATTENDANCE_REQUEST=0;
+let ATTENDANCE_PREPARATION=null,ATTENDANCE_PREPARATION_ACTOR='';
+async function openAttendancePreparation(){
+  if(!hasPermission('attendance.view'))return;
+  ++ATTENDANCE_REQUEST;
+  STATE.attendancePreparation=true;
+  setTitle('Attendance & KPIs','');
+  if(!ATTENDANCE_PREPARATION||ATTENDANCE_PREPARATION_ACTOR!==SESSION?.id){
+    ATTENDANCE_PREPARATION_ACTOR=SESSION?.id;
+    ATTENDANCE_PREPARATION=createAttendancePreparation({supabase,esc,permission:hasPermission,confirm:confirmDataChange,toast,
+      actor:()=>SESSION,content:()=>document.getElementById('content'),today:todayISO,openModal,closeModal,
+      isActive:()=>STATE.view==='attendance'&&STATE.attendancePreparation&&ATTENDANCE_PREPARATION_ACTOR===SESSION?.id,
+      employeePicker:employeePickerHTML,selectedEmployee:employeePickerSelected,departments:employeeDepartmentNames,
+      positions:()=>positionCatalog().filter(item=>item.active).map(item=>item.name),
+      records:()=>{STATE.attendancePreparation=false;renderAttendance();},
+      icons:{back:iArrowLeft(14),search:iSearch(14),plus:iPlus(14),settings:iColumns(14),refresh:iSwap(14),undo:iArrowLeft(14),redo:`<span class="attendance-redo-icon">${iArrowLeft(14)}</span>`,save:iCheck(14),lock:iShield(12)},
+    });
+  }
+  await ATTENDANCE_PREPARATION.open();
+}
 async function renderAttendance(){
   if(!hasPermission('attendance.view'))return;
+  if(STATE.attendancePreparation)return openAttendancePreparation();
   await ensureRecordModules(['employees']);
   if(STATE.view!=='attendance')return;
   setTitle('Attendance & KPIs','');
@@ -3367,7 +3391,7 @@ async function renderAttendance(){
   if(start>end){toast('From date must be on or before To date.',true);return;}
   const request=++ATTENDANCE_REQUEST,current=requestedPageState('attendance'),size=Math.min(current.size,100);
   const {data,error}=await supabase.rpc('query_attendance_dashboard',{p_start:start,p_end:end,p_department:STATE.filterDept||'',p_branch:STATE.attendanceBranch||'',p_status:STATE.filterStatus||'',p_search:STATE.search||'',p_offset:(current.page-1)*size,p_limit:size});
-  if(request!==ATTENDANCE_REQUEST||STATE.view!=='attendance')return;
+  if(request!==ATTENDANCE_REQUEST||STATE.view!=='attendance'||STATE.attendancePreparation)return;
   if(error){document.getElementById('content').innerHTML=`<div class="notice"><b>Attendance could not be loaded.</b> ${esc(error.message)} <button class="btn btn-ghost" onclick="renderAttendance()">Retry</button></div>`;return;}
   const total=Number(data.total)||0;
   const pages=Math.max(1,Math.ceil(total/size));
@@ -3383,6 +3407,7 @@ async function renderAttendance(){
     <select aria-label="Department" onchange="attendanceFilter('filterDept',this.value)"><option value="">All Departments</option>${employeeDepartmentNames().map(v=>`<option ${STATE.filterDept===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
     <select aria-label="Branch" onchange="attendanceFilter('attendanceBranch',this.value)"><option value="">All Branches</option>${employeeBranchLocations().map(v=>`<option ${STATE.attendanceBranch===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
     <select aria-label="Attendance status" onchange="attendanceFilter('filterStatus',this.value)"><option value="">All Statuses</option>${ATTENDANCE_STATUSES.map(v=>`<option ${STATE.filterStatus===v?'selected':''}>${esc(v)}</option>`).join('')}</select>
+    <button class="btn btn-ghost btn-sm" onclick="openAttendancePreparation()">${iCal(14)} Preparation</button>
     <button class="iconbtn" title="KPI definitions" aria-label="KPI definitions" onclick="openInformationNote('attendanceKpis')">${iInfo(16)}</button>
     ${canExport()?`<button class="btn btn-ghost btn-sm" onclick="exportAttendance()">${iDownload(14)} Export</button>`:''}${hasPermission('attendance.create')?`<button class="btn btn-primary btn-sm" onclick="openRecordForm('attendance')">${iPlus(14)} Add Attendance</button>`:''}
   </div><div class="analytics-kpis">${workforceMetricHTML('Attendance',percent(metrics.attendanceRate),`${metrics.present} present / ${metrics.scheduled} scheduled days`)}${workforceMetricHTML('Absence',percent(metrics.absenceRate),`${metrics.absent} absent; ${metrics.unauthorized} unauthorized`)}${workforceMetricHTML('Late',percent(metrics.lateRate),`${metrics.late} late / ${metrics.present} present days`)}${workforceMetricHTML('Undertime',percent(metrics.undertimeRate),`${metrics.undertime} undertime / ${metrics.present} present days`)}${workforceMetricHTML('Lost Time',percent(metrics.lostTimeRate),`${metrics.lostMinutes} / ${metrics.scheduledMinutes} scheduled minutes`)}</div>
@@ -3401,7 +3426,7 @@ async function exportAttendance(){
     rows.push(...data.records);params.p_offset+=100;
     if(rows.length>=data.total||!data.records.length)break;
   }while(true);
-  downloadCSV('attendance_export.csv',toCSV(rows,[...MODULES.attendance.columns.map(c=>({label:c.label,get:r=>r[c.key]})),{label:'Scheduled Minutes',get:r=>r.scheduledMinutes},{label:'Remarks',get:r=>r.remarks},{label:'Recorded By',get:r=>r.createdByName},{label:'Updated By',get:r=>r.updatedByName}]));
+  downloadCSV('attendance_export.csv',toCSV(rows,[...MODULES.attendance.columns.map(c=>({label:c.label,get:r=>r[c.key]})),{label:'Scheduled Minutes',get:r=>r.scheduledMinutes},{label:'Worked Minutes',get:r=>r.workedMinutes},{label:'Duty Transaction',get:r=>r.transaction},{label:'Leave Treatment',get:r=>r.leaveTreatment},{label:'Calendar Classification',get:r=>r.preparation?.holiday},{label:'Scheduled Rest Day',get:r=>r.preparation?.restDay},{label:'Attendance Review',get:r=>r.reviewState},{label:'Client',get:r=>r.clientId},{label:'Schedule Version',get:r=>r.preparation?.snapshot?.assignment?.revision},{label:'Remarks',get:r=>r.remarks},{label:'Recorded By',get:r=>r.createdByName},{label:'Updated By',get:r=>r.updatedByName}]));
 }
 async function saveAttendanceRecord(id,vals){
   const existing=id?DB.attendance.find(r=>r.id===id):null;
@@ -11244,6 +11269,7 @@ PAGE_INTRO_OBSERVER.observe(document.getElementById('content'),{childList:true,s
 // handlers. Expose the application handlers on window so GitHub Pages/Vercel
 // can execute those handlers normally.
 Object.assign(window, {
+  openAttendancePreparation,
   filterEmployeeImport,openEmployeeImportRow,saveEmployeeImportRow,
   openOrganizationImport,readOrganizationImport,commitOrganizationImport,downloadOrganizationTemplate,
   renderManpowerDrafts,renderManpowerDraftEditor,openManpowerDraft,manpowerDraftInfo,manpowerDraftPageGo,manpowerDraftPageSize,manpowerDraftAddLine,manpowerDraftRemoveLine,manpowerDraftDepartmentChanged,manpowerDraftToggleDetails,manpowerDraftPasteChanged,manpowerDraftClearPaste,manpowerDraftPreviewPaste,manpowerDraftPastePage,manpowerDraftApplyPaste,saveManpowerDraft,reviewManpowerDraftSubmission,manpowerDraftCloseReview,submitManpowerDraft,
