@@ -772,3 +772,21 @@ setup notes and related progress records were staged; the skill cache is exclude
 MP-B20 project validation: lint, 317 automated tests, production build, explicit
 repository validation and diff checks passed. Synthetic fixture shutdown/exit,
 temporary browser tab cleanup and viewport reset verified. No live SQL executed.
+
+Attendance roster loading fix — 2026-10-17 (locally verified)
+
+- Separated failed roster requests from genuine empty results, added Retry that
+  keeps cutoff/filters, prevented stale failures replacing newer results, and
+  blocked saves while the roster is unavailable.
+- Explained dated schedule requirements, added a manager-only employee schedule
+  action and filter clearing, and directed viewers to an attendance manager.
+  Empty/error guidance stays outside the wide matrix table for responsive use.
+- Changed the attendance controller, application cache versions, synthetic
+  browser fixture, five behavioral regression tests and attendance setup docs.
+- Lint, 386 tests, build, explicit repository validation and diff checks passed.
+  Synthetic browser checks verified Retry recovery, manager schedule form,
+  viewer guidance, and mobile/tablet layout. Browser tab and fixture were closed;
+  viewport override was reset.
+- No database migration, employee data or authorization policy changed. Live
+  Supabase schedules/access and deployment remain unverified. Missing schedules
+  still require reviewed HR setup. No commit, push or deployment performed.

@@ -30,6 +30,12 @@ Attendance is still stored once in `hr_records`, module `attendance`, for each t
 
 Client restrictions reuse Access Control resource assignments: resource type `attendance_client`, resource ID the Client Account UUID, and access level `view`, `edit` or `manage`. These are optional narrowing restrictions on existing tenant/employee/branch scopes, never additional grants. An account with any such assignments cannot access unassigned clients, including legacy attendance without a client. No new payroll permission namespace is introduced.
 
+### Employees missing from the matrix
+
+The matrix roster comes from accessible dated employee schedules, not the entire employee directory. A directory record alone does not create an attendance schedule. Check the selected cutoff, clear search/location/department/position filters, and verify that a schedule overlaps the period. The effective end is exclusive: that date is the first day no longer assigned. Managers can use **Add employee schedule** in the empty state; other users are directed to an attendance manager. Reviewed calendar coverage is additionally required to enable encoding, but missing coverage does not itself remove roster rows.
+
+A failed roster request displays **Employee roster could not be loaded** and **Retry**, rather than a missing-schedule message or a zero employee count. Retry keeps the cutoff and filters. Check the reported access/database error and the rollout prerequisites above; do not invent schedules or loosen access policies to resolve a loading failure. **Records & KPIs** lists saved attendance records, so employees without saved attendance are absent from that view by design.
+
 If promoted manpower deployment tables exist, the dated schedule must match the canonical primary deployment interval and assignment. The adapter fails closed if deployment tables are only partially promoted. It does not activate SQL proposals. Existing source-snapshot locks and record dependency triggers remain in the write path.
 
 ## Actual records versus assumptions
