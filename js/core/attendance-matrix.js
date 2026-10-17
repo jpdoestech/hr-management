@@ -63,6 +63,16 @@ export function dayClassification(holiday,restDay){
   return restDay?(base==='ordinary'?'rest_day':`${base}_rest_day`):base;
 }
 export function matrixInput(cell,transaction,segments){
+  if(cell?.context?.basic){
+    if(!cell.context.recordingReady||cell.context.writable===false||cell.posted)throw Error('Attendance is outside employment dates, posted or outside your access.');
+    if(!['Present','Absent','Paid Leave','Unpaid Leave','Day-off','AWOL/AWOP','Late/Undertime'].includes(transaction))throw Error('Premium duty requires a reviewed schedule and calendar.');
+    const scheduledMinutes=segments?.scheduledMinutes??cell.record?.scheduledMinutes??cell.context.scheduledMinutes;
+    const lateMinutes=transaction==='Late/Undertime'?(segments?.lateMinutes??0):0,undertimeMinutes=transaction==='Late/Undertime'?(segments?.undertimeMinutes??0):0;
+    if(![scheduledMinutes,lateMinutes,undertimeMinutes].every(Number.isInteger)||scheduledMinutes<(transaction==='Day-off'?0:1)||scheduledMinutes>1440||lateMinutes<0||undertimeMinutes<0||lateMinutes+undertimeMinutes>scheduledMinutes)throw Error('Enter valid scheduled, late and undertime minutes.');
+    return {employeeId:cell.employeeId,workDate:cell.date,expectedHash:cell.hash||'',sourceHash:cell.context.hash,transaction,scheduledMinutes,lateMinutes,undertimeMinutes,
+      status:['Present','Late/Undertime'].includes(transaction)?'Present':['Paid Leave','Unpaid Leave'].includes(transaction)?'Approved Leave':transaction==='Day-off'?'Rest Day / Holiday':'Absent',
+      leaveTreatment:transaction==='Paid Leave'?'Paid':transaction==='Unpaid Leave'?'Unpaid':''};
+  }
   if(!cell?.context?.ready||cell.posted)throw Error(cell?.posted?'Posted attendance requires a controlled adjustment.':'Review the dated schedule and calendar first.');
   if(!MATRIX_TRANSACTIONS.some(([name])=>name===transaction))throw Error('Select a transaction.');
   const context=cell.context,classification=dayClassification(context.holiday,context.restDay);

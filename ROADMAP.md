@@ -790,3 +790,29 @@ Attendance roster loading fix — 2026-10-17 (locally verified)
 - No database migration, employee data or authorization policy changed. Live
   Supabase schedules/access and deployment remain unverified. Missing schedules
   still require reviewed HR setup. No commit, push or deployment performed.
+
+Attendance employee-first roster — 2026-10-17 (locally verified)
+
+- Adapted the AMS employee-first attendance flow. Accessible employee records
+  now populate the matrix without per-employee attendance schedule setup.
+  Ordinary status painting and bulk reported Late/UT minutes save through the
+  canonical attendance records and appear in Records & KPIs.
+- Added migration 0064 for bounded scoped roster queries and atomic mixed
+  ordinary/scheduled saves. Existing dated assignments keep ownership of their
+  days. Ordinary entries do not fabricate reviewed calendars, actual punches,
+  worked minutes or payroll evidence. Client restrictions, permissions, hire /
+  separation dates, stale hashes, audit history and posting locks still apply.
+- Updated matrix/controller, cache versions, synthetic browser fixture, core
+  tests, SQL rehearsal, migration validation manifest and attendance guide.
+  Replaced the empty-state requirement to create schedules with automatic
+  employee/access/filter guidance. No employee or schedule backfill.
+- Verification: lint, 389 tests, build, explicit repository validation and diff
+  checks passed. Actual migrations 0031/0062/0063/0064 passed a synthetic PGlite
+  rehearsal covering ordinary saves, reported minutes, zero-minute Day-off,
+  leave/AWOL, attachments, tenant/client/permission isolation, stale changes,
+  mixed-batch rollback, approval/posting, and existing scheduled behavior.
+  Browser checks verified no-schedule Present/save, Late/UT/save, context menu
+  and 390px mobile editor. Fixture/tab closed and viewport reset.
+- Rollout: deploy migration 0064 before the matching frontend. No production
+  SQL, commit, push or deployment performed; authenticated live acceptance is
+  pending. Test-only PGlite was installed outside the repository.

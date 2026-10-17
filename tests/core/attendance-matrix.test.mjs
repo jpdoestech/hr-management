@@ -56,3 +56,26 @@ test('holiday/rest duty classification is single and calendar-validated, not Sun
   assert.equal(matrixInput(h,'Holiday (Unworked)').status,'Rest Day / Holiday');
   assert.throws(()=>matrixInput(cell(),'Day-off'));assert.throws(()=>matrixInput(cell(),'Holiday (Unworked)'));
 });
+
+test('employee attendance can be painted without inventing a duty schedule or pay evidence',()=>{
+  const basic=cell(undefined,{context:{basic:true,recordingReady:true,ready:false,writable:true,hash:'employee-hash',scheduledMinutes:480}});
+  for(const [transaction,status] of [['Present','Present'],['Absent','Absent'],['Paid Leave','Approved Leave'],['Unpaid Leave','Approved Leave'],['Day-off','Rest Day / Holiday'],['AWOL/AWOP','Absent']]){
+    const input=matrixInput(basic,transaction);assert.equal(input.status,status);assert.equal(input.scheduledMinutes,480);
+    assert.equal(input.segments,undefined);assert.equal(input.workedMinutes,undefined);assert.equal(input.preparation,undefined);
+  }
+  assert.equal(assumedTransaction(basic,'present'),null);
+  assert.equal(matrixInput({...basic,record:{scheduledMinutes:420}},'Present').scheduledMinutes,420);
+  assert.equal(matrixInput({...basic,record:{scheduledMinutes:0}},'Day-off').scheduledMinutes,0);
+  assert.throws(()=>matrixInput(basic,'Regular Holiday Duty'),/reviewed/);
+  assert.throws(()=>matrixInput({...basic,posted:true},'Present'),/posted/);
+  assert.throws(()=>matrixInput({...basic,context:{...basic.context,recordingReady:false}},'Present'),/employment/);
+  assert.throws(()=>matrixInput({...basic,context:{...basic.context,writable:false}},'Present'),/access/);
+});
+
+test('employee attendance records reported minutes without converting them to actual punches',()=>{
+  const basic=cell(undefined,{context:{basic:true,recordingReady:true,scheduledMinutes:480,hash:'employee-hash'}});
+  const input=matrixInput(basic,'Late/Undertime',{scheduledMinutes:420,lateMinutes:15,undertimeMinutes:20});
+  assert.equal(input.status,'Present');assert.equal(input.lateMinutes,15);assert.equal(input.undertimeMinutes,20);assert.equal(input.scheduledMinutes,420);
+  assert.equal(input.segments,undefined);assert.equal(input.workedMinutes,undefined);
+  for(const minutes of [{scheduledMinutes:0},{scheduledMinutes:1441},{lateMinutes:-1},{lateMinutes:1.5},{lateMinutes:481},{lateMinutes:300,undertimeMinutes:181}])assert.throws(()=>matrixInput(basic,'Late/Undertime',minutes),/minutes/);
+});

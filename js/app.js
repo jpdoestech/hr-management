@@ -33,7 +33,7 @@ import {parseOrganizationImport} from './core/organization-import.js?v=20261011-
 import {employeeTemplateBytes} from './core/employee-template-validation.js?v=20261012-1';
 import {revalidateEmployeeImport,employeeImportPreviewHTML,employeeImportCorrection} from './core/employee-import-preview.js?v=20261012-1';
 import {regularizationWorkItems,regularizationToday} from './core/regularization.js?v=20261013-1';
-import {createAttendancePreparation} from './core/attendance-preparation.js?v=20261017-1';
+import {createAttendancePreparation} from './core/attendance-preparation.js?v=20261017-2';
 
 if(!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('YOUR_PROJECT_REF')){
   document.body.innerHTML = '<div style="font-family:system-ui;padding:40px;max-width:760px;margin:auto"><h2>Supabase configuration missing</h2><p>Edit <b>supabase-config.js</b> with your Supabase project URL and publishable key.</p></div>';
