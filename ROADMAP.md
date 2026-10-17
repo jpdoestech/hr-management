@@ -816,3 +816,9 @@ Attendance employee-first roster — 2026-10-17 (locally verified)
 - Rollout: deploy migration 0064 before the matching frontend. No production
   SQL, commit, push or deployment performed; authenticated live acceptance is
   pending. Test-only PGlite was installed outside the repository.
+
+Attendance employee-first publication: `9471445` pushed to `origin/main`;
+remote HEAD verified as `94714454176b629481271e55459861a4cc56d43a`.
+Commit remarks include migration order, preserved access/integrity controls,
+389 passing tests and SQL/browser verification limits. Deployment workflow
+results and authenticated live acceptance have not been verified.
