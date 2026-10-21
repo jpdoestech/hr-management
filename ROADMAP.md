@@ -822,3 +822,20 @@ remote HEAD verified as `94714454176b629481271e55459861a4cc56d43a`.
 Commit remarks include migration order, preserved access/integrity controls,
 389 passing tests and SQL/browser verification limits. Deployment workflow
 results and authenticated live acceptance have not been verified.
+
+Attendance live rollout verification — 2026-10-21
+
+- Signed-in Supabase dashboard confirmed project `wdgiifaywhqpzyyhdinz`
+  (`strellas-hris`) has migrations 0062, 0063 and 0064 installed. Read-only
+  catalog queries confirmed all four 0064 function bodies exactly match the
+  committed SQL (MD5 after CRLF normalization).
+- All five execution-permission checks passed: anonymous execution denied,
+  authenticated execution allowed for the three public functions and denied for
+  both private helpers. No migration replay or employee-data mutation occurred.
+- `https://strellas-hr.vercel.app/` serves application version 20261017-2;
+  deployed attendance modules contain the employee-first recording logic.
+  The live HR app opens at Sign in; account-specific roster acceptance remains
+  pending an authenticated HR session.
+- GitHub migration automation still lacks its deployment secrets and baseline
+  variable. The skipped workflow is not evidence that the live migration is
+  absent; the dashboard/catalog checks above confirm installation independently.
