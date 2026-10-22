@@ -6,7 +6,7 @@ import {resolve,sep,extname} from 'node:path';
 const root=fileURLToPath(new URL('../../',import.meta.url));
 const source=readFileSync(resolve(root,'js/app.js'),'utf8');
 const handlers=source.slice(source.indexOf('let ORGANIZATION_IMPORT='),source.indexOf('function settingsOrganizationHTML('));
-const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic organization import</title><link rel="stylesheet" href="/css/app.css"><link rel="stylesheet" href="/css/professional.css"></head><body><div class="overlay on" id="overlay"><div class="modal" id="modal"></div></div><script src="/js/vendor/xlsx.full.min.js"></script><script type="module">
+const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic organization import</title><link rel="stylesheet" href="/css/app.css"><link rel="stylesheet" href="/css/professional.css"><link rel="stylesheet" href="/css/workspace.css"></head><body><div class="overlay on" id="overlay"><div class="modal" id="modal"></div></div><script src="/js/vendor/xlsx.full.min.js"></script><script type="module">
 import {parseOrganizationImport} from '/js/core/organization-import.js';
 const SESSION={id:'synthetic'},DB={settings:{}},hasPermission=()=>true,employeeSpreadsheetReady=()=>true;
 const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');

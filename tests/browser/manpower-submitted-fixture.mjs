@@ -7,7 +7,7 @@ const root=fileURLToPath(new URL('../../',import.meta.url));
 const source=readFileSync(resolve(root,'js/app.js'),'utf8');
 const handlers=source.slice(source.indexOf('const MANPOWER_SUBMITTED_UI='),source.indexOf('function openManpowerRequestForm('));
 const names=[...handlers.matchAll(/(?:async )?function (\w+)\(/g)].map(match=>match[1]);
-const html=String.raw`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Submitted request fixture</title><link rel="stylesheet" href="/css/app.css"><link rel="stylesheet" href="/css/professional.css"></head><body>
+const html=String.raw`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Submitted request fixture</title><link rel="stylesheet" href="/css/app.css"><link rel="stylesheet" href="/css/professional.css"><link rel="stylesheet" href="/css/workspace.css"></head><body>
 <main style="height:100dvh;overflow:auto;padding:16px"><h2 id="fixture_title">Submitted Requests</h2><div id="content"></div><div id="fixture_status" role="status"></div></main><script type="module">
 import {loadSubmittedRequests,loadSubmittedRequest,loadSubmittedRows,submittedListRowsHTML,submittedHeaderHTML,submittedTableHTML} from '/js/manpower/submitted-workspace.js';
 import {paginationMeta,paginationHTML} from '/js/core/pagination.js';

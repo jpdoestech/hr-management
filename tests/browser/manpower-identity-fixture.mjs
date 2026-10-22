@@ -7,7 +7,7 @@ const root=fileURLToPath(new URL('../../',import.meta.url));
 const source=readFileSync(resolve(root,'js/app.js'),'utf8');
 const handlers=source.slice(source.indexOf('const ONBOARDING_IDENTITY_UI='),source.indexOf('function openOnboardingHire('));
 const names=[...handlers.matchAll(/(?:async )?function (\w+)\(/g)].map(match=>match[1]);
-const html=String.raw`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic identity review</title><link rel="stylesheet" href="/css/app.css"><link rel="stylesheet" href="/css/professional.css"></head><body><div class="overlay on" id="overlay"><div class="modal" id="modal"></div></div><p id="status" role="status"></p><script type="module">
+const html=String.raw`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic identity review</title><link rel="stylesheet" href="/css/app.css"><link rel="stylesheet" href="/css/professional.css"><link rel="stylesheet" href="/css/workspace.css"></head><body><div class="overlay on" id="overlay"><div class="modal" id="modal"></div></div><p id="status" role="status"></p><script type="module">
 import {identityPreviewValid,identityReviewPayload,identityComparisonHTML,identityReviewResultValid,identityReviewError} from '/js/manpower/identity-review.js';
 const SESSION={id:'synthetic-actor'},DB={onboardingCandidates:[{id:'candidate'}]};const hasPermission=()=>true;
 const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');

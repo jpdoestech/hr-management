@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {resolve,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('../../',import.meta.url));
-const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic attendance preparation</title><link rel="stylesheet" href="/css/app.css"><link rel="stylesheet" href="/css/professional.css"><link rel="stylesheet" href="/css/attendance.css"></head><body><main id="content"></main><p id="fixture-notice" role="status"></p><div id="overlay" class="overlay"><div id="modal" class="modal"></div></div><script type="module">
+const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic attendance preparation</title><link rel="stylesheet" href="/css/app.css"><link rel="stylesheet" href="/css/professional.css"><link rel="stylesheet" href="/css/attendance.css"><link rel="stylesheet" href="/css/workspace.css"></head><body><main id="content"></main><p id="fixture-notice" role="status"></p><div id="overlay" class="overlay"><div id="modal" class="modal"></div></div><script type="module">
 import {createAttendancePreparation} from '/js/core/attendance-preparation.js';
 import {cutoffDates} from '/js/core/attendance-matrix.js';
 const client='00000000-0000-0000-0000-000000000021',actor={id:'00000000-0000-0000-0000-000000000011',tenantId:'00000000-0000-0000-0000-000000000001',isSuperAdmin:true};

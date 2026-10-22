@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {resolve,sep,extname} from 'node:path';
 const root=fileURLToPath(new URL('../../',import.meta.url)),source=readFileSync(resolve(root,'js/app.js'),'utf8');
 const section=(start,end)=>source.slice(source.indexOf(start),source.indexOf(end,source.indexOf(start)));
-const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic employee import</title><link rel="stylesheet" href="/css/app.css"><link rel="stylesheet" href="/css/professional.css"></head><body><div class="overlay on" id="overlay"><div class="modal employee-workspace-modal" id="modal"></div></div><script type="module">
+const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic employee import</title><link rel="stylesheet" href="/css/app.css"><link rel="stylesheet" href="/css/professional.css"><link rel="stylesheet" href="/css/workspace.css"></head><body><div class="overlay on" id="overlay"><div class="modal employee-workspace-modal" id="modal"></div></div><script type="module">
 import {revalidateEmployeeImport,employeeImportCorrection,employeeImportPreviewHTML} from '/js/core/employee-import-preview.js';
 import {normalizeAddress} from '/js/address/address-models.js';
 import {EMPLOYMENT_TYPES,STATUS_REASONS,REVIEW_TYPE} from '/js/core/employment.js';

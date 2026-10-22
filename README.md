@@ -7,6 +7,8 @@ This is the structured static build of the STRELLAS HR Management & Disciplinary
 - `index.html` — application shell
 - `css/app.css` — existing application styles extracted from the monolith
 - `css/professional.css` — professional UI/data-display redesign
+- `css/workspace.css` — shared people-workspace presentation, loaded last
+- `design-system/MASTER.md` — palette, component and responsive UI rules
 - `js/app.js` — application runtime and feature integration
 - `js/core/pagination.js` — reusable pagination helpers
 - `supabase-config.js` — Supabase URL and publishable frontend key
@@ -50,6 +52,12 @@ This build is intended to preserve the existing application behavior while makin
 For actual Google Drive file upload/OAuth, use a secure backend/Edge Function flow rather than placing Google client secrets in frontend code.
 
 ## Professional data experience
+
+The shared workspace styling takes its spacious typography, rounded panels and
+clear hierarchy from Sprout's visual direction while retaining SLSC's existing
+violet/charcoal workspace and navy/gold sign-in colors. It uses the existing
+static HTML/CSS/JavaScript architecture. Visual QA and component rules are in
+[`design-system/MASTER.md`](design-system/MASTER.md).
 
 - Structured HTML/CSS/JS project layout
 - Responsive professional data tables

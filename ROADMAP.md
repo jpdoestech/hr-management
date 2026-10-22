@@ -839,3 +839,21 @@ Attendance live rollout verification — 2026-10-21
 - GitHub migration automation still lacks its deployment secrets and baseline
   variable. The skipped workflow is not evidence that the live migration is
   absent; the dashboard/catalog checks above confirm installation independently.
+
+UI-20261022 — Shared people-workspace redesign (locally verified)
+
+- Applied a Sprout-inspired spacious layout and component treatment across the
+  shell, dashboards, tables, forms, dialogs, attendance and authentication.
+  Existing violet/charcoal and navy/gold palettes, fonts, runtime workflows,
+  permissions and persistence remain unchanged. No dependency or migration.
+- Added `css/workspace.css`, shell accessibility/brand refinements, shared
+  design rules in `design-system/MASTER.md`, and a synthetic visual fixture.
+  Existing browser fixtures load the new stylesheet in production order.
+- Lint, 389 tests, build, explicit validation and diff checks passed. Browser
+  checks covered 1280px desktop, 768px tablet, 390px phone and 320px dashboard;
+  employee overview/edit markup, navigation, attendance staging, sign-in and
+  registration layout, wrapped details and skip-link focus were reviewed.
+  Final fresh preview had no console errors. No confidential records used.
+- Scope: shared presentation completed locally. Representative fixture pages
+  do not prove every role-specific runtime flow. Live deployment and
+  authenticated production acceptance require separate verification.

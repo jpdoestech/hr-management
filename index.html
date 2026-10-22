@@ -11,10 +11,12 @@
 <link rel="stylesheet" href="css/app.css?v=20261008-1">
   <link rel="stylesheet" href="css/professional.css?v=20261013-9">
   <link rel="stylesheet" href="css/attendance.css?v=20261015-1">
+<link rel="stylesheet" href="css/workspace.css?v=20261022-1">
 <meta name="theme-color" content="#062451">
 <link rel="icon" href="assets/slsc-mark.svg" type="image/svg+xml">
 </head>
 <body class="session-pending">
+<a class="skip-link" href="#content">Skip to workspace</a>
 
 <div id="session-splash" role="status" aria-live="polite">
   <img src="assets/logo-transparent.png" alt="Strellas Labor Service Cooperative" width="300" height="100">
@@ -82,8 +84,9 @@
 
   <div class="auth-scene-copy">
     <span>People operations, connected</span>
-    <h2>One clear view of your workforce.</h2>
+    <h2>Great teams.<br>Thoughtful HR.</h2>
     <p>Employee records, approvals, cases, documents, and workforce decisions in one secure workspace.</p>
+    <div class="auth-feature-list" aria-label="Workspace capabilities"><span>People</span><span>Attendance</span><span>Growth</span></div>
   </div>
   <footer class="auth-footer"><span>SLSC Human Resources Information System</span><span>Authorized personnel only</span></footer>
 </div>
@@ -94,8 +97,9 @@
     <button class="brand brand-home" type="button" onclick="go('dashboard');closeSidebar()" aria-label="Open Dashboard" title="Dashboard">
       <img src="assets/logo-transparent.png" alt="Strellas Labor Service Cooperative">
     </button>
-    <nav id="nav"></nav>
-    <button class="btn btn-ghost btn-block logout" onclick="doLogout()">Log Out</button>
+    <div class="sidebar-caption">Your people. One connected workspace.</div>
+    <nav id="nav" aria-label="Main navigation"></nav>
+    <div class="sidebar-footer"><span>SLSC · People operations</span><button class="btn btn-ghost btn-block logout" onclick="doLogout()">Log Out</button></div>
   </aside>
 
   <main id="main">
@@ -105,6 +109,7 @@
           <span></span><span></span><span></span>
         </button>
         <div>
+          <span class="workspace-label">Your HR workspace</span>
           <h2 id="tb-title">Dashboard</h2>
           <div class="sub" id="tb-sub">Overview of all HR &amp; online records</div>
         </div>
@@ -133,7 +138,7 @@
         </button>
       </div>
     </div>
-    <div id="content"></div>
+    <div id="content" tabindex="-1"></div>
   </main>
 </div>
 <div id="sidebar-backdrop" class="sidebar-backdrop" aria-hidden="true" onclick="closeSidebar()"></div>

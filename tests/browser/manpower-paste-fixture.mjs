@@ -10,7 +10,7 @@ const names=[...handlers.matchAll(/(?:async )?function (\w+)\(/g)].map(match=>ma
 const page=readFileSync(resolve(root,'index.html'),'utf8');
 const confirmationHTML=page.slice(page.indexOf('<div class="data-confirm-overlay"'),page.indexOf('<div class="toast"'));
 const confirmationHandlers=source.slice(source.indexOf('function confirmDataChange('),source.indexOf("document.addEventListener('click',async event=>{",source.indexOf('function confirmDataChange(')));
-const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Manpower paste fixture</title><link rel="stylesheet" href="/css/app.css"><link rel="stylesheet" href="/css/professional.css"></head><body>
+const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Manpower paste fixture</title><link rel="stylesheet" href="/css/app.css"><link rel="stylesheet" href="/css/professional.css"><link rel="stylesheet" href="/css/workspace.css"></head><body>
 <main style="padding:16px;overflow:auto;height:100dvh"><h2>Manpower Fulfillment / Edit Draft</h2><div id="content"></div><div id="fixture_status" role="status"></div></main>
 ${confirmationHTML}<script src="/js/vendor/xlsx.full.min.js"></script><script type="module">
 import {newManpowerDraft} from '/js/core/manpower-draft.js';
