@@ -74,4 +74,7 @@ pages are representative component compositions, not complete runtime flows.
 Use `node tests/browser/modal-typography-fixture.mjs` for actual employee
 workspace markup with synthetic data. No production employee records, live
 authentication, database mutations or exhaustive role-specific runtime flows
-were used for this visual change. Deployment requires separate verification.
+were used for this visual change. After publication, the live index at
+`https://strellas-hr.vercel.app/` and the versioned workspace stylesheet both
+returned HTTP 200; the CSS exactly matched the tested source after CRLF
+normalization. Authenticated production acceptance remains separate.

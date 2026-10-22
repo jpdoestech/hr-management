@@ -857,3 +857,13 @@ UI-20261022 — Shared people-workspace redesign (locally verified)
 - Scope: shared presentation completed locally. Representative fixture pages
   do not prove every role-specific runtime flow. Live deployment and
   authenticated production acceptance require separate verification.
+
+UI-20261022 publication: `47ab820` pushed to `origin/main`; remote HEAD verified
+as `47ab82087e031703eddcafba8b39bcfe00ce29d0`. Commit remarks record validation,
+preserved behavior and visual-review limits. No production SQL was executed.
+
+UI-20261022 live assets: `https://strellas-hr.vercel.app/` returned HTTP 200
+and loads `css/workspace.css?v=20261022-1`. The stylesheet returned HTTP 200
+and exactly matches the tested source after CRLF normalization. Automatic
+rollout is verified at the public-asset boundary; authenticated role-specific
+HR workflows remain outside this visual review.
