@@ -192,8 +192,8 @@ if(!html.includes('js/vendor/xlsx.full.min.js?v=0.20.3')){
   console.error('Pinned local SheetJS browser build is missing.');
   process.exit(1);
 }
-if(!app.includes("trigger.innerHTML=iEdit(15)")){
-  console.error('Consolidated table actions must use the pencil icon trigger.');
+if(!app.includes("trigger.innerHTML=iMore(15)")){
+  console.error('Consolidated table action menus must use the ellipsis icon trigger.');
   process.exit(1);
 }
 const onboardingMigration=readMigration('phase13-onboarding.sql');

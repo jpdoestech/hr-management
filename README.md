@@ -53,11 +53,13 @@ For actual Google Drive file upload/OAuth, use a secure backend/Edge Function fl
 
 ## Professional data experience
 
-The shared workspace styling takes its spacious typography, rounded panels and
-clear hierarchy from Sprout's visual direction while retaining SLSC's existing
+The shared workspace styling combines compact record tables with rounded panels
+and clear hierarchy while retaining SLSC's existing
 violet/charcoal workspace and navy/gold sign-in colors. It uses the existing
 static HTML/CSS/JavaScript architecture. Visual QA and component rules are in
 [`design-system/MASTER.md`](design-system/MASTER.md).
+UI consistency fixes, regression checks and their limits are documented in
+[`docs/UI-CONSISTENCY.md`](docs/UI-CONSISTENCY.md).
 
 - Structured HTML/CSS/JS project layout
 - Responsive professional data tables

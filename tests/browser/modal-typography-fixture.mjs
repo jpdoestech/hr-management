@@ -6,7 +6,9 @@ import {resolve,sep} from 'node:path';
 import {ageOn} from '../../js/core/workforce-metrics.js';
 const root=fileURLToPath(new URL('../../',import.meta.url)),source=readFileSync(resolve(root,'js/app.js'),'utf8');
 const section=(start,end)=>source.slice(source.indexOf(start),source.indexOf(end,source.indexOf(start)));
-const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic modal typography</title><link rel="stylesheet" href="/css/app.css"><link rel="stylesheet" href="/css/professional.css"><link rel="stylesheet" href="/css/workspace.css"></head><body><div class="overlay on"><div id="modal" class="modal employee-workspace-modal"></div></div><script>
+const productionHead=readFileSync(resolve(root,'index.html'),'utf8').match(/<head>([\s\S]*?)<\/head>/)[1];
+const assets=[...productionHead.matchAll(/<link\b[^>]*>/g)].map(match=>match[0].replace(/href="css\//g,'href="/css/')).join('');
+const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic modal typography</title>${assets}</head><body><div class="overlay on"><div id="modal" class="modal employee-workspace-modal"></div></div><script>
 const employee={id:'synthetic',name:'SYNTHETIC-LONG-FAMILY-NAME, Sample Employee',employeeNo:'EMP-000001',department:'Synthetic Department',position:'Synthetic Position With A Long Descriptive Name',status:'Active',employmentType:'Probationary',statusReason:'Active / Normal',branchReporting:'Synthetic Branch',dateHired:'2026-10-01',birthDate:'2001-01-01',address:'Synthetic Building, Long Synthetic Street, Synthetic Barangay, Synthetic Municipality, Synthetic Province',presentAddressText:'Synthetic Present Address With Additional Building And Unit Details',emergencyContactName:'Synthetic Contact',emergencyContactRelationship:'Parent',emergencyContactPhone:'Not recorded',personalEmail:'synthetic-long-contact-address@example.invalid',sssNumber:'00-0000000-0'};
 const DB={employees:[employee]},EMP_STATUS=['Active','Inactive','Separated'],STATUS_REASONS={'Active':['Active / Normal']},EXIT_CLASSIFICATIONS=['Voluntary'],WORKFORCE_FACTORS=['Personal'],LIFECYCLE_EVENT_TYPES=['Employment Status Change','Regularization','Return to Work'];
 const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),canEdit=()=>true,selectEmployeeDirectoryRow=()=>{},ensureRecordModules=async()=>{},todayISO=()=> '2026-10-13';
@@ -18,8 +20,9 @@ const employeeAllowanceEntries=()=>[],employeeAllowanceTotal=()=>0,peso=value=>'
 ${section('function employeeOptionLabel(','function syncEmployeeStatusReason(')}
 const EMPLOYMENT_TYPES=['Regular / Permanent','Probationary'],REVIEW_TYPE='Needs HR Review',isHRRole=()=>false;
 const uniqueSettingNames=values=>[...new Set(values)].filter(Boolean),nextEmployeeNumber=()=> 'EMP-000002',employeeBranchLocations=()=>['Synthetic Branch'];
-const employeeAllowanceFieldsHTML=()=>'',normalizeAddress=()=>({}),addressComponentHTML=()=>'<div class="address-component"><h5>Home Address</h5><div class="field"><label for="synthetic_street">Street / House / Unit</label><input id="synthetic_street" value="Synthetic street"></div></div>';
+const employeeAllowanceFieldsHTML=()=>'',normalizeAddress=()=>({}),addressComponentHTML=({prefix,label})=>'<div class="address-component"><h5>'+label+'</h5><div class="field"><label for="'+prefix+'_street">Street / House / Unit</label><input id="'+prefix+'_street" value="Synthetic street"></div></div>';
 ${section('function fieldHTML(','function readFields(')}
+${section('function revealModalField(','async function transitionModal(')}
 ${section('const EMP_FIELDS = [','const EMPLOYEE_IMPORT_COLUMNS = [')}
 ${section('const EMP_FORM_SECTIONS = [','function syncPositionSelect(')}
 ${[...source.matchAll(/^function i\w+\(s\)\{.*$/gm)].map(match=>match[0]).join('\n')}
@@ -45,7 +48,23 @@ function show(view){
   const form=view==='Edit'?employeeFormSectionsHTML(employee):'<div class="formgrid">'+fields+'</div><div class="computed-note">Synthetic shared-form note.</div>';
   openEmployeeWorkspaceModal(employeeWorkspaceHeader(employee,view)+'<div class="modal-body '+(view==='Overview'?'employee-profile-workspace':view==='Edit'?'employee-form-body':'')+'">'+employeeWorkspaceNav(employee,view==='Overview'?'overview':'edit')+ (view==='Overview'?overview:form)+'</div>'+employeeWorkspaceFooter(employee,'Save'));
 }
-show('Overview');
+show(new URLSearchParams(location.search).get('view')||'Overview');
+const fixtureErrors=document.createElement('button');fixtureErrors.className='btn btn-ghost';fixtureErrors.textContent='Check required fields';fixtureErrors.onclick=()=>showModalFieldErrors([{id:'f_lastName',message:'Last Name is required.'},{id:'f_firstName',message:'First Name is required.'}]);document.querySelector('.modal-foot').prepend(fixtureErrors);
+document.addEventListener('input',event=>clearModalFieldError(event.target));
+document.addEventListener('change',event=>clearModalFieldError(event.target));
+document.fonts.ready.then(()=>{
+  const failures=[],check=(ok,message)=>{if(!ok)failures.push(message);};
+  const input=document.querySelector('.field input:not([type="hidden"])');
+  if(input){
+    check(input.labels.length>0,'Form controls must have associated labels');
+    check(input.getBoundingClientRect().height>=44,'Form controls must be at least 44px high');
+    check(parseFloat(getComputedStyle(input).fontSize)===(innerWidth<=720?16:14.3),'Input text must follow the dialog token');
+  }
+  check(parseFloat(getComputedStyle(document.querySelector('.modal-head h3')).fontSize)===19.5,'Heading must use the dialog token');
+  check(document.documentElement.scrollWidth<=innerWidth,'Dialog must fit viewport width');
+  const output=document.createElement('output');output.id='fixture-checks';output.hidden=true;output.textContent=failures.length?'FAIL: '+failures.join('; '):'PASS: computed modal tokens, labels, control heights and responsive bounds';document.body.appendChild(output);
+  console.assert(!failures.length,failures.join('; '));
+});
 </script></body></html>`;
 const server=createServer((req,res)=>{
   const path=new URL(req.url,'http://localhost').pathname;

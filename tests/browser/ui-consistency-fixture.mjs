@@ -1,0 +1,71 @@
+// Real record renderers with synthetic data. No authentication or database calls.
+import {createServer} from 'node:http';
+import {readFileSync} from 'node:fs';
+import {resolve,sep,extname} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {Script} from 'node:vm';
+const root=fileURLToPath(new URL('../../',import.meta.url));
+const source=readFileSync(resolve(root,'js/app.js'),'utf8');
+const section=(start,end)=>source.slice(source.indexOf(start),source.indexOf(end,source.indexOf(start)));
+const shell=readFileSync(resolve(root,'index.html'),'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,'').replace('class="session-pending"','');
+const icons=[...source.matchAll(/^function i[A-Z]\w*\(s\)\{.*$/gm)].map(match=>match[0]).join('\n');
+const script=String.raw`<script type="module">
+import {paginateRows,paginationHTML} from '/js/core/pagination.js';
+const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');
+const STATE={view:'employees',employeeSearch:'',tablePages:{},tablePageSizes:{}};
+const SESSION={role:'Viewer'},EMPLOYMENT_TYPES=['Probationary'],REVIEW_TYPE='Needs HR Review';
+const DB={employees:Array.from({length:250},(_,i)=>({id:'synthetic-'+i,employeeNo:'EMP-'+String(i+1).padStart(6,'0'),name:'SYNTHETIC, Employee '+String(i+1).padStart(3,'0'),department:i%2?'Operations':'Administration',branchReporting:'Synthetic Branch',position:'Synthetic Position',status:'Active'})),leaves:[{employeeName:'Synthetic Employee',department:'Operations',startDate:'2026-10-01',endDate:'2026-10-02',leaveType:'Vacation',status:'Approved'}]};
+const EMPLOYEE_DIRECTORY_PAGE_CACHE=new Map();
+const canEdit=()=>false,canExport=()=>false,employeeDisplayName=e=>e.name;
+const columns=[['employeeNo','Employee No.',120],['name','Name',220],['department','Department',160],['position','Position',180],['branchReporting','Branch',160],['status','Status',110]].map(([key,label,width])=>({key,label,width,cell:e=>key==='employeeNo'?'<span class="mono">'+esc(e[key])+'</span>':key==='status'?'<span class="badge b-green">'+esc(e[key])+'</span>':esc(e[key])}));
+const employeeDirectoryQueryState=()=>({columns,pageScope:'employees'}),employeeDirectorySignature=()=> 'synthetic';
+const employeeDirectoryMetadata=()=>({departments:['Operations','Administration'],branches:['Synthetic Branch'],statuses:['Active']});
+const localEmployeeDirectoryRows=()=>DB.employees.filter(e=>(!STATE.employeeSearch||e.name.toLowerCase().includes(STATE.employeeSearch.toLowerCase()))&&(!STATE.employeeDepartmentFilter||e.department===STATE.employeeDepartmentFilter));
+const refreshEmployeeDirectoryPage=()=>{},employeeDirectoryStatus=()=>{},LEAVE_STATUS=['Approved','Pending'];
+const fmtDate=v=>v,daysBetweenInclusive=()=>2,attachCellHTML=()=> '—',statusBadge=value=>'<span class="badge b-green">'+esc(value)+'</span>',LEAVE_STATUS_MAP={};
+const setTitle=(title,sub)=>{document.getElementById('tb-title').textContent=title;document.getElementById('tb-sub').textContent=sub;};
+${icons}
+const SEARCH_RENDER_TIMERS=new Map();
+${section('function queueSearchRender(','/* ---------------- searchable employee picker')}
+${section('function employeeSearchInput(','const EMPLOYEE_COLUMN_DEFS = [')}
+${section('function employeeDirectoryRowsHTML(','function applyEmployeeDirectoryPage(')}
+${section('function renderEmployees(){','function openEmployeeWorkspaceModal(')}
+${section('function renderLeaveRecords(','function renderLeaveSummary(')}
+function serverTablePageGo(key,page){STATE.tablePages[key]={...STATE.tablePages[key],page};renderEmployees();}
+function serverTablePageSize(key,size){STATE.tablePageSizes[key]=Number(size);STATE.tablePages[key]={page:1,size:Number(size)};renderEmployees();}
+const content=document.getElementById('content');
+const view=new URLSearchParams(location.search).get('view')||'employees';
+document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='grid';document.getElementById('session-splash')?.remove();
+document.getElementById('notification-bell-icon').innerHTML=iBell(18);document.getElementById('tb-name').textContent='Sample HR';document.getElementById('tb-role').textContent='Viewer';document.getElementById('tb-av').textContent='SH';
+document.getElementById('nav').innerHTML='<button class="navitem active">'+iUsers(18)+' Employees</button>';
+content.classList.add('data-focused-content');
+if(view==='leaves'){STATE.view='leaves';STATE.search='';setTitle('Leave Tracker','Synthetic records');content.innerHTML='<div id="leave-sub"></div>';renderLeaveRecords();}else renderEmployees();
+Object.assign(window,{STATE,employeeSearchInput,toggleEmployeeDirectoryFilters,resetEmployeeDirectoryFilters,renderEmployees,renderLeaveRecords,queueSearchRender,cancelSearchRender,serverTablePageGo,serverTablePageSize});
+// These assertions use the final cascade, rather than searching CSS source text.
+await document.fonts.ready;
+const failures=[];const check=(ok,message)=>{if(!ok)failures.push(message);};
+const mobile=innerWidth<=720,table=content.querySelector('.data-table'),cell=table.querySelector('tbody td');
+check(document.documentElement.scrollWidth<=innerWidth,'Document must not scroll horizontally');
+check(parseFloat(getComputedStyle(cell).fontSize)>=13,'Record text must remain readable');
+if(view==='employees'){
+  check(table.tBodies[0].rows.length===25,'Employee page must stay bounded to 25 rows');
+  const rowHeight=table.tBodies[0].rows[0].getBoundingClientRect().height;
+  check(rowHeight<=(mobile?60:42),'Employee rows must remain compact');
+  check(parseFloat(getComputedStyle(document.getElementById('employee-directory-search')).fontSize)>=(mobile?16:13),'Search size must follow its breakpoint');
+  check(document.querySelector('.table-pagination-wrap').getBoundingClientRect().bottom<=innerHeight+1,'Pagination must fit the viewport');
+  if(innerWidth>900)check(Math.abs(document.querySelector('#sidebar .brand').getBoundingClientRect().bottom-document.getElementById('topbar').getBoundingClientRect().bottom)<1,'Logo and header dividers must align');
+}
+const result=document.createElement('output');result.id='fixture-checks';result.hidden=true;result.textContent=failures.length?'FAIL: '+failures.join('; '):'PASS: computed styles, density, pagination, responsive bounds and header alignment';document.body.appendChild(result);
+console.assert(!failures.length,failures.join('; '));
+</script>`;
+new Script('(async()=>{'+script.slice(script.indexOf('>')+1,script.lastIndexOf('</script>')).replace(/^import .*$/gm,'')+'})()');
+const html=shell.replace('</body>',script+'</body>');
+const server=createServer((req,res)=>{
+  const path=new URL(req.url,'http://localhost').pathname;
+  if(path==='/shutdown'){res.end('Stopped');server.close();server.closeAllConnections();return;}
+  if(path==='/'){res.setHeader('Content-Type','text/html');res.end(html);return;}
+  const file=resolve(root,'.'+decodeURIComponent(path));
+  if(!['css','assets','js/core'].some(dir=>file.startsWith(resolve(root,dir)+sep))){res.writeHead(403);res.end();return;}
+  try{res.setHeader('Content-Type',({'.css':'text/css','.js':'text/javascript','.png':'image/png','.webp':'image/webp'})[extname(file)]||'application/octet-stream');res.end(readFileSync(file));}catch{res.writeHead(404);res.end();}
+});
+server.listen(4194,'127.0.0.1',()=>console.log('Synthetic UI consistency: http://127.0.0.1:4194/'));

@@ -1,13 +1,15 @@
 # UI Design Direction
 
-The visual language uses deep navy, warm gold, and cool neutral surfaces to match the existing SCPA design direction.
+The palette, fonts, shared component tokens and responsive rules follow
+`design-system/MASTER.md`. The workspace uses violet and charcoal; sign-in
+retains its navy and gold identity.
 
 ## Data Display
 
 Tables use:
 - clear column hierarchy
 - sticky headers
-- larger row spacing
+- compact rows with readable 13px record values
 - quieter borders
 - compact action buttons
 - record counts

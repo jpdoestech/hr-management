@@ -32,14 +32,22 @@ Plex Mono for identifiers. Use tabular figures for numeric comparisons.
   and the existing keyboard-operable group popovers. At 900px it becomes the
   existing drawer. Preserve permission-based visibility.
 - Headers: workspace context above the page title; one clear action hierarchy.
+  The desktop topbar and sidebar logo share a 96px header band and aligned
+  dividers. The phone header is 84px; supporting text does not add extra rows.
 - Dashboard: charcoal hero with white text and violet actions, roomy metric
   cards, and white panels. On phones, cards use two columns and the final odd
   metric fills the row at 420px and below.
-- Tables: readable sentence-case headers, generous body rows, soft borders,
+- Tables: readable sentence-case headers, compact body rows, soft borders,
   clear badges and existing search/filter/pagination controls. Wide tables
-  scroll within their container.
+  scroll within their container. Record values use 13px text, headers 12px,
+  and cells 6px vertical padding. Single-line employee rows are approximately
+  41px on desktop. Touch row controls are 44px, so touch rows grow to fit.
+  Employees keeps the toolbar and pagination visible while its table scrolls.
 - Forms: visible labels, 44px inputs, consistent help/validation states, and
   explicit readonly/disabled styling. Native checkbox/radio sizing is preserved.
+  Labels must reference their controls. Required-field errors remain beside
+  shared record/employee fields, with linked error summaries and focus recovery.
+  Searches retain focus only when they owned it before their delayed render.
 - Dialogs: rounded surfaces, distinct headers/footers and scrollable bodies.
   Existing employee action navigation, focus handling and confirmation logic
   remain in place. Long names and addresses wrap.
@@ -51,6 +59,11 @@ Plex Mono for identifiers. Use tabular figures for numeric comparisons.
 - Accessibility: skip-to-workspace link, visible focus, keyboard controls,
   mobile form text at 16px, and reduced-motion support. Do not remove labels or
   use color alone to convey state.
+- Icons: use the existing outlined SVG family with visible action labels.
+  Ellipsis opens an action menu; document opens a record; pencil edits; check
+  saves/approves; cross cancels/rejects; trash deletes; arrows navigate back.
+  Decorative SVGs are hidden from assistive technology. Icon-only controls
+  need an accessible name. Do not add icons to ordinary record values.
 
 ## Verification — 2026-10-22
 

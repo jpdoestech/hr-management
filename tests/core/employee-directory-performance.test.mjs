@@ -89,7 +89,9 @@ test('employee profile paints before related modules are hydrated',()=>{
 });
 
 test('single employee row actions remain direct and selection avoids duplicate full scans',()=>{
-  assert.match(source,/if\(buttons\.length===1\)\{group\.dataset\.menuEnhanced='true';return;\}/);
+  const singleAction=source.slice(source.indexOf('if(buttons.length===1){'),source.indexOf('const id=`row-actions-'));
+  assert.match(singleAction,/group\.dataset\.menuEnhanced='true';return;/);
+  assert.doesNotMatch(singleAction,/replaceChildren|openRowActionMenu/);
   assert.match(source,/onclick="openEmployeeProfile\('\$\{employee\.id\}'\)"/);
   assert.doesNotMatch(source,/onclick="selectEmployeeDirectoryRow\('\$\{employee\.id\}'\);openEmployeeProfile/);
 });

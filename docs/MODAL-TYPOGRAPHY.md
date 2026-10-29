@@ -1,5 +1,15 @@
 # Modal Typography
 
+## Consistency update — 2026-10-29
+
+The final workspace stylesheet now consumes the shared dialog tokens instead
+of overriding headings and labels with separate numeric sizes. Standard form
+inputs have a 44px minimum height on desktop and phones. Shared form labels are
+associated with their controls; required-field errors persist beside inputs
+and in linked summaries. The synthetic fixture loads production font and
+stylesheet links and checks computed styles. See `UI-CONSISTENCY.md` for current
+validation and browser-review limits. Earlier verification below is historical.
+
 ## Findings
 
 Employee Edit used 11px input text and 9.5px labels. Overview used 10.5px record values and 8px labels. Status, Lifecycle and Transfer inherited generic 14px inputs and 11.5px labels. Address inputs separately used 11px, and Employee Relations entry labels separately used 10px. These overrides caused visible changes when switching transactions.

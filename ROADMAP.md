@@ -1,4 +1,25 @@
 STRELLAS HR Management — Development Roadmap
+
+UI-20261029 — UI consistency and compact employee records
+
+Status: completed locally; publication reference recorded after committing.
+
+- Resolved the ten UI audit findings: label associations, search focus,
+  compact table density, readable record/case text, mobile control sizing,
+  shared modal tokens, action icon semantics, filtered leave recovery,
+  persistent required-field errors and computed-style browser checks.
+- Aligned the desktop sidebar logo and workspace header dividers, and kept
+  employee pagination visible in responsive layouts. Existing server paging,
+  column projection, cache limits and request protection remain unchanged.
+- Changed the shared CSS, application UI helpers/renderers, cache versions,
+  action-icon validation contract, browser fixtures and focused regression
+  tests. Details: docs/UI-CONSISTENCY.md and design-system/MASTER.md.
+- Validation: lint, 395 tests, production build, structural validation and
+  diff checks passed. Synthetic browser checks covered 320–1920px widths,
+  short landscape, modal typography/labels/errors and filtered leave recovery.
+- No SQL, schema, authorization or dependency changes. Production records and
+  authenticated saves were not used. Physical-device coverage is not exhaustive.
+
 Purpose
 
 This roadmap guides incremental development of the STRELLAS HR Management & Disciplinary Dashboard.
