@@ -1,7 +1,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from '../supabase-config.js';
 import { ALL_ROWS_SIZE, paginationMeta, paginationHTML, paginationReset, paginateRows } from './core/pagination.js?v=20261013-1';
-import { installTableEnhancer } from './core/table-enhancer.js?v=20261013-1';
+import { installTableEnhancer } from './core/table-enhancer.js?v=20261029-2';
 import { employeeDirectoryProjection } from './core/employee-directory.js?v=20261009-2';
 import { isValidEmployeeNumber, nextEmployeeNumber, normalizeEmployeeNumber } from './core/employee-number.js?v=20261008-1';
 import { ageOn, workforceAgeMix, validateAttendance, fillRateSummary, EXIT_CLASSIFICATIONS, WORKFORCE_FACTORS, ATTENDANCE_STATUSES, ABSENCE_CLASSIFICATIONS } from './core/workforce-metrics.js?v=20261009-2';
@@ -19,7 +19,7 @@ import {quantityAmendmentPayload,quantityAmendmentHTML,quantityAmendmentError} f
 import {LIFECYCLE_LABELS,lifecycleOperations,lifecycleActionsHTML,lifecyclePayload,lifecycleEditorHTML,lifecycleResultValid,lifecycleError} from './manpower/lifecycle-editor.js?v=20261010-2';
 import {HEADER_AMENDMENT_FIELDS,readHeaderAmendment,headerAmendmentPayload,headerEditorHTML,headerAmendmentResultValid,headerAmendmentError} from './manpower/header-editor.js?v=20261010-1';
 import {loadLineCapacity,lineCapacityHTML,capacityErrorHTML} from './manpower/capacity-summary.js?v=20261010-1';
-import {loadLineWorkers,workerTableHTML,workerFiltersHTML} from './manpower/worker-monitoring.js?v=20261013-1';
+import {loadLineWorkers,workerTableHTML,workerFiltersHTML} from './manpower/worker-monitoring.js?v=20261029-2';
 import {identityPreviewValid,identityReviewPayload,identityComparisonHTML,identityReviewResultValid,identityReviewError} from './manpower/identity-review.js?v=20261010-1';
 import {readManpowerPaste,detectManpowerPasteMapping,previewManpowerPaste} from './core/manpower-paste.js?v=20261009-1';
 import {manpowerPasteMappingHTML,manpowerPastePreviewHTML} from './manpower/paste-preview.js?v=20261009-1';
@@ -2663,6 +2663,7 @@ function downloadCSV(filename, csv){
 /* ---------------- modal helpers ---------------- */
 let MODAL_TRIGGER=null;
 let MODAL_EDIT_STATE=null;
+let EMPLOYEE_SECTION_EDIT=null;
 let EMPLOYEE_TRANSACTION_RETURN=null;
 let MODAL_TRANSITIONING=false;
 let PAGE_EDIT_STATE=null;
@@ -2823,6 +2824,7 @@ function openModal(html){
   modal.removeAttribute('aria-busy');
   modal.classList.remove('case-modal','employee-workspace-modal','entry-modal','relations-modal');
   modal.innerHTML=html;
+  EMPLOYEE_SECTION_EDIT=null;
   modal.querySelectorAll('.field > label:not([for])').forEach(label=>{
     const input=label.parentElement.querySelector('input:not([type="hidden"]),select,textarea');
     if(input?.id&&!label.contains(input))label.htmlFor=input.id;
@@ -2894,6 +2896,7 @@ async function closeModal(keepUploads=[]){
   document.getElementById('modal').innerHTML='';
   MODAL_EDIT_STATE=null;
   CASE_WORKFLOW_CONTEXT=null;
+  EMPLOYEE_SECTION_EDIT=null;
   if(MODAL_TRIGGER?.isConnected) MODAL_TRIGGER.focus();
   MODAL_TRIGGER=null;
   await deleteStorageObjects(pending);
@@ -3033,6 +3036,33 @@ window.addEventListener('beforeunload',event=>{
 });
 
 const ROW_ACTION_MENUS=new Map();
+const FILTER_SELECTORS='.toolbar select,.data-toolbar select,.workflow-toolbar select,.analytics-toolbar select,.quality-toolbar select,.automation-toolbar select,.attendance-paint-toolbar select,select.filter-select';
+let FILTER_TEXT_CONTEXT;
+function enhanceFilterVisibility(){
+  const root=document.getElementById('content');if(!root)return;
+  FILTER_TEXT_CONTEXT ||= document.createElement('canvas').getContext('2d');
+  if(!FILTER_TEXT_CONTEXT)return;
+  const groups=new Map();
+  root.querySelectorAll(FILTER_SELECTORS).forEach(select=>{
+    const parent=select.parentElement;if(!groups.has(parent))groups.set(parent,[]);
+    if(!select.getClientRects().length)return;
+    const text=select.selectedOptions[0]?.textContent.trim()||'';
+    const style=getComputedStyle(select);FILTER_TEXT_CONTEXT.font=style.font;
+    const available=select.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight)-20;
+    if(FILTER_TEXT_CONTEXT.measureText(text).width>available){
+      const label=select.options?.[0]?.textContent.trim()||select.getAttribute('aria-label')||'Filter';
+      groups.get(parent).push(label===text?text:`${label}: ${text}`);
+    }
+  });
+  groups.forEach((values,parent)=>{
+    let note=parent.querySelector(':scope > .filter-value-summary');
+    if(!values.length){note?.remove();return;}
+    if(!note){note=document.createElement('p');note.className='filter-value-summary';parent.appendChild(note);}
+    const text=values.join(' · ');if(note.textContent!==text)note.textContent=text;
+  });
+}
+document.addEventListener('change',event=>{if(event.target.matches(FILTER_SELECTORS))requestAnimationFrame(enhanceFilterVisibility);});
+document.fonts.ready.then(()=>requestAnimationFrame(enhanceFilterVisibility));
 let ROW_ACTION_MENU_ID=0;
 function rowActionLabel(button,index){
   const explicit=(button.getAttribute('aria-label')||button.title||'').trim();
@@ -3049,6 +3079,7 @@ function rowActionLabel(button,index){
   return `Action ${index+1}`;
 }
 function enhanceRowActionMenus(){
+  enhanceFilterVisibility();
   for(const [id,menu] of ROW_ACTION_MENUS){
     if(!menu.trigger?.isConnected) ROW_ACTION_MENUS.delete(id);
   }
@@ -3849,7 +3880,7 @@ function attachCellHTML(moduleKey, r, fieldKey){
   const name = r[fieldKey];
   const data = r[fieldKey+'Data'];
   if(!name) return '<span class="small">—</span>';
-  return `<div class="attach-cell">${iDoc(13)}<span title="${esc(name)}" style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(name)}</span>${data?`<button class="iconbtn" title="Download" onclick="downloadRecordAttachment('${moduleKey}','${r.id}','${fieldKey}')">${iDownload(12)}</button>`:'<span class="small" title="No stored file (demo record or uploaded before this feature)">n/a</span>'}</div>`;
+  return `<div class="attach-cell">${iDoc(13)}<span title="${esc(name)}">${esc(name)}</span>${data?`<button class="iconbtn" title="Download" onclick="downloadRecordAttachment('${moduleKey}','${r.id}','${fieldKey}')">${iDownload(12)}</button>`:'<span class="small" title="No stored file (demo record or uploaded before this feature)">n/a</span>'}</div>`;
 }
 
 /* status badge helper */
@@ -4334,41 +4365,42 @@ function toggleEmployeeDirectoryFilters(){
   const button=document.querySelector('.employee-filter-toggle');
   panel?.classList.toggle('expanded',STATE.employeeFiltersExpanded);
   button?.setAttribute('aria-expanded',String(Boolean(STATE.employeeFiltersExpanded)));
+  if(STATE.employeeFiltersExpanded)requestAnimationFrame(enhanceFilterVisibility);
 }
 const EMPLOYEE_COLUMN_DEFS = [
-  {key:'employeeNo',label:'Employee No.',locked:true,default:true,width:104,cell:e=>`<span class="mono">${esc(e.employeeNo||'—')}</span>`},
-  {key:'prfNumber',label:'PRF Number',locked:true,default:true,width:118,cell:e=>`<span class="mono">${esc(e.prfNumber||'—')}</span>`},
-  {key:'name',label:'Name',locked:true,default:true,width:184,cell:e=>`<b>${esc(employeeDisplayName(e)||'—')}</b>`},
-  {key:'position',label:'Position',default:true,width:172,cell:e=>esc(e.position||'—')},
-  {key:'department',label:'Department',default:true,width:124,cell:e=>esc(e.department||'—')},
-  {key:'branchReporting',label:'Branch Reporting',default:true,width:150,cell:e=>esc(e.branchReporting||'—')},
-  {key:'dateHired',label:'Date Hired',default:true,width:112,cell:e=>fmtDate(e.dateHired)},
-  {key:'gender',label:'Gender',default:false,width:86,cell:e=>esc(e.gender||'—')},
-  {key:'status',label:'Status',default:true,width:142,cell:e=>statusBadge(e.status,EMP_STATUS_MAP)},
-  {key:'statusReason',label:'Status Reason',default:false,width:180,cell:e=>esc(e.statusReason||'—')},
-  {key:'classification',label:'Employment Type',default:true,width:124,cell:e=>statusBadge(classify(e),classify(e)==='Regular / Permanent'?{'Regular / Permanent':'b-green'}:{'Probationary':'b-amber'})},
-  {key:'mobileNumber',label:'Mobile Number',default:false,width:132,cell:e=>esc(e.mobileNumber||'—')},
-  {key:'personalEmail',label:'Contact Email',default:false,width:210,cell:e=>esc(e.personalEmail||'—')},
-  {key:'address',label:'Home Address',default:false,width:250,cell:e=>esc(formatPhilippineAddress(e.homeAddress)||e.address||'—')},
-  {key:'presentAddress',label:'Present Address',default:false,width:250,cell:e=>esc(formatPhilippineAddress(e.presentAddress)||e.presentAddressText||'—')},
-  {key:'remarks',label:'Remarks',default:false,width:260,cell:e=>esc(e.remarks||'—')},
-  {key:'dailyRate',label:'Daily Rate',default:false,width:112,cell:e=>e.dailyRate!==''&&e.dailyRate!=null?peso(Number(e.dailyRate)||0):'—'},
-  {key:'allowances',label:'Allowances',default:false,width:210,cell:e=>employeeAllowanceSummary(e)},
-  {key:'birthDate',label:'Birth Date',default:false,width:112,cell:e=>fmtDate(e.birthDate)},
-  {key:'civilStatus',label:'Civil Status',default:false,width:104,cell:e=>esc(e.civilStatus||'—')},
-  {key:'tin',label:'BIR TIN',default:false,width:150,cell:e=>`<span class="mono">${esc(formatGovernmentId('tin',e.tin)||'—')}</span>`},
-  {key:'sssNumber',label:'SSS Number',default:false,width:144,cell:e=>`<span class="mono">${esc(formatGovernmentId('sss',e.sssNumber)||'—')}</span>`},
-  {key:'philHealthNumber',label:'PhilHealth PIN',default:false,width:160,cell:e=>`<span class="mono">${esc(formatGovernmentId('philHealth',e.philHealthNumber)||'—')}</span>`},
-  {key:'pagIbigNumber',label:'Pag-IBIG MID',default:false,width:154,cell:e=>`<span class="mono">${esc(formatGovernmentId('pagIbig',e.pagIbigNumber)||'—')}</span>`},
-  {key:'emergencyContactName',label:'Emergency Contact',default:false,width:174,cell:e=>esc(e.emergencyContactName||'—')},
-  {key:'emergencyContactRelationship',label:'Relationship',default:false,width:124,cell:e=>esc(e.emergencyContactRelationship||'—')},
-  {key:'emergencyContactPhone',label:'Emergency Phone',default:false,width:142,cell:e=>esc(e.emergencyContactPhone||'—')},
+  {key:'employeeNo',label:'Employee No.',locked:true,default:true,cell:e=>`<span class="mono">${esc(e.employeeNo||'—')}</span>`},
+  {key:'prfNumber',label:'PRF Number',locked:true,default:true,cell:e=>`<span class="mono">${esc(e.prfNumber||'—')}</span>`},
+  {key:'name',label:'Name',locked:true,default:true,cell:e=>`<b>${esc(employeeDisplayName(e)||'—')}</b>`},
+  {key:'position',label:'Position',default:true,cell:e=>esc(e.position||'—')},
+  {key:'department',label:'Department',default:true,cell:e=>esc(e.department||'—')},
+  {key:'branchReporting',label:'Branch Reporting',default:true,cell:e=>esc(e.branchReporting||'—')},
+  {key:'dateHired',label:'Date Hired',default:true,cell:e=>fmtDate(e.dateHired)},
+  {key:'gender',label:'Gender',default:false,cell:e=>esc(e.gender||'—')},
+  {key:'status',label:'Status',default:true,cell:e=>statusBadge(e.status,EMP_STATUS_MAP)},
+  {key:'statusReason',label:'Status Reason',default:false,cell:e=>esc(e.statusReason||'—')},
+  {key:'classification',label:'Employment Type',default:true,cell:e=>statusBadge(classify(e),classify(e)==='Regular / Permanent'?{'Regular / Permanent':'b-green'}:{'Probationary':'b-amber'})},
+  {key:'mobileNumber',label:'Mobile Number',default:false,cell:e=>esc(e.mobileNumber||'—')},
+  {key:'personalEmail',label:'Contact Email',default:false,cell:e=>esc(e.personalEmail||'—')},
+  {key:'address',label:'Home Address',default:false,cell:e=>esc(formatPhilippineAddress(e.homeAddress)||e.address||'—')},
+  {key:'presentAddress',label:'Present Address',default:false,cell:e=>esc(formatPhilippineAddress(e.presentAddress)||e.presentAddressText||'—')},
+  {key:'remarks',label:'Remarks',default:false,cell:e=>esc(e.remarks||'—')},
+  {key:'dailyRate',label:'Daily Rate',default:false,cell:e=>e.dailyRate!==''&&e.dailyRate!=null?peso(Number(e.dailyRate)||0):'—'},
+  {key:'allowances',label:'Allowances',default:false,cell:e=>employeeAllowanceSummary(e)},
+  {key:'birthDate',label:'Birth Date',default:false,cell:e=>fmtDate(e.birthDate)},
+  {key:'civilStatus',label:'Civil Status',default:false,cell:e=>esc(e.civilStatus||'—')},
+  {key:'tin',label:'BIR TIN',default:false,cell:e=>`<span class="mono">${esc(formatGovernmentId('tin',e.tin)||'—')}</span>`},
+  {key:'sssNumber',label:'SSS Number',default:false,cell:e=>`<span class="mono">${esc(formatGovernmentId('sss',e.sssNumber)||'—')}</span>`},
+  {key:'philHealthNumber',label:'PhilHealth PIN',default:false,cell:e=>`<span class="mono">${esc(formatGovernmentId('philHealth',e.philHealthNumber)||'—')}</span>`},
+  {key:'pagIbigNumber',label:'Pag-IBIG MID',default:false,cell:e=>`<span class="mono">${esc(formatGovernmentId('pagIbig',e.pagIbigNumber)||'—')}</span>`},
+  {key:'emergencyContactName',label:'Emergency Contact',default:false,cell:e=>esc(e.emergencyContactName||'—')},
+  {key:'emergencyContactRelationship',label:'Relationship',default:false,cell:e=>esc(e.emergencyContactRelationship||'—')},
+  {key:'emergencyContactPhone',label:'Emergency Phone',default:false,cell:e=>esc(e.emergencyContactPhone||'—')},
 ];
 let EMPLOYEE_COLUMN_CACHE={revision:-1,definitions:[]};
 function employeeColumnDefinitions(){
   if(EMPLOYEE_COLUMN_CACHE.revision===EMPLOYEE_DIRECTORY_REVISION)return EMPLOYEE_COLUMN_CACHE.definitions;
   const allowanceNames=uniqueSettingNames([...employeeAllowanceTypes(),...DB.employees.flatMap(employee=>Object.keys(employee.allowances||{}))]);
-  const definitions=[...EMPLOYEE_COLUMN_DEFS,...allowanceNames.map(name=>({key:employeeAllowanceFieldKey(name),label:name,default:false,width:144,cell:employee=>employee.allowances?.[name]!==''&&employee.allowances?.[name]!=null?peso(employee.allowances[name]):'—'}))];
+  const definitions=[...EMPLOYEE_COLUMN_DEFS,...allowanceNames.map(name=>({key:employeeAllowanceFieldKey(name),label:name,default:false,cell:employee=>employee.allowances?.[name]!==''&&employee.allowances?.[name]!=null?peso(employee.allowances[name]):'—'}))];
   EMPLOYEE_COLUMN_CACHE={revision:EMPLOYEE_DIRECTORY_REVISION,definitions};
   return definitions;
 }
@@ -4579,7 +4611,6 @@ function renderEmployees(){
   const filteredTotal=pageResult.meta.total;
   const {departments:depts,branches,statuses:statusOptions}=employeeDirectoryMetadata();
   const columns=query.columns;
-  const tableMinWidth=columns.reduce((sum,c)=>sum+c.width,0)+58;
   setTitle('Employees', `${filteredTotal} of ${DB.employees.length} employees · ${depts.length} departments`);
   document.getElementById('content')?.classList.add('employee-directory-content');
 
@@ -4587,7 +4618,7 @@ function renderEmployees(){
   <div class="employee-directory-workspace">
     <section class="employee-directory-surface" aria-label="Employee directory">
       <div class="toolbar employee-directory-toolbar" aria-label="Employee directory search and filters">
-        <div class="search employee-directory-search">${iSearch(14)}<input id="employee-directory-search" data-search-key="employeeSearch" type="search" autocomplete="off" spellcheck="false" aria-label="Search employees" placeholder="Search employees…" value="${esc(STATE.employeeSearch)}" oninput="employeeSearchInput(this.value)"></div>
+        <div class="search employee-directory-search">${iSearch(16)}<input id="employee-directory-search" data-search-key="employeeSearch" type="search" autocomplete="off" spellcheck="false" aria-label="Search employees" placeholder="Search employees…" value="${esc(STATE.employeeSearch)}" oninput="employeeSearchInput(this.value)"></div>
         <button class="btn btn-ghost employee-filter-toggle ${activeFilterCount?'active':''}" type="button" onclick="toggleEmployeeDirectoryFilters()" aria-expanded="${Boolean(STATE.employeeFiltersExpanded)}" aria-controls="employee-filter-set">${iFilter(14)} <span>Filters${activeFilterCount?` (${activeFilterCount})`:''}</span></button>
         <div id="employee-filter-set" class="employee-filter-set ${STATE.employeeFiltersExpanded?'expanded':''}">
           <select aria-label="Filter employees by department" onchange="STATE.employeeDepartmentFilter=this.value; renderEmployees()"><option value="">Department</option>${depts.map(d=>`<option value="${esc(d)}" ${deptFilter===d?'selected':''}>${esc(d)}</option>`).join('')}</select>
@@ -4609,8 +4640,8 @@ function renderEmployees(){
         </div>
       </div>
       <div class="tablewrap employee-directory-tablewrap">
-        <table class="data-table employee-directory-table" data-table-key="employees" data-table-tools="external" data-server-paginated="true" data-view-all-disabled="true" data-page-scope="${pageScope}" data-page-handler="serverTablePageSize" data-managed-columns="department,branchReporting,status,classification" style="min-width:${tableMinWidth}px!important">
-          <colgroup>${columns.map(c=>`<col data-column-key="${esc(c.key)}" style="width:${c.width}px">`).join('')}<col data-column-key="actions" style="width:58px"></colgroup>
+        <table class="data-table employee-directory-table" data-table-key="employees" data-table-tools="external" data-server-paginated="true" data-view-all-disabled="true" data-page-scope="${pageScope}" data-page-handler="serverTablePageSize" data-managed-columns="department,branchReporting,status,classification">
+          <colgroup>${columns.map(c=>`<col data-column-key="${esc(c.key)}">`).join('')}<col data-column-key="actions"></colgroup>
           <thead><tr>${columns.map(c=>`<th data-column-key="${esc(c.key)}" ${['department','branchReporting','status','classification'].includes(c.key)?'data-column-managed="true"':''}>${esc(c.label)}</th>`).join('')}<th class="actions-head" data-column-key="actions">Actions</th></tr></thead>
           <tbody>${employeeDirectoryRowsHTML(rows,columns)}</tbody>
         </table>
@@ -4712,7 +4743,7 @@ async function employeeWorkspaceNavigate(employeeId,target='overview'){
     history:async()=>{await openEmployeeProfile(employee.id);employeeProfileSetTab(employee.id,'history');},
     report:()=>openEmployeeOperation('cases',employee.id),
   };
-  const destination=destinations[target]||destinations.overview;
+  const destination=target.startsWith('section:')?()=>openEmployeeSectionForm(employee.id,Number(target.slice(8))):destinations[target]||destinations.overview;
   EMPLOYEE_WORKSPACE_NAVIGATING=true;
   const modal=document.getElementById('modal');
   modal?.setAttribute('aria-busy','true');
@@ -5290,7 +5321,7 @@ function employeeFormFieldValue(field,record){
 function employeeFormSectionsHTML(record,options={}){
   const homeAddress=normalizeAddress(record?.homeAddress,record?.address||'');
   const presentAddress=normalizeAddress(record?.presentAddress,record?.presentAddressText||record?.address||'');
-  const fieldSections=EMP_FORM_SECTIONS.map((section,index)=>`<section class="employee-form-section">
+  const fieldSections=EMP_FORM_SECTIONS.filter(section=>!options.section||section.title===options.section).map((section,index)=>`<section class="employee-form-section">
     <div class="employee-form-section-head"><span>${String(index+1).padStart(2,'0')}</span><div><h4>${esc(section.title)}</h4><p>${esc(section.description)}</p></div></div>
     <div class="employee-form-grid">${section.keys.map(key=>{
       const field=EMP_FIELDS.find(item=>item.key===key);
@@ -5412,6 +5443,60 @@ function openEmployeeForm(id){
     ${existing?employeeWorkspaceFooter(existing,'Save Employee',`saveEmployee('${id}')`):`<div class="modal-foot employee-workspace-foot"><button class="btn btn-ghost" onclick="closeModal()">${iClose(14)} Cancel</button><div class="toolbar-spacer"></div><button class="btn btn-primary" onclick="saveEmployee('')">${iCheck(14)} Save Employee</button></div>`}
   `);
 }
+function openEmployeeSectionForm(id,index){
+  const employee=DB.employees.find(record=>String(record.id)===String(id)),section=EMP_FORM_SECTIONS[index];
+  if(!employee||!section||!hasPermission('employees.update')){toast('Employee editing is not available.',true);return;}
+  const record={...employee,...splitEmployeeName(employee)};
+  openEmployeeWorkspaceModal(`${employeeWorkspaceHeader(employee,`Edit ${section.title}`)}<div class="modal-body employee-form-body">${employeeWorkspaceNav(employee,'edit')}${employeeFormSectionsHTML(record,{section:section.title})}</div>${employeeWorkspaceFooter(employee,`Save ${section.title}`,`saveEmployeeSection('${id}',${index})`)}`);
+  EMPLOYEE_SECTION_EDIT={employeeId:String(id),index,busy:false};
+}
+async function saveEmployeeSection(id,index){
+  const context=EMPLOYEE_SECTION_EDIT;
+  const employee=DB.employees.find(record=>String(record.id)===String(id)),section=EMP_FORM_SECTIONS[index];
+  if(!employee||!section||context?.employeeId!==String(id)||context.index!==index||context.busy||!hasPermission('employees.update'))return;
+  context.busy=true;
+  const saveButton=document.querySelector?.('#modal .modal-foot .btn-primary');
+  if(saveButton)saveButton.disabled=true;
+  try{
+    showModalFieldErrors();
+    const fields=EMP_FIELDS.filter(field=>section.keys.includes(field.key)),patch=readFields(fields);
+    const issues=fields.flatMap(field=>{
+      const control=document.getElementById(`f_${field.key}`),value=patch[field.key];
+      const message=field.required&&!value?`${field.label} is required.`:field.maxLength&&value.length>field.maxLength?`${field.label} is too long.`:control?.checkValidity&&!control.checkValidity()?`Enter a valid ${field.label}.`:'';
+      return message?[{id:`f_${field.key}`,message}]:[];
+    });
+    if(issues.length){showModalFieldErrors(issues);return;}
+    if(section.addresses){
+      if(patch.birthDate&&patch.birthDate>todayISO()){showModalFieldErrors([{id:'f_birthDate',message:'Birth Date cannot be in the future.'}]);return;}
+      const [home,present]=await Promise.all([readAddressComponent('emp_home'),readAddressComponent('emp_present')]);
+      if(!home.valid||!present.valid){toast(home.message||present.message,true);return;}
+      Object.assign(patch,{homeAddress:home.address,presentAddress:present.address,address:formatPhilippineAddress(home.address),presentAddressText:formatPhilippineAddress(present.address),name:formatEmployeeName(patch)});
+      if(!(await confirmEmployeeDuplicateNames({...employee,...patch},id)))return;
+    }
+    if(section.title==='Government IDs'){
+      const error=validateGovernmentIds(patch);if(error){toast(error,true);return;}
+    }
+    if(section.title==='Employment Details'){
+      const candidate={...employee,...patch},error=employmentValidation(candidate,{allowLegacy:employee.employmentType===REVIEW_TYPE});
+      if(error){toast(error,true);return;}
+      const department=departmentCatalog().some(item=>item.name===patch.department&&(item.active||employee.department===patch.department));
+      const position=positionCatalog().some(item=>item.name===patch.position&&item.department===patch.department&&(item.active||(employee.department===patch.department&&employee.position===patch.position)));
+      if(!department||!position){toast('Select an active department and a position configured for that department.',true);return;}
+      if(patch.dateHired>todayISO()){showModalFieldErrors([{id:'f_dateHired',message:'Date Hired cannot be in the future.'}]);return;}
+      if(candidate.status==='Separated'&&employee.status!=='Separated'&&(!candidate.exitClassification||!candidate.exitFactor||!candidate.exitReason)){toast('Use Movement to record the leaving details before separating this employee.',true);return;}
+    }
+    if(section.title==='Compensation'&&patch.dailyRate!==''){
+      if(!Number.isFinite(Number(patch.dailyRate))||Number(patch.dailyRate)<0){showModalFieldErrors([{id:'f_dailyRate',message:'Daily Rate must be a non-negative amount.'}]);return;}
+      patch.dailyRate=Math.round(Number(patch.dailyRate)*100)/100;
+    }
+    if(section.allowances){
+      patch.allowances=readEmployeeAllowances(employee);
+      if(Object.values(patch.allowances).some(value=>!Number.isFinite(value)||value<0)){toast('Allowance amounts must be non-negative numbers.',true);return;}
+    }
+    if(EMPLOYEE_SECTION_EDIT!==context||!hasPermission('employees.update'))return;
+    return await persistEmployeeEdit({...employee,...patch},id,patch);
+  }finally{context.busy=false;if(saveButton?.isConnected)saveButton.disabled=false;}
+}
 function normalizeEmployeeName(v){ return String(v||'').toLowerCase().replace(/\s+/g,' ').trim(); }
 function splitEmployeeName(employee={}){
   if(employee.lastName||employee.firstName||employee.middleName) return {lastName:employee.lastName||'',firstName:employee.firstName||'',middleName:employee.middleName||''};
@@ -5514,11 +5599,19 @@ async function saveEmployee(id){
   const governmentIdValidation=validateGovernmentIds(vals); if(governmentIdValidation){toast(governmentIdValidation,true);return;}
   if(vals.employeeNo && DB.employees.some(e=>e.id!==id && String(e.employeeNo||'').toUpperCase()===String(vals.employeeNo).toUpperCase())){ vals.employeeNo=nextEmployeeNumber(DB.employees); }
   vals.name=formatEmployeeName(vals);
+  if(!(await confirmEmployeeDuplicateNames(vals,id)))return;
+  return persistEmployeeEdit(vals,id);
+}
+async function confirmEmployeeDuplicateNames(vals,id){
   const duplicateCandidates=findEmployeeDuplicates(vals,id);
   if(duplicateCandidates.length){
     const sample=duplicateCandidates.slice(0,4).map(match=>`${employeeDisplayName(match.employee)} · ${match.employee.employeeNo||'No employee number'} · ${match.employee.department||'Unassigned'} (${Math.round(match.score*100)}% name match)`).join('; ');
-    if(!(await confirmDataChange({title:'Possible duplicate employee',message:`Similar employee record${duplicateCandidates.length===1?' was':'s were'} found: ${sample}. Review these matches before creating another employee.`,confirmLabel:'Continue and save',cancelLabel:'Go back',warning:true}))) return;
+    if(!(await confirmDataChange({title:'Possible duplicate employee',message:`Similar employee record${duplicateCandidates.length===1?' was':'s were'} found: ${sample}. Review these matches before creating another employee.`,confirmLabel:'Continue and save',cancelLabel:'Go back',warning:true}))) return false;
   }
+  return true;
+}
+async function persistEmployeeEdit(vals,id,patch=null){
+  if(!hasPermission(id?'employees.update':'employees.create')){toast('Employee editing is not available.',true);return;}
   const isNew=!id;
   const rec=id?DB.employees.find(e=>e.id===id):{id:uid(), employmentHistory:[]};
   if(!rec){ toast('Employee record could not be found.',true); return; }
@@ -5529,11 +5622,13 @@ async function saveEmployee(id){
   const previousStatusDate=id?rec.statusDate:'';
   const now=new Date().toISOString();
   const actorName=SESSION?.fullName||'System';
-  const changedFields=isNew?[]:EMP_FIELDS.filter(field=>String(original?.[field.key]??'')!==String(vals[field.key]??'')).map(field=>field.label);
-  if(!isNew&&JSON.stringify(original?.homeAddress||{})!==JSON.stringify(vals.homeAddress||{}))changedFields.push('Home Address');
-  if(!isNew&&JSON.stringify(original?.presentAddress||{})!==JSON.stringify(vals.presentAddress||{}))changedFields.push('Present Address');
-  if(!isNew&&JSON.stringify(original?.allowances||{})!==JSON.stringify(vals.allowances||{}))changedFields.push('Allowances');
-  Object.assign(rec, vals,{employmentTypeNeedsReview:vals.employmentType===REVIEW_TYPE});
+  const updates=patch||vals;
+  const candidate={...rec,...updates};
+  const changedFields=isNew?[]:EMP_FIELDS.filter(field=>String(original?.[field.key]??'')!==String(candidate[field.key]??'')).map(field=>field.label);
+  if(!isNew&&JSON.stringify(original?.homeAddress||{})!==JSON.stringify(candidate.homeAddress||{}))changedFields.push('Home Address');
+  if(!isNew&&JSON.stringify(original?.presentAddress||{})!==JSON.stringify(candidate.presentAddress||{}))changedFields.push('Present Address');
+  if(!isNew&&JSON.stringify(original?.allowances||{})!==JSON.stringify(candidate.allowances||{}))changedFields.push('Allowances');
+  Object.assign(rec,updates,Object.hasOwn(updates,'employmentType')?{employmentTypeNeedsReview:updates.employmentType===REVIEW_TYPE}:{});
   if(!Array.isArray(rec.employmentHistory)) rec.employmentHistory=[];
   if(!Array.isArray(rec.recordHistory)) rec.recordHistory=[];
   if(isNew){
@@ -5559,7 +5654,7 @@ async function saveEmployee(id){
     const {error}=await supabase.from('hr_cases').update({employee_name:rec.name,updated_by:SESSION?.id||null}).ilike('employee_name',originalName);
     if(error) toast('Employee saved, but linked HR case names could not be updated: '+error.message,true);
   }
-  logAudit((id?'Updated':'Added new')+' employee record: '+vals.name);
+  logAudit((id?'Updated':'Added new')+' employee record: '+rec.name);
   const newStoragePaths=recordStoragePaths(rec); rememberCommittedRecordFiles(rec);
   await deleteStorageObjects([...oldStoragePaths].filter(path=>!newStoragePaths.has(path)));
   await closeModal([...newStoragePaths]); renderNav(); await renderEmployeeOrigin();
@@ -5891,14 +5986,16 @@ function employeeProfileLoadingCards(){
 }
 function employeeProfileSummaryHTML(employee,snapshot){
   const completion=employeeCompleteness(employee);
-  const detail=(label,value,full=false)=>`<div class="item${full?' full':''}"><dt class="label">${esc(label)}</dt><dd class="value">${esc(value||'Not recorded')}</dd></div>`;
+  const canEditSections=Boolean(employee.id)&&hasPermission('employees.update');
+  const sectionHead=title=>{const index=EMP_FORM_SECTIONS.findIndex(section=>section.title===title);return `<div class="employee-section-title"><h3>${esc(title)}</h3>${canEditSections&&index>=0?`<button type="button" class="iconbtn employee-section-edit" aria-label="Edit ${esc(title)}" title="Edit ${esc(title)}" onclick="employeeWorkspaceNavigate('${employee.id}','section:${index}')">${iEdit(15)}</button>`:''}</div>`;};
+  const detail=(label,value,full=false)=>{const missing=value==null||String(value).trim()===''||value==='Not recorded'||value==='—';return `<div class="item${full?' full':''}"><dt class="label">${esc(label)}</dt><dd class="value${missing?' not-recorded':''}">${esc(missing?'Not recorded':value)}</dd></div>`;};
   const maskedId=value=>String(value||'').replace(/\d(?=(?:\D*\d){4})/g,'*');
   const age=ageOn(employee.birthDate,todayISO());
   const allowances=employeeAllowanceEntries(employee);
   return `<div class="employee-overview employee-record-overview" data-employee-id="${esc(employee.id||'')}">
     <div class="employee-overview-completion"><span>Profile completeness</span><progress max="100" value="${completion}" aria-label="Profile completeness"></progress><b>${completion}%</b></div>
     <div class="employee-profile-columns">
-      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Personal Information</h3></div><dl class="profile-detail">
+      <section class="employee-profile-section"><div class="employee-profile-section-head">${sectionHead('Personal Information')}</div><dl class="profile-detail">
         ${detail('Birthdate',fmtDate(employee.birthDate))}
         ${detail('Mobile',employee.mobileNumber)}
         ${detail('Age',age===null?'Not recorded':`${age} years old`)}
@@ -5908,15 +6005,15 @@ function employeeProfileSummaryHTML(employee,snapshot){
         ${detail('Home Address',formatPhilippineAddress(employee.homeAddress)||employee.address,true)}
         ${detail('Current Address',formatPhilippineAddress(employee.presentAddress)||employee.presentAddressText,true)}
       </dl></section>
-      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Emergency Information</h3></div><dl class="profile-detail single-column">
+      <section class="employee-profile-section"><div class="employee-profile-section-head">${sectionHead('Emergency Information')}</div><dl class="profile-detail single-column">
         ${detail('Name',employee.emergencyContactName)}
         ${detail('Relationship',employee.emergencyContactRelationship)}
         ${detail('Contact',employee.emergencyContactPhone)}
       </dl></section>
-      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Government IDs</h3><button type="button" class="btn btn-ghost btn-sm employee-id-toggle" aria-pressed="false" onclick="employeeProfileToggleIds(this)"><span aria-hidden="true">${iShield(14)}</span><span class="employee-id-toggle-label">Unmask Government IDs</span></button></div><dl class="profile-detail single-column employee-government-ids">
-        ${[['SSS','sss','sssNumber'],['PhilHealth','philHealth','philHealthNumber'],['Pag-IBIG','pagIbig','pagIbigNumber'],['TIN','tin','tin']].map(([label,kind,key])=>`<div class="item"><dt class="label">${label}</dt><dd class="value" data-government-id="${key}">${esc(maskedId(formatGovernmentId(kind,employee[key]))||'Not recorded')}</dd></div>`).join('')}
+      <section class="employee-profile-section"><div class="employee-profile-section-head">${sectionHead('Government IDs')}<button type="button" class="btn btn-ghost btn-sm employee-id-toggle" aria-pressed="false" onclick="employeeProfileToggleIds(this)"><span aria-hidden="true">${iShield(14)}</span><span class="employee-id-toggle-label">Unmask Government IDs</span></button></div><dl class="profile-detail single-column employee-government-ids">
+        ${[['SSS','sss','sssNumber'],['PhilHealth','philHealth','philHealthNumber'],['Pag-IBIG','pagIbig','pagIbigNumber'],['TIN','tin','tin']].map(([label,kind,key])=>`<div class="item"><dt class="label">${label}</dt><dd class="value${!formatGovernmentId(kind,employee[key])?' not-recorded':''}" data-government-id="${key}">${esc(maskedId(formatGovernmentId(kind,employee[key]))||'Not recorded')}</dd></div>`).join('')}
       </dl></section>
-      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Employment Details</h3></div><dl class="profile-detail">
+      <section class="employee-profile-section"><div class="employee-profile-section-head">${sectionHead('Employment Details')}</div><dl class="profile-detail">
         ${detail('PRF Number',employee.prfNumber)}
         ${detail('Department',employee.department)}
         ${detail('Position',employee.position)}
@@ -5929,15 +6026,15 @@ function employeeProfileSummaryHTML(employee,snapshot){
         ${detail('Length of Service',employeeTenureText(employee))}
       </dl></section>
       <div class="employee-record-pay">
-      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Compensation</h3></div><dl class="profile-detail single-column">
+      <section class="employee-profile-section"><div class="employee-profile-section-head">${sectionHead('Compensation')}</div><dl class="profile-detail single-column">
         ${detail('Daily Rate',employee.dailyRate===''||employee.dailyRate==null?'Not recorded':peso(employee.dailyRate))}
       </dl></section>
-      <section class="employee-profile-section"><div class="employee-profile-section-head"><h3>Allowances</h3></div><dl class="profile-detail single-column">
+      <section class="employee-profile-section"><div class="employee-profile-section-head">${sectionHead('Allowances')}</div><dl class="profile-detail single-column">
         ${allowances.length?allowances.map(item=>detail(item.name,peso(item.amount))).join(''):detail('Allowances','Not recorded')}
         ${detail('Total Allowances',peso(employeeAllowanceTotal(employee)))}
       </dl></section></div>
-      ${employee.remarks?`<section class="employee-profile-section full"><div class="employee-profile-section-head"><h3>Remarks</h3></div><p class="employee-profile-remarks">${esc(employee.remarks)}</p></section>`:''}
-      ${isSeparated(employee)?`<section class="employee-profile-section full"><div class="employee-profile-section-head"><h3>Leaving Details</h3></div><dl class="profile-detail">
+      ${employee.remarks?`<section class="employee-profile-section full"><div class="employee-profile-section-head">${sectionHead('Remarks')}</div><p class="employee-profile-remarks">${esc(employee.remarks)}</p></section>`:''}
+      ${isSeparated(employee)?`<section class="employee-profile-section full"><div class="employee-profile-section-head">${sectionHead('Leaving Details')}</div><dl class="profile-detail">
         ${detail('Leaving Classification',employee.exitClassification)}
         ${detail('Leaving Factor',employee.exitFactor)}
         ${detail('Reason for Leaving',employee.exitReason,true)}
@@ -6222,7 +6319,7 @@ async function renderDisciplinary(){
   const page=paginateRows(rows,STATE,scope,25);
   const filterOptions=tab==='legacy'?uniqueSettingNames([...legacySource.map(row=>row.department),...legacySource.map(row=>row.migration_status),...legacySource.map(row=>row.verification_status)]):uniqueSettingNames([...verifiedSource.map(row=>row.department),...verifiedSource.map(row=>row.implementation_status),...verifiedSource.map(row=>row.status)]);
   const verifiedTable=`<div class="tablewrap"><table class="data-table" data-server-paginated="true" data-page-scope="${scope}"><thead><tr><th>Employee</th><th>Policy / Finding</th><th>Occurrence</th><th>Final Action</th><th>Finalized</th><th>Implementation</th><th class="actions-head">Case</th></tr></thead><tbody>${page.rows.length?page.rows.map(row=>{const occurrenceLabel=row.confirmed_occurrence?tdaOrdinal(row.confirmed_occurrence-1):'';return `<tr><td><b>${esc(row.employee_name)}</b><div class="cell-secondary mono">${esc(row.employee_record_id)} · ${esc(row.department||'Unassigned')}</div></td><td><b>${esc(disciplinaryHistoryPolicy(row))}</b><div class="cell-secondary">${esc(row.finding)}${row.tda_rule_id?` · ${esc(row.tda_rule_id)}`:''}</div></td><td>${occurrenceLabel?statusBadge(occurrenceLabel,{[occurrenceLabel]:'b-blue'}):'<span class="small">Not policy-counted</span>'}</td><td><b>${esc(row.disciplinary_action)}</b><div class="cell-secondary">${row.effective_date?`Effective ${fmtDate(row.effective_date)}`:'No effective date'}</div></td><td>${fmtDate(row.finalization_date)}<div class="cell-secondary">${esc(row.source_type==='case_generated'?'Approved case outcome':'Reviewed legacy record')}</div></td><td>${statusBadge(row.implementation_status,{Pending:'b-amber','Not Required':'b-grey','In Progress':'b-blue',Completed:'b-green',Cancelled:'b-grey'})}<div class="cell-secondary">${statusBadge(row.status,{Active:'b-green',Superseded:'b-grey',Reversed:'b-red',Void:'b-red'})}</div></td><td>${row.case_id?`<button class="iconbtn" title="Open source HR case" onclick="openCaseDetails('${row.case_id}')">${iShield(14)}</button>`:'<span class="small">No case</span>'}</td></tr>`;}).join(''):`<tr><td colspan="7"><div class="empty"><b>${DISCIPLINARY_HISTORY_READY===false?'Phase 25 migration required':'No verified disciplinary history'}</b>${DISCIPLINARY_HISTORY_READY===false?'Run the Phase 25 disciplinary-history migration to enable authoritative outcomes.':'Approved decisions and explicitly verified legacy records appear here.'}</div></td></tr>`}</tbody></table></div>`;
-  const legacyTable=`<div class="tablewrap"><table class="data-table legacy-review-table" data-server-paginated="true" data-page-scope="${scope}"><thead><tr><th>Employee</th><th>Recorded Matter</th><th>Review State</th><th>Date</th><th>Historical Action</th><th>Source Context</th><th class="actions-head">Actions</th></tr></thead><tbody>${page.rows.length?page.rows.map(row=>{const source=legacyHistorySource(row);const sourceId=legacyHistoryRecordId(row);const sourceRecord=(DB.disciplinary||[]).find(item=>String(item.id)===String(sourceId));const historicalLevel=source.tdaRule?.offenseLevel||source.historicalLevel||'';const reviewMap={'Reviewed Verified':'b-green','Reviewed Rejected':'b-red','Pending Employee Match':'b-amber','Ambiguous Case Links':'b-red','Source Removed':'b-grey','Pending Review':'b-amber','Reviewed Unverified':'b-blue','Migration Required':'b-amber'};return `<tr><td><b>${esc(row.employee_name||source.employeeName||'Unknown employee')}</b><div class="cell-secondary mono">${esc(row.employee_record_id||'Employee match required')} · ${esc(row.department||source.department||'Unassigned')}</div></td><td><b>${esc(source.violation||'Not recorded')}</b>${historicalLevel?`<div class="cell-secondary legacy-count-warning">Historical label: ${esc(historicalLevel)} · not counted</div>`:''}</td><td>${statusBadge(row.migration_status||'Pending Review',reviewMap)}<div class="cell-secondary">${esc(row.verification_status||'Legacy Unverified')}</div></td><td>${fmtDate(source.dateOfIncident)}</td><td>${esc(source.action||row.disciplinary_action||'—')}</td><td>${esc(source.sourceType||'legacy')}<div class="cell-secondary">${esc(row.migration_note||source.sourceReason||source.remarks||'Source snapshot preserved')}</div></td><td><div class="rowactions">${!row._legacyFallback&&(hasPermission('employee_relations.manage')||hasPermission('employee_relations.approve'))?`<button class="iconbtn" title="Review legacy record" onclick="openLegacyDisciplinaryReview('${row.id}')">${iEdit(14)}</button>`:''}${row.case_id?`<button class="iconbtn" title="Open linked HR case" onclick="openCaseDetails('${row.case_id}')">${iShield(14)}</button>`:sourceRecord&&hasPermission('employee_relations.manage')?`<button class="iconbtn" title="Link to an HR case" onclick="openRecordCaseDialog('disciplinary','${sourceId}')">${iShield(14)}</button>`:''}${sourceRecord&&hasPermission('employee_relations.manage')?`<button class="iconbtn" title="Edit preserved source" onclick="openRecordForm('disciplinary','${sourceId}')">${iEdit(14)}</button><button class="iconbtn" title="Remove preserved source" onclick="deleteRecord('disciplinary','${sourceId}')">${iTrash(14)}</button>`:''}${!sourceRecord&&!row.case_id?'<span class="small">Snapshot only</span>':''}</div></td></tr>`;}).join(''):'<tr><td colspan="7"><div class="empty"><b>No legacy entries found</b>Preserved records appear here without affecting occurrence counts until explicitly verified.</div></td></tr>'}</tbody></table></div>`;
+  const legacyTable=`<div class="tablewrap"><table class="data-table legacy-review-table" data-server-paginated="true" data-page-scope="${scope}"><thead><tr><th>Employee</th><th>Recorded Matter</th><th>Review State</th><th>Date</th><th>Historical Action</th><th>Source Context</th><th class="actions-head">Actions</th></tr></thead><tbody>${page.rows.length?page.rows.map(row=>{const source=legacyHistorySource(row);const sourceId=legacyHistoryRecordId(row);const sourceRecord=(DB.disciplinary||[]).find(item=>String(item.id)===String(sourceId));const historicalLevel=source.tdaRule?.offenseLevel||source.historicalLevel||'';const reviewMap={'Reviewed Verified':'b-green','Reviewed Rejected':'b-red','Pending Employee Match':'b-amber','Ambiguous Case Links':'b-red','Source Removed':'b-grey','Pending Review':'b-amber','Reviewed Unverified':'b-blue','Migration Required':'b-amber'};return `<tr><td><b>${esc(row.employee_name||source.employeeName||'Unknown employee')}</b><div class="cell-secondary mono">${esc(row.employee_record_id||'Employee match required')} · ${esc(row.department||source.department||'Unassigned')}</div></td><td><b class="${!source.violation?'not-recorded':''}">${esc(source.violation||'Not recorded')}</b>${historicalLevel?`<div class="cell-secondary legacy-count-warning">Historical label: ${esc(historicalLevel)} · not counted</div>`:''}</td><td>${statusBadge(row.migration_status||'Pending Review',reviewMap)}<div class="cell-secondary">${esc(row.verification_status||'Legacy Unverified')}</div></td><td>${fmtDate(source.dateOfIncident)}</td><td>${esc(source.action||row.disciplinary_action||'—')}</td><td>${esc(source.sourceType||'legacy')}<div class="cell-secondary">${esc(row.migration_note||source.sourceReason||source.remarks||'Source snapshot preserved')}</div></td><td><div class="rowactions">${!row._legacyFallback&&(hasPermission('employee_relations.manage')||hasPermission('employee_relations.approve'))?`<button class="iconbtn" title="Review legacy record" onclick="openLegacyDisciplinaryReview('${row.id}')">${iEdit(14)}</button>`:''}${row.case_id?`<button class="iconbtn" title="Open linked HR case" onclick="openCaseDetails('${row.case_id}')">${iShield(14)}</button>`:sourceRecord&&hasPermission('employee_relations.manage')?`<button class="iconbtn" title="Link to an HR case" onclick="openRecordCaseDialog('disciplinary','${sourceId}')">${iShield(14)}</button>`:''}${sourceRecord&&hasPermission('employee_relations.manage')?`<button class="iconbtn" title="Edit preserved source" onclick="openRecordForm('disciplinary','${sourceId}')">${iEdit(14)}</button><button class="iconbtn" title="Remove preserved source" onclick="deleteRecord('disciplinary','${sourceId}')">${iTrash(14)}</button>`:''}${!sourceRecord&&!row.case_id?'<span class="small">Snapshot only</span>':''}</div></td></tr>`;}).join(''):'<tr><td colspan="7"><div class="empty"><b>No legacy entries found</b>Preserved records appear here without affecting occurrence counts until explicitly verified.</div></td></tr>'}</tbody></table></div>`;
   const pendingLegacy=legacySource.filter(row=>!['Reviewed Verified','Reviewed Rejected'].includes(row.migration_status)).length;
   const html=`${caseWorkspaceTabsHTML('history',CASE_INTAKE_READY!==false)}${employeeRelationsProcessHTML('history')}
     <div class="sectionhead"><div><h2>Disciplinary History</h2><p>${verifiedSource.length} verified outcome${verifiedSource.length===1?'':'s'} · ${pendingLegacy} legacy item${pendingLegacy===1?'':'s'} requiring review.</p></div><div class="page-header-actions">${informationNoteButton('disciplinaryLevels')}${tab==='legacy'&&hasPermission('employee_relations.manage')?`<button class="btn btn-primary btn-sm" onclick="openRecordForm('disciplinary')">${iPlus(14)} Add Legacy Record</button>`:''}</div></div>
@@ -7079,7 +7176,7 @@ function openATDPayments(id){
 }
 function atdPayslipCellHTML(atdId, p){
   if(!p.payslip) return '<span class="small">—</span>';
-  return `<div class="attach-cell">${iDoc(13)}<span title="${esc(p.payslip)}" style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.payslip)}</span>${p.payslipData?`<button class="iconbtn" title="Download" onclick="downloadATDPayslip('${atdId}','${p.id}')">${iDownload(12)}</button>`:'<span class="small" title="No stored file">n/a</span>'}</div>`;
+  return `<div class="attach-cell">${iDoc(13)}<span title="${esc(p.payslip)}">${esc(p.payslip)}</span>${p.payslipData?`<button class="iconbtn" title="Download" onclick="downloadATDPayslip('${atdId}','${p.id}')">${iDownload(12)}</button>`:'<span class="small" title="No stored file">n/a</span>'}</div>`;
 }
 function downloadATDPayslip(atdId, paymentId){
   const rec = DB.atd.find(r=>r.id===atdId); if(!rec) return;
@@ -10517,7 +10614,7 @@ function caseDueProcessWorkspaceHTML(caseRecord,dueProcess,dueProcessReady,revis
   const hearingRows=hearings.slice(0,4).map(item=>`<div class="case-process-row"><div><b>${esc(item.hearing_type)}</b><span>${esc(item.status)} · ${item.held_at?new Date(item.held_at).toLocaleString():item.scheduled_at?new Date(item.scheduled_at).toLocaleString():'No schedule'}</span>${item.no_hearing_reason?`<p>${esc(item.no_hearing_reason)}</p>`:''}${caseManagedAttachmentHTML(item.attachment_name,item.attachment_ref)}</div>${hasErCapability('manage_hearing')&&!['Held','Not Required'].includes(item.status)?`<button class="iconbtn" title="Edit hearing" onclick="openCaseHearingForm('${caseRecord.id}','${item.id}')">${iEdit(14)}</button>`:''}</div>`).join('');
   const decisionMap={Draft:'b-grey','For Approval':'b-amber',Approved:'b-green',Returned:'b-red',Superseded:'b-grey',Reversed:'b-red'};
   const canRevise=revisionReady&&hasErCapability('reopen_case','approve')&&(isCaseTerminalStage(caseRecord.status)||currentDecision?.decision_status==='Approved'||caseRecord.status==='Resolved');
-  const decisionHTML=currentDecision?`<div class="case-decision-summary"><div class="case-process-row"><div><b>Decision version ${currentDecision.version}</b><span>${statusBadge(currentDecision.decision_status,decisionMap)}${currentDecision.decision_date?' · '+fmtDate(currentDecision.decision_date):''}</span></div></div><dl><div><dt>Outcome</dt><dd>${esc(currentDecision.overall_outcome||'Pending')}</dd></div><div><dt>TDA recommendation</dt><dd>${esc(currentDecision.tda_recommended_action||'Not recorded')}</dd></div><div><dt>Proposed action</dt><dd>${esc(currentDecision.proposed_action||'Not recorded')}</dd></div><div><dt>Final action</dt><dd>${esc(currentDecision.final_action||'Not approved')}</dd></div></dl>${currentDecision.review_notes?`<div class="computed-note"><b>Review note:</b> ${esc(currentDecision.review_notes)}</div>`:''}<div class="case-process-actions">${hasErCapability('propose_decision')&&['Draft','Returned'].includes(currentDecision.decision_status)?`<button class="btn btn-ghost btn-sm" onclick="openCaseDecisionForm('${caseRecord.id}','${currentDecision.id}')">${iEdit(13)} Edit Decision</button>`:''}${currentDecision.decision_status==='For Approval'&&hasErCapability('approve_decision','approve')?`<button class="btn btn-primary btn-sm" onclick="openCaseDecisionReview('${caseRecord.id}','${currentDecision.id}','approve')">${iCheck(13)} Review</button>`:''}${currentDecision.decision_status==='Approved'&&hasErCapability('issue_nod')?`<button class="btn btn-ghost btn-sm" onclick="openWorkflowRecordForm('nod','${caseRecord.id}')">${iPlus(13)} Prepare NOD</button>`:''}${canRevise?`<button class="btn btn-ghost btn-sm" onclick="openCaseRevisionForm('${caseRecord.id}')">${iEdit(13)} Reopen / Amend</button>`:''}</div></div>`:`<div class="empty"><b>No decision prepared</b>Record findings for each allegation, then prepare the decision for approval.${canRevise?`<button class="btn btn-ghost btn-sm" style="margin-top:10px;" onclick="openCaseRevisionForm('${caseRecord.id}')">Reopen Case</button>`:''}</div>`;
+  const decisionHTML=currentDecision?`<div class="case-decision-summary"><div class="case-process-row"><div><b>Decision version ${currentDecision.version}</b><span>${statusBadge(currentDecision.decision_status,decisionMap)}${currentDecision.decision_date?' · '+fmtDate(currentDecision.decision_date):''}</span></div></div><dl><div><dt>Outcome</dt><dd>${esc(currentDecision.overall_outcome||'Pending')}</dd></div><div><dt>TDA recommendation</dt><dd class="${!currentDecision.tda_recommended_action?'not-recorded':''}">${esc(currentDecision.tda_recommended_action||'Not recorded')}</dd></div><div><dt>Proposed action</dt><dd class="${!currentDecision.proposed_action?'not-recorded':''}">${esc(currentDecision.proposed_action||'Not recorded')}</dd></div><div><dt>Final action</dt><dd>${esc(currentDecision.final_action||'Not approved')}</dd></div></dl>${currentDecision.review_notes?`<div class="computed-note"><b>Review note:</b> ${esc(currentDecision.review_notes)}</div>`:''}<div class="case-process-actions">${hasErCapability('propose_decision')&&['Draft','Returned'].includes(currentDecision.decision_status)?`<button class="btn btn-ghost btn-sm" onclick="openCaseDecisionForm('${caseRecord.id}','${currentDecision.id}')">${iEdit(13)} Edit Decision</button>`:''}${currentDecision.decision_status==='For Approval'&&hasErCapability('approve_decision','approve')?`<button class="btn btn-primary btn-sm" onclick="openCaseDecisionReview('${caseRecord.id}','${currentDecision.id}','approve')">${iCheck(13)} Review</button>`:''}${currentDecision.decision_status==='Approved'&&hasErCapability('issue_nod')?`<button class="btn btn-ghost btn-sm" onclick="openWorkflowRecordForm('nod','${caseRecord.id}')">${iPlus(13)} Prepare NOD</button>`:''}${canRevise?`<button class="btn btn-ghost btn-sm" onclick="openCaseRevisionForm('${caseRecord.id}')">${iEdit(13)} Reopen / Amend</button>`:''}</div></div>`:`<div class="empty"><b>No decision prepared</b>Record findings for each allegation, then prepare the decision for approval.${canRevise?`<button class="btn btn-ghost btn-sm" style="margin-top:10px;" onclick="openCaseRevisionForm('${caseRecord.id}')">Reopen Case</button>`:''}</div>`;
   const revisionHTML=revisions.length?`<div class="case-revision-history"><span class="eyebrow">Revision history</span>${revisions.map(item=>`<div class="case-process-row"><div><b>${esc(item.action)}</b><span>${esc(item.previous_case_status)} → ${esc(item.resulting_case_status)} · ${new Date(item.created_at).toLocaleString()}</span><p>${esc(item.reason)}</p></div></div>`).join('')}</div>`:'';
   return `<section class="panel case-process-workspace"><div class="panel-heading-row"><div><h3>Response, Hearing &amp; Decision</h3><p>Separate due-process records connected to this case and its audit timeline.</p></div></div><div class="case-process-grid"><article><header><div><span>Employee response</span><b>${responses.length} record${responses.length===1?'':'s'}</b></div>${hasErCapability('record_response')?`<button class="iconbtn" title="Add employee response" onclick="openCaseResponseForm('${caseRecord.id}')">${iPlus(14)}</button>`:''}</header>${responseRows||'<div class="empty"><b>No response recorded</b>Record a response, declined response, or documented no-response outcome.</div>'}</article><article><header><div><span>Hearing / conference</span><b>Optional case event</b></div>${hasErCapability('manage_hearing')?`<button class="iconbtn" title="Add hearing or conference" onclick="openCaseHearingForm('${caseRecord.id}')">${iPlus(14)}</button>`:''}</header>${hearingRows||'<div class="empty"><b>No hearing record</b>Schedule a conference or record why no hearing was required.</div>'}</article><article class="case-process-decision"><header><div><span>Decision / approval</span><b>Final action control</b></div>${hasErCapability('propose_decision')&&!currentDecision?`<button class="iconbtn" title="Prepare decision" onclick="openCaseDecisionForm('${caseRecord.id}')">${iPlus(14)}</button>`:''}</header>${decisionHTML}${revisionHTML}</article></div></section>`;
 }
@@ -10617,7 +10714,7 @@ async function openCaseDecisionReview(caseId,decisionId,action='approve'){
   CASE_WORKFLOW_CONTEXT={caseId,module:'case-decision-review'};
   const {data,error}=await supabase.from('hr_case_decisions').select('decision_status,overall_outcome,final_action').eq('id',decisionId).eq('case_id',caseId).maybeSingle();
   if(error||!data||data.decision_status!=='For Approval'){toast('This decision is no longer awaiting approval.',true);return;}
-  openModal(`<div class="modal-head"><div><h3>Review Decision</h3><div class="small">Approve the final action or return the decision for revision.</div></div><button onclick="openCaseDetails('${caseId}')">&times;</button></div><div class="modal-body" data-employee-relations-modal><div class="case-review-summary"><div><span>Outcome</span><b>${esc(data.overall_outcome||'Not recorded')}</b></div><div><span>Final action</span><b>${esc(data.final_action||'Not recorded')}</b></div></div><div class="field full"><label>Approval / Return Note ${action==='return'?'*':''}</label><textarea id="case_decision_review_note" rows="5" placeholder="Record the approval basis, conditions, or required revisions."></textarea></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="openCaseDetails('${caseId}')">${iClose(14)} Cancel</button><button class="btn btn-ghost" onclick="saveCaseDecisionReview('${caseId}','${decisionId}','return')">Return for Revision</button><button class="btn btn-primary" onclick="saveCaseDecisionReview('${caseId}','${decisionId}','approve')">${iCheck(14)} Approve Decision</button></div>`);
+  openModal(`<div class="modal-head"><div><h3>Review Decision</h3><div class="small">Approve the final action or return the decision for revision.</div></div><button onclick="openCaseDetails('${caseId}')">&times;</button></div><div class="modal-body" data-employee-relations-modal><div class="case-review-summary"><div><span>Outcome</span><b class="${!data.overall_outcome?'not-recorded':''}">${esc(data.overall_outcome||'Not recorded')}</b></div><div><span>Final action</span><b class="${!data.final_action?'not-recorded':''}">${esc(data.final_action||'Not recorded')}</b></div></div><div class="field full"><label>Approval / Return Note ${action==='return'?'*':''}</label><textarea id="case_decision_review_note" rows="5" placeholder="Record the approval basis, conditions, or required revisions."></textarea></div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="openCaseDetails('${caseId}')">${iClose(14)} Cancel</button><button class="btn btn-ghost" onclick="saveCaseDecisionReview('${caseId}','${decisionId}','return')">Return for Revision</button><button class="btn btn-primary" onclick="saveCaseDecisionReview('${caseId}','${decisionId}','approve')">${iCheck(14)} Approve Decision</button></div>`);
 }
 async function saveCaseDecisionReview(caseId,decisionId,action){
   if(!hasErCapability('approve_decision','approve'))return;
@@ -10644,7 +10741,7 @@ async function openCaseRevisionForm(caseId){
   const options=decision
     ?`<option value="Supersede Decision">Supersede decision and prepare version ${Number(decision.version||0)+1}</option><option value="Reverse Decision">Reverse decision and prepare replacement</option>`
     :'<option value="Reopen Case">Reopen case for investigation</option>';
-  const decisionSummary=decision?`<div class="case-review-summary"><div><span>Approved decision</span><b>Version ${decision.version}</b></div><div><span>Outcome</span><b>${esc(decision.overall_outcome||'Not recorded')}</b></div><div><span>Final action</span><b>${esc(decision.final_action||'Not recorded')}</b></div><div><span>NOD status</span><b>${esc(decision.nod_status||'Not prepared')}</b></div></div>`:`<div class="computed-note">No active approved decision exists. The case will return to investigation while all existing records remain available.</div>`;
+  const decisionSummary=decision?`<div class="case-review-summary"><div><span>Approved decision</span><b>Version ${decision.version}</b></div><div><span>Outcome</span><b class="${!decision.overall_outcome?'not-recorded':''}">${esc(decision.overall_outcome||'Not recorded')}</b></div><div><span>Final action</span><b class="${!decision.final_action?'not-recorded':''}">${esc(decision.final_action||'Not recorded')}</b></div><div><span>NOD status</span><b>${esc(decision.nod_status||'Not prepared')}</b></div></div>`:`<div class="computed-note">No active approved decision exists. The case will return to investigation while all existing records remain available.</div>`;
   openModal(`<div class="modal-head"><div class="modal-head-copy"><div class="modal-context-breadcrumb"><span>Employee Relations</span><span aria-hidden="true">›</span><span>${esc(caseRecord.case_number)}</span><span aria-hidden="true">›</span><b>Controlled Revision</b></div><h3>Reopen or Amend Case</h3><div class="small">${esc(caseRecord.employee_name)} · ${esc(caseRecord.department||'Unassigned')}</div></div><button onclick="openCaseDetails('${caseId}')">&times;</button></div><div class="modal-body" data-employee-relations-modal>${decisionSummary}<div class="formgrid" style="margin-top:14px;"><div class="field full"><label>Authorized Action *</label><select id="case_revision_action">${options}</select></div><div class="field full"><label>Reason *</label><textarea id="case_revision_reason" rows="6" maxlength="4000" placeholder="Explain why the case is being reopened or why the approved decision must change."></textarea><small>Minimum 10 characters. This reason becomes part of the permanent revision history.</small></div></div><div class="notice warning"><b>Controlled record change</b> The prior decision, NOD, history, and completed implementation evidence will not be deleted. A decision amendment creates a new draft version.</div></div><div class="modal-foot"><button class="btn btn-ghost" onclick="openCaseDetails('${caseId}')">${iClose(14)} Cancel</button><button class="btn btn-primary" onclick="saveCaseRevision('${caseId}')">Authorize Revision</button></div>`);
 }
 async function saveCaseRevision(caseId){
@@ -11285,6 +11382,7 @@ const RENDERERS = {
 };
 
 document.addEventListener('click', e=>{
+  if(STATE.employeeFiltersExpanded&&document.getElementById('employee-filter-set')&&!e.target.closest('#employee-filter-set,.employee-filter-toggle'))toggleEmployeeDirectoryFilters();
   const wrap=document.getElementById('notification-wrap');
   if(wrap && !wrap.contains(e.target)) closeNotificationPanel();
   const navPanel=document.getElementById('navgroup-popover');
@@ -11299,6 +11397,7 @@ document.addEventListener('click', e=>{
 });
 document.addEventListener('keydown', e=>{
   if(e.key!=='Escape') return;
+  if(STATE.employeeFiltersExpanded&&document.getElementById('employee-filter-set'))toggleEmployeeDirectoryFilters();
   closeNotificationPanel();
   closeNavGroupPanel();
   document.querySelectorAll('.employee-more-menu[open]').forEach(menu=>menu.removeAttribute('open'));
@@ -11306,6 +11405,7 @@ document.addEventListener('keydown', e=>{
   document.querySelectorAll('.tda-picker').forEach(picker=>tdaRulePickerClose(picker.id.replace(/_tda_rule_picker$/,'')));
 });
 window.addEventListener('resize',()=>{
+  requestAnimationFrame(enhanceFilterVisibility);
   const panel=document.getElementById('navgroup-popover');
   const trigger=document.querySelector('.navgroup-head[aria-expanded="true"]');
   if(panel&&trigger)positionNavGroupPanel(panel,trigger);
@@ -11363,7 +11463,7 @@ Object.assign(window, {
   fieldHTML, fmtDate, formatGovernmentIdInput, getEvalRecord, go, handleFileInput, incidentTypeOccurrence, incidentTypeSummaryHTML, filterIncidentClassifications, refreshIncidentClassificationSummary, addIncidentClassification,
   toggleSidebar, closeSidebar, applyReportFilters, exportReportEmployees, exportReportActivity, exportReportATD, exportReportCases,
   loadDB, loadProfiles, logAudit, mondayOf, nextEmployeeNumber, normalizeEmployeeMasterData, nthLabel, employeeCompleteness, employeeTenureText, openEmployeeStatusForm, saveEmployeeStatus, openATDForm, openATDPaymentForm,
-  openATDPayments, openCVRForm, openEmployeeForm, openEmployeeLifecycleEventForm, openEmployeeProfile, employeeProfileSetTab, employeeProfileToggleIds, employeeWorkspaceNavigate, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
+  openATDPayments, openCVRForm, openEmployeeForm, saveEmployeeSection, openEmployeeLifecycleEventForm, openEmployeeProfile, employeeProfileSetTab, employeeProfileToggleIds, employeeWorkspaceNavigate, openEmployeeStatusForm, openEvalForm, openIncidentForm, openModal, openRecordForm,
   openTransferForEmployee, openUserForm, overlapsRange, peso, readFields, renderATD, renderAnalytics, renderCVR, renderDashboard, dashboardOpenEmployees, dashboardOpenCases,
   renderDisciplinary, setDisciplinaryHistoryTab, exportDisciplinaryHistoryCSV, exportLegacyDisciplinaryHistoryCSV, openLegacyDisciplinaryReview, saveLegacyDisciplinaryReview, refreshLegacyReviewContext, legacyReviewActionChanged, openEmployeeDisciplinaryHistory, renderCorrespondence, exportCaseCorrespondenceCSV, downloadCaseCorrespondenceAttachment, renderEmployees, employeeSearchInput, resetEmployeeDirectoryFilters, toggleEmployeeDirectoryFilters, selectEmployeeDirectoryRow, openEmployeeColumnManager, openTableViewSettings, saveTableViewPreferences, resetTableViewPreferences, tableViewDragStart, tableViewDragOver, tableViewDrop, tableViewDragEnd, tableViewMove, saveEmployeeColumnPreferences, resetEmployeeColumnPreferences, renderOnboarding, openOnboardingForm, saveOnboardingCandidate, openOnboardingDetails, openOnboardingHire, convertOnboardingCandidate, queueSearchRender, cancelSearchRender, employeePickerOpen, employeePickerInput, employeePickerClose, employeePickerChoose, employeePickerClear, employeePickerSet, employeePickerSelected, employeePickerKeydown, renderEvaluations, renderIncidents, renderDataQuality, exportDataQuality, openEmployeeProfile, renderLeaveCalendar, renderLeaveRecords, lifecycleEmployeePreview, lifecycleEventTypeChanged, saveEmployeeLifecycleEvent, unlinkCaseRecord, opsHistoryOpenAction,
   renderLeaveSummary, renderLeaves, renderModuleView, renderNav, closeNavGroupPanel, renderEmployeeLifecycle, renderOffenseSummary, renderReports, renderSettings, renderActionCenter, actionCenterItems, actionCenterCounts, actionCenterSetLevel, actionCenterResetFilters, actionCenterPageGo, actionCenterPageSize, openActionCenterItem,

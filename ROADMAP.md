@@ -1,5 +1,23 @@
 STRELLAS HR Management — Development Roadmap
 
+UI-20261029-B — Full filter labels, flexible columns and scoped Overview edits
+
+Status: completed locally; publication reference recorded after committing.
+
+- Replaced clipping-prone filter widths with content sizing and wrapping;
+  selected values too long for the screen have a visible full-text note.
+  Phone filters overlay the employee table instead of consuming record space.
+- Employee columns follow headers/current-page data without fixed widths or
+  name ellipses. Search icon alignment/contrast and similar record-table text
+  clipping are corrected. Missing "Not recorded" values use dark red.
+- Permission-gated Overview pencils open one group at a time. Section saves
+  preserve other fields and reuse employee persistence, audit and rollback.
+- Validation: 405 tests, lint, build, structural validation and diff checks;
+  synthetic browser review of responsive filters, full names, missing values,
+  Emergency Information editing, and read-only presentation.
+- No SQL, schema, authorization-policy or dependency changes. No confidential
+  records or authenticated production saves used. See docs/UI-CONSISTENCY.md.
+
 UI-20261029 — UI consistency and compact employee records
 
 Status: completed and pushed to origin/main.

@@ -7,8 +7,10 @@ const source=readFileSync(new URL('../../js/app.js',import.meta.url),'utf8');
 const summary=source.slice(source.indexOf('function employeeProfileSummaryHTML('),source.indexOf('function employeeProfilePersonalHTML('));
 const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
 const labels=source.slice(source.indexOf('function employeeOptionLabel('),source.indexOf('function syncEmployeeStatusReason('));
+const sections=source.slice(source.indexOf('const EMP_FORM_SECTIONS = ['),source.indexOf('function employeeFormFieldValue('));
 const scope={ageOn,todayISO:()=> '2026-10-13',iShield:()=>'',esc,employeeAllowanceEntries:()=>[{name:'Synthetic Allowance',amount:100}],employeeAllowanceTotal:()=>100,peso:value=>'PHP '+value,formatGovernmentId:(_kind,value)=>value||'',formatPhilippineAddress:()=>'',employeeCompleteness:()=>60,classify:employee=>employee.employmentType,fmtDate:value=>value||'Not recorded',isSeparated:employee=>employee.status==='Separated',employeeTenureText:()=> 'Synthetic tenure'};
-const render=runInNewContext(labels+summary+'\nemployeeProfileSummaryHTML',scope);
+scope.hasPermission=()=>true;scope.iEdit=()=>'';
+const render=runInNewContext(labels+sections+summary+'\nemployeeProfileSummaryHTML',scope);
 const employee={position:'Synthetic Position',department:'Synthetic Department',branchReporting:'Synthetic Branch',employmentType:'Probationary',status:'Active',statusReason:'Active / Normal',dateHired:'2026-10-01',prfNumber:'PRF-TEST'};
 test('Overview shows each assignment and employment field once without duplicate cards',()=>{
   const html=render(employee,null);
@@ -56,8 +58,22 @@ test('Overview uses the same label width for regular rows and full-width address
 test('Overview safely preserves missing values and separated employee details',()=>{
   const html=render({...employee,status:'Separated',exitClassification:'Voluntary',exitFactor:'Personal',exitReason:'<script>synthetic</script>',prfNumber:''},null);
   assert.match(html,/Leaving Details/);assert.match(html,/Voluntary/);assert.match(html,/Personal/);assert.match(html,/&lt;script&gt;/);
-  assert.doesNotMatch(html,/<script>|undefined|NaN/);assert.match(html,/PRF Number<\/dt><dd class="value">Not recorded/);
+  assert.doesNotMatch(html,/<script>|undefined|NaN/);assert.match(html,/PRF Number<\/dt><dd class="value not-recorded">Not recorded/);
   assert.doesNotMatch(render(employee,null),/Leaving Details/);
+});
+
+test('missing values use the missing-record style while a zero rate remains recorded',()=>{
+  const html=render({...employee,dailyRate:0,sssNumber:'',prfNumber:''},null);
+  assert.match(html,/class="value not-recorded" data-government-id="sssNumber">Not recorded/);
+  assert.match(html,/Daily Rate<\/dt><dd class="value">PHP 0/);
+  assert.doesNotMatch(html,/class="value not-recorded">PHP 0/);
+});
+test('editable Overview groups expose scoped shortcuts only with employee update permission',()=>{
+  const html=render({...employee,id:'synthetic'},null);
+  assert.match(html,/aria-label="Edit Emergency Information"/);
+  assert.match(html,/employeeWorkspaceNavigate\('synthetic','section:1'\)/);
+  const readOnly=runInNewContext(labels+sections+summary+'\nemployeeProfileSummaryHTML',{...scope,hasPermission:()=>false});
+  assert.doesNotMatch(readOnly(employee,null),/employee-section-edit|section:1/);
 });
 test('Overview retains details navigation and role-gated ER action without a repeated profile banner',()=>{
   const profile=source.slice(source.indexOf('async function openEmployeeProfile(id)'),source.indexOf('function renderLeaves('));

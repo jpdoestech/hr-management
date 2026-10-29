@@ -43,14 +43,26 @@ Plex Mono for identifiers. Use tabular figures for numeric comparisons.
   and cells 6px vertical padding. Single-line employee rows are approximately
   41px on desktop. Touch row controls are 44px, so touch rows grow to fit.
   Employees keeps the toolbar and pagination visible while its table scrolls.
+  Employee columns size to headers and displayed records, without fixed pixel
+  widths or name ellipses. Keep wide records in the horizontal table scroller;
+  do not fetch additional pages to calculate column widths.
 - Forms: visible labels, 44px inputs, consistent help/validation states, and
   explicit readonly/disabled styling. Native checkbox/radio sizing is preserved.
   Labels must reference their controls. Required-field errors remain beside
   shared record/employee fields, with linked error summaries and focus recovery.
   Searches retain focus only when they owned it before their delayed render.
+  Filter controls reserve room for their text and dropdown arrow. Groups wrap
+  rather than shrink labels. Oversized selected values have a full, wrapping
+  text note. On phones the employee filter panel overlays the table and closes
+  on outside click or Escape, preserving the record area.
 - Dialogs: rounded surfaces, distinct headers/footers and scrollable bodies.
   Existing employee action navigation, focus handling and confirmation logic
   remain in place. Long names and addresses wrap.
+  Overview group pencils require employee update permission. They open only
+  the chosen group's fields and save a field-scoped patch through the shared
+  employee persistence/audit/rollback path. Keep the full Edit view available.
+  Missing record values display "Not recorded" in dark red (`#991B1B`);
+  recorded zero amounts retain their normal value styling.
 - Attendance: retain its own compact grid, sticky headers/employee column,
   transaction colors and editing behavior. Do not apply directory row padding
   or large input heights to matrix checkboxes.

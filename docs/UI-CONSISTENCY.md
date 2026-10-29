@@ -1,5 +1,50 @@
 # UI consistency — 2026-10-29
 
+## Visibility and section-edit follow-up — 2026-10-29
+
+Fixed filter widths left over from the smaller type scale could clip labels
+such as Department and Employment Type. Shared toolbar selects now size to
+content, reserve arrow space and wrap as a group. When a selected value is
+longer than the available screen width, its complete text appears in a wrapping
+note. Phone employee filters overlay the table and close on outside click or
+Escape. No extra data fetches or per-row measurements are used for filters.
+
+Employee columns now use native automatic table layout, with no fixed column
+widths or employee-name ellipses. Width follows headers and the current page's
+data; wide tables remain horizontally scrollable. Other record-table secondary
+text and attachment names no longer use the identified clipping rules. Frozen
+column offsets refresh after fonts load. The employee search SVG is 16px,
+vertically centered and fully opaque.
+
+Displayed "Not recorded" values use dark red in employee details, government
+IDs, employee-relations summaries and manpower worker dates. Zero amounts keep
+their normal recorded-value styling. Missing employee date values shown as a
+dash are normalized to the same explicit missing-value treatment in Overview.
+
+Each editable Overview group has a named pencil shortcut, gated by employee
+update permission. Emergency Information opens only its three contact fields.
+Section saves validate that group's fields and commit only those fields through
+the shared employee save/audit/rollback path. Other sections, historical values
+and unresolved addresses are preserved. Personal details retain address and
+duplicate-name checks; employment details retain catalog/status validation;
+government IDs and monetary sections retain their existing validation rules.
+Separation needing leaving details continues through Movement. Full Edit and
+the existing unsaved-change navigation guard remain available.
+
+The follow-up adds regressions for scoped markup, permission checks, unrelated
+field preservation, failed-save rollback, zero compensation, full-save reuse,
+content-sized columns and overflowing filter values. The modal fixture supports
+`?section=1` and `?readonly=1`; section saves in that browser fixture update only
+synthetic in-memory data. Real persistence and rollback are exercised by the
+unit harness with a stubbed save result, not a live production database.
+
+Validation: 405 tests, lint, build, structural validation and diff checks pass.
+Browser review used synthetic records, long names and long selected filter
+values at phone, tablet and desktop widths. Authenticated production saves
+remain outside these checks.
+
+The verification below describes the earlier implementation.
+
 This change resolves the ten findings from the UI audit and the requested
 compact employee rows, matching transaction icons and aligned header dividers.
 The static HTML/CSS/JavaScript architecture, fonts and authorization model stay

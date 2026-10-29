@@ -892,13 +892,12 @@ body,input,select,textarea,button,table{font-family:'Plus Jakarta Sans',sans-ser
 .employee-more-popover{position:absolute;top:calc(100% + 7px);right:0;z-index:30;width:242px;padding:5px;border:1px solid var(--border);border-radius:7px;background:#fff;box-shadow:0 12px 30px rgba(34,31,42,.16);}
 .employee-more-popover>button{width:100%;display:grid;grid-template-columns:24px minmax(0,1fr);align-items:center;gap:8px;padding:8px;border:0;border-radius:5px;background:#fff;color:var(--text);text-align:left;cursor:pointer;}.employee-more-popover>button:hover,.employee-more-popover>button:focus-visible{background:#F5F2FF;color:var(--accent);outline:0;}.employee-more-popover>button>svg{align-self:start;margin-top:2px;}.employee-more-popover b,.employee-more-popover small{display:block;}.employee-more-popover b{font-size:12px;}.employee-more-popover small{margin-top:2px;color:var(--muted);font-size:12px;line-height:1.35;}
 .employee-directory-tablewrap{flex:1 1 auto;min-height:0;max-height:none;border:0;border-radius:0;box-shadow:none;}
-.employee-directory-table{table-layout:fixed;}
+.employee-directory-table{table-layout:auto;width:max-content;min-width:100%;}
 .employee-directory-row{cursor:pointer;outline:none;}
 .employee-directory-row:hover td,.employee-directory-row:focus-visible td{background:#FBFAFE!important;}
 .employee-directory-row:focus-visible td:first-child{box-shadow:inset 3px 0 0 var(--accent);}
 .employee-directory-row.selected td{background:#F8F6FF;}
 .employee-directory-row.selected td:first-child{box-shadow:inset 3px 0 0 var(--accent);}
-.employee-directory-table tbody td[data-column="name"],.employee-directory-table tbody td[data-column="position"],.employee-directory-table tbody td[data-column="personalEmail"],.employee-directory-table tbody td[data-column="address"],.employee-directory-table tbody td[data-column="emergencyContactName"]{overflow:hidden;text-overflow:ellipsis;}
 .employee-directory-table th:last-child,.employee-directory-table td:last-child{position:sticky;right:0;text-align:right;background:#fff;box-shadow:-1px 0 0 var(--border);}
 .employee-directory-table th:last-child{z-index:6;background:#FAFAFC;}
 .employee-directory-table tbody tr:hover td:last-child{background:#FBFAFE;}

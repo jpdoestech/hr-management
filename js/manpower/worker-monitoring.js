@@ -15,7 +15,7 @@ export function workerTableHTML(rows,formatDate,now=Date.now()){
   const headers=['Applicant / Employee','Hiring Category','Assignment State','Reservation Age','Scheduled','Actual Deployment','Ended'];
   const body=rows.map(row=>{
     const age=['Reserved','Scheduled'].includes(row.state)?workerAge(row.created_at,now):null;
-    return `<tr><td><b>${escape(row.name||'Name unavailable')}</b><div class="small">Applicant: ${escape(row.candidate_id)}${row.employee_id?` / Employee: ${escape(row.employee_id)}`:''}</div></td><td>${escape(row.hiring_category)}</td><td>${escape(row.state)}</td><td>${age==null?'Not applicable':age+' days'}</td>${['scheduled_date','actual_date','ended_date'].map(key=>`<td>${escape(row[key]?formatDate(row[key]):'Not recorded')}</td>`).join('')}</tr>`;
+    return `<tr><td><b>${escape(row.name||'Name unavailable')}</b><div class="small">Applicant: ${escape(row.candidate_id)}${row.employee_id?` / Employee: ${escape(row.employee_id)}`:''}</div></td><td>${escape(row.hiring_category)}</td><td>${escape(row.state)}</td><td>${age==null?'Not applicable':age+' days'}</td>${['scheduled_date','actual_date','ended_date'].map(key=>`<td class="${!row[key]?'not-recorded':''}">${escape(row[key]?formatDate(row[key]):'Not recorded')}</td>`).join('')}</tr>`;
   }).join('');
   return `<div class="tablewrap" tabindex="0" role="region" aria-label="Line worker records"><table class="data-table" data-server-paginated="true" data-table-tools="external"><caption class="sr-only">Permitted workers for selected requisition line</caption><thead><tr>${headers.map(label=>`<th scope="col">${label}</th>`).join('')}</tr></thead><tbody>${body||'<tr><td colspan="7"><div class="empty">No matching permitted workers.</div></td></tr>'}</tbody></table></div>`;
 }

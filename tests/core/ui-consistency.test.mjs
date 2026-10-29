@@ -53,8 +53,29 @@ test('a single row action stays direct and receives an accessible name',()=>{
   const attrs={onclick:"openEmployeeProfile('synthetic')"};
   const button={textContent:'',title:'',getAttribute:key=>attrs[key],setAttribute:(key,value)=>attrs[key]=value};
   const group={dataset:{},querySelectorAll:()=>[button],replaceChildren(){assert.fail('A single action must not become a menu');}};
-  const context={document:{querySelectorAll:()=>[group]},ROW_ACTION_MENUS:new Map()};
+  const context={document:{querySelectorAll:()=>[group]},ROW_ACTION_MENUS:new Map(),enhanceFilterVisibility() {}};
   vm.createContext(context);vm.runInContext(section('function rowActionLabel(','function openRowActionMenu('),context);
   context.enhanceRowActionMenus();
   assert.equal(attrs['aria-label'],'View details');assert.equal(group.dataset.menuEnhanced,'true');
+});
+
+test('clipped selected filter text is shown in full without repeated notes',()=>{
+  let note;
+  const parent={querySelector:()=>note,appendChild:value=>{note=value;}};
+  const select={parentElement:parent,clientWidth:100,selectedOptions:[{textContent:'Synthetic long department name'}],getClientRects:()=>[{}],getAttribute:()=> 'Department'};
+  const root={querySelectorAll:()=>[select]};
+  const context={FILTER_SELECTORS:'select',FILTER_TEXT_CONTEXT:{font:'',measureText:text=>({width:text.length*8})},getComputedStyle:()=>({font:'13px sans-serif',paddingLeft:'9px',paddingRight:'27px'}),document:{getElementById:()=>root,createElement:()=>({textContent:'',remove(){note=undefined;}})}};
+  vm.createContext(context);vm.runInContext(section('function enhanceFilterVisibility(',"document.addEventListener('change',event=>{if(event.target.matches(FILTER_SELECTORS))"),context);
+  context.enhanceFilterVisibility();assert.match(note.textContent,/Department: Synthetic long department name/);
+  const original=note;context.enhanceFilterVisibility();assert.equal(note,original);
+  select.clientWidth=400;context.enhanceFilterVisibility();assert.equal(note,undefined);
+});
+
+test('employee records use content-sized columns and an explicit search icon',()=>{
+  const renderer=section('function renderEmployees(){','function openEmployeeWorkspaceModal(');
+  assert.doesNotMatch(renderer,/tableMinWidth|style="width:|style="min-width:/);
+  assert.match(renderer,/employee-directory-search">\$\{iSearch\(16\)\}/);
+  const css=readFileSync(new URL('../../css/professional.css',import.meta.url),'utf8');
+  assert.match(css,/\.employee-directory-table\{table-layout:auto;width:max-content;min-width:100%/);
+  assert.doesNotMatch(css,/\.employee-directory-table[^\n]*text-overflow:ellipsis/);
 });

@@ -375,5 +375,6 @@ export function installTableEnhancer({getState, getContent, getAdditionalRoots=(
   document.addEventListener('click',event=>{if(columnMenu&&!columnMenu.contains(event.target)&&!event.target.closest('.table-column-menu-button'))closeColumnMenu();});
   document.addEventListener('keydown',event=>{if(event.key==='Escape')closeColumnMenu();});
   window.addEventListener('resize',()=>{refreshFrozenColumns();closeColumnMenu();});start();
+  document.fonts?.ready.then(refreshFrozenColumns);
   return {enhanceDataTables,tablePageGo,tablePageSize,resetAllTablePages,getTableInfo,setTableLayout,resetTableLayout,refreshFrozenColumns};
 }
