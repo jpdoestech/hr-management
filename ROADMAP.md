@@ -2,7 +2,11 @@ STRELLAS HR Management — Development Roadmap
 
 UI-20261030 — Shared interactive control sizing system
 
-Status: implemented and verified; publication pending.
+Status: completed and pushed to origin/main.
+
+Implementation: 3e05641ba3791dabc8c0bc53b849df50456193b9.
+Remote refs/heads/main matched the full implementation hash after pushing on
+2026-10-30. The commit includes Summary, Description and validation results.
 
 - Standardized form controls at 44px desktop / 48px phone, toolbar controls at
   42px / 44px, and compact pagination at 34px / 44px using semantic tokens.
