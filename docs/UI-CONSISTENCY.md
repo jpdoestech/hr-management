@@ -1,4 +1,123 @@
-# UI consistency — 2026-10-29
+# UI consistency
+
+## Control sizing audit and implementation — 2026-10-30
+
+Implemented and verified locally. Publication status is recorded in ROADMAP.md.
+No production deployment was performed as part of this workflow.
+This specification supersedes the older form sizing/type descriptions below.
+No production JavaScript, business rules, database, configuration, permissions,
+validation semantics, labels, IDs, names, ARIA attributes or handlers changed.
+
+### Findings and ownership
+
+Reviewed AGENTS.md, README, this document, MASTER, the UI/UX Pro Max skill,
+index, all four CSS layers, generated markup across app/core/address/manpower,
+package scripts, CSS tests, browser fixtures and validation/build scripts.
+A focused local skill search informed target-size and label decisions.
+
+The actual stylesheet order is app → professional → attendance → workspace.
+Professional declared 38px toolbar controls; workspace redeclared 42px. Forms
+were documented as 44px but mixed 38px component boxes, 44px minima, padding
+sizing and 14.3px modal input text. Employee labels were 12.35px; textareas
+measured about 76px desktop / 83px phone. Sign-in fields/buttons measured 50px
+while the password toggle measured about 27px. Picker/currency wrappers and
+inner inputs had separate dimensions and !important resets. Settings and some
+other grids combined their gap with each field's bottom margin. Broad input
+sizing also included non-text controls. Readonly text also inherited a muted color measuring about 4.38:1 contrast;
+readonly fields now retain primary text on their tinted background.
+Older search/filter/pagination rules
+still declared inconsistent values, even when later layers masked them.
+
+Sizing defaults now have one owner in app.css. Feature components consume
+those tokens in professional.css and attendance.css. Existing responsive rules
+in workspace.css adapt them for phones and coarse pointers. Removed 25
+!important declarations from professional.css (98 → 73); none were added.
+Remaining declarations include existing presentation and specialized controls,
+not a new blanket sizing override. No new framework or dependency.
+
+### Standards and coverage
+
+| Component / actual selectors | Implemented rule |
+| --- | --- |
+| Shared `.field`, `.formgrid`, `.employee-form-grid`, address/settings/manpower grids | 44px entry controls; 48px on phones; 14/16px input text; 13px labels; 8px label gap; 16px field gap; 24px section gap; 8px radius; 12px horizontal padding |
+| Auth `.auth-field`, `.auth-submit`, `.auth-password button` | Same form metrics; 44px password action target; registration preserves its grid |
+| Employee creation/edit/scoped forms and Overview | Shared form metrics; record values retain their own display type; scoped pencils keep 28px/44px targets |
+| `.toolbar`, `.data-toolbar`, workflow/quality/analytics/access controls | 42px desktop / 44px phone controls; readable 13/16px text; existing employee disclosure at 721–1499px and equal inline filters at ≥1500px retained |
+| `.employee-picker-input`, `.tda-picker-input`, `.money-input`, catalog controls | Wrapper owns form height; inner inputs fit it; existing keyboard, selection, clear and catalog handlers retained |
+| Leave, requests, approvals, disciplinary/document and compensation forms | Shared fields and entry-modal styles; text/date/time/datetime/number/email inputs; automatic 96px-minimum textareas |
+| Attendance | 42/44px toolbar and footer; 44/48px schedule entry; matrix geometry and 16px checkboxes unchanged |
+| Manpower header/draft/lifecycle/quantity editors | Form tokens and consistent field gaps; dense administrative table layout retained |
+| Access/settings, labeled checkboxes and automation checkbox switches | Native glyphs; 24px desktop label/control targets and 44px touch targets; permission controls without labels get direct targets |
+| Tables, pagination and column menus | Existing 13px body/12px headers/40px minimum rows; 34px desktop pagination; 44px touch; 28px/44px row actions; column-menu targets at least 24px |
+
+The token names/defaults and responsive roles are listed in MASTER. Textareas
+have no fixed height; native file controls, hidden inputs, range/color inputs,
+multiselects and native checkbox/radio glyphs are excluded from text-field
+height rules. No standalone payroll or radio workflow/custom switch was added.
+Automation switches remain native checkbox labels. Attendance, compact
+pagination, contextual row actions, multiline option rows and mobile request
+cards are intentional density/geometry exceptions.
+
+### Measured before and after
+
+Computed browser dimensions, CSS px, using the same synthetic fixtures.
+Desktop values below are from 1440px (Attendance baseline: 1280px); phone values from 390px. Approximate
+values account for native rendering/pixel rounding.
+
+| Representative control | Desktop before → after | Phone before → after |
+| --- | --- | --- |
+| Employee text input | 44 → 44 | 44 → 48 |
+| Employee select | 44 → 44 | 44 → 48 |
+| Employee date input | 44 → 44 | 44 → 48 |
+| Employee textarea | ≈75.6 → 96 minimum | ≈82.8 → 96 minimum |
+| Sign-in input | 50 → 44 | 50 → 48 |
+| Sign-in primary button | 50 → 44 | 50 → 48 |
+| Password visibility button | ≈27.2 → 44 | ≈27.2 → 44 |
+| Employee search/filter/action button | 42 → 42 | 44 → 44 |
+| Pagination button / page-size select | 34 → 34 | 44 → 44 |
+| Employee table action | 28 → 28 | 44 → 44 |
+| Attendance footer field | 40 → 42 | 44 → 44 |
+| Attendance checkbox | 16×16 → 16×16 | 16×16 → 16×16 |
+
+Employee form input text changes from 14.3px to 14px desktop and stays 16px on
+phones. Labels change from 12.35px to 13px. Ordinary table density remains
+approximately 41px desktop / 57px phone for single-line employee records.
+
+### Verification and limits
+
+Checked at 1440, 1280, 768, 390 and 320px with computed-style assertions:
+employee Edit, shared Controls and entry-modal compositions; sign-in and
+registration; directory filters/actions/pagination; table families, leave
+records and request cards; actual manpower header markup and Attendance.
+No page-level horizontal overflow on these reviewed surfaces. The employee
+fixture retains its toolbar alignment, full-name, bounded-row, footer and
+filter-text checks. Attendance retains sticky headers/identity and measured
+42px desktop / approximately 61.6px phone cell heights in the synthetic dataset.
+Its 16px checkboxes and successful day staging remain unchanged.
+
+The modal fixture's `?view=Controls` uses actual employee-picker functions plus
+representative native input types, currency/catalog wrappers, readonly/disabled
+states, native upload/hidden fields, checkbox settings and schedule inputs.
+Checks cover heights, fonts, textarea minima, wrapper alignment and line boxes.
+Native select `line-height:normal` is checked with a conservative font-based
+allowance and visual review rather than parsed as a numeric line height.
+Keyboard Arrow Down/Enter selection and Escape closure, native checkbox
+selection, linked error text/ARIA and visible focus were checked. Table focus
+outlines remain inside their scrolling viewport. Native date/time field
+geometry is checked; OS/browser popup rendering remains platform-owned.
+
+An optional manpower fixture initially failed with a pre-existing missing
+`iArrowLeft` helper. It now reuses the actual SVG helper functions, enabling
+inspection of the actual amendment form; production code was not altered.
+
+`npm run lint`, `npm test` (407 passing), `npm run build`,
+`node scripts/validate.mjs` and `git diff --check` passed after implementation.
+Synthetic fixtures never connected to Supabase or used production records.
+This is not exhaustive authenticated workflow, physical-device, cross-browser,
+OS calendar/file-dialog or assistive-technology certification. Native controls
+and Attendance retain the applicable target-size/spacing exceptions; 44px is
+preferred touch sizing rather than a claim that WCAG always requires 44px.
+
 
 ## Employee History return navigation — 2026-10-29
 

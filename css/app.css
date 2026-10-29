@@ -1,4 +1,23 @@
 :root{
+  /* Semantic control sizing: toolbar density is separate from data entry. */
+  --workspace-control-height:42px;
+  --workspace-control-radius:8px;
+  --workspace-control-font:13px;
+  --workspace-compact-height:34px;
+  --workspace-compact-font:12px;
+  --form-control-height:44px;
+  --form-control-font:14px;
+  --touch-control-height:48px;
+  --control-target-size:44px;
+  --table-action-size:28px;
+  --selection-target-size:24px;
+  --control-padding-inline:12px;
+  --form-label-size:13px;
+  --form-label-gap:8px;
+  --form-field-gap:16px;
+  --form-section-gap:24px;
+  --form-textarea-min-height:96px;
+
   /* Strellas-inspired palette: deep navy, warm gold, cool gray */
   --ink:#0B2E63; --ink-2:#08244C; --paper:#F3F5F8; --panel:#FFFFFF;
   --brass:#C08A37; --brass-dk:#9D6D24; --gold-soft:#F4D971; --navy-deep:#041A36;
@@ -38,9 +57,13 @@ a{color:inherit;}
 .auth-tabs{display:flex;gap:4px;background:var(--paper);border-radius:8px;padding:4px;margin-bottom:22px;}
 .auth-tab{flex:1;text-align:center;padding:9px 0;border:none;background:transparent;border-radius:6px;font-size:13.5px;font-weight:600;color:var(--slate);}
 .auth-tab.active{background:var(--panel);color:var(--ink);box-shadow:var(--shadow);}
-.field{margin-bottom:15px;}
-.field label{display:block;font-size:12.5px;font-weight:600;color:var(--slate);margin-bottom:6px;}
-.field input,.field select,.field textarea{width:100%;padding:10px 12px;border:1px solid var(--line-2);border-radius:7px;font-size:14px;background:#fff;color:var(--ink);}
+.field{margin-bottom:var(--form-field-gap);}
+.field label{display:block;font-size:var(--form-label-size);font-weight:600;color:var(--slate);margin-bottom:var(--form-label-gap);}
+.field :is(input:not([type="checkbox"],[type="radio"],[type="hidden"],[type="file"],[type="range"],[type="color"]),select,textarea){width:100%;min-width:0;padding:10px var(--control-padding-inline);border:1px solid var(--border-strong,var(--line-2));border-radius:var(--workspace-control-radius);font-size:var(--form-control-font);line-height:1.4;background:var(--surface,#fff);color:var(--text,var(--ink));}
+.field :is(input:not([type="checkbox"],[type="radio"],[type="hidden"],[type="file"],[type="range"],[type="color"]),select){height:var(--form-control-height);min-height:var(--form-control-height);padding:0 var(--control-padding-inline);}
+.field textarea{height:auto;min-height:var(--form-textarea-min-height);padding:10px var(--control-padding-inline);resize:vertical;}
+.field select:is([multiple],[size]){height:auto;min-height:var(--form-control-height);}
+:is(.formgrid,.employee-form-grid,.address-grid,.settings-form-grid,.manpower-header-fields,.manpower-header-editor,.manpower-lifecycle-editor,.manpower-quantity-editor,.tda-scope-editor)>.field{margin-bottom:0;}
 .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--brass);outline-offset:1px;border-color:var(--brass);}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 16px;border-radius:7px;border:1px solid transparent;font-size:13.5px;font-weight:600;transition:transform .06s ease;}
 .btn:active{transform:translateY(1px);}
@@ -390,7 +413,7 @@ a{color:inherit;}
   .dashboard-kpis{grid-template-columns:repeat(2,1fr);}
 }
 @media (max-width:720px){
-  .btn,.auth-tab,.field input,.field select,.field textarea{min-height:44px;}
+  .btn,.auth-tab{min-height:var(--control-target-size);}
   .iconbtn,.mobile-menu,.notification-btn{min-width:44px;min-height:44px;}
   #topbar{align-items:flex-start;min-height:70px;}
   #topbar h2{font-size:17px;line-height:1.15;}
@@ -489,7 +512,7 @@ tbody tr:hover{background:#FAF9F5;}
 .modal-head button{background:none;border:none;font-size:20px;color:var(--slate);line-height:1;padding:4px;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;}
 .modal-body{padding:20px 22px;flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;}
 .modal-foot{padding:16px 22px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;flex:none;}
-.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;}
+.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:var(--form-field-gap);}
 .formgrid .full{grid-column:1/-1;}
 @media (max-width:640px){
   .formgrid{grid-template-columns:1fr;}
@@ -665,7 +688,7 @@ tbody tr:hover{background:#FAF9F5;}
 .automation-rule .desc{font-size:10.5px;color:var(--slate);margin-top:3px;line-height:1.4;}
 .automation-rule .meta{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;}
 .automation-rule .tag{font-size:9.2px;color:var(--slate);border:1px solid var(--line);border-radius:99px;padding:3px 6px;background:#FBFCFE;}
-.automation-switch{display:inline-flex;align-items:center;gap:7px;font-size:10.5px;color:var(--slate);white-space:nowrap;}
+.automation-switch{display:inline-flex;align-items:center;gap:8px;max-width:100%;font-size:var(--workspace-control-font);color:var(--slate);white-space:normal;overflow-wrap:anywhere;}
 .automation-switch input{accent-color:var(--ink);}
 .automation-run-row{display:grid;grid-template-columns:10px 1fr auto;gap:10px;align-items:center;padding:10px 11px;border:1px solid var(--line);border-radius:9px;}
 .automation-run-row .dot{width:8px;height:8px;border-radius:50%;background:var(--forest);}
@@ -836,6 +859,9 @@ tbody tr:hover{background:#FAF9F5;}
 .checklist{display:flex;flex-direction:column;gap:7px;max-height:190px;overflow-y:auto;border:1px solid var(--line-2);border-radius:7px;padding:10px 12px;background:#fff;}
 .checkrow{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;}
 .checkrow input{width:auto;margin:0;}
+:is(.checkrow,.automation-switch,.settings-check,.onboarding-check,.address-copy,.table-view-toggle,.access-checkbox-grid label,.access-capability-grid label,.tda-scope-toggle,.checklist-complete-toggle),.field label:has(>input:is([type="checkbox"],[type="radio"])){min-height:var(--selection-target-size);gap:8px;}
+.field input:is([type="checkbox"],[type="radio"]){flex:none;width:18px;height:18px;min-height:18px;margin:0;padding:0;accent-color:var(--accent,var(--ink));}
+
 label.opt{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--slate);font-weight:500;margin-top:6px;}
 
 @media (min-width:1440px){#content{max-width:1680px;margin:0 auto;padding-left:34px;padding-right:34px;}.dashboard-grid,.analytics-grid{gap:18px;}.panel{padding:22px;}}

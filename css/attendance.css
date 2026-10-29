@@ -1,7 +1,7 @@
 .attendance-preparation{display:flex;flex-direction:column;min-width:0;height:calc(100dvh - 150px);min-height:480px;color:var(--text);font-family:inherit;}
 .attendance-preparation .data-toolbar,.attendance-paint-toolbar{flex:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;margin:0;border-radius:0;box-shadow:none;}
 .attendance-preparation .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:36px;white-space:normal;}
-.attendance-preparation input,.attendance-preparation select{font-family:inherit;font-size:13px;min-width:0;min-height:36px;border:1px solid var(--border);border-radius:6px;padding:6px 9px;background:var(--surface,#fff);color:var(--text);}
+.attendance-preparation :is(input:not([type="checkbox"],[type="radio"],[type="hidden"],[type="file"],[type="range"],[type="color"]),select){font-family:inherit;font-size:var(--workspace-control-font);min-width:0;height:var(--workspace-control-height);min-height:var(--workspace-control-height);border:1px solid var(--border);border-radius:var(--workspace-control-radius);padding:0 var(--control-padding-inline);background:var(--surface,#fff);color:var(--text);}
 .attendance-preparation .searchbox{flex:1;min-width:180px;}
 .attendance-view-tabs{display:flex;align-items:center;gap:16px;flex:none;border-bottom:1px solid var(--border);margin-bottom:8px;}
 .attendance-view-tabs>button{font:inherit;font-size:13px;background:none;border:0;border-bottom:2px solid transparent;padding:8px 0;color:var(--muted);cursor:pointer;}
@@ -70,11 +70,14 @@
 .att-weekday{border:0;border-top:1px solid var(--border);padding:12px 0;margin:8px 0;min-width:0;}
 .att-weekday legend{font-size:14px;font-weight:600;}
 .att-duty{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:8px 0;}
-.att-duty label{display:flex;flex-direction:column;gap:4px;font-size:13px;}
+.att-duty label{display:flex;flex-direction:column;gap:var(--form-label-gap);font-size:var(--form-label-size);}
 .att-duty input{min-width:0;max-width:100%;}
+.att-duty input:not([type="checkbox"],[type="radio"]){height:var(--form-control-height);padding:0 var(--control-padding-inline);border:1px solid var(--border-strong);border-radius:var(--workspace-control-radius);font-size:var(--form-control-font);}
+.att-duty label:has(>input[type="checkbox"]){flex-direction:row;align-items:center;min-height:var(--selection-target-size);}
+
 @media(max-width:720px){
   .attendance-preparation{height:calc(100dvh - 125px);min-height:540px;}
-  .attendance-preparation .btn,.attendance-preparation input,.attendance-preparation select{min-height:44px;}
+  .attendance-preparation .btn,.attendance-preparation :is(input:not([type="checkbox"],[type="radio"],[type="hidden"],[type="file"],[type="range"],[type="color"]),select){min-height:44px;}
   .attendance-brush{min-height:44px;padding:6px 12px;}
   .attendance-brushes{gap:8px;}
   .attendance-view-tabs>button{min-height:44px;}
@@ -90,7 +93,7 @@
   .attendance-matrix-toolbar input[type="month"],.attendance-matrix-toolbar select[name="period"]{flex:1;}
   .attendance-matrix-toolbar select[name="location"]{max-width:none;flex-basis:100%;}
   .attendance-matrix-toolbar select[name="department"],.attendance-matrix-toolbar select[name="position"]{max-width:100%;flex:1;}
-  .attendance-preparation input,.attendance-preparation select{font-size:16px;max-width:100%;}
+  .attendance-preparation :is(input:not([type="checkbox"],[type="radio"],[type="hidden"],[type="file"],[type="range"],[type="color"]),select){font-size:16px;max-width:100%;}
   .attendance-matrix-toolbar .searchbox{min-width:100%;}
   .attendance-preparation .data-toolbar .btn{width:auto;flex:0 0 auto;}
   .attendance-tools summary{min-height:44px;}

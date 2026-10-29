@@ -1,14 +1,17 @@
 # Modal Typography
 
-## Consistency update — 2026-10-29
+## Control sizing update — 2026-10-30
 
-The final workspace stylesheet now consumes the shared dialog tokens instead
-of overriding headings and labels with separate numeric sizes. Standard form
-inputs have a 44px minimum height on desktop and phones. Shared form labels are
-associated with their controls; required-field errors persist beside inputs
-and in linked summaries. The synthetic fixture loads production font and
-stylesheet links and checks computed styles. See `UI-CONSISTENCY.md` for current
-validation and browser-review limits. Earlier verification below is historical.
+Form sizing is owned by semantic tokens in `css/app.css`, with responsive
+values in `css/workspace.css`; display typography remains in professional.css.
+Standard inputs/selects/date controls measure 44px on desktop/tablet and 48px
+on phones. Form text is 14px / 16px, labels 13px, field gaps 16px and textarea
+minima 96px with automatic height. Picker/currency wrappers own their height;
+inner inputs fit within them. Native checkboxes, radio buttons, hidden fields
+and file uploads are excluded from single-line sizing. Existing label/error
+associations and transaction behavior remain unchanged. See MASTER and
+`UI-CONSISTENCY.md` for token ownership, measured results and validation limits.
+Earlier verification below is historical; this sizing system takes precedence.
 
 ## Findings
 
@@ -16,13 +19,13 @@ Employee Edit used 11px input text and 9.5px labels. Overview used 10.5px record
 
 ## Shared Scale
 
-`css/professional.css` now defines scoped dialog typography tokens without changing dialog width or height:
+`css/professional.css` defines display tokens; form fields consume the shared form tokens without changing dialog dimensions:
 
 | Element | Desktop / Tablet | Mobile (720px and below) |
 | --- | --- | --- |
-| Form values, including addresses | 14.3px (30% above Edit's 11px) | 16px |
-| Overview record values | 13.65px (30% above 10.5px) | 16px |
-| Labels | 12.35px | 12.35px |
+| Form values, including addresses | 14px | 16px |
+| Record display values | Existing 13.65–14.3px contextual scale | 16px |
+| Labels | 13px | 13px |
 | Supporting text | 12px | 12px |
 | Section headings | 15px | 15px |
 | Dialog heading | 19.5px | 19.5px |

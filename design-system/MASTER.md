@@ -46,7 +46,7 @@ Plex Mono for identifiers. Use tabular figures for numeric comparisons.
   Employee columns size to headers and displayed records, without fixed pixel
   widths or name ellipses. Keep wide records in the horizontal table scroller;
   do not fetch additional pages to calculate column widths.
-- Forms: visible labels, 44px inputs, consistent help/validation states, and
+- Forms: visible 13px labels, 44px desktop / 48px phone inputs, consistent help/validation states, and
   explicit readonly/disabled styling. Native checkbox/radio sizing is preserved.
   Labels must reference their controls. Required-field errors remain beside
   shared record/employee fields, with linked error summaries and focus recovery.
@@ -80,6 +80,67 @@ Plex Mono for identifiers. Use tabular figures for numeric comparisons.
   saves/approves; cross cancels/rejects; trash deletes; arrows navigate back.
   Decorative SVGs are hidden from assistive technology. Icon-only controls
   need an accessible name. Do not add icons to ordinary record values.
+
+## Control sizing system — 2026-10-30
+
+The actual `index.html` order is `app.css` → `professional.css` →
+`attendance.css` → `workspace.css`. `app.css :root` owns the semantic sizing
+values. `professional.css` consumes them for feature components; it no longer
+declares a competing toolbar token set. `attendance.css` owns matrix geometry
+and schedule inputs. `workspace.css` owns shared presentation and responsive
+token changes. Do not restore a second form-height system in dialog typography.
+
+| Role / token | Desktop | Phone ≤720px |
+| --- | --- | --- |
+| `--form-control-height` | 44px | `--touch-control-height`: 48px |
+| `--form-control-font` | 14px | 16px |
+| `--workspace-control-height` (toolbars/search/filters) | 42px | 44px |
+| `--workspace-control-font` | 13px | 16px |
+| `--workspace-compact-height` (pagination/compact actions) | 34px | 44px |
+| `--workspace-compact-font` | 12px | 16px |
+| `--table-action-size` | 28px | 44px |
+| `--selection-target-size` (labels, clear/header/permission controls) | 24px | 44px |
+| `--control-target-size` (preferred minimum touch action) | 44px | 44px |
+| `--workspace-control-radius` | 8px | 8px |
+| `--control-padding-inline` | 12px | 12px |
+
+Coarse pointers also receive 44px compact, table and selection targets, retaining
+desktop text sizes when the viewport is wide. The 42px toolbar token and 44px
+form token describe separate roles; forms must consume the form token.
+
+Use `--form-label-size:13px`, `--form-label-gap:8px`,
+`--form-field-gap:16px` and `--form-section-gap:24px`. Grid children do not add
+another bottom field margin. Textareas use automatic height, existing HTML
+rows, vertical resizing and `--form-textarea-min-height:96px`, with 10px vertical
+padding. Helper/error text stays 12px (13px summaries), spaced 6px from fields.
+Record detail values retain their separate 14.3px display scale.
+
+Picker and currency wrappers own their height; their inner text inputs fit the
+wrapper rather than receiving another 44px box. Native selects retain browser
+appearance and arrow behavior. Multiselect/listboxes, hidden/file/range/color
+inputs and checkbox/radio glyphs are excluded from single-line sizing. Native
+uploads retain intrinsic browser height. Checkbox labels provide targets;
+permission checkboxes without a wrapping label use the selection target token.
+There is no separate custom switch implementation: automation uses labeled
+native checkboxes. No radio workflow or new product control was introduced.
+
+Attendance matrix cells, 16px selection checkboxes, frozen identity and date
+headers remain specialized. Ordinary record row rules never apply to that
+matrix. Its schedule data-entry inputs use form metrics; toolbar/footer fields
+use toolbar metrics. Compact pagination and 28px desktop row actions remain
+intentional density differences. Mobile request cards retain automatic height.
+
+Visible focus stays on inputs and buttons; pagination/table focus outlines use
+an inset offset to stay inside scrollers. Readonly fields remain tinted and
+selectable; disabled fields are tinted, faded and noninteractive. Existing
+labels, validation associations, keyboard handlers and reduced-motion rules
+remain intact. For WCAG 2.2 AA, use the web 24 CSS px target requirement and its
+applicable spacing/native-control exceptions; prefer 44px for touch. Do not
+resize the Attendance checkbox glyph to achieve an unrelated generic target.
+
+See `docs/UI-CONSISTENCY.md` for the measured before/after table, selector
+coverage, fixture checks and limits. This work is verified locally; publication status and the implementation commit
+are recorded in ROADMAP.md.
 
 ## Shared table contract — 2026-10-29
 

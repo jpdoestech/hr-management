@@ -18,7 +18,7 @@ import {loadLineCapacity,lineCapacityHTML,capacityErrorHTML} from '/js/manpower/
 import {loadLineWorkers,workerTableHTML,workerFiltersHTML} from '/js/manpower/worker-monitoring.js';
 const SESSION={id:'fixture-user'};const STATE={view:'manpowerSubmitted'};const hasPermission=()=>true;
 const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
-const iSearch=()=>'';const iInfo=()=>'<span aria-hidden="true">i</span>';
+${[...source.matchAll(/^function i[A-Z]\w*\(s\)\{.*$/gm)].map(match=>match[0]).join('\n')}
 const fmtDate=value=>value||'Not recorded';const employeeBranchLocations=()=>['Davao','Manila'];
 const uniqueSettingNames=values=>[...new Set(values.filter(Boolean))];
 const setTitle=value=>document.getElementById('fixture_title').textContent=value;

@@ -52,7 +52,7 @@ content.classList.add('data-focused-content');
 function tableGallery(){
   STATE.view='table-gallery';content.className='data-focused-content';setTitle('Table consistency','Synthetic records only');
   const variants=['data-table','data-table settings-table','data-table access-users-table','data-table legacy-review-table','data-table onboarding-table','data-table manpower-slot-table','data-table tda-table','analytics-table','dashboard-mini-table','permission-matrix','permission-overrides'];
-  content.innerHTML=variants.map((type,index)=>'<section class="panel"><h3>'+type+'</h3><div class="tablewrap"><table class="'+type+'" data-table-key="gallery-'+index+'"><thead><tr><th>Reference</th><th>Description</th><th>Status</th></tr></thead><tbody><tr><td>SAMPLE-001</td><td>Synthetic record</td><td>Active</td></tr><tr><td>SAMPLE-002</td><td>'+('Long synthetic explanation '.repeat(12))+'</td><td>Pending</td></tr></tbody></table></div></section>').join('');
+  content.innerHTML=variants.map((type,index)=>'<section class="panel"><h3>'+type+'</h3><div class="tablewrap"><table class="'+type+'" data-table-key="gallery-'+index+'"><thead><tr><th>Reference</th><th>Description</th><th>Status</th></tr></thead><tbody><tr><td>SAMPLE-001</td><td>Synthetic record</td><td>'+(type==='permission-matrix'?'<input type="checkbox" aria-label="Synthetic permission">':'Active')+'</td></tr><tr><td>SAMPLE-002</td><td>'+('Long synthetic explanation '.repeat(12))+'</td><td>Pending</td></tr></tbody></table></div></section>').join('');
   content.insertAdjacentHTML('beforeend','<section class="panel"><h3>Editable table</h3><div class="tablewrap"><table class="data-table"><thead><tr><th>Day</th><th>Worked basis points</th><th>Unworked basis points</th></tr></thead><tbody><tr><td>Regular day</td><td><input type="number" aria-label="Worked basis points" value="10000"></td><td><input type="number" aria-label="Unworked basis points" value="0"></td></tr></tbody></table></div></section>');
 }
 function portalTable(){
@@ -85,6 +85,7 @@ if(view==='tables'){
     check(host.getBoundingClientRect().right<=innerWidth+1,'Contained table scroller: '+table.className);
     if(innerWidth>=1920)check(table.getBoundingClientRect().width<host.clientWidth-100,'Columns must not stretch: '+table.className);
     check(getComputedStyle(th).position==='sticky','Sticky column headers: '+table.className);
+    const checkbox=table.querySelector('input[type="checkbox"]');if(checkbox)check(checkbox.getBoundingClientRect().width===(mobile?44:24),'Permission targets follow the selection token');
     const longCell=table.tBodies[0].rows[1]?.cells[1];
     if(longCell)check(longCell.scrollWidth<=longCell.clientWidth+1,'Long text wraps within its cell: '+table.className);
   });

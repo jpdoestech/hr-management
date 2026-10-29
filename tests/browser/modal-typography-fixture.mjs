@@ -33,6 +33,9 @@ ${[...source.matchAll(/^function i\w+\(s\)\{.*$/gm)].map(match=>match[0]).join('
 function employeeWorkspaceNavigate(id,target){if(target==='history'){show('Overview');return employeeProfileSetTab(id,'history');}if(target.startsWith('section:'))return openEmployeeSectionForm(id,Number(target.slice(8)));return show({overview:'Overview',edit:'Edit',status:'Status',lifecycle:'Lifecycle',transfer:'Transfer',history:'Overview',report:'Incident'}[target]);}
 function openEmployeeOperation(){return show('Incident');}
 ${section('function employeeWorkspaceNav(','function employeeWorkspaceFooter(')}
+const normalizeEmployeeName=value=>String(value||'').toLowerCase(),opsInitials=()=> 'SY';
+${section('function employeePickerFind(','/* ---------------- icons (inline svg, currentColor) ---------------- */')}
+
 const employeeWorkspaceHeader=(record,title)=>'<div class="modal-head employee-workspace-head"><div><div class="employee-workspace-breadcrumb">Employees › '+title+'</div><h3>'+esc(title==='Overview'?record.name:title)+'</h3><div class="small">'+esc(title==='Overview'?record.employeeNo:record.position)+'</div></div><button type="button" aria-label="Close">×</button></div>';
 ${section('function employeeWorkspaceFooter(','const EMP_FIELDS = [')}
 const openModal=markup=>{EMPLOYEE_SECTION_EDIT=null;document.getElementById('modal').innerHTML=markup;};
@@ -59,6 +62,13 @@ function show(view){
   if(view==='Lifecycle')return openEmployeeLifecycleEventForm(employee.id);
   const overview=employeeProfileSummaryHTML(employee,null);
   const fields='<div class="field"><label for="sample_name">Employee Name</label><input id="sample_name" value="'+esc(employee.name)+'"></div><div class="field"><label for="sample_department">Department</label><select id="sample_department"><option>'+esc(employee.department)+'</option></select></div><div class="field full"><label for="sample_remarks">Remarks</label><textarea id="sample_remarks">Synthetic text for layout testing only.</textarea></div>';
+  if(view==='Controls'){
+    const samples=['text','email','number','date','time','datetime-local'].map((type,index)=>'<div class="field"><label for="control_'+index+'">'+type+'</label><input id="control_'+index+'" type="'+type+'" placeholder="Synthetic value"></div>').join('');
+    const composite='<div class="field"><label for="control_money">Currency</label><div class="money-input"><span>PHP</span><input id="control_money" type="number" value="0"></div></div><div class="field"><label for="control_catalog">Catalog</label><div class="catalog-select-row"><select id="control_catalog"><option>Synthetic department</option></select><button type="button" class="catalog-add-button" aria-label="Add catalog option">+</button></div></div>';
+    const duty='<div class="full att-duty"><label for="control_start">Duty start<input id="control_start" type="time" value="08:00"></label><label for="control_end">Duty end<input id="control_end" type="time" value="17:00"></label><label for="control_break">Break minutes<input id="control_break" type="number" value="60"></label></div>';
+    const states='<div class="field"><label for="control_readonly">Readonly</label><input id="control_readonly" readonly value="Synthetic readonly"></div><div class="field"><label for="control_disabled">Disabled</label><input id="control_disabled" disabled value="Synthetic disabled"></div><div class="field"><label for="control_upload">Native upload</label><input id="control_upload" type="file"><input id="control_hidden" type="hidden"></div><label class="checkrow"><input id="control_checkbox" type="checkbox">Synthetic selection</label><label class="automation-switch"><input id="control_switch" type="checkbox">Synthetic enabled setting</label>';
+    return openEmployeeWorkspaceModal(employeeWorkspaceHeader(employee,'Control sizing')+'<div class="modal-body"><div class="formgrid">'+samples+composite+employeePickerHTML({id:'control_employee',autofill:false})+states+duty+fields+'</div></div>'+employeeWorkspaceFooter(employee,'Save'));
+  }
   const form=view==='Edit'?employeeFormSectionsHTML(employee):'<div class="formgrid">'+fields+'</div><div class="computed-note">Synthetic shared-form note.</div>';
   openEmployeeWorkspaceModal(employeeWorkspaceHeader(employee,view)+'<div class="modal-body '+(view==='Overview'?'employee-profile-workspace':view==='Edit'?'employee-form-body':'')+'" data-employee-profile-id="synthetic" data-active-tab="summary">'+employeeWorkspaceNav(employee,view==='Overview'?'overview':'edit')+ (view==='Overview'?'<div class="employee-profile-tab-content">'+overview+'</div>':form)+'</div>'+employeeWorkspaceFooter(employee,'Save'));
 }
@@ -74,8 +84,18 @@ document.fonts.ready.then(()=>{
   if(input){
     check(input.labels.length>0,'Form controls must have associated labels');
     check(input.getBoundingClientRect().height>=44,'Form controls must be at least 44px high');
-    check(parseFloat(getComputedStyle(input).fontSize)===(innerWidth<=720?16:14.3),'Input text must follow the dialog token');
+    check(parseFloat(getComputedStyle(input).fontSize)===(innerWidth<=720?16:14),'Input text must follow the dialog token');
   }
+  const expected=innerWidth<=720?48:44;
+  document.querySelectorAll('.field input:not([type="checkbox"],[type="radio"],[type="hidden"],[type="file"]),.field select').forEach(control=>{
+    if(control.closest('.employee-picker-input,.tda-picker-input,.money-input'))return;
+    check(Math.abs(control.getBoundingClientRect().height-expected)<1,'Consistent form height: '+control.id);
+    check(parseFloat(getComputedStyle(control).fontSize)===(innerWidth<=720?16:14),'Consistent form font: '+control.id);
+    const style=getComputedStyle(control),line=parseFloat(style.lineHeight)||parseFloat(style.fontSize)*1.5;check(line+parseFloat(style.paddingTop)+parseFloat(style.paddingBottom)<=control.clientHeight+1,'Text fits vertically: '+control.id);
+  });
+  document.querySelectorAll('.field textarea').forEach(control=>check(control.getBoundingClientRect().height>=96,'Textareas retain their content minimum'));
+  document.querySelectorAll('.employee-picker-input,.money-input,.catalog-add-button,.att-duty input').forEach(control=>check(Math.abs(control.getBoundingClientRect().height-expected)<1,'Composite control height: '+control.className));
+  const hidden=document.getElementById('control_hidden');if(hidden)check(!hidden.getClientRects().length,'Hidden inputs stay hidden');
   check(parseFloat(getComputedStyle(document.querySelector('.modal-head h3')).fontSize)===19.5,'Heading must use the dialog token');
   check(document.documentElement.scrollWidth<=innerWidth,'Dialog must fit viewport width');
   if(EMPLOYEE_SECTION_EDIT)check(document.querySelectorAll('.employee-form-section').length===1,'Scoped editing must show exactly one group');
