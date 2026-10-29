@@ -2,7 +2,10 @@ STRELLAS HR Management — Development Roadmap
 
 UI-20261029-E — Direct History-to-Overview navigation
 
-Status: fixed and verified; publication pending.
+Status: completed and pushed to origin/main.
+
+Implementation: 0ed1f233104e8334cd9199dba426e18649c74c3e.
+Remote refs/heads/main matched this hash after pushing on 2026-10-29.
 
 - Retained navigation handlers when active employee action buttons are disabled,
   so Overview works immediately after switching to History.
