@@ -2,7 +2,12 @@ STRELLAS HR Management — Development Roadmap
 
 UI-20261029 — UI consistency and compact employee records
 
-Status: completed locally; publication reference recorded after committing.
+Status: completed and pushed to origin/main.
+
+Implementation: 3db694d1dce7359ff9240a58f9e70be08e0b5803.
+Push verified against refs/heads/main with git ls-remote on 2026-10-29.
+The implementation commit includes the summary, description and validation
+results. This publication note is a separate documentation-only follow-up.
 
 - Resolved the ten UI audit findings: label associations, search focus,
   compact table density, readable record/case text, mobile control sizing,
