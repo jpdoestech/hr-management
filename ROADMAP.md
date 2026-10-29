@@ -2,7 +2,11 @@ STRELLAS HR Management — Development Roadmap
 
 UI-20261029-C — Compact laptop and desktop employee filters
 
-Status: completed locally; publication reference recorded after committing.
+Status: completed and pushed to origin/main.
+
+Implementation: 7b52e06d8216aee433864a59fac70c072e2b76d5.
+Remote refs/heads/main matched the full implementation hash after pushing on
+2026-10-29. The commit includes the summary, description and validation results.
 
 - Replaced uneven growing filter blocks with equal-width inline controls on
   wide desktops and a compact Filters popover on laptop/tablet widths.
