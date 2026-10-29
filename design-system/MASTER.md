@@ -55,6 +55,10 @@ Plex Mono for identifiers. Use tabular figures for numeric comparisons.
   rather than shrink labels. Oversized selected values have a full, wrapping
   text note. On phones the employee filter panel overlays the table and closes
   on outside click or Escape, preserving the record area.
+  The employee toolbar stays a single row above 720px. At 1500px and wider,
+  its four inline filters have equal 176px widths. Laptop/tablet widths use
+  the Filters disclosure and a compact two-column popover; phone filters keep
+  their single-column panel. Closing a focused panel restores trigger focus.
 - Dialogs: rounded surfaces, distinct headers/footers and scrollable bodies.
   Existing employee action navigation, focus handling and confirmation logic
   remain in place. Long names and addresses wrap.

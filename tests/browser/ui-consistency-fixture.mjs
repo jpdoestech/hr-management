@@ -15,11 +15,11 @@ import {installTableEnhancer} from '/js/core/table-enhancer.js';
 const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');
 const STATE={view:'employees',employeeSearch:'',tablePages:{},tablePageSizes:{}};
 const params=new URLSearchParams(location.search);STATE.employeeFiltersExpanded=params.has('filters');
-const SESSION={role:'Viewer'},EMPLOYMENT_TYPES=['Probationary'],REVIEW_TYPE='Needs HR Review';
+const SESSION={role:params.has('admin')?'Administrator':'Viewer'},EMPLOYMENT_TYPES=['Probationary'],REVIEW_TYPE='Needs HR Review';
 const DB={employees:Array.from({length:250},(_,i)=>({id:'synthetic-'+i,employeeNo:'EMP-'+String(i+1).padStart(6,'0'),name:'SYNTHETIC, Employee '+String(i+1).padStart(3,'0'),department:i%2?'Operations':'Administration',branchReporting:'Synthetic Branch',position:'Synthetic Position',status:'Active'})),leaves:[{employeeName:'Synthetic Employee',department:'Operations',startDate:'2026-10-01',endDate:'2026-10-02',leaveType:'Vacation',status:'Approved'}]};
 DB.employees[0].name='SYNTHETIC-LONG-FAMILY-NAME, Sample Employee With A Long Given Name';
 const EMPLOYEE_DIRECTORY_PAGE_CACHE=new Map();
-const canEdit=()=>false,canExport=()=>false,employeeDisplayName=e=>e.name;
+const canEdit=()=>params.has('admin'),canExport=()=>false,employeeDisplayName=e=>e.name;
 const columns=[['employeeNo','Employee No.',120],['name','Name',220],['department','Department',160],['position','Position',180],['branchReporting','Branch',160],['status','Status',110]].map(([key,label,width])=>({key,label,width,cell:e=>key==='employeeNo'?'<span class="mono">'+esc(e[key])+'</span>':key==='status'?'<span class="badge b-green">'+esc(e[key])+'</span>':esc(e[key])}));
 const employeeDirectoryQueryState=()=>({columns,pageScope:'employees'}),employeeDirectorySignature=()=> 'synthetic';
 let employeeDirectoryMetadata=()=>({departments:['Operations','Administration'],branches:['Synthetic Branch'],statuses:['Active']});
@@ -46,7 +46,7 @@ function serverTablePageSize(key,size){STATE.tablePageSizes[key]=Number(size);ST
 const content=document.getElementById('content');
 const view=new URLSearchParams(location.search).get('view')||'employees';
 document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='grid';document.getElementById('session-splash')?.remove();
-document.getElementById('notification-bell-icon').innerHTML=iBell(18);document.getElementById('tb-name').textContent='Sample HR';document.getElementById('tb-role').textContent='Viewer';document.getElementById('tb-av').textContent='SH';
+document.getElementById('notification-bell-icon').innerHTML=iBell(18);document.getElementById('tb-name').textContent='Sample HR';document.getElementById('tb-role').textContent=SESSION.role;document.getElementById('tb-av').textContent='SH';
 document.getElementById('nav').innerHTML='<button class="navitem active">'+iUsers(18)+' Employees</button>';
 content.classList.add('data-focused-content');
 if(view==='leaves'){STATE.view='leaves';STATE.search='';setTitle('Leave Tracker','Synthetic records');content.innerHTML='<div id="leave-sub"></div>';renderLeaveRecords();}else renderEmployees();
@@ -71,6 +71,17 @@ if(view==='employees'){
   check(parseFloat(getComputedStyle(document.getElementById('employee-directory-search')).fontSize)>=(mobile?16:13),'Search size must follow its breakpoint');
   check(document.querySelector('.table-pagination-wrap').getBoundingClientRect().bottom<=innerHeight+1,'Pagination must fit the viewport');
   if(innerWidth>900)check(Math.abs(document.querySelector('#sidebar .brand').getBoundingClientRect().bottom-document.getElementById('topbar').getBoundingClientRect().bottom)<1,'Logo and header dividers must align');
+  if(innerWidth>720&&!params.has('long')){
+    const toolbar=content.querySelector('.employee-directory-toolbar').getBoundingClientRect();
+    const search=content.querySelector('.employee-directory-search').getBoundingClientRect();
+    const actions=content.querySelector('.employee-toolbar-actions').getBoundingClientRect();
+    check(toolbar.height<=64,'Desktop employee toolbar must stay one compact row');
+    check(Math.abs(search.y-actions.y)<1,'Search and actions must align on desktop');
+    if(innerWidth>=1500){
+      const filters=[...content.querySelectorAll('.employee-filter-set select')].map(e=>e.getBoundingClientRect());
+      check(filters.every(rect=>Math.abs(rect.width-filters[0].width)<1&&Math.abs(rect.y-search.y)<1),'Wide desktop filters must have equal widths in one row');
+    }else check(getComputedStyle(content.querySelector('.employee-filter-toggle')).display!=='none','Laptop filters must have a compact disclosure');
+  }
   content.querySelectorAll('.employee-filter-set select').forEach(select=>{
     if(!select.getClientRects().length)return;
     const style=getComputedStyle(select),context=document.createElement('canvas').getContext('2d');context.font=style.font;

@@ -1,5 +1,23 @@
 # UI consistency — 2026-10-29
 
+## Desktop filter layout refinement — 2026-10-29
+
+The employee filter group previously allowed controls to grow and wrap into
+uneven blocks beside the search. Desktop toolbars now keep search, filters and
+actions aligned in a single approximately 61px row. At 1500px and wider, the
+four inline selects have equal 176px widths. At 721–1499px, a Filters button
+opens a 440px two-column popover instead of stretching inline controls. Phone
+filters retain their existing one-column panel. Full-label notes remain for
+unusually long selected values, and closing a focused panel returns keyboard
+focus to its trigger.
+
+The synthetic fixture's `?admin=1` variant includes Add Employee, and its browser
+assertions check toolbar height, action alignment and equal inline widths.
+Browser checks passed at 1280px, 1366px, 1500px and 1920px, including active
+filters with Clear and Add Employee. A 390px phone check confirmed the existing
+responsive bounds. Lint, 406 tests, build, structural validation and diff checks
+pass. No data queries, permissions or persistence behavior changed.
+
 ## Visibility and section-edit follow-up — 2026-10-29
 
 Fixed filter widths left over from the smaller type scale could clip labels

@@ -79,3 +79,10 @@ test('employee records use content-sized columns and an explicit search icon',()
   assert.match(css,/\.employee-directory-table\{table-layout:auto;width:max-content;min-width:100%/);
   assert.doesNotMatch(css,/\.employee-directory-table[^\n]*text-overflow:ellipsis/);
 });
+test('closing employee filters returns focus from the panel to its trigger',()=>{
+  let focused=false;
+  const button={setAttribute(){},focus(){focused=true;}},panel={contains:()=>true,classList:{toggle(){}}};
+  const context={STATE:{employeeFiltersExpanded:true},document:{activeElement:{},getElementById:()=>panel,querySelector:()=>button}};
+  vm.createContext(context);vm.runInContext(section('function toggleEmployeeDirectoryFilters(){','const EMPLOYEE_COLUMN_DEFS = ['),context);
+  context.toggleEmployeeDirectoryFilters();assert.equal(context.STATE.employeeFiltersExpanded,false);assert.equal(focused,true);
+});

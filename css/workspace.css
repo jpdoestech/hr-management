@@ -172,12 +172,25 @@ button,a,input,select,textarea{touch-action:manipulation;}
 .toolbar.employee-directory-toolbar .employee-directory-search svg{position:absolute;left:12px;top:50%;width:16px;height:16px;transform:translateY(-50%);color:var(--text);opacity:1;pointer-events:none;}
 .data-table .cell-secondary{max-width:none;overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere;}
 .employee-directory-toolbar .employee-tool-btn{width:var(--workspace-control-height);min-width:var(--workspace-control-height);}
+.employee-directory-toolbar .employee-filter-toggle[aria-expanded="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
 /* Native filters must reserve room for text, padding and the dropdown arrow. */
 :is(.toolbar,.data-toolbar,.workflow-toolbar,.analytics-toolbar,.quality-toolbar,.automation-toolbar,.attendance-paint-toolbar) select,
 .filter-select{field-sizing:content;flex-shrink:0;width:auto;min-width:min(100%,calc(14ch + 42px));max-width:100%;}
 .employee-filter-set,.tda-filter-set{flex-wrap:wrap;}
 .employee-directory-toolbar .employee-filter-set>select{field-sizing:content;flex:1 0 auto;width:auto;min-width:min(100%,calc(14ch + 42px));max-width:100%;}
 .filter-value-summary{flex:1 0 100%;grid-column:1/-1;min-width:0;margin:0;font-size:12px;line-height:1.5;overflow-wrap:anywhere;white-space:normal;}
+@media(min-width:721px){
+  .toolbar.employee-directory-toolbar{position:relative;z-index:8;display:flex;flex-wrap:nowrap;gap:8px;}
+  .toolbar.employee-directory-toolbar .employee-directory-search{flex:1 1 200px;min-width:180px;}
+  .employee-directory-toolbar .employee-filter-set{display:grid;flex:0 0 auto;grid-template-columns:repeat(4,176px);gap:8px;}
+  .toolbar.employee-directory-toolbar .employee-filter-set>select{field-sizing:fixed;flex:none;width:100%;min-width:0;max-width:100%;}
+  .employee-directory-toolbar .employee-toolbar-actions{flex:none;margin-left:0;}
+}
+@media(min-width:721px) and (max-width:1499px){
+  .employee-directory-toolbar .employee-filter-toggle{display:inline-flex!important;align-items:center;justify-content:center;gap:6px;flex:none;}
+  .employee-directory-toolbar .employee-filter-set{display:none;}
+  .employee-directory-toolbar .employee-filter-set.expanded{display:grid;position:absolute;top:calc(100% + 6px);right:10px;z-index:10;width:min(440px,calc(100% - 20px));padding:12px;grid-template-columns:repeat(2,minmax(0,1fr));max-height:60dvh;overflow-y:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface);box-shadow:var(--shadow-md);}
+}
 .not-recorded,:is(#content,#modal) .not-recorded{color:#991B1B;}
 .employee-section-title{display:flex;align-items:center;gap:8px;min-width:0;}
 .employee-section-title h3{margin:0;}

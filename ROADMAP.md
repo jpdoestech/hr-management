@@ -1,5 +1,19 @@
 STRELLAS HR Management — Development Roadmap
 
+UI-20261029-C — Compact laptop and desktop employee filters
+
+Status: completed locally; publication reference recorded after committing.
+
+- Replaced uneven growing filter blocks with equal-width inline controls on
+  wide desktops and a compact Filters popover on laptop/tablet widths.
+- Kept the toolbar to one aligned row, including administrator actions and
+  active-filter Clear. Preserved full labels, long-value notes and phone layout.
+- Added focus restoration when a focused filter panel closes. Browser fixture
+  checks now include administrator controls and desktop alignment/width rules.
+- Validation: lint, 406 tests, build, structural validation and diff checks;
+  synthetic checks at 1280, 1366, 1500, 1920 and 390px. No production records,
+  database, permission or persistence changes. See docs/UI-CONSISTENCY.md.
+
 UI-20261029-B — Full filter labels, flexible columns and scoped Overview edits
 
 Status: completed and pushed to origin/main.

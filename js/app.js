@@ -4363,8 +4363,10 @@ function toggleEmployeeDirectoryFilters(){
   STATE.employeeFiltersExpanded=!STATE.employeeFiltersExpanded;
   const panel=document.getElementById('employee-filter-set');
   const button=document.querySelector('.employee-filter-toggle');
+  const returnFocus=!STATE.employeeFiltersExpanded&&panel?.contains(document.activeElement);
   panel?.classList.toggle('expanded',STATE.employeeFiltersExpanded);
   button?.setAttribute('aria-expanded',String(Boolean(STATE.employeeFiltersExpanded)));
+  if(returnFocus)button?.focus({preventScroll:true});
   if(STATE.employeeFiltersExpanded)requestAnimationFrame(enhanceFilterVisibility);
 }
 const EMPLOYEE_COLUMN_DEFS = [
