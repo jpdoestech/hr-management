@@ -49,7 +49,19 @@ document.getElementById('auth-screen').style.display='none';document.getElementB
 document.getElementById('notification-bell-icon').innerHTML=iBell(18);document.getElementById('tb-name').textContent='Sample HR';document.getElementById('tb-role').textContent=SESSION.role;document.getElementById('tb-av').textContent='SH';
 document.getElementById('nav').innerHTML='<button class="navitem active">'+iUsers(18)+' Employees</button>';
 content.classList.add('data-focused-content');
-if(view==='leaves'){STATE.view='leaves';STATE.search='';setTitle('Leave Tracker','Synthetic records');content.innerHTML='<div id="leave-sub"></div>';renderLeaveRecords();}else renderEmployees();
+function tableGallery(){
+  STATE.view='table-gallery';content.className='data-focused-content';setTitle('Table consistency','Synthetic records only');
+  const variants=['data-table','data-table settings-table','data-table access-users-table','data-table legacy-review-table','data-table onboarding-table','data-table manpower-slot-table','data-table tda-table','analytics-table','dashboard-mini-table','permission-matrix','permission-overrides'];
+  content.innerHTML=variants.map((type,index)=>'<section class="panel"><h3>'+type+'</h3><div class="tablewrap"><table class="'+type+'" data-table-key="gallery-'+index+'"><thead><tr><th>Reference</th><th>Description</th><th>Status</th></tr></thead><tbody><tr><td>SAMPLE-001</td><td>Synthetic record</td><td>Active</td></tr><tr><td>SAMPLE-002</td><td>'+('Long synthetic explanation '.repeat(12))+'</td><td>Pending</td></tr></tbody></table></div></section>').join('');
+  content.insertAdjacentHTML('beforeend','<section class="panel"><h3>Editable table</h3><div class="tablewrap"><table class="data-table"><thead><tr><th>Day</th><th>Worked basis points</th><th>Unworked basis points</th></tr></thead><tbody><tr><td>Regular day</td><td><input type="number" aria-label="Worked basis points" value="10000"></td><td><input type="number" aria-label="Unworked basis points" value="0"></td></tr></tbody></table></div></section>');
+}
+function portalTable(){
+  STATE.view='portal';content.className='data-focused-content';setTitle('My requests','Synthetic request layout');
+  const headers=['Request','Details','Submitted','Status','Reviewer remarks','Actions'];
+  const values=['Certificate request','Synthetic request with a deliberately long explanation '.repeat(4),'Oct 29, 2026','Pending','Not recorded','<div class="rowactions"><button class="btn btn-ghost btn-sm">Cancel request</button></div>'];
+  content.innerHTML='<section class="portal-history"><div class="tablewrap"><table class="data-table portal-request-table"><thead><tr>'+headers.map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody><tr>'+values.map((value,index)=>'<td data-label="'+headers[index]+'">'+value+'</td>').join('')+'</tr></tbody></table></div></section>';
+}
+if(view==='portal')portalTable();else if(view==='tables')tableGallery();else if(view==='leaves'){STATE.view='leaves';STATE.search='';setTitle('Leave Tracker','Synthetic records');content.innerHTML='<div id="leave-sub"></div>';renderLeaveRecords();}else renderEmployees();
 const tableEnhancer=installTableEnhancer({getState:()=>STATE,getContent:()=>content});tableEnhancer.enhanceDataTables();
 Object.assign(window,{STATE,employeeSearchInput,toggleEmployeeDirectoryFilters,resetEmployeeDirectoryFilters,renderEmployees,renderLeaveRecords,queueSearchRender,cancelSearchRender,serverTablePageGo,serverTablePageSize});
 // These assertions use the final cascade, rather than searching CSS source text.
@@ -59,6 +71,24 @@ const failures=[];const check=(ok,message)=>{if(!ok)failures.push(message);};
 const mobile=innerWidth<=720,table=content.querySelector('.data-table'),cell=table.querySelector('tbody td');
 check(document.documentElement.scrollWidth<=innerWidth,'Document must not scroll horizontally');
 check(parseFloat(getComputedStyle(cell).fontSize)>=13,'Record text must remain readable');
+if(view==='portal'&&mobile){
+  check(getComputedStyle(table).display==='block','Mobile requests retain cards');
+  check(parseFloat(getComputedStyle(cell).fontSize)===13,'Request cards retain readable record text');
+  check(content.querySelector('.rowactions .btn').getBoundingClientRect().height>=44,'Request actions retain touch targets');
+}
+if(view==='tables'){
+  content.querySelectorAll('table').forEach(table=>{
+    const row=table.tBodies[0].rows[0],td=row.cells[0],th=table.tHead.rows[0].cells[0],host=table.closest('.tablewrap');
+    check(getComputedStyle(td).fontSize==='13px','Uniform record font: '+table.className);
+    check(getComputedStyle(th).fontSize==='12px','Uniform header font: '+table.className);
+    check(parseFloat(getComputedStyle(td).paddingTop)===6,'Uniform cell spacing: '+table.className);
+    check(host.getBoundingClientRect().right<=innerWidth+1,'Contained table scroller: '+table.className);
+    if(innerWidth>=1920)check(table.getBoundingClientRect().width<host.clientWidth-100,'Columns must not stretch: '+table.className);
+    check(getComputedStyle(th).position==='sticky','Sticky column headers: '+table.className);
+    const longCell=table.tBodies[0].rows[1]?.cells[1];
+    if(longCell)check(longCell.scrollWidth<=longCell.clientWidth+1,'Long text wraps within its cell: '+table.className);
+  });
+}
 if(view==='employees'){
   check(table.tBodies[0].rows.length===25,'Employee page must stay bounded to 25 rows');
   check(getComputedStyle(table).tableLayout==='auto','Employee columns must size to their contents');
@@ -76,6 +106,7 @@ if(view==='employees'){
     const search=content.querySelector('.employee-directory-search').getBoundingClientRect();
     const actions=content.querySelector('.employee-toolbar-actions').getBoundingClientRect();
     check(toolbar.height<=64,'Desktop employee toolbar must stay one compact row');
+    check(search.width<=480.5,'Desktop searches must not stretch on wide screens');
     check(Math.abs(search.y-actions.y)<1,'Search and actions must align on desktop');
     if(innerWidth>=1500){
       const filters=[...content.querySelectorAll('.employee-filter-set select')].map(e=>e.getBoundingClientRect());

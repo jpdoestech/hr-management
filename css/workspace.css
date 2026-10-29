@@ -151,10 +151,40 @@ button,a,input,select,textarea{touch-action:manipulation;}
 .page-btn{min-width:34px;height:34px;border-radius:9px;font-size:12px;}
 .page-btn.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-soft);}
 .page-size select{height:34px;font-size:12px;border-radius:9px;}
-/* Record density is shared by server and client tables; Attendance owns its matrix. */
-#content.data-focused-content .data-table thead th{height:36px;padding:8px 12px;font-size:var(--record-header-size);letter-spacing:0;text-transform:none;}
-#content.data-focused-content .data-table tbody td{height:var(--record-row-height);padding:var(--record-cell-padding);font-size:var(--record-font-size);line-height:1.4;}
-.employee-directory-table tbody td{white-space:nowrap;}
+/* All record workspaces share control metrics; matrix cells retain their own rules. */
+:is(#content,#modal) :is(.toolbar,.data-toolbar,.workflow-toolbar,.quality-toolbar,.automation-toolbar,.analytics-toolbar,.access-toolbar) :is(.search,.searchbox,input:not([type="checkbox"]):not([type="radio"]),select){min-height:var(--workspace-control-height);height:var(--workspace-control-height);font-size:var(--workspace-control-font);border-radius:var(--workspace-control-radius);}
+:is(#content,#modal) :is(.toolbar,.data-toolbar,.workflow-toolbar,.quality-toolbar,.automation-toolbar,.analytics-toolbar,.access-toolbar) .btn{min-height:var(--workspace-control-height);font-size:var(--workspace-control-font);border-radius:var(--workspace-control-radius);}
+:is(#content,#modal) :is(.toolbar,.data-toolbar,.workflow-toolbar,.quality-toolbar,.automation-toolbar,.analytics-toolbar,.access-toolbar) :is(.search,.searchbox) svg{opacity:1;flex-shrink:0;color:var(--text);}
+@media(min-width:721px){
+  :is(#content,#modal) :is(.toolbar,.data-toolbar,.workflow-toolbar,.quality-toolbar,.automation-toolbar,.analytics-toolbar,.access-toolbar) :is(.search,.searchbox){max-width:480px;}
+}
+/* One sizing contract for lists, reports, previews, settings and dialog tables.
+   Intrinsic columns avoid distributing spare wide-screen space across short values. */
+:is(#content,#modal) .tablewrap{min-width:0;max-width:100%;overflow:auto;overscroll-behavior:contain;}
+:is(#content,#modal) table:not(.attendance-grid){table-layout:auto;width:max-content;min-width:0;border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums;}
+:is(#content,#modal) table:not(.attendance-grid) th{height:36px;padding:8px 12px;font-size:var(--record-header-size);font-weight:650;line-height:1.4;letter-spacing:0;text-transform:none;white-space:nowrap;}
+:is(#content,#modal) table:not(.attendance-grid) td{height:var(--record-row-height);padding:var(--record-cell-padding);font-size:var(--record-font-size);line-height:1.4;max-width:36rem;white-space:normal;overflow-wrap:anywhere;vertical-align:middle;}
+:is(#content,#modal) table:not(.attendance-grid) :is(th,td).actions-head{width:auto;min-width:0;}
+:is(#content,#modal) .tablewrap thead th{position:sticky;top:0;}
+#content .tablewrap:not(.employee-directory-tablewrap){max-height:min(62dvh,720px);}
+#content.data-focused-content{padding-left:var(--workspace-gutter);padding-right:var(--workspace-gutter);}
+:is(#content,#modal) .table-pagination-wrap{padding:6px 10px;min-height:43px;gap:10px;}
+:is(#content,#modal) .table-pagination-wrap :is(.page-size select,.page-btn){height:34px;min-height:34px;font-size:12px;}
+:is(#content,#modal) .tablewrap :is(input:not([type="checkbox"]):not([type="radio"]),select){min-width:120px;min-height:var(--workspace-control-height);font-size:var(--workspace-control-font);}
+:is(#content,#modal) .tablewrap .rowactions .btn{min-height:28px;padding:4px 8px;font-size:12px;}
+:is(#content,#modal) .tablewrap .iconbtn{width:28px;height:28px;min-width:28px;min-height:28px;border-radius:6px;}
+@media(max-width:720px),(pointer:coarse){
+  :is(#content,#modal) .tablewrap .rowactions .btn{min-height:44px;padding:8px 12px;}
+  :is(#content,#modal) .tablewrap .iconbtn{width:44px;height:44px;min-width:44px;min-height:44px;}
+  :is(#content,#modal) .table-pagination-wrap :is(.page-size select,.page-btn){height:44px;min-height:44px;min-width:44px;}
+}
+@media(max-width:720px){
+  :is(#content,#modal) .table-pagination-wrap :is(.page-size select,.page-btn){font-size:16px;}
+  #content.data-focused-content table.portal-request-table{width:100%;}
+  #content.data-focused-content table.portal-request-table tbody td{height:auto;max-width:none;}
+  #content .portal-history>.tablewrap{max-height:none;overflow:visible;}
+}
+#content .employee-directory-table tbody td{max-width:none;white-space:nowrap;}
 #main:has(>#content.employee-directory-content){height:100dvh;display:flex;flex-direction:column;overflow:hidden;}
 #main:has(>#content.employee-directory-content)>#topbar{flex-shrink:0;}
 #content.employee-directory-content{flex:1;min-height:0;height:auto;}

@@ -76,7 +76,7 @@ test('employee records use content-sized columns and an explicit search icon',()
   assert.doesNotMatch(renderer,/tableMinWidth|style="width:|style="min-width:/);
   assert.match(renderer,/employee-directory-search">\$\{iSearch\(16\)\}/);
   const css=readFileSync(new URL('../../css/professional.css',import.meta.url),'utf8');
-  assert.match(css,/\.employee-directory-table\{table-layout:auto;width:max-content;min-width:100%/);
+  assert.match(css,/\.employee-directory-table\{table-layout:auto;width:max-content;min-width:0/);
   assert.doesNotMatch(css,/\.employee-directory-table[^\n]*text-overflow:ellipsis/);
 });
 test('closing employee filters returns focus from the panel to its trigger',()=>{

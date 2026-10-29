@@ -1,5 +1,22 @@
 STRELLAS HR Management — Development Roadmap
 
+UI-20261029-D — Uniform responsive tables and shared controls
+
+Status: implementation and synthetic browser verification complete; publication pending.
+
+- Fixed viewport-filling table widths across all table families, including
+  settings, access control, previews, reports, manpower and modal tables.
+- Unified typography, cell spacing, actions, pagination, toolbar controls and
+  gutters; capped desktop search growth. Preserved full employee names,
+  Attendance editing and responsive request cards.
+- Compared the reference repository read-only. Added computed-style fixtures
+  for all table classes, editable tables and mobile request cards.
+- Validation: lint, 406 tests, build, structural validation and diff checks;
+  synthetic browser review at 320–3440px and short landscape, plus dialogs
+  and Attendance staging. No database, authorization or dependency changes.
+- See docs/UI-CONSISTENCY.md for coverage and limitations.
+
+
 UI-20261029-C — Compact laptop and desktop employee filters
 
 Status: completed and pushed to origin/main.

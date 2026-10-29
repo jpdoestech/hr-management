@@ -81,6 +81,20 @@ Plex Mono for identifiers. Use tabular figures for numeric comparisons.
   Decorative SVGs are hidden from assistive technology. Icon-only controls
   need an accessible name. Do not add icons to ordinary record values.
 
+## Shared table contract — 2026-10-29
+
+Every ordinary table under `#content` or `#modal` uses content width and native
+automatic layout, including settings, access control, previews and summaries.
+Do not add viewport-filling widths or arbitrary whole-table minimum widths.
+Use 12px headers, 13px values, 40px minimum ordinary rows and 6px/12px cell
+padding. Long prose wraps within 36rem; the employee directory keeps complete
+single-line values in its scroller. Form controls/multiline content can grow
+rows. Keep table action targets 28px desktop and 44px touch. Shared pagination
+and toolbar metrics apply throughout; desktop searches cap at 480px. Content
+gutters align with the header. Preserve the daily Attendance grid and mobile
+request cards; request descriptions use automatic height. See the family
+inventory and current validation in `docs/UI-CONSISTENCY.md`.
+
 ## Verification — 2026-10-22
 
 `npm run lint`, `npm test` (389 tests), `npm run build` and
