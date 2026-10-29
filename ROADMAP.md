@@ -2,7 +2,11 @@ STRELLAS HR Management — Development Roadmap
 
 UI-20261029-B — Full filter labels, flexible columns and scoped Overview edits
 
-Status: completed locally; publication reference recorded after committing.
+Status: completed and pushed to origin/main.
+
+Implementation: 2d2241adabcb5fa958ca9c44627b053513be11ce.
+Remote refs/heads/main matched the full implementation hash after pushing on
+2026-10-29. The commit includes the summary, description and validation results.
 
 - Replaced clipping-prone filter widths with content sizing and wrapping;
   selected values too long for the screen have a visible full-text note.
