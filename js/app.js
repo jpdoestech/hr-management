@@ -4767,7 +4767,7 @@ function employeeWorkspaceNav(emp,active='overview'){
     ['history','History',iInfo(14),''],
   ];
   const current=active==='status'?'lifecycle':active;
-  const actionButton=([key,label,icon])=>`<button type="button" data-workspace-target="${key}" class="${key===current?'active':''}" ${key===current?'disabled aria-current="page"':`onclick="employeeWorkspaceNavigate('${emp.id}','${key}')"`}><span aria-hidden="true">${icon}</span><span>${label}</span></button>`;
+  const actionButton=([key,label,icon])=>`<button type="button" data-workspace-target="${key}" class="${key===current?'active':''}" ${key===current?'disabled aria-current="page"':''} onclick="employeeWorkspaceNavigate('${emp.id}','${key}')"><span aria-hidden="true">${icon}</span><span>${label}</span></button>`;
   return `<nav class="employee-workspace-nav employee-action-toolbar" aria-label="Employee actions">
     ${actions.filter(([key])=>canEdit()||['overview','history'].includes(key)).map(actionButton).join('')}
     ${canEdit()?`<div class="toolbar-spacer"></div><button type="button" class="profile-er-action" onclick="employeeWorkspaceNavigate('${emp.id}','report')">${iShield(14)}<span>Report ER Matter</span></button>`:''}

@@ -30,7 +30,7 @@ ${section('function revealModalField(','async function transitionModal(')}
 ${section('const EMP_FIELDS = [','const EMPLOYEE_IMPORT_COLUMNS = [')}
 ${section('const EMP_FORM_SECTIONS = [','function syncPositionSelect(')}
 ${[...source.matchAll(/^function i\w+\(s\)\{.*$/gm)].map(match=>match[0]).join('\n')}
-function employeeWorkspaceNavigate(id,target){if(target.startsWith('section:'))return openEmployeeSectionForm(id,Number(target.slice(8)));return show({overview:'Overview',edit:'Edit',status:'Status',lifecycle:'Lifecycle',transfer:'Transfer',history:'Overview',report:'Incident'}[target]);}
+function employeeWorkspaceNavigate(id,target){if(target==='history'){show('Overview');return employeeProfileSetTab(id,'history');}if(target.startsWith('section:'))return openEmployeeSectionForm(id,Number(target.slice(8)));return show({overview:'Overview',edit:'Edit',status:'Status',lifecycle:'Lifecycle',transfer:'Transfer',history:'Overview',report:'Incident'}[target]);}
 function openEmployeeOperation(){return show('Incident');}
 ${section('function employeeWorkspaceNav(','function employeeWorkspaceFooter(')}
 const employeeWorkspaceHeader=(record,title)=>'<div class="modal-head employee-workspace-head"><div><div class="employee-workspace-breadcrumb">Employees › '+title+'</div><h3>'+esc(title==='Overview'?record.name:title)+'</h3><div class="small">'+esc(title==='Overview'?record.employeeNo:record.position)+'</div></div><button type="button" aria-label="Close">×</button></div>';
@@ -45,6 +45,9 @@ const confirmEmployeeDuplicateNames=async()=>true,validateGovernmentIds=()=>'',e
 const departmentCatalog=()=>[{name:employee.department,active:true}],positionCatalog=()=>[{name:employee.position,department:employee.department,active:true}];
 ${section('function openEmployeeWorkspaceModal(','async function returnFromEmployeeTransaction(')}
 ${section('function employeeProfileSummaryHTML(','function employeeProfilePersonalHTML(')}
+const EMPLOYEE_PROFILE_CACHE=new Map([[employee.id,{snapshot:{}}]]);
+function employeeProfileTabContent(record,tab){return tab==='history'?'<h3>History</h3><p>No synthetic history recorded.</p>':employeeProfileSummaryHTML(record,null);}
+${section('function employeeProfileSetTab(','function updateEmployeeProfileActivity(')}
 ${section('function openEmployeeStatusForm(','async function saveEmployeeStatus(')}
 ${section('async function openTransferForEmployee(','async function saveEmployeeTransfer(')}
 ${section('function openEmployeeLifecycleEventForm(','function lifecycleEventTypeChanged(')}
@@ -57,7 +60,7 @@ function show(view){
   const overview=employeeProfileSummaryHTML(employee,null);
   const fields='<div class="field"><label for="sample_name">Employee Name</label><input id="sample_name" value="'+esc(employee.name)+'"></div><div class="field"><label for="sample_department">Department</label><select id="sample_department"><option>'+esc(employee.department)+'</option></select></div><div class="field full"><label for="sample_remarks">Remarks</label><textarea id="sample_remarks">Synthetic text for layout testing only.</textarea></div>';
   const form=view==='Edit'?employeeFormSectionsHTML(employee):'<div class="formgrid">'+fields+'</div><div class="computed-note">Synthetic shared-form note.</div>';
-  openEmployeeWorkspaceModal(employeeWorkspaceHeader(employee,view)+'<div class="modal-body '+(view==='Overview'?'employee-profile-workspace':view==='Edit'?'employee-form-body':'')+'">'+employeeWorkspaceNav(employee,view==='Overview'?'overview':'edit')+ (view==='Overview'?overview:form)+'</div>'+employeeWorkspaceFooter(employee,'Save'));
+  openEmployeeWorkspaceModal(employeeWorkspaceHeader(employee,view)+'<div class="modal-body '+(view==='Overview'?'employee-profile-workspace':view==='Edit'?'employee-form-body':'')+'" data-employee-profile-id="synthetic" data-active-tab="summary">'+employeeWorkspaceNav(employee,view==='Overview'?'overview':'edit')+ (view==='Overview'?'<div class="employee-profile-tab-content">'+overview+'</div>':form)+'</div>'+employeeWorkspaceFooter(employee,'Save'));
 }
 show(new URLSearchParams(location.search).get('view')||'Overview');
 const initialSection=new URLSearchParams(location.search).get('section');

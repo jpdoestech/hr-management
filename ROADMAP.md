@@ -1,5 +1,17 @@
 STRELLAS HR Management — Development Roadmap
 
+UI-20261029-E — Direct History-to-Overview navigation
+
+Status: fixed and verified; publication pending.
+
+- Retained navigation handlers when active employee action buttons are disabled,
+  so Overview works immediately after switching to History.
+- Added editor/viewer transition regression coverage and browser fixture support
+  for the actual tab switcher. Verified History then Overview with synthetic data.
+- Validation: lint, 407 tests, build, structural validation and diff checks.
+- No database, permission, persistence or dependency changes.
+
+
 UI-20261029-D — Uniform responsive tables and shared controls
 
 Status: completed and pushed to origin/main.

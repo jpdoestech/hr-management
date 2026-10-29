@@ -1,5 +1,18 @@
 # UI consistency — 2026-10-29
 
+## Employee History return navigation — 2026-10-29
+
+Overview originally rendered disabled without a click handler. Switching to
+History enabled that button but left it without an action. The shared navigation
+renderer now retains handlers on active buttons; native disabled state still
+prevents activating the current destination. No routing, save or data behavior
+changed. A regression test reproduces the History-to-Overview transition for
+editors and viewers. The modal fixture now uses the actual tab switcher, and a
+browser click through History then Overview restored Personal Information.
+Lint, 407 tests, build, structural validation and diff checks passed. Synthetic
+records only; authenticated production history retrieval was not exercised.
+
+
 ## Shared table responsiveness and uniformity — 2026-10-29
 
 Investigated every application table declaration in `js/app.js`, core modules

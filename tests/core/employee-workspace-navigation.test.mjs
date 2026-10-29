@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+import {runInNewContext} from 'node:vm';
 
 const source=await readFile(new URL('../../js/app.js',import.meta.url),'utf8');
 const styles=await readFile(new URL('../../css/professional.css',import.meta.url),'utf8');
@@ -53,4 +54,23 @@ test('employee transactions return to the selected overview on cancel or save',(
 test('Access Control role editor keeps form fields away from modal edges',()=>{
   assert.match(styles,/\.access-role-editor>\.formgrid\{padding:17px 20px/);
   assert.match(styles,/\.access-editor-section,\.access-role-editor>\.formgrid\{padding:14px 13px/);
+});
+
+test('History enables a working Overview action for editors and viewers',()=>{
+  const nav=source.slice(source.indexOf('function employeeWorkspaceNav('),source.indexOf('function employeeWorkspaceFooter('));
+  const setTab=source.slice(source.indexOf('function employeeProfileSetTab('),source.indexOf('function updateEmployeeProfileActivity('));
+  for(const editable of [true,false]){
+    const employee={id:'synthetic'},icons=Object.fromEntries(['iUser','iEdit','iSwap','iPlus','iInfo','iShield'].map(key=>[key,()=> '']));
+    const render=runInNewContext(nav+';employeeWorkspaceNav',{...icons,canEdit:()=>editable});
+    const buttons=[...render(employee).matchAll(/<button[^>]*data-workspace-target="([^"]+)"[^>]*>/g)].map(([html,target])=>({dataset:{workspaceTarget:target},disabled:/\bdisabled\b/.test(html),onclick:html.match(/onclick="([^"]+)"/)?.[1],classList:{toggle(){}},setAttribute(){},removeAttribute(){}}));
+    const workspace={dataset:{employeeProfileId:employee.id},querySelectorAll:selector=>selector==='[data-workspace-target]'?buttons:[],querySelector:()=>({innerHTML:''})};
+    const changeTab=runInNewContext(setTab+';employeeProfileSetTab',{DB:{employees:[employee]},document:{querySelector:()=>workspace},EMPLOYEE_PROFILE_CACHE:new Map([[employee.id,{snapshot:{}}]]),employeeProfileTabContent:()=>''});
+    const overview=buttons.find(button=>button.dataset.workspaceTarget==='overview');
+    assert.equal(overview.disabled,true);
+    assert.equal(changeTab(employee.id,'history'),true);assert.equal(overview.disabled,false);
+    assert.ok(overview.onclick,'Overview must keep its click handler when History enables it');
+    let destination;runInNewContext(overview.onclick,{employeeWorkspaceNavigate:(id,target)=>{destination=[id,target];}});
+    assert.deepEqual(destination,[employee.id,'overview']);
+    changeTab(employee.id,'summary');assert.equal(overview.disabled,true);assert.equal(buttons.find(button=>button.dataset.workspaceTarget==='history').disabled,false);
+  }
 });
