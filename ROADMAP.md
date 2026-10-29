@@ -2,7 +2,11 @@ STRELLAS HR Management — Development Roadmap
 
 UI-20261029-D — Uniform responsive tables and shared controls
 
-Status: implementation and synthetic browser verification complete; publication pending.
+Status: completed and pushed to origin/main.
+
+Implementation: 63b1efcc7e0b8e90f13f77bfe95aafdc3523ff72.
+Remote refs/heads/main matched the full implementation hash after pushing on
+2026-10-29. The commit includes the summary, description and validation results.
 
 - Fixed viewport-filling table widths across all table families, including
   settings, access control, previews, reports, manpower and modal tables.
