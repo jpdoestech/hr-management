@@ -1083,4 +1083,6 @@ HR-20261030-GOV-OWNER — Duplicate government ID owner context (locally verifie
 - Docs: government ID uniqueness, deployment and browser coverage describe the
   permitted metadata, fallback behavior and migration requirement. Hosted CI,
   full Supabase acceptance and live migration 0066 installation are unverified.
-- Publication: ready for authorized commit and push; references follow.
+- Publication: implementation `7af8895` pushed to `origin/main`; remote HEAD
+  verified as `7af889587d700c453fe98742a99749452def091c`. Commit includes
+  summary, description, validation and migration/authorization limits.
