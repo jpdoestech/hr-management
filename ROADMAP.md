@@ -988,3 +988,32 @@ and loads `css/workspace.css?v=20261022-1`. The stylesheet returned HTTP 200
 and exactly matches the tested source after CRLF normalization. Automatic
 rollout is verified at the public-asset boundary; authenticated role-specific
 HR workflows remain outside this visual review.
+
+
+UI-20261030-R — Browser regressions and workflow reliability (locally verified)
+
+- Added `npm run test:browser`: 73 synthetic checks across 1440, 1280, 768,
+  390 and 320px document widths using the existing modal, directory/table,
+  workspace/auth and Attendance fixtures. Includes actual employee navigation,
+  scoped persistence rollback/retry, unsaved edits, error associations, picker
+  keyboard handlers, directory filter/search/page-size recovery, Attendance
+  failed-save/retry and loading state checks.
+- Fixed Attendance's post-confirmation submission race and exposed accessible
+  roster-refresh busy state with stale-request protection. Updated import cache
+  versions. No schema, permission, data-fetching or attendance-rule changes.
+- Added a dependency-free loopback runner, validated ignored JSON reports,
+  optional disposable-profile Chrome/Edge headless mode and a separate read-only
+  GitHub UI regression workflow. Existing deployment behavior is unchanged.
+  Workspace fixture port moved to 4191 because Node fetch rejects port 4190.
+- Final verification: 73/73 browser checks; lint, 411 Node tests, production
+  build, explicit structural validation and diff checks passed. Initial mock and
+  browser-harness failures were corrected; no unresolved gate failure remains.
+  Synthetic frontend render medians: cached profile 0.7ms, directory with 250
+  records 1.5ms, directory with 10,000 records 1.8ms; only 25 rows rendered.
+- Docs: `docs/BROWSER-REGRESSIONS.md`, README, UI consistency and MASTER record
+  commands, coverage, measurements and limits. Offline fallback fonts, scripted
+  handler events and fixed 900px iframe height are intentional test boundaries.
+- Publication: authorized for commit and push; no deployment performed.
+  Optional headless launcher,
+  hosted CI, authenticated backend workflows, screen-reader/physical-device
+  acceptance and production performance remain unverified. No production data.

@@ -16,3 +16,4 @@ docs/work_rback/*
 supabase-config.old.js
 supabase-config.js
 __pycache__/*
+/artifacts/browser-regression.json

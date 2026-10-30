@@ -54,11 +54,13 @@ export function createAttendancePreparation(api){
     if(!active())return;
     const token=++state.sequence;state.busy=true;
     if(!root?.querySelector('.attendance-grid'))host().innerHTML='<div role="status" class="attendance-loading">Loading scoped employee-days…</div>';
+    const busyRegion=host().querySelector('.attendance-preparation');busyRegion?.setAttribute('aria-busy','true');
     try{
       state.dates=cutoffDates(state.cutoff.start,state.cutoff.end);
       const data=await call('query_attendance_matrix',{p_cutoff:state.cutoff,p_search:state.search,p_department:state.department,p_position:state.position,p_offset:(state.page-1)*state.size,p_limit:state.size});
       if(token!==state.sequence)return;if(!active()){state.busy=false;return;}loadError='';state.rows=data.rows||[];state.total=data.total||0;state.selected.clear();state.busy=false;render();
     }catch(error){if(token!==state.sequence||!active())return;state.busy=false;loadError=error.message||'Attendance operation failed.';state.rows=[];state.total=0;render();alertError(error);}
+    finally{if(token===state.sequence)busyRegion?.removeAttribute('aria-busy');}
   }
   function render(){
     const locations=state.locations.map((l,i)=>[String(i),`${l.branch} / ${l.client_id?state.clients.find(c=>c.id===l.client_id)?.name||'Client':'Employees'}`]);
@@ -159,6 +161,7 @@ export function createAttendancePreparation(api){
     if(state.busy||loadError||!state.draft.count)return;
     if(!state.reference.trim()){toast('Enter a DTR / attendance reference.',true);return;}
     if(!(await accepted('Save attendance batch',`Save ${state.draft.count} changed days in one transaction? Attendance approval and payroll posting are separate.`)))return;
+    if(state.busy||loadError||!state.draft.count)return;
     state.busy=true;updateGrid();
     try{await call('save_attendance_matrix',{p_cutoff:state.cutoff,p_edits:Object.values(state.draft.edits),p_reference:state.reference.trim()});state.draft.reset();state.busy=false;await load();toast('Attendance batch saved.');}catch(error){state.busy=false;updateGrid();alertError(error);}
   }

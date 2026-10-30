@@ -12,15 +12,18 @@ const cutoff={id:'synthetic-cutoff',data:{start:'2024-01-01',end:'2024-01-10',br
 const records=new Map(),duties=[{start:480,end:720,breakMinutes:0},{start:780,end:1020,breakMinutes:0}];
 let version=0,mode='present',loadFailed=false;
 const scenario=new URLSearchParams(location.search).get('scenario');
+window.FIXTURE_STATE={queries:0,saves:0};
 const supabase={rpc:async(name,args)=>{
  if(name==='attendance_preparation_options')return {data:{clients:[{id:client,name:'Synthetic Client'}],locations:[{branch:'Synthetic Branch',client_id:client}]}};
  if(name==='query_attendance_matrix'){
+  window.FIXTURE_STATE.queries++;if(scenario==='slow')await new Promise(resolve=>setTimeout(resolve,100));
   if(scenario==='error'&&!loadFailed){loadFailed=true;return {error:{message:'Synthetic roster request failed'}};}
   if(scenario==='empty'||scenario==='viewer')return {data:{rows:[],total:0}};
   let rows=[{id:'synthetic-a',name:'SYNTHETIC, ALPHA',employeeNo:'EMP-000001'},{id:'synthetic-b',name:'SYNTHETIC, BETA',employeeNo:'EMP-000002'}].filter(r=>String(args.p_search||'').toLowerCase().replaceAll(',',' ').split(/\\s+/).every(word=>r.name.toLowerCase().includes(word)));
   rows=rows.map(row=>({...row,days:Object.fromEntries(cutoffDates(args.p_cutoff.start,args.p_cutoff.end).map(date=>{const key=row.id+':'+date,saved=records.get(key);return [date,{employeeId:row.id,date,hash:saved?.hash||'',record:saved?.data||null,posted:date==='2024-01-10',context:scenario==='employee'?{basic:true,recordingReady:date<='2024-01-10',ready:false,writable:true,scheduledMinutes:480,hash:'employee-v1',reason:'Attendance only; no verified duty or pay calculation'}:{ready:true,hash:'source-v1',holiday:date==='2024-01-06'?'regular_holiday':'ordinary',restDay:date==='2024-01-07',segments:duties,reason:''}}];}))}));return {data:{rows,total:rows.length}};
  }
  if(name==='save_attendance_matrix'){
+  window.FIXTURE_STATE.saves++;await new Promise(resolve=>setTimeout(resolve,80));
   if(args.p_reference==='FAIL')return {error:{code:'40001',message:'Synthetic concurrent edit'}};
   for(const row of args.p_edits){const key=row.employeeId+':'+row.workDate;if((records.get(key)?.hash||'')!==row.expectedHash)return {error:{code:'40001'}};}
   for(const row of args.p_edits)records.set(row.employeeId+':'+row.workDate,{hash:'saved-'+(++version),data:{...row,reviewState:'Draft'}});return {data:{saved:args.p_edits.length}};

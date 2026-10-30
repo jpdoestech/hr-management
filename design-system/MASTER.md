@@ -173,7 +173,7 @@ long employee details and absence of document-level horizontal overflow on the
 reviewed phone/tablet views. A separate 320px check covers the smallest layout.
 
 Run `node tests/browser/workspace-redesign-fixture.mjs` and open
-`http://127.0.0.1:4190/` (`?view=auth` for sign-in). The fixture's non-attendance
+`http://127.0.0.1:4191/` (`?view=auth` for sign-in). The fixture's non-attendance
 pages are representative component compositions, not complete runtime flows.
 Use `node tests/browser/modal-typography-fixture.mjs` for actual employee
 workspace markup with synthetic data. No production employee records, live
@@ -182,3 +182,13 @@ were used for this visual change. After publication, the live index at
 `https://strellas-hr.vercel.app/` and the versioned workspace stylesheet both
 returned HTTP 200; the CSS exactly matched the tested source after CRLF
 normalization. Authenticated production acceptance remains separate.
+
+
+## Automated regression coverage — 2026-10-30
+
+`npm run test:browser` combines the existing synthetic fixtures at 1440, 1280,
+768, 390 and 320px document widths. It checks computed dimensions and workflow
+recovery, retaining compact Attendance and pagination exceptions. Automated
+runs use offline fallback fonts; standalone fixtures retain production fonts
+for separate visual checks. See `docs/BROWSER-REGRESSIONS.md` for exact scope,
+performance methodology and local/hosted execution limits.

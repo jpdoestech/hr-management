@@ -1,5 +1,15 @@
 # UI consistency
 
+## Automated workflow coverage — 2026-10-30
+
+`npm run test:browser` now runs the existing synthetic fixtures together. See
+[BROWSER-REGRESSIONS.md](BROWSER-REGRESSIONS.md) for coverage, commands,
+performance methodology and limitations. The separate UI regression workflow
+adds repeatable checks without changing deployment behavior. Shared sizing
+standards below remain unchanged. Attendance refresh accessibility and the
+post-confirmation submission guard are the only production behavior changes
+in this follow-up.
+
 ## Control sizing audit and implementation — 2026-10-30
 
 Implemented and verified locally. Publication status is recorded in ROADMAP.md.

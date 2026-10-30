@@ -16,7 +16,8 @@ const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;'
 const STATE={view:'employees',employeeSearch:'',tablePages:{},tablePageSizes:{}};
 const params=new URLSearchParams(location.search);STATE.employeeFiltersExpanded=params.has('filters');
 const SESSION={role:params.has('admin')?'Administrator':'Viewer'},EMPLOYMENT_TYPES=['Probationary'],REVIEW_TYPE='Needs HR Review';
-const DB={employees:Array.from({length:250},(_,i)=>({id:'synthetic-'+i,employeeNo:'EMP-'+String(i+1).padStart(6,'0'),name:'SYNTHETIC, Employee '+String(i+1).padStart(3,'0'),department:i%2?'Operations':'Administration',branchReporting:'Synthetic Branch',position:'Synthetic Position',status:'Active'})),leaves:[{employeeName:'Synthetic Employee',department:'Operations',startDate:'2026-10-01',endDate:'2026-10-02',leaveType:'Vacation',status:'Approved'}]};
+const fixtureRowCount=params.get('rows')==='10000'?10000:250;
+const DB={employees:Array.from({length:fixtureRowCount},(_,i)=>({id:'synthetic-'+i,employeeNo:'EMP-'+String(i+1).padStart(6,'0'),name:'SYNTHETIC, Employee '+String(i+1).padStart(3,'0'),department:i%2?'Operations':'Administration',branchReporting:'Synthetic Branch',position:'Synthetic Position',status:'Active'})),leaves:[{employeeName:'Synthetic Employee',department:'Operations',startDate:'2026-10-01',endDate:'2026-10-02',leaveType:'Vacation',status:'Approved'}]};
 DB.employees[0].name='SYNTHETIC-LONG-FAMILY-NAME, Sample Employee With A Long Given Name';
 const EMPLOYEE_DIRECTORY_PAGE_CACHE=new Map();
 const canEdit=()=>params.has('admin'),canExport=()=>false,employeeDisplayName=e=>e.name;

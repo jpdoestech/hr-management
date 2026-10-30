@@ -7,12 +7,26 @@ import {ageOn} from '../../js/core/workforce-metrics.js';
 import {Script} from 'node:vm';
 const root=fileURLToPath(new URL('../../',import.meta.url)),source=readFileSync(resolve(root,'js/app.js'),'utf8');
 const section=(start,end)=>source.slice(source.indexOf(start),source.indexOf(end,source.indexOf(start)));
-const productionHead=readFileSync(resolve(root,'index.html'),'utf8').match(/<head>([\s\S]*?)<\/head>/)[1];
+const productionHTML=readFileSync(resolve(root,'index.html'),'utf8');
+const confirmation=productionHTML.slice(productionHTML.indexOf('<div class="data-confirm-overlay"'),productionHTML.indexOf('<div class="toast"'));
+const functionSource=name=>{const start=source.indexOf('function '+name+'(');const rest=source.slice(start);return rest.slice(0,rest.search(/\r?\n}\r?\n/)+3);};
+const productionHead=productionHTML.match(/<head>([\s\S]*?)<\/head>/)[1];
 const assets=[...productionHead.matchAll(/<link\b[^>]*>/g)].map(match=>match[0].replace(/href="css\//g,'href="/css/')).join('');
-const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic modal typography</title>${assets}</head><body><div class="overlay on"><div id="modal" class="modal employee-workspace-modal"></div></div><script>
+const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic modal typography</title>${assets}</head><body><div class="overlay on"><div id="modal" class="modal employee-workspace-modal"></div></div>${confirmation}<script>
 const employee={id:'synthetic',name:'SYNTHETIC-LONG-FAMILY-NAME, Sample Employee',employeeNo:'EMP-000001',department:'Synthetic Department',position:'Synthetic Position With A Long Descriptive Name',status:'Active',employmentType:'Probationary',statusReason:'Active / Normal',branchReporting:'Synthetic Branch',dateHired:'2026-10-01',birthDate:'2001-01-01',address:'Synthetic Building, Long Synthetic Street, Synthetic Barangay, Synthetic Municipality, Synthetic Province',presentAddressText:'Synthetic Present Address With Additional Building And Unit Details',emergencyContactName:'Synthetic Contact',emergencyContactRelationship:'Parent',emergencyContactPhone:'',personalEmail:'synthetic-long-contact-address@example.invalid',sssNumber:'00-0000000-0'};
 const DB={employees:[employee]},EMP_STATUS=['Active','Inactive','Separated'],STATUS_REASONS={'Active':['Active / Normal']},EXIT_CLASSIFICATIONS=['Voluntary'],WORKFORCE_FACTORS=['Personal'],LIFECYCLE_EVENT_TYPES=['Employment Status Change','Regularization','Return to Work'];
-let EMPLOYEE_SECTION_EDIT=null;
+let EMPLOYEE_SECTION_EDIT=null,MODAL_EDIT_STATE=null,EMPLOYEE_WORKSPACE_NAVIGATING=false,DATA_CONFIRM_PENDING=null,DATA_CONFIRM_TRIGGER=null;
+const CONFIRMED_CHANGE_TARGETS=new WeakSet(),SESSION={id:'synthetic-actor',fullName:'Synthetic HR'};
+const fixtureParams=new URLSearchParams(location.search);
+window.FIXTURE_STATE={saveAttempts:0,profileOpens:0,employee};
+${section('function editorControls(','function findEditorSaveButton(')}
+${functionSource('modalHasUnsavedChanges')}
+${functionSource('confirmDataChange')}
+${functionSource('resolveDataChangeConfirmation')}
+for(const [id,result] of [['data-confirm-cancel',false],['data-confirm-discard','discard'],['data-confirm-accept','confirm']])document.getElementById(id).addEventListener('click',()=>resolveDataChangeConfirmation(result));
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&document.getElementById('data-confirm-overlay').classList.contains('on'))resolveDataChangeConfirmation(false);});
+
+
 const readOnly=new URLSearchParams(location.search).has('readonly');
 const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),canEdit=()=>!readOnly,hasPermission=()=>!readOnly,selectEmployeeDirectoryRow=()=>{},ensureRecordModules=async()=>{},todayISO=()=> '2026-10-13';
 const employeeDisplayName=record=>record.name,employeeDepartmentNames=()=>['Synthetic Department','Another Department'],employeePositionNames=()=>[employee.position],employeeCompleteness=()=>60,classify=record=>record.employmentType,fmtDate=value=>value||'Not recorded',isSeparated=()=>false,employeeTenureText=()=> 'Synthetic tenure';
@@ -30,7 +44,7 @@ ${section('function revealModalField(','async function transitionModal(')}
 ${section('const EMP_FIELDS = [','const EMPLOYEE_IMPORT_COLUMNS = [')}
 ${section('const EMP_FORM_SECTIONS = [','function syncPositionSelect(')}
 ${[...source.matchAll(/^function i\w+\(s\)\{.*$/gm)].map(match=>match[0]).join('\n')}
-function employeeWorkspaceNavigate(id,target){if(target==='history'){show('Overview');return employeeProfileSetTab(id,'history');}if(target.startsWith('section:'))return openEmployeeSectionForm(id,Number(target.slice(8)));return show({overview:'Overview',edit:'Edit',status:'Status',lifecycle:'Lifecycle',transfer:'Transfer',history:'Overview',report:'Incident'}[target]);}
+${section('async function employeeWorkspaceNavigate(','function employeeWorkspaceNav(')}
 function openEmployeeOperation(){return show('Incident');}
 ${section('function employeeWorkspaceNav(','function employeeWorkspaceFooter(')}
 const normalizeEmployeeName=value=>String(value||'').toLowerCase(),opsInitials=()=> 'SY';
@@ -38,12 +52,18 @@ ${section('function employeePickerFind(','/* ---------------- icons (inline svg,
 
 const employeeWorkspaceHeader=(record,title)=>'<div class="modal-head employee-workspace-head"><div><div class="employee-workspace-breadcrumb">Employees › '+title+'</div><h3>'+esc(title==='Overview'?record.name:title)+'</h3><div class="small">'+esc(title==='Overview'?record.employeeNo:record.position)+'</div></div><button type="button" aria-label="Close">×</button></div>';
 ${section('function employeeWorkspaceFooter(','const EMP_FIELDS = [')}
-const openModal=markup=>{EMPLOYEE_SECTION_EDIT=null;document.getElementById('modal').innerHTML=markup;};
+const openModal=markup=>{EMPLOYEE_SECTION_EDIT=null;const modal=document.getElementById('modal');modal.innerHTML=markup;const saveButton=modal.querySelector('.modal-foot .btn-primary');MODAL_EDIT_STATE=saveButton&&modal.querySelector('.field')?{baseline:serializeEditor(modal),saveButton}:null;};
 ${section('function splitEmployeeName(','function formatEmployeeName(')}
 ${section('function formatEmployeeName(','function employeeDisplayName(')}
 ${section('function openEmployeeSectionForm(','function normalizeEmployeeName(')}
 const toast=message=>{document.querySelector('.modal-foot').dataset.message=message;};
-const persistEmployeeEdit=async(_values,_id,patch)=>{Object.assign(employee,patch);show('Overview');};
+const recordStoragePaths=()=>new Set(),updateEmployeeNameReferences=()=>[],restoreEmployeeNameReferences=()=>{},logAudit=()=>{},rememberCommittedRecordFiles=()=>{},deleteStorageObjects=async()=>{},closeModal=async()=>{},renderNav=()=>{},renderEmployeeOrigin=async()=>{};
+const saveDB=async()=>{const state=window.FIXTURE_STATE;state.saveAttempts++;await new Promise(resolve=>setTimeout(resolve,fixtureParams.has('slow')?100:0));if(fixtureParams.has('fail-once')&&state.saveAttempts===1){toast('Synthetic save failed. Your entries are retained; try again.');return false;}return true;};
+${functionSource('appendEmployeeRecordHistory')}
+${'async '+functionSource('persistEmployeeEdit')}
+async function openEmployeeProfile(){window.FIXTURE_STATE.profileOpens++;if(fixtureParams.has('slow'))await new Promise(resolve=>setTimeout(resolve,80));show('Overview');}
+const openEmployeeForm=()=>show('Edit');
+
 const confirmEmployeeDuplicateNames=async()=>true,validateGovernmentIds=()=>'',employmentValidation=()=>'',readAddressComponent=async()=>({valid:true,address:{}}),readEmployeeAllowances=()=>employee.allowances||{};
 const departmentCatalog=()=>[{name:employee.department,active:true}],positionCatalog=()=>[{name:employee.position,department:employee.department,active:true}];
 ${section('function openEmployeeWorkspaceModal(','async function returnFromEmployeeTransaction(')}
@@ -70,12 +90,12 @@ function show(view){
     return openEmployeeWorkspaceModal(employeeWorkspaceHeader(employee,'Control sizing')+'<div class="modal-body"><div class="formgrid">'+samples+composite+employeePickerHTML({id:'control_employee',autofill:false})+states+duty+fields+'</div></div>'+employeeWorkspaceFooter(employee,'Save'));
   }
   const form=view==='Edit'?employeeFormSectionsHTML(employee):'<div class="formgrid">'+fields+'</div><div class="computed-note">Synthetic shared-form note.</div>';
-  openEmployeeWorkspaceModal(employeeWorkspaceHeader(employee,view)+'<div class="modal-body '+(view==='Overview'?'employee-profile-workspace':view==='Edit'?'employee-form-body':'')+'" data-employee-profile-id="synthetic" data-active-tab="summary">'+employeeWorkspaceNav(employee,view==='Overview'?'overview':'edit')+ (view==='Overview'?'<div class="employee-profile-tab-content">'+overview+'</div>':form)+'</div>'+employeeWorkspaceFooter(employee,'Save'));
+  openEmployeeWorkspaceModal(employeeWorkspaceHeader(employee,view)+'<div class="modal-body '+(view==='Overview'?'employee-profile-workspace':view==='Edit'?'employee-form-body':'')+'" data-employee-profile-id="synthetic" data-active-tab="summary">'+employeeWorkspaceNav(employee,view==='Overview'?'overview':'edit')+ (view==='Overview'?'<div class="employee-profile-tab-content">'+overview+'</div>':form)+'</div>'+(view==='Overview'?'<div class="modal-foot"><button type="button" class="btn btn-ghost">Back to Directory</button></div>':employeeWorkspaceFooter(employee,'Save')));
 }
 show(new URLSearchParams(location.search).get('view')||'Overview');
 const initialSection=new URLSearchParams(location.search).get('section');
 if(initialSection!==null&&!readOnly)openEmployeeSectionForm(employee.id,Number(initialSection));
-const fixtureErrors=document.createElement('button');fixtureErrors.className='btn btn-ghost';fixtureErrors.textContent='Check required fields';fixtureErrors.onclick=()=>showModalFieldErrors([{id:'f_lastName',message:'Last Name is required.'},{id:'f_firstName',message:'First Name is required.'}]);if(!EMPLOYEE_SECTION_EDIT)document.querySelector('.modal-foot').prepend(fixtureErrors);
+const fixtureErrors=document.createElement('button');fixtureErrors.className='btn btn-ghost fixture-validation';fixtureErrors.textContent='Check required fields';fixtureErrors.onclick=()=>showModalFieldErrors([{id:'f_lastName',message:'Last Name is required.'},{id:'f_firstName',message:'First Name is required.'}]);if(!EMPLOYEE_SECTION_EDIT&&document.querySelector('.field'))document.querySelector('.modal-foot').prepend(fixtureErrors);
 document.addEventListener('input',event=>clearModalFieldError(event.target));
 document.addEventListener('change',event=>clearModalFieldError(event.target));
 document.fonts.ready.then(()=>{

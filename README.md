@@ -81,3 +81,15 @@ A GitHub Pages workflow is included at `.github/workflows/pages.yml`. Deployment
 ## Validation
 
 Run `node scripts/validate.mjs` from the project root to verify required files, local references, and the current Supabase publishable-key configuration.
+
+
+Run `npm run lint`, `npm test` and `npm run build` for the existing repository
+checks. The Node tests do not open a browser.
+
+Run `npm run test:browser`, then open its printed loopback URL in a browser.
+The synthetic suite checks shared sizing and workflow recovery at 1440, 1280,
+768, 390 and 320px document widths. It exits nonzero on failures, incomplete
+reports or a timeout. For automated Chrome/Edge runs, use
+`npm run test:browser -- --headless`; set `BROWSER_BIN` to an installed browser
+executable when automatic discovery is unavailable. No new packages are needed.
+See [browser regression coverage and limits](docs/BROWSER-REGRESSIONS.md).

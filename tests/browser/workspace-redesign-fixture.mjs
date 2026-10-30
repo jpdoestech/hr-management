@@ -72,4 +72,4 @@ const server=createServer((req,res)=>{
   if(!['css','assets','js/core'].some(directory=>file.startsWith(resolve(root,directory)+sep))){res.writeHead(403);res.end();return;}
   try{res.setHeader('Content-Type',({'.css':'text/css','.js':'text/javascript','.png':'image/png','.webp':'image/webp','.svg':'image/svg+xml'})[extname(file)]||'application/octet-stream');res.end(readFileSync(file));}catch{res.writeHead(404);res.end();}
 });
-server.listen(4190,'127.0.0.1',()=>console.log('Synthetic workspace: http://127.0.0.1:4190/'));
+server.listen(4191,'127.0.0.1',()=>console.log('Synthetic workspace: http://127.0.0.1:4191/'));

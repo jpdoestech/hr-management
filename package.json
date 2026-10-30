@@ -5,6 +5,7 @@
   "scripts": {
     "lint": "node scripts/lint.mjs",
     "test": "node --test tests/address/*.test.mjs tests/core/*.test.mjs",
+    "test:browser": "node scripts/test-browser.mjs",
     "build": "node scripts/build.mjs"
   }
 }

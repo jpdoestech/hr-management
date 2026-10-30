@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {createAttendancePreparation} from '../../js/core/attendance-preparation.js';
 
 function preview({manage=true,matrix=async()=>({data:{rows:[],total:0}})}={}){
-  const listeners={},calls=[],notices=[];
-  const root={isConnected:true,addEventListener:(name,handler)=>{listeners[name]=handler;},querySelector:()=>null,querySelectorAll:()=>[]};
+  const listeners={},calls=[],notices=[],attributes=new Map();
+  const root={setAttribute:(name,value)=>attributes.set(name,value),removeAttribute:name=>attributes.delete(name),isConnected:true,addEventListener:(name,handler)=>{listeners[name]=handler;},querySelector:()=>null,querySelectorAll:()=>[]};
   const host={innerHTML:'',querySelector:()=>root};
   const controller=createAttendancePreparation({
     actor:()=>({id:'synthetic-actor'}),isActive:()=>true,today:()=> '2026-10-17',content:()=>host,
@@ -19,7 +19,7 @@ function preview({manage=true,matrix=async()=>({data:{rows:[],total:0}})}={}){
   });
   const click=action=>listeners.click({target:{closest:selector=>selector==='[data-action]'?{dataset:{action}}:null}});
   const change=(name,value)=>listeners.change({target:{name,value,dataset:{}}});
-  return {controller,host,calls,notices,click,change,listeners};
+  return {controller,host,calls,notices,click,change,listeners,attributes};
 }
 
 test('empty roster explains automatic employees without requiring schedule setup',async()=>{
@@ -92,4 +92,23 @@ test('a stale request failure cannot replace a newer successful roster',async()=
   assert.match(view.host.innerHTML,/No accessible employees/);
   assert.doesNotMatch(view.host.innerHTML,/Stale failure|Roster unavailable/);
   assert.deepEqual(view.notices,[]);
+});
+
+
+test('only the latest roster request clears its accessible busy state',async()=>{
+  let resolveFirst,resolveLatest,started,latestStarted;
+  const firstStarted=new Promise(resolve=>{started=resolve;});
+  const secondStarted=new Promise(resolve=>{latestStarted=resolve;});
+  let requests=0;
+  const view=preview({matrix:async()=>{
+    if(++requests===1){started();return new Promise(resolve=>{resolveFirst=resolve;});}
+    latestStarted();return new Promise(resolve=>{resolveLatest=resolve;});
+  }});
+  const first=view.controller.open();await firstStarted;
+  assert.equal(view.attributes.get('aria-busy'),'true');
+  const latest=view.controller.open(true);await secondStarted;
+  resolveFirst({data:{rows:[],total:0}});await first;
+  assert.equal(view.attributes.get('aria-busy'),'true');
+  resolveLatest({data:{rows:[],total:0}});await latest;
+  assert.equal(view.attributes.has('aria-busy'),false);
 });
