@@ -1086,3 +1086,38 @@ HR-20261030-GOV-OWNER — Duplicate government ID owner context (locally verifie
 - Publication: implementation `7af8895` pushed to `origin/main`; remote HEAD
   verified as `7af889587d700c453fe98742a99749452def091c`. Commit includes
   summary, description, validation and migration/authorization limits.
+
+
+UI-20261030-COMPACT — Compact enterprise controls (locally verified)
+
+- Baseline on clean main: 422 Node tests / 78 browser checks passed. Captured
+  1440px computed dimensions and screenshots before changes. Followed the
+  pasted brief's 36px desktop toolbar / 40px form targets, superseding prior
+  42/44px specifications. Phone/coarse controls retain 44–48px targets.
+- Refined app.css semantic sizing, search widths (320px / 360px maximum),
+  spacing and padding tokens. Height tokens accommodate enlarged control text.
+  Existing feature/shared CSS consumes them; no new override layer or dependency.
+  Ordinary rows remain 40px; pagination 34px; Attendance matrix/checks unchanged.
+- Added proportional employee fields, purpose-sized wide filters, narrower
+  numbers/dates/currency, consistent toolbar/button/icon alignment and an 80px
+  desktop header. Preserved 721–1499px filter disclosure and mobile panels.
+  Existing palette roles and fonts remain, with darker muted/placeholder/error
+  text for measured contrast. All data rules, queries and permissions preserved.
+- Fixed missing label associations in Movement/Transfer markup; added IDs only
+  to previously unnamed disabled display fields. No event-handler change.
+- Expanded existing synthetic browser fixtures to all seven requested widths
+  and shared toolbar/real manpower renderer coverage. Corrected fixture-only
+  shell, hidden-field, wrapper-focus and scrollbar assumptions. Added an
+  unrounded contrast-calculation unit regression.
+- Final verification: 423 Node tests, 175 browser checks, lint, build, explicit
+  validation and diff checks passed. Verified enlarged control text, 320×568
+  dialog actions and 960×540 zoom-equivalent reflow. Before/after examples:
+  search 42×480 to 36×320px, form height 44 to 40px, date width about 467 to
+  147px, header 96 to 80px. Pagination, table rows and textareas retain density.
+- Updated MASTER, UI-CONSISTENCY, BROWSER-REGRESSIONS and README with current
+  standards, ownership, measured dimensions, exceptions and coverage boundaries.
+- Limits: fixture/source review is not authenticated production acceptance.
+  Physical coarse-pointer devices, screen readers, native browser zoom and
+  exhaustive hover/browser/dialog coverage remain unverified. No production data.
+- Publication: the subsequent instruction authorizes commit and push with
+  summary and description. Verified implementation references follow.

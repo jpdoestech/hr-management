@@ -106,17 +106,18 @@ document.fonts.ready.then(()=>{
   const input=document.querySelector('.field input:not([type="hidden"])');
   if(input){
     check(input.labels.length>0,'Form controls must have associated labels');
-    check(input.getBoundingClientRect().height>=44,'Form controls must be at least 44px high');
+    check(input.getBoundingClientRect().height>=(innerWidth<=720?48:40),'Form controls use the form-height contract');
     check(parseFloat(getComputedStyle(input).fontSize)===(innerWidth<=720?16:14),'Input text must follow the dialog token');
   }
-  const expected=innerWidth<=720?48:44;
+  const expected=innerWidth<=720?48:40;
   document.querySelectorAll('.field input:not([type="checkbox"],[type="radio"],[type="hidden"],[type="file"]),.field select').forEach(control=>{
-    if(control.closest('.employee-picker-input,.tda-picker-input,.money-input'))return;
+    if(!control.getClientRects().length||control.closest('.employee-picker-input,.tda-picker-input,.money-input'))return;
+    check(control.labels.length>0,'Associated label: '+control.id);
     check(Math.abs(control.getBoundingClientRect().height-expected)<1,'Consistent form height: '+control.id);
     check(parseFloat(getComputedStyle(control).fontSize)===(innerWidth<=720?16:14),'Consistent form font: '+control.id);
     const style=getComputedStyle(control),line=parseFloat(style.lineHeight)||parseFloat(style.fontSize)*1.5;check(line+parseFloat(style.paddingTop)+parseFloat(style.paddingBottom)<=control.clientHeight+1,'Text fits vertically: '+control.id);
   });
-  document.querySelectorAll('.field textarea').forEach(control=>check(control.getBoundingClientRect().height>=96,'Textareas retain their content minimum'));
+  document.querySelectorAll('.field textarea').forEach(control=>!control.getClientRects().length||check(control.getBoundingClientRect().height>=96,'Textareas retain their content minimum'));
   document.querySelectorAll('.employee-picker-input,.money-input,.catalog-add-button,.att-duty input').forEach(control=>check(Math.abs(control.getBoundingClientRect().height-expected)<1,'Composite control height: '+control.className));
   const hidden=document.getElementById('control_hidden');if(hidden)check(!hidden.getClientRects().length,'Hidden inputs stay hidden');
   check(parseFloat(getComputedStyle(document.querySelector('.modal-head h3')).fontSize)===19.5,'Heading must use the dialog token');

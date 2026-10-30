@@ -87,9 +87,14 @@ Run `npm run lint`, `npm test` and `npm run build` for the existing repository
 checks. The Node tests do not open a browser.
 
 Run `npm run test:browser`, then open its printed loopback URL in a browser.
-The synthetic suite checks shared sizing and workflow recovery at 1440, 1280,
-768, 390 and 320px document widths. It exits nonzero on failures, incomplete
+The synthetic suite checks shared sizing and workflow recovery at 1920, 1440, 1280,
+1024, 768, 390 and 320px document widths. It exits nonzero on failures, incomplete
 reports or a timeout. For automated Chrome/Edge runs, use
 `npm run test:browser -- --headless`; set `BROWSER_BIN` to an installed browser
 executable when automatic discovery is unavailable. No new packages are needed.
 See [browser regression coverage and limits](docs/BROWSER-REGRESSIONS.md).
+
+
+Current UI sizing: 36px desktop toolbars, 40px forms and 44–48px touch controls.
+See [UI consistency](docs/UI-CONSISTENCY.md) for token ownership, measured
+before/after sizes, layout exceptions and browser verification limits.

@@ -1,5 +1,5 @@
 // Browser-native integration checks over synthetic fixtures; no production session.
-export const VIEWPORTS=[1440,1280,768,390,320];
+export const VIEWPORTS=[1920,1440,1280,1024,768,390,320];
 const assert=(value,message)=>{if(!value)throw Error(message);};
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(predicate,message='Timed out',timeout=6000){
@@ -11,11 +11,25 @@ const key=(w,node,value)=>node.dispatchEvent(new w.KeyboardEvent('keydown',{key:
 const click=(doc,selector)=>{const node=doc.querySelector(selector);assert(node,'Missing '+selector);assert(!node.disabled,'Disabled '+selector);node.click();};
 const visibleRows=table=>[...table.tBodies[0].rows].filter(row=>getComputedStyle(row).display!=='none');
 const median=values=>[...values].sort((a,b)=>a-b)[Math.floor(values.length/2)];
+export function contrastRatio(left,right){
+  const luminance=rgb=>rgb.reduce((sum,value,i)=>{const n=value/255;return sum+[.2126,.7152,.0722][i]*(n<=.04045?n/12.92:((n+.055)/1.055)**2.4);},0);
+  const a=luminance(left),b=luminance(right);return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+}
+function textContrast(node,pseudo){
+  const w=node.ownerDocument.defaultView,parse=value=>(value.match(/[\d.]+/g)||[]).map(Number),layers=[];
+  for(let current=node;current;current=current.parentElement)layers.unshift(parse(w.getComputedStyle(current).backgroundColor));
+  const background=layers.reduce((rgb,layer)=>{const alpha=layer[3]??1;return rgb.map((v,i)=>(layer[i]??255)*alpha+v*(1-alpha));},[255,255,255]);
+  const foreground=parse(w.getComputedStyle(node,pseudo).color).slice(0,3);
+  return contrastRatio(foreground,background);
+}
 function geometry(doc,width){
   assert(doc.documentElement.scrollWidth<=width+1,'Page-level horizontal overflow');
+  const main=doc.querySelector('#main');if(main?.getClientRects().length)assert(main.getBoundingClientRect().right>=doc.documentElement.clientWidth-1,'Workspace does not fill the available screen');
+  for(const node of doc.querySelectorAll('.field label,.field-error,.field-help,.form-error-summary a,.page-size')){if(node.getClientRects().length)assert(textContrast(node)>=4.5,'Text contrast below 4.5: '+node.className);}
+  for(const node of doc.querySelectorAll('input[placeholder]')){if(!node.value&&!node.disabled&&node.getClientRects().length)assert(textContrast(node,'::placeholder')>=4.5,'Placeholder contrast below 4.5: '+node.id);}
   for(const control of doc.querySelectorAll('.field input:not([type="checkbox"],[type="radio"],[type="hidden"],[type="file"]),.field select')){
     if(!control.getClientRects().length||control.closest('.employee-picker-input,.money-input,.tda-picker-input'))continue;
-    assert(Math.abs(control.getBoundingClientRect().height-(width<=720?48:44))<1,'Form control height: '+control.id);
+    assert(Math.abs(control.getBoundingClientRect().height-Math.max(width<=720?48:40,parseFloat(doc.defaultView.getComputedStyle(control).fontSize)*1.4+2))<1,'Form control height: '+control.id);
   }
 }
 async function directory({w,d,width}){
@@ -24,7 +38,7 @@ async function directory({w,d,width}){
   await until(()=>d.querySelectorAll('tbody tr').length===1&&d.querySelector('tbody')?.textContent.includes('Employee 025')&&d.activeElement?.id==='employee-directory-search','Search never settled');
   assert(d.activeElement.id==='employee-directory-search','Search lost keyboard focus');
   const searchMs=performance.now()-started;
-  click(d,'.employee-filter-toggle');
+  if(w.getComputedStyle(d.querySelector('.employee-filter-toggle')).display!=='none')click(d,'.employee-filter-toggle');
   let select=d.querySelector('.employee-filter-set select');input(w,select,'Operations','change');
   assert(d.activeElement.tagName==='SELECT','Filter lost keyboard focus');
   assert(d.querySelector('tbody').textContent.includes('No employees found'),'Department filter did not narrow the search');
@@ -123,7 +137,7 @@ async function tables({w,d,width}){
 }
 async function registration({d,width}){
   click(d,'#tab-register');await until(()=>d.getElementById('register-form').getClientRects().length,'Registration did not open');geometry(d,width);
-  assert([...d.querySelectorAll('#register-form .auth-password button')].every(node=>node.getBoundingClientRect().height>=44),'Password action target too small');
+  assert([...d.querySelectorAll('#register-form .auth-password button')].every(node=>node.getBoundingClientRect().height>=(width<=720?44:40)),'Password action target too small');
 }
 async function attendance({w,d,width}){
   await until(()=>d.querySelector('.attendance-grid'),'Attendance roster missing');
@@ -153,6 +167,27 @@ async function rosterSlow({w,d}){
   await until(()=>!d.querySelector('.attendance-preparation[aria-busy="true"]'),'Busy state did not clear');
   assert(d.querySelector('.attendance-grid'),'Refresh removed existing records');
 }
+async function controlFamilies({w,d,width}){
+  const touch=width<=720;
+  for(const node of d.querySelectorAll('.data-toolbar .btn,.workflow-toolbar .btn,.quality-toolbar .btn,.automation-toolbar .btn,.analytics-toolbar .btn,.access-toolbar .btn,.searchbox')){
+    if(!node.getClientRects().length)continue;
+    assert(Math.abs(node.getBoundingClientRect().height-(touch?44:36))<1,'Toolbar family height: '+node.className);
+  }
+  for(const node of d.querySelectorAll('.tablewrap input[type="number"],.tablewrap select'))assert(Math.abs(node.getBoundingClientRect().height-(touch?44:36))<1,'Dense table editor height');
+  for(const node of d.querySelectorAll('.field label'))assert(d.getElementById(node.htmlFor),'Missing label-control association');
+  const textarea=d.querySelector('.field textarea');if(textarea)assert(textarea.getBoundingClientRect().height>=96,'Multiline control was compacted');
+  const search=d.querySelector('.searchbox input');if(search){search.focus();assert(parseFloat(w.getComputedStyle(search).outlineWidth)>0||w.getComputedStyle(search.closest('.searchbox')).boxShadow!=='none','Search focus is missing');}
+}
+async function enlargedText({w,d,width}){
+  d.documentElement.style.setProperty('--form-control-font',width<=720?'32px':'28px');
+  d.documentElement.style.setProperty('--workspace-control-font',width<=720?'32px':'26px');
+  d.documentElement.style.setProperty('--form-label-size','26px');
+  await pause(0);
+  for(const node of d.querySelectorAll('.field input:not([type="hidden"],[type="checkbox"],[type="radio"],[type="file"]),.field select')){
+    const style=w.getComputedStyle(node),line=parseFloat(style.lineHeight)||parseFloat(style.fontSize)*1.4;
+    assert(node.clientHeight+1>=line+parseFloat(style.paddingTop)+parseFloat(style.paddingBottom),'Enlarged control text clipped: '+node.id);
+  }
+}
 async function directoryPerformance(ctx){
   const {w,d}=ctx,samples=[];
   for(let n=0;n<8;n++){const start=performance.now();w.renderEmployees();const duration=performance.now()-start;await pause(0);if(n)samples.push(duration);assert(d.querySelectorAll('tbody tr').length===25,'Performance case rendered unbounded rows');}
@@ -176,16 +211,25 @@ export const CASES=[
   {id:'directory-search-filters-pages',path:'/fixtures/ui?admin=1',run:directory},
   {id:'table-sort-filter-recovery',path:'/fixtures/ui?view=tables',run:tables},
   {id:'registration',path:'/fixtures/workspace?view=auth',run:registration},
+  {id:'shared-control-families',path:'/fixtures/ui?view=controls',run:controlFamilies},
+  {id:'manpower-editors',path:'/fixtures/ui?view=manpower',run:controlFamilies},
+  {id:'workspace-settings',path:'/fixtures/workspace?view=settings'},
+  {id:'workspace-dashboard',path:'/fixtures/workspace?view=dashboard'},
+  {id:'long-filter-values',path:'/fixtures/ui?admin=1&long=1&filters=1'},
+  ...['Status','Transfer','Lifecycle','Incident'].map(view=>({id:'dialog-'+view.toLowerCase(),path:'/fixtures/modal?view='+view})),
   {id:'request-cards',path:'/fixtures/ui?view=portal'},
   {id:'attendance-failure-retry',path:'/fixtures/attendance',run:attendance},
   {id:'attendance-roster-error',path:'/fixtures/attendance?scenario=error',run:rosterError},
   {id:'attendance-refresh-loading',path:'/fixtures/attendance?scenario=slow',run:rosterSlow},
+  {id:'zoom-equivalent-reflow',path:'/fixtures/ui?admin=1&filters=1',widths:[960],height:540},
+  {id:'short-phone-dialog',path:'/fixtures/modal?view=Edit',widths:[320],height:568,run:({w,d})=>assert(d.querySelector('.modal-foot').getBoundingClientRect().bottom<=w.innerHeight,'Dialog actions are offscreen')},
+  {id:'enlarged-control-text',path:'/fixtures/modal?view=Controls',widths:[1440,390],run:enlargedText},
   {id:'cached-profile-performance',path:'/fixtures/modal',widths:[1440],run:profilePerformance},
   ...[250,10000].map(rows=>({id:'directory-performance-'+rows,path:'/fixtures/ui?rows='+rows,widths:[1440],run:directoryPerformance})),
 ];
 export const expectedIds=()=>CASES.flatMap(test=>(test.widths||VIEWPORTS).map(width=>test.id+'@'+width));
-async function loadFixture(iframe,path,width){
-  iframe.width=String(width);iframe.height='900';
+async function loadFixture(iframe,path,width,height=900){
+  iframe.width=String(width);iframe.height=String(height);
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Fixture load timed out')),8000);iframe.onload=()=>{clearTimeout(timer);resolve();};iframe.src=path;});
   const w=iframe.contentWindow,d=w.document;
   await until(()=>d.readyState==='complete','Fixture not ready');await d.fonts.ready;
@@ -198,7 +242,7 @@ async function runSuite(){
   const results=[],iframe=document.getElementById('preview'),list=document.getElementById('results'),status=document.getElementById('summary');
   for(const test of CASES)for(const width of test.widths||VIEWPORTS){
     const id=test.id+'@'+width,item=document.createElement('li');item.textContent=id+' — running';list.append(item);const started=performance.now();
-    try{const ctx=await loadFixture(iframe,test.path,width);const metrics=await test.run?.(ctx);geometry(ctx.d,width);assert(!(ctx.w.__fixtureErrors||[]).length,(ctx.w.__fixtureErrors||[]).join('; '));results.push({id,pass:true,durationMs:performance.now()-started,...(metrics?{metrics}:{})});item.textContent=id+' — PASS';item.className='pass';}
+    try{const ctx=await loadFixture(iframe,test.path,width,test.height||900);const metrics=await test.run?.(ctx);geometry(ctx.d,width);assert(!(ctx.w.__fixtureErrors||[]).length,(ctx.w.__fixtureErrors||[]).join('; '));results.push({id,pass:true,durationMs:performance.now()-started,...(metrics?{metrics}:{})});item.textContent=id+' — PASS';item.className='pass';}
     catch(error){results.push({id,pass:false,durationMs:performance.now()-started,error:String(error.message).slice(0,600)});item.textContent=id+' — FAIL: '+error.message;item.className='fail';}
     status.textContent=results.length+' / '+expectedIds().length+' checks completed';
   }

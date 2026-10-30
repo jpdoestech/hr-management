@@ -22,7 +22,8 @@ Reuse these classes for new views; keep authorization and state in the runtime.
 | Gold detail | `--gold-soft: #FFD86B` |
 | Sign-in primary | `#123D70` |
 
-Keep the existing success, warning, error and attendance-status colors. Status
+Keep the existing semantic color roles and Attendance transaction colors. Muted
+and validation text may be darkened when measured contrast requires it. Status
 text accompanies color. Plus Jakarta Sans remains the interface font, with IBM
 Plex Mono for identifiers. Use tabular figures for numeric comparisons.
 
@@ -32,8 +33,8 @@ Plex Mono for identifiers. Use tabular figures for numeric comparisons.
   and the existing keyboard-operable group popovers. At 900px it becomes the
   existing drawer. Preserve permission-based visibility.
 - Headers: workspace context above the page title; one clear action hierarchy.
-  The desktop topbar and sidebar logo share a 96px header band and aligned
-  dividers. The phone header is 84px; supporting text does not add extra rows.
+  The desktop topbar and sidebar logo share an 80px header band and aligned
+  dividers above 900px. Drawer tablets at 721–900px retain 94px; the phone header is 84px; supporting text does not add extra rows.
 - Dashboard: charcoal hero with white text and violet actions, roomy metric
   cards, and white panels. On phones, cards use two columns and the final odd
   metric fills the row at 420px and below.
@@ -46,7 +47,7 @@ Plex Mono for identifiers. Use tabular figures for numeric comparisons.
   Employee columns size to headers and displayed records, without fixed pixel
   widths or name ellipses. Keep wide records in the horizontal table scroller;
   do not fetch additional pages to calculate column widths.
-- Forms: visible 13px labels, 44px desktop / 48px phone inputs, consistent help/validation states, and
+- Forms: visible 13px labels, 40px desktop / 48px phone inputs, consistent help/validation states, and
   explicit readonly/disabled styling. Native checkbox/radio sizing is preserved.
   Labels must reference their controls. Required-field errors remain beside
   shared record/employee fields, with linked error summaries and focus recovery.
@@ -56,7 +57,8 @@ Plex Mono for identifiers. Use tabular figures for numeric comparisons.
   text note. On phones the employee filter panel overlays the table and closes
   on outside click or Escape, preserving the record area.
   The employee toolbar stays a single row above 720px. At 1500px and wider,
-  its four inline filters have equal 176px widths. Laptop/tablet widths use
+  its four inline filters use content-appropriate minimum widths (150px
+  department, 130px branch, 112px status, 178px employment type). Laptop/tablet widths use
   the Filters disclosure and a compact two-column popover; phone filters keep
   their single-column panel. Closing a focused panel restores trigger focus.
 - Dialogs: rounded surfaces, distinct headers/footers and scrollable bodies.
@@ -92,24 +94,24 @@ token changes. Do not restore a second form-height system in dialog typography.
 
 | Role / token | Desktop | Phone ≤720px |
 | --- | --- | --- |
-| `--form-control-height` | 44px | `--touch-control-height`: 48px |
+| `--form-control-height` | 40px | `--touch-control-height`: 48px |
 | `--form-control-font` | 14px | 16px |
-| `--workspace-control-height` (toolbars/search/filters) | 42px | 44px |
+| `--workspace-control-height` (toolbars/search/filters) | 36px | 44px |
 | `--workspace-control-font` | 13px | 16px |
 | `--workspace-compact-height` (pagination/compact actions) | 34px | 44px |
 | `--workspace-compact-font` | 12px | 16px |
 | `--table-action-size` | 28px | 44px |
 | `--selection-target-size` (labels, clear/header/permission controls) | 24px | 44px |
-| `--control-target-size` (preferred minimum touch action) | 44px | 44px |
+| `--control-target-size` (form mini-action) | 40px | 44px |
 | `--workspace-control-radius` | 8px | 8px |
 | `--control-padding-inline` | 12px | 12px |
 
-Coarse pointers also receive 44px compact, table and selection targets, retaining
-desktop text sizes when the viewport is wide. The 42px toolbar token and 44px
-form token describe separate roles; forms must consume the form token.
+Coarse pointers also receive 44px toolbar, compact, table and selection targets,
+48px forms and 16px control text even at wide viewports. The 36px desktop toolbar
+and 40px form roles stay separate; forms must consume the form token.
 
-Use `--form-label-size:13px`, `--form-label-gap:8px`,
-`--form-field-gap:16px` and `--form-section-gap:24px`. Grid children do not add
+Use `--form-label-size:13px`, `--form-label-gap:6px`,
+`--form-field-gap:14px` and `--form-section-gap:24px`. Grid children do not add
 another bottom field margin. Textareas use automatic height, existing HTML
 rows, vertical resizing and `--form-textarea-min-height:96px`, with 10px vertical
 padding. Helper/error text stays 12px (13px summaries), spaced 6px from fields.
@@ -151,7 +153,7 @@ Use 12px headers, 13px values, 40px minimum ordinary rows and 6px/12px cell
 padding. Long prose wraps within 36rem; the employee directory keeps complete
 single-line values in its scroller. Form controls/multiline content can grow
 rows. Keep table action targets 28px desktop and 44px touch. Shared pagination
-and toolbar metrics apply throughout; desktop searches cap at 480px. Content
+and toolbar metrics apply throughout; desktop searches use 320px with a 360px cap. Content
 gutters align with the header. Preserve the daily Attendance grid and mobile
 request cards; request descriptions use automatic height. See the family
 inventory and current validation in `docs/UI-CONSISTENCY.md`.
@@ -192,3 +194,28 @@ recovery, retaining compact Attendance and pagination exceptions. Automated
 runs use offline fallback fonts; standalone fixtures retain production fonts
 for separate visual checks. See `docs/BROWSER-REGRESSIONS.md` for exact scope,
 performance methodology and local/hosted execution limits.
+
+
+## Compact desktop revision — 2026-10-30 (current)
+
+This revision supersedes the earlier 42px-toolbar / 44px-form baseline and any
+historical descriptions below. Heights remain owned by app.css; form and toolbar
+height tokens use `max()` with the text line box so enlarged control text can
+grow instead of clipping. The default computed sizes are 40px forms and 36px
+toolbars; phone/coarse-pointer entry fields remain 48px and toolbars 44px.
+Pagination stays 34px desktop / 44px touch, table actions 28px / 44px, and ordinary
+records 40px minimum. Attendance cells and 16px checkbox glyphs are unchanged.
+Textareas retain automatic height, a 96px minimum and vertical resizing.
+
+The desktop search basis is `--workspace-search-width:320px` with
+`--workspace-search-max:360px`. Toolbar padding uses 10px; panel padding uses
+20px. Forms keep 14px field gaps, 24px section gaps, 13px labels, 14px desktop
+input text, 16px phone input text, 12px inline padding and 8px control radii.
+Desktop employee grids use six tracks with two-track normal fields and narrower
+short fields; Government IDs uses four fields per row where space permits.
+Existing two-column laptop/tablet and single-column phone forms are preserved.
+No dense grid placement changes reading/keyboard order.
+
+The existing workspace violet/charcoal and sign-in navy/gold identities remain.
+Only muted text, placeholders and validation red were darkened for contrast.
+See docs/UI-CONSISTENCY.md for measurements, exceptions and verification limits.

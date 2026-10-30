@@ -12,6 +12,10 @@ const icons=[...source.matchAll(/^function i[A-Z]\w*\(s\)\{.*$/gm)].map(match=>m
 const script=String.raw`<script type="module">
 import {paginateRows,paginationHTML} from '/js/core/pagination.js';
 import {installTableEnhancer} from '/js/core/table-enhancer.js';
+import {manpowerDraftEditorHTML} from '/js/manpower/draft-editor.js';
+import {headerEditorHTML} from '/js/manpower/header-editor.js';
+import {quantityAmendmentHTML} from '/js/manpower/quantity-editor.js';
+import {newManpowerDraft} from '/js/core/manpower-draft.js';
 const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;');
 const STATE={view:'employees',employeeSearch:'',tablePages:{},tablePageSizes:{}};
 const params=new URLSearchParams(location.search);STATE.employeeFiltersExpanded=params.has('filters');
@@ -35,6 +39,7 @@ const refreshEmployeeDirectoryPage=()=>{},employeeDirectoryStatus=()=>{},LEAVE_S
 const fmtDate=v=>v,daysBetweenInclusive=()=>2,attachCellHTML=()=> '—',statusBadge=value=>'<span class="badge b-green">'+esc(value)+'</span>',LEAVE_STATUS_MAP={};
 const setTitle=(title,sub)=>{document.getElementById('tb-title').textContent=title;document.getElementById('tb-sub').textContent=sub;};
 ${icons}
+${section('function fieldHTML(','function clearModalFieldError(')}
 ${section('const FILTER_SELECTORS=','let ROW_ACTION_MENU_ID=')}
 const SEARCH_RENDER_TIMERS=new Map();
 ${section('function queueSearchRender(','/* ---------------- searchable employee picker')}
@@ -46,7 +51,7 @@ function serverTablePageGo(key,page){STATE.tablePages[key]={...STATE.tablePages[
 function serverTablePageSize(key,size){STATE.tablePageSizes[key]=Number(size);STATE.tablePages[key]={page:1,size:Number(size)};renderEmployees();}
 const content=document.getElementById('content');
 const view=new URLSearchParams(location.search).get('view')||'employees';
-document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='grid';document.getElementById('session-splash')?.remove();
+document.getElementById('auth-screen').style.display='none';document.getElementById('app').classList.add('on');document.getElementById('session-splash')?.remove();
 document.getElementById('notification-bell-icon').innerHTML=iBell(18);document.getElementById('tb-name').textContent='Sample HR';document.getElementById('tb-role').textContent=SESSION.role;document.getElementById('tb-av').textContent='SH';
 document.getElementById('nav').innerHTML='<button class="navitem active">'+iUsers(18)+' Employees</button>';
 content.classList.add('data-focused-content');
@@ -62,7 +67,22 @@ function portalTable(){
   const values=['Certificate request','Synthetic request with a deliberately long explanation '.repeat(4),'Oct 29, 2026','Pending','Not recorded','<div class="rowactions"><button class="btn btn-ghost btn-sm">Cancel request</button></div>'];
   content.innerHTML='<section class="portal-history"><div class="tablewrap"><table class="data-table portal-request-table"><thead><tr>'+headers.map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody><tr>'+values.map((value,index)=>'<td data-label="'+headers[index]+'">'+value+'</td>').join('')+'</tr></tbody></table></div></section>';
 }
-if(view==='portal')portalTable();else if(view==='tables')tableGallery();else if(view==='leaves'){STATE.view='leaves';STATE.search='';setTitle('Leave Tracker','Synthetic records');content.innerHTML='<div id="leave-sub"></div>';renderLeaveRecords();}else renderEmployees();
+function controlsGallery(manpower=false){
+  setTitle(manpower?'Manpower components':'Shared control families','Synthetic presentation checks');
+  const toolbars=['data-toolbar','workflow-toolbar','quality-toolbar','automation-toolbar','analytics-toolbar','access-toolbar'];
+  const toolbarHTML=toolbars.map((type,i)=>'<section class="panel"><h3>'+type+'</h3><div class="'+type+'"><div class="searchbox">'+iSearch(16)+'<input id="gallery-search-'+i+'" type="search" aria-label="Search synthetic '+type+'" placeholder="Search synthetic records"></div><select aria-label="Synthetic status '+i+'"><option>Pending approval</option><option>Approved</option></select><button type="button" class="btn btn-primary">'+iPlus(16)+' Add record</button><button type="button" class="btn btn-ghost" disabled>Unavailable</button></div></section>').join('');
+  const fields=[['name','Name','text'],['quantity','Quantity','number'],['date','Effective date','date'],['status','Status','select'],['notes','Remarks','textarea']].map(([key,label,type])=>fieldHTML({key:'gallery_'+key,label,type,options:['Pending approval','Approved']},'')).join('');
+  let components='<section class="panel"><h3>Shared entry fields</h3><div class="formgrid">'+fields+'</div></section>';
+  if(manpower){
+    const draft=newManpowerDraft('synthetic-request','synthetic-line');
+    Object.assign(draft.request,{prf_number:'SAMPLE-001',client_id:'synthetic-client',branch_reporting:'Synthetic Branch',requested_by:'Synthetic HR',date_requested:'2026-10-30',target_date:'2026-11-01'});
+    Object.assign(draft.lines[0],{department:'Sales',position:'Merchandiser',current_authorized:'3'});
+    const catalogs={clients:[{id:'synthetic-client',name:'Synthetic Client',active:true}],branches:['Synthetic Branch'],departments:['Sales'],positions:[{name:'Merchandiser',department:'Sales',active:true}]};
+    components='<section class="panel">'+manpowerDraftEditorHTML(draft,catalogs,{plus:iPlus(16)})+'</section><section class="panel">'+headerEditorHTML(draft.request)+'</section><section class="panel">'+quantityAmendmentHTML({ordinal:0,current_authorized:3})+'</section>';
+  }
+  content.innerHTML=(manpower?'':toolbarHTML)+components+'<section class="panel"><h3>Dense table editors</h3><div class="tablewrap"><table class="data-table"><thead><tr><th>Quantity</th><th>Status</th></tr></thead><tbody><tr><td><input type="number" aria-label="Inline quantity" value="3"></td><td><select aria-label="Inline status"><option>Approved</option></select></td></tr></tbody></table></div></section>';
+}
+if(view==='controls'||view==='manpower')controlsGallery(view==='manpower');else if(view==='portal')portalTable();else if(view==='tables')tableGallery();else if(view==='leaves'){STATE.view='leaves';STATE.search='';setTitle('Leave Tracker','Synthetic records');content.innerHTML='<div id="leave-sub"></div>';renderLeaveRecords();}else renderEmployees();
 const tableEnhancer=installTableEnhancer({getState:()=>STATE,getContent:()=>content});tableEnhancer.enhanceDataTables();
 Object.assign(window,{STATE,employeeSearchInput,toggleEmployeeDirectoryFilters,resetEmployeeDirectoryFilters,renderEmployees,renderLeaveRecords,queueSearchRender,cancelSearchRender,serverTablePageGo,serverTablePageSize});
 // These assertions use the final cascade, rather than searching CSS source text.
@@ -100,6 +120,8 @@ if(view==='employees'){
   check(getComputedStyle(content.querySelector('.employee-directory-search svg')).opacity==='1','Employee search icon must remain visible');
   const rowHeight=table.tBodies[0].rows[0].getBoundingClientRect().height;
   check(rowHeight<=(mobile?60:42),'Employee rows must remain compact');
+  ['#employee-directory-search','.employee-filter-toggle','.employee-add-button'].forEach(selector=>{const node=content.querySelector(selector);if(node?.getClientRects().length)check(Math.abs(node.getBoundingClientRect().height-(mobile?44:36))<1,'Toolbar control height: '+selector);});
+  content.querySelectorAll('.page-btn,.page-size select').forEach(node=>check(Math.abs(node.getBoundingClientRect().height-(mobile?44:34))<1,'Pagination control height'));
   check(parseFloat(getComputedStyle(document.getElementById('employee-directory-search')).fontSize)>=(mobile?16:13),'Search size must follow its breakpoint');
   check(document.querySelector('.table-pagination-wrap').getBoundingClientRect().bottom<=innerHeight+1,'Pagination must fit the viewport');
   if(innerWidth>900)check(Math.abs(document.querySelector('#sidebar .brand').getBoundingClientRect().bottom-document.getElementById('topbar').getBoundingClientRect().bottom)<1,'Logo and header dividers must align');
@@ -108,11 +130,12 @@ if(view==='employees'){
     const search=content.querySelector('.employee-directory-search').getBoundingClientRect();
     const actions=content.querySelector('.employee-toolbar-actions').getBoundingClientRect();
     check(toolbar.height<=64,'Desktop employee toolbar must stay one compact row');
-    check(search.width<=480.5,'Desktop searches must not stretch on wide screens');
+    check(search.width<=360.5,'Desktop searches must not stretch on wide screens');
     check(Math.abs(search.y-actions.y)<1,'Search and actions must align on desktop');
     if(innerWidth>=1500){
       const filters=[...content.querySelectorAll('.employee-filter-set select')].map(e=>e.getBoundingClientRect());
-      check(filters.every(rect=>Math.abs(rect.width-filters[0].width)<1&&Math.abs(rect.y-search.y)<1),'Wide desktop filters must have equal widths in one row');
+      check(filters.every(rect=>Math.abs(rect.y-search.y)<1),'Wide desktop filters must align in one row');
+      check(filters[3].width>filters[2].width,'Employment type filter must be wider than status');
     }else check(getComputedStyle(content.querySelector('.employee-filter-toggle')).display!=='none','Laptop filters must have a compact disclosure');
   }
   content.querySelectorAll('.employee-filter-set select').forEach(select=>{
@@ -133,7 +156,7 @@ const server=createServer((req,res)=>{
   if(path==='/shutdown'){res.end('Stopped');server.close();server.closeAllConnections();return;}
   if(path==='/'){res.setHeader('Content-Type','text/html');res.end(html);return;}
   const file=resolve(root,'.'+decodeURIComponent(path));
-  if(!['css','assets','js/core'].some(dir=>file.startsWith(resolve(root,dir)+sep))){res.writeHead(403);res.end();return;}
+  if(!['css','assets','js/core','js/manpower'].some(dir=>file.startsWith(resolve(root,dir)+sep))){res.writeHead(403);res.end();return;}
   try{res.setHeader('Content-Type',({'.css':'text/css','.js':'text/javascript','.png':'image/png','.webp':'image/webp'})[extname(file)]||'application/octet-stream');res.end(readFileSync(file));}catch{res.writeHead(404);res.end();}
 });
 server.listen(4194,'127.0.0.1',()=>console.log('Synthetic UI consistency: http://127.0.0.1:4194/'));

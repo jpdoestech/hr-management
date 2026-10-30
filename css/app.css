@@ -1,20 +1,24 @@
 :root{
   /* Semantic control sizing: toolbar density is separate from data entry. */
-  --workspace-control-height:42px;
+  --workspace-control-height:max(36px,calc(1.4 * var(--workspace-control-font) + 2px));
   --workspace-control-radius:8px;
   --workspace-control-font:13px;
   --workspace-compact-height:34px;
   --workspace-compact-font:12px;
-  --form-control-height:44px;
+  --form-control-height:max(40px,calc(1.4 * var(--form-control-font) + 2px));
   --form-control-font:14px;
   --touch-control-height:48px;
-  --control-target-size:44px;
+  --control-target-size:40px;
   --table-action-size:28px;
   --selection-target-size:24px;
   --control-padding-inline:12px;
+  --workspace-search-width:320px;
+  --workspace-search-max:360px;
+  --workspace-panel-padding:20px;
+  --workspace-toolbar-padding:10px;
   --form-label-size:13px;
-  --form-label-gap:8px;
-  --form-field-gap:16px;
+  --form-label-gap:6px;
+  --form-field-gap:14px;
   --form-section-gap:24px;
   --form-textarea-min-height:96px;
 

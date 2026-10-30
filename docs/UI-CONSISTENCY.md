@@ -1,5 +1,160 @@
 # UI consistency
 
+## Compact enterprise desktop revision — 2026-10-30 (current)
+
+This section supersedes the earlier 42px toolbar / 44px form specifications and
+measurements below. The current request explicitly targets denser desktop use.
+The working tree was clean on main. Baseline: 422 Node tests and 78 existing
+browser checks passed before editing. All review data is synthetic.
+
+### Findings and implementation
+
+Browser baseline at 1440px: directory search/filter/action 42px high, search
+480px wide, form inputs/selects/dates 44px high, ordinary employee rows 40px,
+pagination 34px, header 96px. Employee date and rate fields measured about 467px
+wide, the same as a name field. Source inspection found padding-driven button
+height, Attendance's later 38–40px minimums, equal 176px desktop filters, duplicate
+employee grid declarations and an Access toolbar that squeezed labels instead
+of wrapping. Source findings were checked against representative fixtures.
+
+The actual stylesheet order is app → professional → attendance → workspace.
+app.css owns semantic sizing. Existing feature rules in professional.css consume
+it, including picker/currency/catalog widgets and manpower editors. workspace.css
+owns shared layout, responsive tokens and ordinary tables. Attendance geometry
+remains owned by attendance.css and its existing workspace adaptation.
+
+| Role | Desktop | Phone/coarse pointer |
+| --- | --- | --- |
+| Toolbar/search/filter | 36px; 13px text | 44px; 16px text |
+| Form/select/date | 40px; 14px text | 48px; 16px text |
+| Compact action/pagination | 34px; 12px text | 44px |
+| Dense table editor | 36px | 44px |
+| Table icon action | 28px | 44px |
+| Form label / gap | 13px / 6px | Same label sizing |
+| Field / section gap | 14px / 24px | Same grouping |
+| Input padding / radius | 12px / 8px | Same |
+| Textarea | Automatic height; ≥96px; vertical resizing | Same |
+
+`--workspace-control-height` and `--form-control-height` also respect their text
+line box through `max()` expressions. Default heights remain 36/40px; enlarged
+control text can increase the box. `--workspace-search-width` is 320px with a
+360px maximum; `--workspace-toolbar-padding` is 10px and panel padding is 20px.
+Buttons use 12–14px horizontal padding and 16px outlined icons.
+
+Employee forms use proportional six-track layouts on roomy desktops, two-track
+normal fields, narrow date/status/identifier fields and full-row prose. Government
+IDs use four tracks when space permits. At intermediate widths the existing two
+columns remain, and phones use one. Generic short numeric/date/currency fields
+have deliberate bounds while long names, organization choices and prose retain
+space. Grid placement never reorders DOM or keyboard navigation.
+
+The single-row employee toolbar and Filters disclosure at 721–1499px remain.
+At ≥1500px filters have different minimum widths by purpose (department 150px,
+branch 130px, status 112px, employment type 178px). Long selected text retains
+the existing full-value note. Access toolbar items now wrap rather than squeeze
+button labels. Search focus uses the existing visible wrapper ring.
+
+Ordinary rows remain 40px with 13px data / 12px headers and 6px/12px cell padding;
+multiline rows can grow. Table editors use 36px desktop controls, with short
+quantities bounded. Intrinsic column sizing, full employee names, sticky headers,
+internal horizontal scrolling and mobile request cards remain unchanged.
+
+The shell header is 80px desktop with the logo divider aligned. Phones retain
+the existing 84px band. Panel/toolbar/dialog padding and oversized hero spacing
+were reduced without changing navigation. Sign-in retains its navy/gold theme;
+the existing violet/charcoal operational theme and fonts are preserved. No new
+palette, gradient, dependency or animation was introduced.
+
+Source-derived contrast calculations identified the auth placeholder (~2.43:1 on white),
+muted metadata (~4.3:1 on a pale surface), and validation red (~3.91:1 on error
+pink). Darker neutral and red tokens now exceed 4.5:1 in the checked states.
+Browser assertions check rendered labels, placeholders, field errors, summary
+links and pagination labels using unrounded luminance ratios. This is scoped
+verification, not an assertion of complete WCAG conformance. Reference:
+[contrast minimum](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)
+and [target size](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html).
+Desktop 28px table actions exceed the 24px web minimum; touch targets are enlarged.
+Native picker affordances and the specialized Attendance grid retain their
+existing interaction alternatives and spacing. No focus or label was removed.
+
+JavaScript changes are limited to missing label associations in the existing
+Movement and Transfer dialogs, including IDs on previously unnamed disabled
+display inputs. Field IDs/names, handlers, validation, persistence, authorization,
+queries, calculations and task sequences are unchanged. No database migration.
+
+### Files changed
+
+- css/app.css: canonical semantic sizing, width and spacing defaults.
+- css/professional.css: existing composite/feature control rules, employee spans,
+  Access wrapping and contrast tokens; no new layer or important declarations.
+- css/workspace.css: shared toolbar/table/dialog/shell proportions and touch rules.
+- js/app.js: Movement/Transfer label associations only. index.html: asset cache
+  versions, retaining the verified stylesheet order.
+- tests/browser/regression-suite.mjs and the ui-consistency, modal-typography and
+  workspace-redesign fixtures: updated dimension expectations and expanded
+  source-renderer/state coverage. scripts/test-browser.mjs permits the manpower
+  presentation modules required by those fixtures and reports seven widths.
+- tests/core/browser-regression.test.mjs: contrast-ratio calibration regression.
+- design-system/MASTER.md, README.md, ROADMAP.md, this file and
+  docs/BROWSER-REGRESSIONS.md: current standards, measurements and limitations.
+
+### Measured controls (1440px desktop)
+
+| Control | Before | After |
+| --- | ---: | ---: |
+| Employee text/select/date input | 44px | 40px |
+| Employee search/filter/add | 42px | 36px |
+| Employee search width | 480px | 320px |
+| Employee date field width | ≈467px | ≈147px |
+| Employee rate field width | ≈467px | ≈225px |
+| Employee name field width | ≈467px | ≈307px |
+| Employee footer action | 42px | 40px |
+| Sign-in input / submit / password action | 44px | 40px |
+| Pagination / page-size selector | 34px | 34px |
+| Ordinary employee row | 40px | 40px |
+| Shell header | 96px | 80px |
+| Textarea minimum | 96px | 96px |
+
+### Final validation and limits
+
+Final result: 423 Node tests and 175 browser checks passed. `npm run lint`,
+`npm test`, `npm run build`, `node scripts/validate.mjs` and final diff checks
+passed. Browser fixtures covered all seven requested document widths, actual
+employee form/navigation/section-save markup, native control variants,
+sign-in/registration, Attendance, requests/cards, shared table families, settings,
+shared workflow/quality/analytics/access toolbar patterns and real manpower
+renderers. Functional search/filter/pagination, validation, duplicate-ID messages,
+failed-save retry, unsaved-edit guards and Attendance staging checks still pass.
+
+Two additional cases verified doubled semantic control text at desktop/phone
+widths. A 320×568 dialog retained 48px fields, 16px text and reachable footer
+actions. The 960×540 case checks zoom-equivalent reflow; actual browser zoom
+controls were not driven. Short numeric/date fields, native affordances and long
+filter notes were reviewed. The 721–900px drawer header intentionally retains
+its existing 94px band; desktop above 900px is 80px and phones are 84px.
+
+The expanded suite exposed missing Movement/Transfer label associations (fixed),
+Access toolbar wrapping (fixed), and test assumptions about hidden controls,
+wrapper focus rings and scrollbar width (corrected without removing functional
+checks). The fixture shell now uses production's `.on` class rather than forcing
+an inline desktop grid, which had distorted a 960px layout. No application
+breakpoint or navigation behavior was changed to accommodate the fixture.
+
+Screenshots and computed measurements were captured before/after at 1440px,
+with a separate 320×568 view. The full suite uses offline fallback fonts;
+standalone screenshots load production font links. Source review covers shared
+selectors across existing modules, but fixtures are not complete authenticated
+screens. Real backend workflows, screen readers, physical coarse-pointer devices,
+native browser zoom, hover rendering and every feature-specific dialog were not
+exercised. Source hover/disabled/loading rules and coarse-pointer overrides were
+inspected; no full WCAG certification is claimed. No production records used.
+
+No database, authentication, permission, query or business-rule change. No new
+dependency. Publication status and verified implementation references are recorded in ROADMAP.md.
+
+---
+
+
 ## Automated workflow coverage — 2026-10-30
 
 `npm run test:browser` now runs the existing synthetic fixtures together. See

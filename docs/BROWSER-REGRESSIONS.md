@@ -31,9 +31,11 @@ Attendance runs the production module against a synthetic RPC adapter. The
 workspace/auth fixture uses representative shell markup and registration handlers;
 it does not sign in, register an account or validate backend authorization.
 
-There are 78 checks: 15 scenarios at 1440, 1280, 768, 390 and 320px document
-widths, plus three desktop performance samples. Every iframe is 900px high;
-these widths are layout tests, not physical-device or short-screen emulation.
+There are 175 checks: 24 scenarios at 1920, 1440, 1280, 1024, 768, 390 and
+320px document widths, two enlarged-control-text cases, a 960×540 reflow case, a 320×568 short-dialog
+case and three desktop performance samples. Ordinary cases use 900px-high iframes; the two short-screen cases use their
+stated heights.
+these are layout and short-screen checks, not physical-device emulation.
 
 - Form dimensions, hidden/disabled inputs, visible focus, keyboard employee
   picker selection/Escape, native checkbox behavior and associated field errors.
@@ -47,6 +49,10 @@ these widths are layout tests, not physical-device or short-screen emulation.
   next page, page-size change and bounded DOM row count.
 - Shared table column sort/filter/clear, sticky headers, pagination sizing,
   table density, mobile request cards and absence of document horizontal overflow.
+- Shared workflow/quality/automation/analytics/access toolbar patterns, settings,
+  dashboard, long filters, real manpower draft/header/quantity renderers, and
+  Movement/Transfer/lifecycle/shared entry dialogs. Shared field markup is the
+  production renderer; gallery compositions do not simulate complete workflows.
 - Sign-in/registration geometry and password action targets via workspace checks.
 - Attendance keyboard staging, failed batch/retry, repeated save, unavailable
   roster/retry, delayed refresh busy state, sticky employee column and intentional
@@ -59,8 +65,7 @@ end-to-end acceptance. Address data and backend transport remain fixture stubs.
 To keep the suite deterministic and offline, the proxy removes external font
 links and blocks external connections and native form posts with CSP. This suite
 uses fallback fonts; the standalone fixtures retain production font links for
-separate visual checks. It serves only fixture pages, styles, assets and shared
-core modules, not application configuration or confidential records.
+separate visual checks. It serves only fixture pages, styles, assets, shared core modules and manpower presentation modules, not application configuration or confidential records.
 
 ## Results and performance
 
@@ -115,3 +120,33 @@ The optional standalone headless launcher and hosted GitHub job have not been
 executed in this session. Production fonts, screen readers, trusted Tab traversal,
 short-screen devices, authenticated saves and database performance remain
 separate acceptance checks. Publication status is recorded in ROADMAP.md.
+
+
+## Compact desktop revision — 2026-10-30
+
+The current specification is 36px desktop toolbar controls and 40px form
+controls, with 44–48px touch targets. It supersedes the first sizing baseline.
+The suite also checks computed text contrast, exact toolbar/pagination heights,
+short numeric fields, purpose-sized filters, real manpower renderers and related
+shared toolbar patterns. The shell fixtures use production's `.on` class rather
+than forcing an inline desktop grid, so the responsive shell rules are exercised.
+The 960×540 case approximates the CSS viewport of a 1920px screen at 200% zoom;
+it does not drive the browser's native zoom UI. The enlarged-control-text cases
+double semantic control/label font sizes and verify that line boxes fit.
+
+Contrast assertions cover rendered form labels, placeholders, helper/error
+text, summary links and pagination labels. They use unrounded WCAG luminance
+ratios; this is not a complete accessibility certification. Pointer/coarse rules
+are inspected in source; real hardware and screen readers remain separate.
+Standalone fixtures keep their production font links for visual review. Auth,
+access/workflow gallery patterns and settings compositions are representative;
+real authenticated workflow acceptance is not simulated by gallery markup.
+
+
+Final compact-revision local run passed 175/175 browser checks and all 423 Node
+tests. Lint, build, explicit validation and diff checks passed. Tests include
+normal inputs, select/date/time/number controls, proportional widths, enlarged
+text, label/error associations, visible focus or wrapper rings, hidden/disabled
+states, native checkboxes, picker keyboard use and existing workflow recovery.
+Hosted CI and standalone headless execution were not run for this revision.
+Publication status and verified implementation references are recorded in ROADMAP.md.

@@ -3957,18 +3957,18 @@ function openEmployeeLifecycleEventForm(id,initialEvent=''){
     <div class="modal-body">
       ${existingEmp?employeeWorkspaceNav(existingEmp,'lifecycle'):''}
       <div class="formgrid">
-        ${existingEmp?`<div class="field full"><label>Employee</label><input value="${esc(employeeDisplayName(existingEmp))}" disabled><input type="hidden" id="lc_employee" value="${esc(existingEmp.id)}"></div>`:employeePickerHTML({id:'lc_employee',label:'Employee',selectedId:'',required:true,full:true,onSelect:'lifecycleEmployeePreview'})}
+        ${existingEmp?`<div class="field full"><label for="lc_employee_display">Employee</label><input id="lc_employee_display" value="${esc(employeeDisplayName(existingEmp))}" disabled><input type="hidden" id="lc_employee" value="${esc(existingEmp.id)}"></div>`:employeePickerHTML({id:'lc_employee',label:'Employee',selectedId:'',required:true,full:true,onSelect:'lifecycleEmployeePreview'})}
         <div class="field"><label for="lc_eventType">Movement Type *</label><select id="lc_eventType" onchange="lifecycleEventTypeChanged()">${LIFECYCLE_EVENT_TYPES.map(x=>`<option ${x===initialEvent?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
-        <div class="field"><label>Effective Date *</label><input type="date" id="lc_date" value="${todayISO()}"></div>
+        <div class="field"><label for="lc_date">Effective Date *</label><input type="date" id="lc_date" value="${todayISO()}"></div>
         <div class="field full" id="lc_status_wrap" hidden><div class="formgrid">
           <div class="field"><label for="es_status">Employment Status *</label><select id="es_status" onchange="syncEmployeeStatusReason('es_reason',this.value);lifecycleEventTypeChanged()">${EMP_STATUS.map(status=>`<option ${status===(existingEmp?.status||'Active')?'selected':''}>${esc(status)}</option>`).join('')}</select></div>
           <div class="field"><label for="es_reason">Status Reason *</label><select id="es_reason">${STATUS_REASONS[existingEmp?.status||'Active'].map(reason=>`<option value="${esc(reason)}" ${reason===existingEmp?.statusReason?'selected':''}>${esc(employeeOptionLabel(reason))}</option>`).join('')}</select></div>
         </div></div>
-        <div class="field" id="lc_position_wrap" style="display:none"><label>New Position</label><input id="lc_position" placeholder="e.g. HR Officer II"></div>
-        <div class="field"><label>Leaving Classification</label><select id="lc_exit_class"><option value="">Select classification</option>${EXIT_CLASSIFICATIONS.map(v=>`<option>${esc(v)}</option>`).join('')}</select></div>
-        <div class="field"><label>Primary Leaving Factor</label><select id="lc_exit_factor"><option value="">Select factor</option>${WORKFORCE_FACTORS.map(v=>`<option>${esc(v)}</option>`).join('')}</select></div>
-        <div class="field full"><label>Reason for Leaving</label><textarea id="lc_exit_reason" rows="2" maxlength="1000"></textarea></div>
-        <div class="field full"><label>Remarks / HR Reference</label><textarea id="lc_remarks" rows="3" placeholder="Reference, reason, approving authority, or other HR note…"></textarea></div>
+        <div class="field" id="lc_position_wrap" style="display:none"><label for="lc_position">New Position</label><input id="lc_position" placeholder="e.g. HR Officer II"></div>
+        <div class="field"><label for="lc_exit_class">Leaving Classification</label><select id="lc_exit_class"><option value="">Select classification</option>${EXIT_CLASSIFICATIONS.map(v=>`<option>${esc(v)}</option>`).join('')}</select></div>
+        <div class="field"><label for="lc_exit_factor">Primary Leaving Factor</label><select id="lc_exit_factor"><option value="">Select factor</option>${WORKFORCE_FACTORS.map(v=>`<option>${esc(v)}</option>`).join('')}</select></div>
+        <div class="field full"><label for="lc_exit_reason">Reason for Leaving</label><textarea id="lc_exit_reason" rows="2" maxlength="1000"></textarea></div>
+        <div class="field full"><label for="lc_remarks">Remarks / HR Reference</label><textarea id="lc_remarks" rows="3" placeholder="Reference, reason, approving authority, or other HR note…"></textarea></div>
       </div>
       <div id="lc_preview" class="lifecycle-helper">Select an employee to see the current employment state.</div>
     </div>
@@ -5692,13 +5692,13 @@ async function openTransferForEmployee(id){
     <div class="modal-body">
       ${employeeWorkspaceNav(emp,'transfer')}
       <div class="formgrid">
-        <div class="field full"><label>Employee</label><input value="${esc(employeeDisplayName(emp))}" disabled style="background:var(--paper);"></div>
-        <div class="field"><label>Transferred From *</label><select id="tf_from">${employeeDepartmentNames(emp.department).map(d=>`<option ${d===emp.department?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
-        <div class="field"><label>From Date *</label><input type="date" id="tf_fromDate" value="${todayISO()}"></div>
-        <div class="field"><label>Transferred To *</label><select id="tf_to" onchange="syncPositionSelect('tf_position',this.value)">${employeeDepartmentNames().map(d=>`<option ${d===emp.department?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
-        <div class="field"><label>To Date *</label><input type="date" id="tf_toDate" value="${todayISO()}"></div>
-        <div class="field"><label>Position After Transfer *</label><select id="tf_position"><option value="">Select position</option>${employeePositionNames(emp.department,emp.position).map(position=>`<option value="${esc(position)}" ${position===emp.position?'selected':''}>${esc(position)}</option>`).join('')}</select></div>
-        <div class="field full"><label>Remarks</label><textarea id="tf_remarks" rows="2"></textarea></div>
+        <div class="field full"><label for="tf_employee_display">Employee</label><input id="tf_employee_display" value="${esc(employeeDisplayName(emp))}" disabled style="background:var(--paper);"></div>
+        <div class="field"><label for="tf_from">Transferred From *</label><select id="tf_from">${employeeDepartmentNames(emp.department).map(d=>`<option ${d===emp.department?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+        <div class="field"><label for="tf_fromDate">From Date *</label><input type="date" id="tf_fromDate" value="${todayISO()}"></div>
+        <div class="field"><label for="tf_to">Transferred To *</label><select id="tf_to" onchange="syncPositionSelect('tf_position',this.value)">${employeeDepartmentNames().map(d=>`<option ${d===emp.department?'selected':''}>${esc(d)}</option>`).join('')}</select></div>
+        <div class="field"><label for="tf_toDate">To Date *</label><input type="date" id="tf_toDate" value="${todayISO()}"></div>
+        <div class="field"><label for="tf_position">Position After Transfer *</label><select id="tf_position"><option value="">Select position</option>${employeePositionNames(emp.department,emp.position).map(position=>`<option value="${esc(position)}" ${position===emp.position?'selected':''}>${esc(position)}</option>`).join('')}</select></div>
+        <div class="field full"><label for="tf_remarks">Remarks</label><textarea id="tf_remarks" rows="2"></textarea></div>
       </div>
       <div class="computed-note">This records the department and position assignment. Employment Type, Status, Status Reason, and Status Effective Date remain unchanged.</div>
     </div>
