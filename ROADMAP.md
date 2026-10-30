@@ -1013,7 +1013,9 @@ UI-20261030-R — Browser regressions and workflow reliability (locally verified
 - Docs: `docs/BROWSER-REGRESSIONS.md`, README, UI consistency and MASTER record
   commands, coverage, measurements and limits. Offline fallback fonts, scripted
   handler events and fixed 900px iframe height are intentional test boundaries.
-- Publication: authorized for commit and push; no deployment performed.
+- Publication: implementation `11eefe0` pushed to `origin/main`; remote HEAD
+  verified as `11eefe0a3c0aa2d94884bec0f8e278ab5267d35b`. Commit includes
+  summary, description, validation and limits. No deployment performed.
   Optional headless launcher,
   hosted CI, authenticated backend workflows, screen-reader/physical-device
   acceptance and production performance remain unverified. No production data.
