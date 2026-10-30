@@ -1119,5 +1119,6 @@ UI-20261030-COMPACT — Compact enterprise controls (locally verified)
 - Limits: fixture/source review is not authenticated production acceptance.
   Physical coarse-pointer devices, screen readers, native browser zoom and
   exhaustive hover/browser/dialog coverage remain unverified. No production data.
-- Publication: the subsequent instruction authorizes commit and push with
-  summary and description. Verified implementation references follow.
+- Publication: implementation `dfe8d18` pushed to `origin/main`; remote HEAD
+  verified as `dfe8d187e5330c9ab12f1536c4a57fc2a7dd372c`. Commit includes
+  summary, description, validation and remaining acceptance limits.
