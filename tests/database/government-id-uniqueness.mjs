@@ -42,5 +42,38 @@ try{
   await insert('cross-type',{sssNumber:'0000000012',philHealthNumber:'0000000012',pagIbigNumber:'0000000012',tin:'000000012'});
   await assert.rejects(db.query('insert into public.hr_records values($1,\'employees\',\'batch-a\',$2),($1,\'employees\',\'batch-b\',$2)',[tenant,JSON.stringify({sssNumber:'9999999999'})]),error=>error.code==='23505');
   assert.equal((await db.query("select count(*)::int n from public.hr_records where record_id in ('batch-a','batch-b')")).rows[0].n,0);
+  await db.exec(`create role authenticated;create role anon;create schema auth;
+    create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('test.uid',true),'')::uuid$$;
+    create function public.current_tenant_id() returns uuid language sql stable as $$select current_setting('test.tenant',true)::uuid$$;
+    create function public.current_user_has_permission(p text) returns boolean language sql stable as $$select coalesce(current_setting('test.permissions',true)::jsonb ? p,false)$$;
+    create function public.current_user_scope_allows(p text,d jsonb) returns boolean language sql stable as $$select d->>'department'=current_setting('test.department',true)$$;
+    grant usage on schema auth to authenticated;grant select on public.hr_records to authenticated;
+    alter table public.hr_records enable row level security;
+    create policy fixture_visibility on public.hr_records for select to authenticated using(tenant_id=public.current_tenant_id() and data->>'blocked' is distinct from 'true');`);
+  const lookupMigration=await readFile(new URL('../../supabase/migrations/0066_government_id_owner_lookup.sql',import.meta.url),'utf8');
+  await db.exec(lookupMigration);
+  await insert('visible-owner',{sssNumber:'1234567890',philHealthNumber:'123456789012',pagIbigNumber:'123456789013',tin:'123456789000',clientName:'Company Y',department:'Sales',position:'Merchandiser',lastName:'Dela Cruz',firstName:'Juan'});
+  await insert('other-tenant-owner',{sssNumber:'1234567890',department:'Sales',name:'Other tenant'},otherTenant);
+  await insert('outside-scope',{sssNumber:'1234567891',department:'Other',name:'Outside scope'});
+  await insert('rls-hidden',{sssNumber:'1234567892',department:'Sales',name:'RLS hidden',blocked:true});
+  const lookup=(value='12-3456789-0',record_id='synthetic-edited',field='sssNumber')=>db.query('select * from public.employee_government_id_owners($1,$2)',[field,JSON.stringify([{record_id,value}])]);
+  await db.query("select set_config('test.uid',$1,false),set_config('test.tenant',$2,false),set_config('test.department','Sales',false),set_config('test.permissions',$3,false)",[tenant,tenant,JSON.stringify(['employees.view','employees.update'])]);
+  await db.exec('set role authenticated');
+  assert.deepEqual((await lookup()).rows,[{clientName:'Company Y',department:'Sales',position:'Merchandiser',name:'Dela Cruz, Juan'}]);
+  for(const [field,value] of [['philHealthNumber','12-345678901-2'],['pagIbigNumber','1234-5678-9013'],['tin','123-456-789-999']])assert.equal((await lookup(value,'synthetic-edited',field)).rows[0].name,'Dela Cruz, Juan');
+  for(const value of ['1234567891','1234567892',''])assert.equal((await lookup(value)).rows.length,0);
+  assert.equal((await lookup('1234567890','visible-owner')).rows.length,0);
+  await assert.rejects(lookup('1234567890','','unknown'),error=>error.code==='22023');
+  await assert.rejects(db.query('select * from public.employee_government_id_owners($1,$2)',['sssNumber',JSON.stringify(Array(251).fill({}))]),error=>error.code==='22023');
+  for(const permissions of [[],['employees.view'],['employees.update']]){
+    await db.query("select set_config('test.permissions',$1,false)",[JSON.stringify(permissions)]);
+    await assert.rejects(lookup(),error=>error.code==='42501');
+  }
+  await db.query("select set_config('test.permissions',$1,false)",[JSON.stringify(['employees.view','employees.create'])]);assert.equal((await lookup()).rows.length,1);
+  await db.query("select set_config('test.uid','',false),set_config('test.permissions',$1,false)",[JSON.stringify(['employees.view','employees.update'])]);
+  await assert.rejects(lookup(),error=>error.code==='42501');
+  await db.exec('reset role;set role anon');await assert.rejects(lookup(),error=>error.code==='42501');await db.exec('reset role');
+  assert.equal((await db.query("select prosecdef from pg_proc where oid='public.employee_government_id_owners(text,jsonb)'::regprocedure")).rows[0].prosecdef,false);
+  console.log('Owner lookup SQL checks passed: minimal display fields, own-record exclusion, permission/auth gates, tenant/scope/RLS isolation and batch bound.');
   console.log('Government ID SQL rehearsal passed: migration rollback, four unique indexes, blanks, normalization parity, self updates, tenant/type isolation, update conflicts and atomic batch rejection.');
 }finally{await db.close();}

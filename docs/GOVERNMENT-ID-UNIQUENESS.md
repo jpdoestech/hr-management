@@ -31,9 +31,26 @@ uses PostgreSQL's [unique index enforcement](https://www.postgresql.org/docs/cur
 The indexes exclude missing/empty normalized IDs and non-employee modules.
 No RLS, roles, permissions, authentication logic or stored values are changed.
 
-Known database uniqueness errors map to a field-specific message. Neither
-messages nor logs identify the other employee or expose their government ID.
-The existing employee rollback and failure-retry behavior is preserved.
+Known database uniqueness errors map to a field-specific message. Permitted
+owners are displayed as `Client assigned | Department | Position | Name`, for
+example `Company Y | Sales | Merchandiser | Dela Cruz, Juan`. The optional
+existing `clientName` value supplies the client slot; otherwise it reads
+`Client not assigned`. No client assignment workflow is added. Missing department,
+position and name have explicit not-recorded labels.
+
+Loaded records supply owner context for employee forms, imports and onboarding.
+A failed employee upsert also queries the new `employee_government_id_owners`
+RPC for that failed batch only, covering records that were not loaded locally.
+Migration 0066 must follow 0065 for this database-only enrichment. The function
+is security-invoker, requires employee view and create/update permission, and
+respects tenant, scope and existing RLS checks. It returns only client, department,
+position and name; no stored ID numbers or record identifiers. Anonymous access
+is denied and each request is limited to 250 submitted employee entries.
+
+Owners outside the user's access remain hidden. Missing migration, denied access
+or lookup/network errors preserve the generic uniqueness error. No save override
+is introduced. Owner metadata is shown only in existing text-based error UI and
+is not logged. The existing rollback and failure-retry behavior is preserved.
 
 ## Rollout and existing duplicates
 
@@ -75,12 +92,15 @@ node tests/database/government-id-uniqueness.mjs /absolute/path/to/pglite/dist/i
 
 The script constructs an in-memory database using [PGlite](https://pglite.dev/docs/api);
 it accepts a local module path, not a database connection URL. It applies the
-actual migration and verifies pre-existing duplicate rejection without data
+actual migrations and verifies pre-existing duplicate rejection without data
 changes, four indexes, normalization parity, optional blanks, self-updates,
 tenant/type separation, update collisions and atomic single-statement batch
 rejection. It never reads or writes a live database and adds no application
 dependency. It does not reproduce multi-connection scheduling or the entire
-Supabase RLS/migration environment.
+Supabase RLS/migration environment. Migration 0066 is also exercised under an
+unprivileged authenticated role with synthetic auth/permission/scope helpers and
+RLS, checking minimal output, own-record exclusion, tenant/scope/RLS isolation,
+authentication/permission failures, anonymous denial and batch limits.
 
 Local results and publication references are recorded in ROADMAP.md. Live
 migration installation and existing production data have not been inspected.

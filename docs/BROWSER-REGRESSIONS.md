@@ -40,7 +40,8 @@ these widths are layout tests, not physical-device or short-screen emulation.
 - History to Overview navigation, viewer navigation and repeated navigation.
 - Emergency Information scoped save, delayed failure, rollback, retained input,
   retry, duplicate-submission protection and exactly one successful history entry.
-- Government IDs section duplicate errors, retained input and successful correction.
+- Government IDs section duplicate errors with client/department/position/name
+  owner context, retained input and successful correction.
 - Keep editing/discard confirmation without unintended persistence.
 - Debounced directory search with focus recovery, department filtering, reset,
   next page, page-size change and bounded DOM row count.

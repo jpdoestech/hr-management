@@ -20,7 +20,7 @@ let EMPLOYEE_SECTION_EDIT=null,MODAL_EDIT_STATE=null,EMPLOYEE_WORKSPACE_NAVIGATI
 const CONFIRMED_CHANGE_TARGETS=new WeakSet(),SESSION={id:'synthetic-actor',fullName:'Synthetic HR'};
 const fixtureParams=new URLSearchParams(location.search);
 window.FIXTURE_STATE={saveAttempts:0,profileOpens:0,employee};
-if(fixtureParams.has('government-duplicate'))DB.employees.push({id:'synthetic-other',sssNumber:'00-0001234-5',philHealthNumber:'00-000000123-4',pagIbigNumber:'0000-0001-2345',tin:'000-001-234-000'});
+if(fixtureParams.has('government-duplicate'))DB.employees.push({id:'synthetic-other',clientName:'Company Y',department:'Sales',position:'Merchandiser',lastName:'Dela Cruz',firstName:'Juan',sssNumber:'00-0001234-5',philHealthNumber:'00-000000123-4',pagIbigNumber:'0000-0001-2345',tin:'000-001-234-000'});
 ${section('function editorControls(','function findEditorSaveButton(')}
 ${functionSource('modalHasUnsavedChanges')}
 ${functionSource('confirmDataChange')}

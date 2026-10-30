@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
-import {GOVERNMENT_IDS,governmentIdKey,employeeGovernmentIdIssues,governmentIdConflictIssue} from '../../js/core/government-ids.js';
+import {GOVERNMENT_IDS,governmentIdKey,employeeGovernmentIdIssues,governmentIdConflictIssue,governmentIdOwnerLabel,governmentIdSaveIssue} from '../../js/core/government-ids.js';
 
 test('each government ID rejects formatting variants, preserving leading zeroes',()=>{
   for(const {key,label} of GOVERNMENT_IDS){
@@ -51,7 +51,7 @@ test('database conflict feedback uses the field association and retains safe mes
 
 test('onboarding conversion blocks an existing employee ID before mutating either record',async()=>{
   const candidate={id:'synthetic-candidate',sssNumber:'00-0001234-5'},messages=[];
-  const c={employeeGovernmentIdIssues,EMPLOYMENT_TYPES:['Probationary'],SESSION:{id:'synthetic-actor',fullName:'Synthetic HR'},
+  const c={hasPermission:()=>true,employeeGovernmentIdIssues,EMPLOYMENT_TYPES:['Probationary'],SESSION:{id:'synthetic-actor',fullName:'Synthetic HR'},
     DB:{onboardingCandidates:[candidate],employees:[{id:'synthetic-existing',sssNumber:'0000012345'}]},
     document:{getElementById:id=>({value:({oh_employment_type:'Probationary',oh_branch:'Synthetic Branch',oh_daily_rate:''})[id]})},
     onboardingHireBlockers:()=>[],readEmployeeAllowances:()=>({}),readAddressComponent:async()=>({valid:true,address:{}}),
@@ -60,4 +60,41 @@ test('onboarding conversion blocks an existing employee ID before mutating eithe
   vm.createContext(c);vm.runInContext('async '+extract('convertOnboardingCandidate'),c);
   await c.convertOnboardingCandidate(candidate.id);
   assert.equal(c.DB.employees.length,1);assert.equal(candidate.employeeRecordId,undefined);assert.match(messages[0],/SSS Number already belongs/);
+});
+
+
+test('owner labels use client, department, position and formatted employee name',()=>{
+  const employee={id:'synthetic-owner',clientName:'Company Y',department:'Sales',position:'Merchandiser',lastName:'Dela Cruz',firstName:'Juan',sssNumber:'0000012345'};
+  const expected='Company Y | Sales | Merchandiser | Dela Cruz, Juan';
+  assert.equal(governmentIdOwnerLabel(employee),expected);
+  assert.ok(employeeGovernmentIdIssues({sssNumber:'00-0001234-5'},[employee])[0].message.includes(expected));
+  assert.equal(governmentIdOwnerLabel({name:'Synthetic Name'}),'Client not assigned | Department not recorded | Position not recorded | Synthetic Name');
+  assert.ok(!employeeGovernmentIdIssues({sssNumber:employee.sssNumber},[employee],'',false)[0].message.includes('Dela Cruz'));
+});
+
+test('save conflict lookup is limited to the failed employee batch and preserves generic fallback',async()=>{
+  const error={code:'23505',constraint:GOVERNMENT_IDS[0].index};
+  const rows=[{module:'employees',record_id:'synthetic-edited',data:{sssNumber:'0000012345',tin:'not sent'}},{module:'onboarding',record_id:'ignored',data:{sssNumber:'not sent'}}];
+  const client={rpc:async(name,args)=>{
+    assert.equal(name,'employee_government_id_owners');
+    assert.deepEqual(args,{p_field:'sssNumber',p_entries:[{record_id:'synthetic-edited',value:'0000012345'}]});
+    return {data:[{clientName:'Company Y',department:'Sales',position:'Merchandiser',name:'Dela Cruz, Juan'}]};
+  }};
+  const issue=await governmentIdSaveIssue(client,error,rows);
+  assert.match(issue.message,/Company Y \| Sales \| Merchandiser \| Dela Cruz, Juan/);
+  for(const rpc of [async()=>({data:[],error:null}),async()=>({error:{code:'42501'}}),async()=>{throw Error('Unavailable');}]){
+    const generic=await governmentIdSaveIssue({rpc},error,rows);assert.ok(!generic.message.includes('Owner:'));assert.equal(generic.id,'f_sssNumber');
+  }
+  assert.equal(await governmentIdSaveIssue({rpc:()=>assert.fail('No lookup for unrelated errors')},{code:'42501'},rows),null);
+});
+
+
+test('failed upserts resolve permitted owner context before the save error is displayed',async()=>{
+  const failure={code:'23505',constraint:GOVERNMENT_IDS[0].index,message:'Duplicate'};
+  const client={from:table=>table==='hr_settings'?{select(){return this;},eq(){return this;},maybeSingle:async()=>({data:{data:{}}})}:{upsert:()=>({select:async()=>({error:failure})})},
+    rpc:async()=>({data:[{clientName:'Company Y',department:'Sales',position:'Merchandiser',name:'Dela Cruz, Juan'}]})};
+  const c={supabase:client,governmentIdSaveIssue,SESSION:{id:'synthetic'},DB_SNAPSHOT:{},blankDB:()=>({}),
+    buildRecordChanges:()=>({upserts:[{module:'employees',recordId:'synthetic-edited',record:{sssNumber:'0000012345'}}]})};
+  vm.createContext(c);vm.runInContext('async '+extract('saveDBInternal'),c);
+  await assert.rejects(c.saveDBInternal({settings:{}},['employees']),error=>error.governmentIdIssue.message.includes('Company Y | Sales | Merchandiser | Dela Cruz, Juan'));
 });

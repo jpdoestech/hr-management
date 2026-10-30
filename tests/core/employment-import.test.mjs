@@ -11,7 +11,7 @@ function context(){
     EXIT_CLASSIFICATIONS:['Voluntary'],WORKFORCE_FACTORS:['Other'],normalizeEmployeeNumber,isValidEmployeeNumber,nextEmployeeNumber,
     DB:{employees:[]},employeeDepartmentNames:()=>['Production'],employeeBranchLocations:()=>['Davao'],employeeAllowanceTypes:()=>[],
     positionCatalog:()=>[{name:'Operator',department:'Production',active:true}],todayISO:()=> '2026-10-09',employeeAllowanceFieldKey:name=>'allowance:'+name,
-    employeeGovernmentIdIssues,validateGovernmentIds:()=>'',formatEmployeeName:r=>`${r.lastName}, ${r.firstName}`,employeeDisplayName:r=>r.name,employeeNameSimilarity:()=>0,
+    hasPermission:()=>true,employeeGovernmentIdIssues,validateGovernmentIds:()=>'',formatEmployeeName:r=>`${r.lastName}, ${r.firstName}`,employeeDisplayName:r=>r.name,employeeNameSimilarity:()=>0,
   };
   vm.createContext(context);
   vm.runInContext(source.slice(source.indexOf('const EMPLOYEE_IMPORT_COLUMNS = ['),source.indexOf('function employeeAllowanceFieldKey(')),context);

@@ -59,3 +59,13 @@ indexes for employee SSS, PhilHealth, Pag-IBIG and the nine-digit TIN identity.
 Existing duplicate IDs abort the migration without rewriting employee records;
 authorized HR review must resolve them before retrying. The lock-acquisition
 timeout is five seconds. See [the rule and safe rollout](GOVERNMENT-ID-UNIQUENESS.md).
+
+
+### Government ID duplicate owner lookup (0066)
+
+Apply `0066_government_id_owner_lookup.sql` after 0065 to enrich database-only
+uniqueness errors with permitted owner display fields. The RPC respects existing
+RLS, tenant and scope boundaries and requires employee view and editing access.
+It returns no government ID numbers. The frontend retains generic errors if
+lookup is unavailable or the owner is restricted. Existing uniqueness indexes
+remain authoritative. No employee data or access policies are changed.

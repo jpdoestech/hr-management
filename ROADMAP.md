@@ -1055,3 +1055,32 @@ HR-20261030-GOV — Government ID uniqueness (implementation locally verified)
 - Publication: implementation `d70f05e` pushed to `origin/main`; remote HEAD
   verified as `d70f05e5e7a3d624f8cc979c9488bef3f31a9cea`. Commit includes
   summary, description, validation and migration/rollout limits.
+
+
+HR-20261030-GOV-OWNER — Duplicate government ID owner context (locally verified)
+
+- Form, scoped-edit, import and onboarding duplicate errors now include permitted
+  owner context as Client assigned | Department | Position | Name. Existing
+  clientName is used when recorded; otherwise Client not assigned. No client
+  assignment feature or invented company relationship was added.
+- Added migration 0066 after 0065: a security-invoker owner lookup restricted to
+  authenticated users with employee view and create/update permission. Tenant,
+  existing RLS and record scope checks remain enforced. Only four display fields
+  are returned; stored government IDs and record IDs are excluded. Requests are
+  bounded to one 250-record save batch. No data rewrite or RLS policy change.
+- Failed employee upserts enrich their existing uniqueness error using only
+  the failed batch. Denied, missing or unavailable lookup retains generic
+  rejection. Normal successful saves do not run this lookup. Existing uniqueness
+  indexes, rollback, correction and no-override behavior remain unchanged.
+- Verification: 422 Node tests; 78 browser checks at five document widths;
+  lint, build, explicit structural validation and diff checks passed. The actual
+  migration passed isolated PGlite tests under an authenticated role for all
+  four ID types, minimal output, owner-name formatting, own-record exclusion,
+  tenant/scope/RLS isolation, authentication/permission denial and batch bounds.
+  Existing migration 0065 uniqueness/rollback checks also passed.
+- Captured the requested Company Y | Sales | Merchandiser | Dela Cruz, Juan
+  display using synthetic records only. No production records were accessed.
+- Docs: government ID uniqueness, deployment and browser coverage describe the
+  permitted metadata, fallback behavior and migration requirement. Hosted CI,
+  full Supabase acceptance and live migration 0066 installation are unverified.
+- Publication: ready for authorized commit and push; references follow.

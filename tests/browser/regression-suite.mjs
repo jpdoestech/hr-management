@@ -72,6 +72,7 @@ async function governmentIds({w,d}){
   click(d,'.modal-foot .btn-primary');
   await until(()=>d.querySelectorAll('[aria-invalid="true"]').length===4,'Duplicate IDs did not receive field errors');
   assert(w.FIXTURE_STATE.saveAttempts===0,'Duplicate IDs reached persistence');
+  assert([...d.querySelectorAll('.field-error')].every(node=>node.textContent.includes('Company Y | Sales | Merchandiser | Dela Cruz, Juan')),'Duplicate field errors lack owner context');
   assert(JSON.stringify(w.FIXTURE_STATE.employee)===before,'Duplicate ID rejection mutated the employee');
   for(const [field,value] of Object.entries(values))assert(d.getElementById('f_'+field).value.replace(/\D/g,'')===value,'Rejected ID entry was discarded');
   for(const [field,value] of Object.entries({sssNumber:'0000012346',philHealthNumber:'000000001235',pagIbigNumber:'000000012346',tin:'000001235000'}))input(w,d.getElementById('f_'+field),value);
