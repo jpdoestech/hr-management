@@ -1139,3 +1139,6 @@ ATT-20261030-EDIT — Preserve Late/UT edits (locally verified)
   regression cases at 1440px and 390px for stage, reopen, cancel, transaction
   change, save and undo/redo. Synthetic records and mocked RPC saves only;
   live database writes and full-app Escape/backdrop behavior were not tested.
+- Publication: implementation `4eb3ec2` pushed to `origin/main`; remote
+  `refs/heads/main` verified as `4eb3ec2206123a39db61e04d11d3bfeb9ff720bf`.
+  The implementation commit includes Summary, Description and validation.
