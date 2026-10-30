@@ -1122,3 +1122,20 @@ UI-20261030-COMPACT — Compact enterprise controls (locally verified)
 - Publication: implementation `dfe8d18` pushed to `origin/main`; remote HEAD
   verified as `dfe8d187e5330c9ab12f1536c4a57fc2a7dd372c`. Commit includes
   summary, description, validation and remaining acceptance limits.
+
+
+ATT-20261030-EDIT — Preserve Late/UT edits (locally verified)
+
+- Reopen actual duty times from the staged entry, then saved entry, before
+  falling back to the reviewed schedule. Retain custom employee-only scheduled
+  minutes when changing transaction type before saving.
+- Cancel preserves prior data; identical restaging preserves undo history.
+  Existing validation, permissions, concurrency hashes and batch saves remain.
+- Changed attendance-preparation.js, application cache versions, the browser
+  regression suite and Attendance documentation. No database migration.
+- Verification: npm run lint; npm test (423 passed); npm run build;
+  node scripts/validate.mjs; git diff --check. All succeeded.
+- Browser runner: 179/179 checks passed, including new minute/time editor
+  regression cases at 1440px and 390px for stage, reopen, cancel, transaction
+  change, save and undo/redo. Synthetic records and mocked RPC saves only;
+  live database writes and full-app Escape/backdrop behavior were not tested.

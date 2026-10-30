@@ -154,6 +154,39 @@ async function attendance({w,d,width}){
   await until(()=>d.getElementById('fixture-notice').textContent.includes('Attendance batch saved'),'Retry did not save');
   assert(w.FIXTURE_STATE.saves===2,'Retry count incorrect');assert(d.querySelector('.attendance-change-count').textContent.includes('0 changed'),'Saved draft was not cleared');geometry(d,width);
 }
+async function lateEditor({w,d},basic){
+  await until(()=>d.querySelector('.attendance-grid'),'Attendance roster missing');
+  const cell=()=>d.querySelector('.attendance-cell[data-row="0"][data-col="0"]');
+  const open=()=>{click(d,'[data-brush="Late/Undertime"]');key(w,cell(),'Enter');};
+  const form=()=>d.querySelector(basic?'#attendance-minutes':'#attendance-times');
+  const cancel=()=>click(d,(basic?'#attendance-minutes':'#attendance-times')+' .modal-foot button[type="button"]');
+  const stage=async()=>{form().requestSubmit();await until(()=>!d.querySelector('#overlay.on'),'Editor did not close');};
+  const late=()=>d.querySelector(basic?'#att_lateMinutes':'#att_start0');
+  const out=()=>d.querySelector(basic?'#att_undertimeMinutes':'#att_end1');
+  const count=()=>d.querySelector('.attendance-change-count').textContent;
+  open();input(w,late(),basic?'15':'08:15');cancel();
+  assert(count().includes('0 changed'),'Cancel staged a new entry');
+  open();if(basic)input(w,d.querySelector('#att_scheduledMinutes'),'420');
+  input(w,late(),basic?'15':'08:15');input(w,out(),basic?'20':'16:40');await stage();
+  assert(cell().textContent==='L 15 / UT 20','Late/UT was not staged');
+  const prefill=()=>{assert(late().value===(basic?'15':'08:15'),'Reopening lost late value');assert(out().value===(basic?'20':'16:40'),'Reopening lost UT value');if(basic)assert(d.querySelector('#att_scheduledMinutes').value==='420','Reopening lost scheduled minutes');};
+  open();prefill();input(w,late(),basic?'30':'08:30');cancel();
+  assert(cell().textContent==='L 15 / UT 20','Cancel replaced staged values');
+  open();prefill();await stage();click(d,'[data-action="undo"]');
+  assert(count().includes('0 changed'),'Unchanged restaging added an undo frame');
+  click(d,'[data-action="redo"]');assert(cell().textContent==='L 15 / UT 20','Redo lost entry');
+  if(basic){
+    click(d,'[data-brush="Present"]');key(w,cell(),'Enter');open();
+    assert(d.querySelector('#att_scheduledMinutes').value==='420','Transaction change lost unsaved scheduled minutes');cancel();
+    click(d,'[data-action="undo"]');
+  }
+  input(w,d.querySelector('[name="reference"]'),'Synthetic Late/UT regression');click(d,'[data-action="save"]');
+  await until(()=>count().includes('0 changed'),'Late/UT save did not finish');
+  open();prefill();input(w,late(),basic?'30':'08:30');await stage();
+  assert(cell().textContent==='L 30 / UT 20','Changing saved late value lost UT');
+  click(d,'[data-action="undo"]');assert(cell().textContent==='L 15 / UT 20'&&count().includes('0 changed'),'Undo lost saved entry');
+  open();prefill();cancel();assert(count().includes('0 changed'),'Cancel changed saved entry');
+}
 async function rosterError({d}){
   await until(()=>d.querySelector('[data-action="reload"]'),'Roster error did not offer retry');
   assert(d.querySelector('.attendance-roster-count')?.textContent.includes('unavailable'),'Failed roster presented fake employee count');
@@ -219,6 +252,8 @@ export const CASES=[
   ...['Status','Transfer','Lifecycle','Incident'].map(view=>({id:'dialog-'+view.toLowerCase(),path:'/fixtures/modal?view='+view})),
   {id:'request-cards',path:'/fixtures/ui?view=portal'},
   {id:'attendance-failure-retry',path:'/fixtures/attendance',run:attendance},
+  {id:'attendance-late-times',path:'/fixtures/attendance',widths:[1440,390],run:ctx=>lateEditor(ctx,false)},
+  {id:'attendance-late-minutes',path:'/fixtures/attendance?scenario=employee',widths:[1440,390],run:ctx=>lateEditor(ctx,true)},
   {id:'attendance-roster-error',path:'/fixtures/attendance?scenario=error',run:rosterError},
   {id:'attendance-refresh-loading',path:'/fixtures/attendance?scenario=slow',run:rosterSlow},
   {id:'zoom-equivalent-reflow',path:'/fixtures/ui?admin=1&filters=1',widths:[960],height:540},

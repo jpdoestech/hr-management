@@ -51,6 +51,23 @@ Paid Leave and Unpaid Leave both retain the canonical `Approved Leave` status wi
 
 Approval is stored in a protected review registry. Old arbitrary JSON review flags are not treated as authoritative approval. Edits retain genuine approval but remain auditable. Approval alone never locks attendance.
 
+## Editing and cancelling Late/UT
+
+Both Late/UT editors reopen the current staged entry before the saved entry.
+The reported-minute editor defaults to 480 scheduled minutes only for a new
+employee-only day. Switching transaction type retains that day's staged
+scheduled-minute basis while clearing late/UT for non-Late/UT transactions.
+The reviewed-duty editor reuses entered actual segments, including breaks and
+next-day flags; a day without actual segments starts from the reviewed schedule.
+Bulk edits still require compatible reviewed schedules and apply the first
+selected day's displayed values to the selected days when staged.
+
+Cancel and Close discard only changes in the open editor. Existing staged or
+saved attendance remains intact. Stage updates the local draft; Save changes
+persists the batch with its required reference and existing confirmation.
+Restaging identical values does not add an undo frame. Undo/Redo remains
+available for staged changes; neither action changes already saved attendance.
+
 ## Persistence and security
 
 `save_attendance_matrix` validates the batch server-side, including current permissions, client/record scope, dated schedule/calendar hashes and existing-record hashes. It acquires the existing manpower source lock when installed, then attendance and employee locks in a consistent order. Migration 0063 moves the original scoped writer into the protected private schema and calls it for each trusted assignment group inside one transaction, not browser upsert loops. Changes, before/after snapshots and audit entries share that transaction. Existing canonical validation and downstream write/dependency triggers still run.
