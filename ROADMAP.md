@@ -1052,4 +1052,6 @@ HR-20261030-GOV — Government ID uniqueness (implementation locally verified)
   or stale client data can miss a conflict until the database rejects it. The
   existing 250-record multi-batch save service is not an atomic full import;
   earlier batches can remain saved if a later batch fails. No workflow rewrite.
-- Publication: ready for the authorized commit and push; references follow.
+- Publication: implementation `d70f05e` pushed to `origin/main`; remote HEAD
+  verified as `d70f05e5e7a3d624f8cc979c9488bef3f31a9cea`. Commit includes
+  summary, description, validation and migration/rollout limits.
