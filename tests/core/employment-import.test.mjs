@@ -4,13 +4,14 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import {EMPLOYMENT_TYPES,EMPLOYMENT_STATUSES,STATUS_REASONS,canonicalEmploymentType,employmentValidation,REVIEW_TYPE} from '../../js/core/employment.js';
 import {normalizeEmployeeNumber,isValidEmployeeNumber,nextEmployeeNumber} from '../../js/core/employee-number.js';
+import {employeeGovernmentIdIssues} from '../../js/core/government-ids.js';
 const source=readFileSync(new URL('../../js/app.js',import.meta.url),'utf8');
 function context(){
   const context={EMPLOYMENT_TYPES,EMP_STATUS:EMPLOYMENT_STATUSES,STATUS_REASONS,REVIEW_TYPE,canonicalEmploymentType,employmentValidation,
     EXIT_CLASSIFICATIONS:['Voluntary'],WORKFORCE_FACTORS:['Other'],normalizeEmployeeNumber,isValidEmployeeNumber,nextEmployeeNumber,
     DB:{employees:[]},employeeDepartmentNames:()=>['Production'],employeeBranchLocations:()=>['Davao'],employeeAllowanceTypes:()=>[],
     positionCatalog:()=>[{name:'Operator',department:'Production',active:true}],todayISO:()=> '2026-10-09',employeeAllowanceFieldKey:name=>'allowance:'+name,
-    validateGovernmentIds:()=>'',formatEmployeeName:r=>`${r.lastName}, ${r.firstName}`,employeeDisplayName:r=>r.name,employeeNameSimilarity:()=>0,
+    employeeGovernmentIdIssues,validateGovernmentIds:()=>'',formatEmployeeName:r=>`${r.lastName}, ${r.firstName}`,employeeDisplayName:r=>r.name,employeeNameSimilarity:()=>0,
   };
   vm.createContext(context);
   vm.runInContext(source.slice(source.indexOf('const EMPLOYEE_IMPORT_COLUMNS = ['),source.indexOf('function employeeAllowanceFieldKey(')),context);
@@ -48,4 +49,12 @@ test('department transfers preserve contract and operational state and retain an
   const transfer=source.slice(source.indexOf('async function saveEmployeeTransfer('),source.indexOf('function employeeCompleteness('));
   assert.doesNotMatch(transfer,/emp\.(status|statusReason|statusDate|employmentType)\s*=/);
   assert.match(transfer,/type:'Department Transfer'/);
+});
+
+
+test('import blocks normalized duplicate government IDs in existing records and the workbook',()=>{
+  const c=context();c.DB.employees.push({id:'synthetic',sssNumber:'00-0001234-5'});
+  assert.match(c.validateEmployeeImportRow({...row,sssNumber:'0000012345'},2,[]).errors.join(';'),/SSS Number already belongs/);
+  const accepted=[{employeeNo:'EMP-000002',tin:'000-001-234-000'}];
+  assert.match(c.validateEmployeeImportRow({...row,tin:'000001234999'},3,accepted).errors.join(';'),/BIR TIN already belongs/);
 });

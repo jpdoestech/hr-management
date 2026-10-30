@@ -1019,3 +1019,37 @@ UI-20261030-R — Browser regressions and workflow reliability (locally verified
   Optional headless launcher,
   hosted CI, authenticated backend workflows, screen-reader/physical-device
   acceptance and production performance remain unverified. No production data.
+
+
+HR-20261030-GOV — Government ID uniqueness (implementation locally verified)
+
+- Added shared employee ID comparisons and field errors for SSS, PhilHealth,
+  Pag-IBIG and BIR TIN. Separators are ignored, leading zeroes preserved and TIN
+  identity uses the first nine digits. Optional blanks, own-record edits and
+  independent ID types remain valid. No duplicate override is offered.
+- Employee creation/full/scoped persistence, Excel preview validation and
+  onboarding-to-employee conversion use the rule. Database conflict messages
+  identify the field without revealing another employee's ID or identity.
+- Added ordered migration 0065: four tenant-scoped partial unique indexes and
+  a generic existing-duplicate preflight. The transaction locks writes while
+  installing the rule and aborts safely on duplicates or lock timeout. No
+  employee rewrite, destructive operation, RLS/permission change or dependency.
+  Updated the validation script's authoritative ordered migration inventory.
+- Verification: 419 Node tests, 78 browser cases across five widths, lint,
+  build, explicit validation and diff checks passed. The actual migration
+  passed an isolated in-memory PGlite rehearsal for pre-existing duplicate
+  rollback, formatting/TIN normalization, blanks, edits, tenant/type isolation,
+  update conflicts and single-statement batch rejection. Test-only PGlite was
+  installed outside the repository; no live database was contacted.
+- Browser harness initially lacked the existing input formatter; it now uses
+  real formatter/format-validation functions and all five new cases pass.
+  The initial structural gate required adding 0065 to its migration inventory;
+  the full gate then passed without weakening validation.
+- Docs: GOVERNMENT-ID-UNIQUENESS.md, EMPLOYEE-IMPORT-EXPORT.md, DEPLOYMENT.md
+  and browser coverage document describe behavior, migration order and limits.
+- Rollout: migration 0065 must be installed for authoritative enforcement.
+  Existing production duplicates and live installation are unverified. Scoped
+  or stale client data can miss a conflict until the database rejects it. The
+  existing 250-record multi-batch save service is not an atomic full import;
+  earlier batches can remain saved if a later batch fails. No workflow rewrite.
+- Publication: ready for the authorized commit and push; references follow.

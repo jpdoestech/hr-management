@@ -65,6 +65,20 @@ async function scoped({w,d}){
   assert(state.employee.department==='Synthetic Department','Scoped save changed an unrelated group');
   assert(state.employee.recordHistory.length===1,'Failed/repeated save added duplicate history');
 }
+async function governmentIds({w,d}){
+  const values={sssNumber:'0000012345',philHealthNumber:'000000001234',pagIbigNumber:'000000012345',tin:'000001234999'};
+  for(const [field,value] of Object.entries(values))input(w,d.getElementById('f_'+field),value);
+  const before=JSON.stringify(w.FIXTURE_STATE.employee);
+  click(d,'.modal-foot .btn-primary');
+  await until(()=>d.querySelectorAll('[aria-invalid="true"]').length===4,'Duplicate IDs did not receive field errors');
+  assert(w.FIXTURE_STATE.saveAttempts===0,'Duplicate IDs reached persistence');
+  assert(JSON.stringify(w.FIXTURE_STATE.employee)===before,'Duplicate ID rejection mutated the employee');
+  for(const [field,value] of Object.entries(values))assert(d.getElementById('f_'+field).value.replace(/\D/g,'')===value,'Rejected ID entry was discarded');
+  for(const [field,value] of Object.entries({sssNumber:'0000012346',philHealthNumber:'000000001235',pagIbigNumber:'000000012346',tin:'000001235000'}))input(w,d.getElementById('f_'+field),value);
+  click(d,'.modal-foot .btn-primary');
+  await until(()=>d.querySelector('.employee-overview'),'Unique ID correction did not save');
+  assert(w.FIXTURE_STATE.saveAttempts===1,'Correction saved an unexpected number of times');
+}
 async function unsaved({w,d}){
   input(w,d.getElementById('f_emergencyContactName'),'Synthetic Unsaved Contact');
   click(d,'[data-workspace-target="overview"]');
@@ -155,6 +169,7 @@ export const CASES=[
   {id:'history-overview',path:'/fixtures/modal?slow=1',run:history},
   {id:'viewer-history-overview',path:'/fixtures/modal?readonly=1&slow=1',run:history},
   {id:'scoped-failure-retry',path:'/fixtures/modal?section=1&fail-once=1&slow=1',run:scoped},
+  {id:'government-id-duplicates',path:'/fixtures/modal?section=2&government-duplicate=1',run:governmentIds},
   {id:'unsaved-edit-guard',path:'/fixtures/modal?section=1',run:unsaved},
   {id:'field-errors',path:'/fixtures/modal?view=Edit',run:validation},
   {id:'directory-search-filters-pages',path:'/fixtures/ui?admin=1',run:directory},

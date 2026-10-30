@@ -49,3 +49,13 @@ Changing the destination affects new uploads only. Existing Drive and Supabase f
 ## Local preview
 
 Because browser modules and Supabase access are used, preview the project through a local HTTP server rather than opening `index.html` directly from the filesystem.
+
+
+### Employee government ID uniqueness (0065)
+
+Apply `0065_employee_government_id_uniqueness.sql` before relying on government
+ID uniqueness across concurrent or scoped clients. It adds tenant-scoped unique
+indexes for employee SSS, PhilHealth, Pag-IBIG and the nine-digit TIN identity.
+Existing duplicate IDs abort the migration without rewriting employee records;
+authorized HR review must resolve them before retrying. The lock-acquisition
+timeout is five seconds. See [the rule and safe rollout](GOVERNMENT-ID-UNIQUENESS.md).

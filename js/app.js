@@ -33,6 +33,7 @@ import {parseOrganizationImport} from './core/organization-import.js?v=20261011-
 import {employeeTemplateBytes} from './core/employee-template-validation.js?v=20261012-1';
 import {revalidateEmployeeImport,employeeImportPreviewHTML,employeeImportCorrection} from './core/employee-import-preview.js?v=20261012-1';
 import {regularizationWorkItems,regularizationToday} from './core/regularization.js?v=20261013-1';
+import {employeeGovernmentIdIssues,governmentIdConflictIssue} from './core/government-ids.js?v=20261030-1';
 import {createAttendancePreparation} from './core/attendance-preparation.js?v=20261030-1';
 
 if(!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('YOUR_PROJECT_REF')){
@@ -508,8 +509,10 @@ function saveDB(){
   SAVE_QUEUE=SAVE_QUEUE.then(async()=>{
     try{ await saveDBInternal(snapshot,loadedModules); return true; }
     catch(error){
+      const governmentIdIssue=governmentIdConflictIssue(error);
+      if(governmentIdIssue&&document.getElementById(governmentIdIssue.id))showModalFieldErrors([governmentIdIssue]);
       const resetConflict=/reset|stale HRIS session/i.test(error.message||'');
-      toast(resetConflict?'The database was reset. Reloading this stale session…':'Database save failed: '+error.message,true);
+      toast(governmentIdIssue?governmentIdIssue.message:resetConflict?'The database was reset. Reloading this stale session…':'Database save failed: '+error.message,true);
       if(resetConflict)setTimeout(()=>window.location.reload(),900);
       return false;
     }
@@ -4335,6 +4338,8 @@ async function convertOnboardingCandidate(id){
   const linkedSlots=(DB.manpowerSlots||[]).filter(slot=>String(slot.candidateId||'')===String(candidate.id));
   const linkedRequest=linkedSlots.length?manpowerRequestById(linkedSlots[0].requestId):null;
   const employee={id:uid(),employeeNo:nextEmployeeNumber(DB.employees),prfNumber:candidate.prfNumber||linkedRequest?.prfNumber||'',lastName:candidate.lastName,firstName:candidate.firstName,middleName:candidate.middleName,name:formatEmployeeName(candidate),position:candidate.positionApplied,department:candidate.department,branchReporting,dailyRate:dailyRateRaw===''?'':Math.round(Number(dailyRateRaw)*100)/100,allowances,dateHired:candidate.proposedStartDate,birthDate:candidate.birthDate,gender:candidate.gender,civilStatus:candidate.civilStatus||'',status:'Active',statusReason:'Active / Normal',employmentType:document.getElementById('oh_employment_type').value,statusDate:'',mobileNumber:candidate.mobileNumber||'',personalEmail:candidate.personalEmail||'',homeAddress:homeResult.address,presentAddress:presentResult.address,address:formatPhilippineAddress(homeResult.address),presentAddressText:formatPhilippineAddress(presentResult.address),tin:candidate.tin||'',sssNumber:candidate.sssNumber||'',philHealthNumber:candidate.philHealthNumber||'',pagIbigNumber:candidate.pagIbigNumber||'',emergencyContactName:'',emergencyContactRelationship:'',emergencyContactPhone:'',classOverride:'Auto',sourceCandidateId:candidate.id,createdAt,createdBy:SESSION?.id||null,createdByName,updatedAt:createdAt,updatedBy:SESSION?.id||null,updatedByName:createdByName,recordHistory:[{action:'Created',at:createdAt,by:createdByName,byId:SESSION?.id||null,detail:'Converted from Onboarding & Applicants'}],employmentHistory:[{type:'Hiring',from:'Applicant',to:'Active',statusReason:'Active / Normal',employmentType:document.getElementById('oh_employment_type').value,effectiveDate:candidate.proposedStartDate,remarks:'Converted from Onboarding & Applicants',changedAt:createdAt,changedBy:createdByName}]};
+  const idIssues=employeeGovernmentIdIssues(employee,DB.employees);
+  if(idIssues.length){toast(idIssues.map(issue=>issue.message).join(' '),true);return;}
   const original=JSON.parse(JSON.stringify(candidate));
   const originalSlots=linkedSlots.map(slot=>({slot,data:JSON.parse(JSON.stringify(slot))}));
   DB.employees.push(employee);Object.assign(candidate,{stage:'Hired',employeeRecordId:employee.id,hiredAt:new Date().toISOString(),updatedAt:new Date().toISOString()});linkedSlots.forEach(slot=>{slot.employeeId=employee.id;if(['Open','Sourcing','Candidate Identified'].includes(slot.status))slot.status='For Onboarding';slot.updatedAt=createdAt;slot.updatedBy=SESSION?.id||null;});
@@ -4970,6 +4975,7 @@ function validateEmployeeImportRow(values,rowNumber,accepted){
   if(vals.status==='Separated'&&(!vals.exitClassification||!vals.exitFactor||!vals.exitReason))errors.push('Leaving statuses require a classification, primary factor, and reason');
   if(vals.exitReason.length>1000)errors.push('Reason for Leaving cannot exceed 1,000 characters');
   [employeeImportPhoneError(vals.mobileNumber,'Mobile Number'),employeeImportPhoneError(vals.emergencyContactPhone,'Emergency Contact Phone'),validateGovernmentIds(vals)].filter(Boolean).forEach(error=>errors.push(error));
+  errors.push(...employeeGovernmentIdIssues(vals,[...DB.employees,...accepted]).map(issue=>issue.message));
   if(!vals.employeeNo) vals.employeeNo=nextEmployeeNumber([...DB.employees,...accepted]);
   else {
     vals.employeeNo=normalizeEmployeeNumber(vals.employeeNo);
@@ -5614,6 +5620,8 @@ async function confirmEmployeeDuplicateNames(vals,id){
 }
 async function persistEmployeeEdit(vals,id,patch=null){
   if(!hasPermission(id?'employees.update':'employees.create')){toast('Employee editing is not available.',true);return;}
+  const idIssues=employeeGovernmentIdIssues(vals,DB.employees,id);
+  if(idIssues.length){showModalFieldErrors(idIssues.filter(issue=>document.getElementById(issue.id)));toast(idIssues.map(issue=>issue.message).join(' '),true);return;}
   const isNew=!id;
   const rec=id?DB.employees.find(e=>e.id===id):{id:uid(), employmentHistory:[]};
   if(!rec){ toast('Employee record could not be found.',true); return; }

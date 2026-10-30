@@ -31,7 +31,7 @@ Attendance runs the production module against a synthetic RPC adapter. The
 workspace/auth fixture uses representative shell markup and registration handlers;
 it does not sign in, register an account or validate backend authorization.
 
-There are 73 checks: 14 scenarios at 1440, 1280, 768, 390 and 320px document
+There are 78 checks: 15 scenarios at 1440, 1280, 768, 390 and 320px document
 widths, plus three desktop performance samples. Every iframe is 900px high;
 these widths are layout tests, not physical-device or short-screen emulation.
 
@@ -40,6 +40,7 @@ these widths are layout tests, not physical-device or short-screen emulation.
 - History to Overview navigation, viewer navigation and repeated navigation.
 - Emergency Information scoped save, delayed failure, rollback, retained input,
   retry, duplicate-submission protection and exactly one successful history entry.
+- Government IDs section duplicate errors, retained input and successful correction.
 - Keep editing/discard confirmation without unintended persistence.
 - Debounced directory search with focus recovery, department filtering, reset,
   next page, page-size change and bounded DOM row count.

@@ -13,12 +13,14 @@ const functionSource=name=>{const start=source.indexOf('function '+name+'(');con
 const productionHead=productionHTML.match(/<head>([\s\S]*?)<\/head>/)[1];
 const assets=[...productionHead.matchAll(/<link\b[^>]*>/g)].map(match=>match[0].replace(/href="css\//g,'href="/css/')).join('');
 const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic modal typography</title>${assets}</head><body><div class="overlay on"><div id="modal" class="modal employee-workspace-modal"></div></div>${confirmation}<script>
+${readFileSync(resolve(root,'js/core/government-ids.js'),'utf8').replace(/^export /gm,'')}
 const employee={id:'synthetic',name:'SYNTHETIC-LONG-FAMILY-NAME, Sample Employee',employeeNo:'EMP-000001',department:'Synthetic Department',position:'Synthetic Position With A Long Descriptive Name',status:'Active',employmentType:'Probationary',statusReason:'Active / Normal',branchReporting:'Synthetic Branch',dateHired:'2026-10-01',birthDate:'2001-01-01',address:'Synthetic Building, Long Synthetic Street, Synthetic Barangay, Synthetic Municipality, Synthetic Province',presentAddressText:'Synthetic Present Address With Additional Building And Unit Details',emergencyContactName:'Synthetic Contact',emergencyContactRelationship:'Parent',emergencyContactPhone:'',personalEmail:'synthetic-long-contact-address@example.invalid',sssNumber:'00-0000000-0'};
 const DB={employees:[employee]},EMP_STATUS=['Active','Inactive','Separated'],STATUS_REASONS={'Active':['Active / Normal']},EXIT_CLASSIFICATIONS=['Voluntary'],WORKFORCE_FACTORS=['Personal'],LIFECYCLE_EVENT_TYPES=['Employment Status Change','Regularization','Return to Work'];
 let EMPLOYEE_SECTION_EDIT=null,MODAL_EDIT_STATE=null,EMPLOYEE_WORKSPACE_NAVIGATING=false,DATA_CONFIRM_PENDING=null,DATA_CONFIRM_TRIGGER=null;
 const CONFIRMED_CHANGE_TARGETS=new WeakSet(),SESSION={id:'synthetic-actor',fullName:'Synthetic HR'};
 const fixtureParams=new URLSearchParams(location.search);
 window.FIXTURE_STATE={saveAttempts:0,profileOpens:0,employee};
+if(fixtureParams.has('government-duplicate'))DB.employees.push({id:'synthetic-other',sssNumber:'00-0001234-5',philHealthNumber:'00-000000123-4',pagIbigNumber:'0000-0001-2345',tin:'000-001-234-000'});
 ${section('function editorControls(','function findEditorSaveButton(')}
 ${functionSource('modalHasUnsavedChanges')}
 ${functionSource('confirmDataChange')}
@@ -31,7 +33,8 @@ const readOnly=new URLSearchParams(location.search).has('readonly');
 const esc=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;'),canEdit=()=>!readOnly,hasPermission=()=>!readOnly,selectEmployeeDirectoryRow=()=>{},ensureRecordModules=async()=>{},todayISO=()=> '2026-10-13';
 const employeeDisplayName=record=>record.name,employeeDepartmentNames=()=>['Synthetic Department','Another Department'],employeePositionNames=()=>[employee.position],employeeCompleteness=()=>60,classify=record=>record.employmentType,fmtDate=value=>value||'Not recorded',isSeparated=()=>false,employeeTenureText=()=> 'Synthetic tenure';
 const lifecycleEmployeePreview=()=>{},syncPositionSelect=()=>{},syncEmployeeStatusReason=()=>{};
-const formatPhilippineAddress=()=>'',formatGovernmentId=(_kind,value)=>value||'';
+const formatPhilippineAddress=()=>'';
+${section('function governmentIdDigits(','async function dashboardOpenEmployees(')}
 ${ageOn.toString()}
 const employeeAllowanceEntries=()=>[],employeeAllowanceTotal=()=>0,peso=value=>'PHP '+value;
 ${section('function employeeOptionLabel(','function syncEmployeeStatusReason(')}
@@ -64,7 +67,7 @@ ${'async '+functionSource('persistEmployeeEdit')}
 async function openEmployeeProfile(){window.FIXTURE_STATE.profileOpens++;if(fixtureParams.has('slow'))await new Promise(resolve=>setTimeout(resolve,80));show('Overview');}
 const openEmployeeForm=()=>show('Edit');
 
-const confirmEmployeeDuplicateNames=async()=>true,validateGovernmentIds=()=>'',employmentValidation=()=>'',readAddressComponent=async()=>({valid:true,address:{}}),readEmployeeAllowances=()=>employee.allowances||{};
+const confirmEmployeeDuplicateNames=async()=>true,employmentValidation=()=>'',readAddressComponent=async()=>({valid:true,address:{}}),readEmployeeAllowances=()=>employee.allowances||{};
 const departmentCatalog=()=>[{name:employee.department,active:true}],positionCatalog=()=>[{name:employee.position,department:employee.department,active:true}];
 ${section('function openEmployeeWorkspaceModal(','async function returnFromEmployeeTransaction(')}
 ${section('function employeeProfileSummaryHTML(','function employeeProfilePersonalHTML(')}

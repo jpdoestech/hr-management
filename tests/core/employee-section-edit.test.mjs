@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
+import {employeeGovernmentIdIssues} from '../../js/core/government-ids.js';
 const source=readFileSync(new URL('../../js/app.js',import.meta.url),'utf8');
 const extract=(name,async=false)=>{const start=source.indexOf(`${async?'async ':''}function ${name}(`);return source.slice(start,source.indexOf('\n}\n',start)+3);};
 const sections=source.slice(source.indexOf('const EMP_FORM_SECTIONS = ['),source.indexOf('function employeeFormFieldValue('));
@@ -10,9 +11,9 @@ function setup({allowed=true,saved=true,valid=true,index=1}={}){
   const before=structuredClone(employee),messages=[];let saves=0;
   const values={emergencyContactName:'Synthetic New Contact',emergencyContactRelationship:'Sibling',emergencyContactPhone:'Synthetic new phone',dailyRate:'0'};
   const fields=[...Object.keys(values), 'department','status','sssNumber'].map(key=>({key,label:key}));
-  const context={EMPLOYEE_SECTION_EDIT:{employeeId:'synthetic',index,busy:false},EMP_FIELDS:fields,DB:{employees:[employee]},REVIEW_TYPE:'Needs HR Review',SESSION:{id:'synthetic-actor',fullName:'Synthetic HR'},hasPermission:()=>allowed,showModalFieldErrors:issues=>messages.push(issues),readFields:fields=>Object.fromEntries(fields.map(field=>[field.key,values[field.key]||''])),document:{getElementById:()=>({checkValidity:()=>valid})},toast:message=>messages.push(message),recordStoragePaths:()=>new Set(),updateEmployeeNameReferences:()=>[],restoreEmployeeNameReferences(){},saveDB:async()=>{saves++;return saved;},normalizeEmployeeName:value=>value.toLowerCase(),logAudit(){},rememberCommittedRecordFiles(){},deleteStorageObjects:async()=>{},closeModal:async()=>{},renderNav(){},renderEmployeeOrigin:async()=>{},selectEmployeeDirectoryRow(){},openEmployeeProfile:async()=>{},readAddressComponent(){assert.fail('Unrelated addresses must not be read');}};
+  const context={employeeGovernmentIdIssues,EMPLOYEE_SECTION_EDIT:{employeeId:'synthetic',index,busy:false},EMP_FIELDS:fields,DB:{employees:[employee]},REVIEW_TYPE:'Needs HR Review',SESSION:{id:'synthetic-actor',fullName:'Synthetic HR'},hasPermission:()=>allowed,showModalFieldErrors:issues=>messages.push(issues),readFields:fields=>Object.fromEntries(fields.map(field=>[field.key,values[field.key]||''])),document:{getElementById:()=>({checkValidity:()=>valid})},toast:message=>messages.push(message),recordStoragePaths:()=>new Set(),updateEmployeeNameReferences:()=>[],restoreEmployeeNameReferences(){},saveDB:async()=>{saves++;return saved;},normalizeEmployeeName:value=>value.toLowerCase(),logAudit(){},rememberCommittedRecordFiles(){},deleteStorageObjects:async()=>{},closeModal:async()=>{},renderNav(){},renderEmployeeOrigin:async()=>{},selectEmployeeDirectoryRow(){},openEmployeeProfile:async()=>{},readAddressComponent(){assert.fail('Unrelated addresses must not be read');}};
   vm.createContext(context);vm.runInContext(sections+extract('appendEmployeeRecordHistory')+extract('saveEmployeeSection',true)+extract('persistEmployeeEdit',true),context);
-  return {employee,before,messages,save:()=>context.saveEmployeeSection('synthetic',index),saveFull:values=>context.persistEmployeeEdit({...employee,...values},'synthetic'),get saves(){return saves;}};
+  return {employee,before,messages,context,save:()=>context.saveEmployeeSection('synthetic',index),saveFull:values=>context.persistEmployeeEdit({...employee,...values},'synthetic'),get saves(){return saves;}};
 }
 test('Emergency Information saves only contact fields and records the change',async()=>{
   const c=setup();await c.save();assert.equal(c.saves,1);
@@ -33,4 +34,12 @@ test('zero compensation is recorded without changing other sections',async()=>{
 test('full employee edits retain the shared persistence path',async()=>{
   const c=setup();await c.saveFull({department:'Updated Synthetic Department',dailyRate:250});
   assert.equal(c.saves,1);assert.equal(c.employee.department,'Updated Synthetic Department');assert.equal(c.employee.dailyRate,250);assert.equal(c.employee.recordHistory.length,1);
+});
+
+
+test('duplicate government IDs block shared persistence without mutation',async()=>{
+  const c=setup();c.context.DB.employees.push({id:'synthetic-other',sssNumber:'00-0001234-5'});
+  await c.saveFull({sssNumber:'0000012345'});
+  assert.equal(c.saves,0);assert.equal(JSON.stringify(c.employee),JSON.stringify(c.before));
+  assert.ok(c.messages.some(value=>Array.isArray(value)&&value[0]?.id==='f_sssNumber'));
 });

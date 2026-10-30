@@ -26,11 +26,18 @@ The template is generated from the current settings, so its department reference
 11. Choose the completed `.xlsx`, `.xls`, or `.csv` file.
 12. Review every validation result. Select **Ready**, **Errors**, or **Warnings** to filter the preview, or **All rows** to restore it. Ready includes rows with warnings but no errors; error and warning totals count individual issues.
 13. Click an employee row (or focus its name and press Enter) to correct it using the existing Employee editor. **Apply Corrections** updates the preview and revalidates the entire batch, including duplicate checks. Back returns to the same preview filter and scroll position; unsaved edits use the existing Save/Discard/Keep editing confirmation.
-14. Review any yellow possible-duplicate warnings, then confirm the import. Filtering never limits which rows are imported. The system does not save partial imports; all errors must be corrected first.
+14. Review any yellow possible-duplicate warnings, then confirm the import. Filtering never limits which rows are imported. All preview errors must be corrected before submitting any rows. Large imports use multiple write batches; see the limitations below before retrying a failed import.
 
 Preview corrections do not save employee records or change organization settings. Records are saved only after the final import confirmation. Workbook-level errors, such as missing or duplicate headers, still require correcting the workbook and choosing it again. No database migration is required for preview editing.
 
-The importer validates required fields, dates, allowed department and status values, email and phone formats, government ID formats, and duplicate employee numbers. Employee numbers use a six-digit numeric sequence in the canonical form `EMP-000001`; a blank value generates the next number, while a numeric or legacy value is normalized during validation. Similar employee names are warnings and require an explicit confirmation.
+The importer validates required fields, dates, allowed department and status values, email and phone formats, government ID formats and uniqueness, and duplicate employee numbers. Employee numbers use a six-digit numeric sequence in the canonical form `EMP-000001`; a blank value generates the next number, while a numeric or legacy value is normalized during validation. Similar employee names are warnings and require an explicit confirmation.
+
+Government ID comparisons ignore separators; TIN compares the first nine digits.
+Duplicates in loaded employee records or accepted workbook rows are errors,
+including after preview corrections. Database migration 0065 enforces the rule
+against scoped, unloaded or concurrent records. See
+[government ID uniqueness](GOVERNMENT-ID-UNIQUENESS.md) for rollout, existing
+duplicates and the existing multi-batch import limitation.
 
 ## Export employees
 
