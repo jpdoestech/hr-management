@@ -1162,3 +1162,13 @@ ATT-20261031-CORRECT — Replace mistaken Late/UT entries (locally verified)
 - Deployment investigation: the live index served app.js?v=20261030-5 and the
   previous editor patch on 2026-10-31; that patch did not address this text-minute
   validation failure. No authenticated production records or writes were used.
+- Publication: `1d72cb91765715f7379757653eb9ddb1f9f779ab` pushed to
+  `origin/main`; the remote reference matched. Commit contains Summary,
+  Description and validation results.
+- Live verification on 2026-10-31: GitHub commit status for Vercel - strellas-hr
+  reported deployment completed. Cache-busted live index plus versioned app,
+  preparation and matrix JavaScript matched local files after line-ending
+  normalization. Index loads app.js?v=20261031-1 through the full import chain.
+  The ordinary homepage request still returned an older cached index; use a
+  fresh query URL or hard reload to load this version. No authenticated live
+  correction/save was performed; persistence tests used mocked fixture RPCs.
