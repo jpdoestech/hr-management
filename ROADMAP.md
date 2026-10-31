@@ -1172,3 +1172,23 @@ ATT-20261031-CORRECT — Replace mistaken Late/UT entries (locally verified)
   The ordinary homepage request still returned an older cached index; use a
   fresh query URL or hard reload to load this version. No authenticated live
   correction/save was performed; persistence tests used mocked fixture RPCs.
+
+
+UI-20261031-ATT-TOOLS — Compact Attendance Matrix controls (locally verified)
+
+- Consolidated period/search/actions into a responsive query bar and moved
+  location, department and position into a labeled filter disclosure.
+- Grouped More into Workspace, Encoding and Batch actions; replaced oversized
+  button cards with compact icon actions and an accessible phone bottom panel.
+  Added touch Close, Escape focus recovery and action dismissal.
+- Reused existing icons and sizing tokens; preserved permissions, transaction
+  rules, confirmation flows, matrix geometry, pagination and batch persistence.
+- Narrowed cutoff-opening clicks to actual saved-cutoff buttons, preventing the
+  filter disclosure state from being treated as a cutoff identifier.
+- Updated feature CSS, shared paint-row spacing, runtime markup/import cache
+  versions, design/Attendance documents, synthetic icon fixture and regressions.
+- Validation: lint, 424 tests, build, structural validation and diff checks passed.
+  Browser runner: 189/189 passed across seven widths plus a 320×568 phone case.
+  New checks cover menu bounds/targets, desktop density, filter reset, nested
+  filter clicks, Escape/focus, touch Close and paint-mode behavior. Existing
+  Late/UT and mocked save checks pass. No production records or writes used.

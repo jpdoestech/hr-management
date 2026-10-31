@@ -483,3 +483,22 @@ These checks cover representative responsive sizes, not every physical device.
 Authenticated production saves, all role-specific workflows, backend performance
 and every feature-specific modal were not exercised. No confidential records,
 production mutations or SQL were used.
+
+
+## Attendance tools refinement — 2026-10-31
+
+The query bar now uses one row above 1000px, with period controls moving to a
+separate row on tablets and search stacking on narrow phones. Labeled assignment,
+department and position filters share a disclosure instead of competing with
+search. Search consumes its available grid track without doubled icon padding.
+More groups Workspace, Encoding and Batch actions: a compact desktop popover
+and a bounded phone bottom panel with Close. Menu targets are 32px desktop /
+44px touch; existing toolbar tokens and matrix geometry remain unchanged.
+
+Validated with synthetic browser fixtures at 1920, 1440, 1280, 1024, 768, 390 and
+320px, plus 320×568. Checks cover menu bounds, visible action targets, filter
+labels, disclosure state, Escape focus restoration, Close, paint-mode switching,
+filter-reset loading, and unchanged 16px matrix checkboxes. Final browser run:
+189/189 passed; lint, 424 tests, build and structural validation passed. Existing
+Late/UT correction and mocked batch-save regressions remain included. No
+production records were used or modified.

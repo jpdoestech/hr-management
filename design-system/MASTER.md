@@ -219,3 +219,21 @@ No dense grid placement changes reading/keyboard order.
 The existing workspace violet/charcoal and sign-in navy/gold identities remain.
 Only muted text, placeholders and validation red were darkened for contrast.
 See docs/UI-CONSISTENCY.md for measurements, exceptions and verification limits.
+
+
+## Attendance matrix tools
+
+Keep the query bar separate from the transaction row and matrix. Above 1000px,
+month/cutoff, search, Filters, Export and More share one compact row. At tablet
+widths, the period moves above search/actions; narrow phones stack search above
+three equal actions. Assignment location, department and position share a labeled
+filter disclosure with Escape dismissal and focus restoration. Selected values
+retain the shared overflow-summary behavior when necessary.
+
+More uses the existing native details/summary disclosure. Group Workspace,
+Encoding and Batch actions; desktop uses two columns and a full-width batch
+section, while phones use a bounded, scrollable bottom panel with an explicit
+Close action. Menu actions use 32px desktop / 44px touch targets. Preserve the
+36px desktop query controls, transaction colors, 42px matrix cells, 16px matrix
+checkboxes and independent horizontal table scroller. Existing SVG icons are
+reused; no animation, dependency or business-rule changes are needed.

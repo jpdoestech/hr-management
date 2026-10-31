@@ -34,7 +34,7 @@ import {employeeTemplateBytes} from './core/employee-template-validation.js?v=20
 import {revalidateEmployeeImport,employeeImportPreviewHTML,employeeImportCorrection} from './core/employee-import-preview.js?v=20261012-1';
 import {regularizationWorkItems,regularizationToday} from './core/regularization.js?v=20261013-1';
 import {employeeGovernmentIdIssues,governmentIdConflictIssue,governmentIdSaveIssue} from './core/government-ids.js?v=20261030-2';
-import {createAttendancePreparation} from './core/attendance-preparation.js?v=20261031-1';
+import {createAttendancePreparation} from './core/attendance-preparation.js?v=20261031-2';
 
 if(!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('YOUR_PROJECT_REF')){
   document.body.innerHTML = '<div style="font-family:system-ui;padding:40px;max-width:760px;margin:auto"><h2>Supabase configuration missing</h2><p>Edit <b>supabase-config.js</b> with your Supabase project URL and publishable key.</p></div>';
@@ -3469,7 +3469,7 @@ async function openAttendancePreparation(){
       canExport:()=>canExport()&&hasPermission('attendance.export'),
       exportMatrix:(rows,dates,cutoff)=>downloadCSV(`attendance_${cutoff.start}_${cutoff.end}.csv`,toCSV(rows,[{label:'Employee No.',get:r=>r.employeeNo},{label:'Employee',get:r=>r.name},...dates.map(date=>({label:date,get:r=>r.days[date]?.record?.transaction||r.days[date]?.record?.status||''}))])),
       prepareEmployeePicker:()=>ensureRecordModules(['employees']),
-      icons:{back:iArrowLeft(14),search:iSearch(14),plus:iPlus(14),settings:iColumns(14),refresh:iSwap(14),undo:iArrowLeft(14),redo:`<span class="attendance-redo-icon">${iArrowLeft(14)}</span>`,save:iCheck(14),lock:iShield(12)},
+      icons:{back:iArrowLeft(14),search:iSearch(14),plus:iPlus(14),settings:iColumns(14),filter:iFilter(14),more:iMore(14),export:iDownload(14),calendar:iCal(14),check:iCheck(14),clear:iClose(14),pointer:iSwap(14),refresh:iSwap(14),undo:iArrowLeft(14),redo:`<span class="attendance-redo-icon">${iArrowLeft(14)}</span>`,save:iCheck(14),lock:iShield(12)},
     });
   }
   await ATTENDANCE_PREPARATION.open();

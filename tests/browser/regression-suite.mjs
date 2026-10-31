@@ -209,6 +209,33 @@ async function replaceLegacyLate({w,d}){
   }
   assert(!d.querySelector('#fixture-notice').textContent.includes('valid scheduled'),'Legacy validation error shown');
 }
+async function attendanceTools({w,d,width}){
+  await until(()=>d.querySelector('.attendance-grid'),'Attendance roster missing');
+  const toolbar=d.querySelector('.attendance-matrix-toolbar');
+  if(width>1000)assert(toolbar.getBoundingClientRect().height<=66,'Desktop query bar uses extra rows');
+  click(d,'.attendance-filter-toggle span');
+  assert(d.querySelector('.attendance-filter-toggle').getAttribute('aria-expanded')==='true','Nested filter click lost expanded state');
+  const panel=d.querySelector('.attendance-filter-fields');
+  assert(w.getComputedStyle(panel).display==='grid','Filters not disclosed');
+  for(const select of panel.querySelectorAll('select'))assert(select.getBoundingClientRect().width>=150,'Filter text cramped');
+  key(w,panel.querySelector('select'),'Escape');
+  assert(w.getComputedStyle(panel).display==='none','Escape did not close filters');
+  assert(d.activeElement===d.querySelector('.attendance-filter-toggle'),'Filter focus not restored');
+  click(d,'.attendance-tools summary');
+  const menu=d.querySelector('.attendance-tools-panel'),rect=menu.getBoundingClientRect();
+  assert(rect.left>=0&&rect.right<=width+1&&rect.bottom<=w.innerHeight+1,'Tools menu outside viewport');
+  assert(menu.querySelectorAll('section').length===3,'Missing tool groups');
+  const actions=[...menu.querySelectorAll('button')].filter(button=>button.getClientRects().length);
+  assert(actions.every(button=>button.getBoundingClientRect().height>=(width<=720?44:32)),'Menu action targets too small');
+  if(width>720)assert(menu.scrollHeight<=menu.clientHeight+1,'Desktop tools require unnecessary scrolling');
+  key(w,menu.querySelector('button'),'Escape');assert(!d.querySelector('.attendance-tools').open,'Escape did not close tools');
+  assert(d.activeElement===d.querySelector('.attendance-tools summary'),'Tools focus not restored');
+  if(width<=720){click(d,'.attendance-tools summary');click(d,'[data-action="tools-close"]');assert(!d.querySelector('.attendance-tools').open,'Touch Close did not dismiss tools');}
+  click(d,'.attendance-tools summary');click(d,'[data-action="paint"]');
+  assert(!d.querySelector('.attendance-tools').open,'Chosen action left menu open');
+  assert(!d.querySelector('.attendance-grid').classList.contains('paint-mode'),'Existing paint-mode action broken');
+  assert(d.querySelector('.attendance-grid input').getBoundingClientRect().height===16,'Matrix checkbox changed');
+}
 async function rosterError({d}){
   await until(()=>d.querySelector('[data-action="reload"]'),'Roster error did not offer retry');
   assert(d.querySelector('.attendance-roster-count')?.textContent.includes('unavailable'),'Failed roster presented fake employee count');
@@ -216,6 +243,7 @@ async function rosterError({d}){
 }
 async function rosterSlow({w,d}){
   await until(()=>d.querySelector('.attendance-grid'));
+  click(d,'.attendance-filter-toggle');
   click(d,'[data-action="filters-clear"]');
   await until(()=>w.FIXTURE_STATE.queries===2,'Refresh request missing');
   assert(d.querySelector('.attendance-preparation').getAttribute('aria-busy')==='true','Roster refresh lacks accessible loading state');
@@ -277,6 +305,8 @@ export const CASES=[
   {id:'attendance-late-times',path:'/fixtures/attendance',widths:[1440,390],run:ctx=>lateEditor(ctx,false)},
   {id:'attendance-late-minutes',path:'/fixtures/attendance?scenario=employee',widths:[1440,390],run:ctx=>lateEditor(ctx,true)},
   {id:'attendance-replace-legacy-late',path:'/fixtures/attendance?scenario=legacy',widths:[1440,390],run:replaceLegacyLate},
+  {id:'attendance-tools-layout',path:'/fixtures/attendance',run:attendanceTools},
+  {id:'attendance-tools-short-phone',path:'/fixtures/attendance',widths:[320],height:568,run:attendanceTools},
   {id:'attendance-roster-error',path:'/fixtures/attendance?scenario=error',run:rosterError},
   {id:'attendance-refresh-loading',path:'/fixtures/attendance?scenario=slow',run:rosterSlow},
   {id:'zoom-equivalent-reflow',path:'/fixtures/ui?admin=1&filters=1',widths:[960],height:540},

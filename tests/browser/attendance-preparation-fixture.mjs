@@ -4,9 +4,14 @@ import {readFileSync} from 'node:fs';
 import {resolve,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('../../',import.meta.url));
+const appSource=readFileSync(resolve(root,'js/app.js'),'utf8');
+const fixtureIcons=['iSearch','iPlus','iColumns','iSwap','iArrowLeft','iCheck','iShield','iFilter','iMore','iDownload','iCal','iClose'].map(name=>{
+ const line=appSource.split('\n').find(line=>line.startsWith('function '+name+'(s)'));if(!line)throw Error('Missing fixture icon '+name);return line;
+}).join('\n');
 const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic attendance preparation</title><link rel="stylesheet" href="/css/app.css"><link rel="stylesheet" href="/css/professional.css"><link rel="stylesheet" href="/css/attendance.css"><link rel="stylesheet" href="/css/workspace.css"></head><body><main id="content"></main><p id="fixture-notice" role="status"></p><div id="overlay" class="overlay"><div id="modal" class="modal"></div></div><script type="module">
 import {createAttendancePreparation} from '/js/core/attendance-preparation.js';
 import {cutoffDates} from '/js/core/attendance-matrix.js';
+${fixtureIcons}
 const client='00000000-0000-0000-0000-000000000021',actor={id:'00000000-0000-0000-0000-000000000011',tenantId:'00000000-0000-0000-0000-000000000001',isSuperAdmin:true};
 const cutoff={id:'synthetic-cutoff',data:{start:'2024-01-01',end:'2024-01-10',branch:'Synthetic Branch',clientId:client}};
 const records=new Map(),duties=[{start:480,end:720,breakMinutes:0},{start:780,end:1020,breakMinutes:0}];
@@ -36,7 +41,7 @@ window.closeModal=async()=>document.getElementById('overlay').classList.remove('
 const controller=createAttendancePreparation({supabase,esc,permission:key=>scenario!=='viewer'||key.endsWith('.view'),actor:()=>actor,today:()=> '2024-01-10',confirm:async()=>true,toast:(text)=>document.getElementById('fixture-notice').textContent=text,
  content:()=>document.getElementById('content'),records:()=>document.getElementById('fixture-notice').textContent='Back to original attendance records',departments:()=>['Synthetic Department'],positions:()=>['Synthetic Position'],canExport:()=>scenario!=='viewer',exportMatrix:rows=>document.getElementById('fixture-notice').textContent='Exported '+rows.length+' synthetic employees',
  openModal:markup=>{document.getElementById('modal').innerHTML=markup;document.getElementById('overlay').classList.add('on');},closeModal:window.closeModal,employeePicker:()=>'<div>Synthetic employee selector</div>',selectedEmployee:()=>({id:'synthetic-a'}),
- icons:{back:'Back',search:'',plus:'+',settings:'Settings',refresh:'Reload',undo:'Undo',redo:'Redo',save:'Save',lock:'Locked'}
+ icons:{back:iArrowLeft(14),search:iSearch(14),plus:iPlus(14),settings:iColumns(14),filter:iFilter(14),more:iMore(14),export:iDownload(14),calendar:iCal(14),check:iCheck(14),clear:iClose(14),pointer:iSwap(14),refresh:iSwap(14),undo:iArrowLeft(14),redo:'<span class="attendance-redo-icon">'+iArrowLeft(14)+'</span>',save:iCheck(14),lock:iShield(12)}
 });await controller.open();
 </script></body></html>`;
 const server=createServer((req,res)=>{

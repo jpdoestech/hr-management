@@ -6,22 +6,41 @@
 .attendance-view-tabs{display:flex;align-items:center;gap:16px;flex:none;border-bottom:1px solid var(--border);margin-bottom:8px;}
 .attendance-view-tabs>button{font:inherit;font-size:13px;background:none;border:0;border-bottom:2px solid transparent;padding:8px 0;color:var(--muted);cursor:pointer;}
 .attendance-view-tabs>button[aria-current]{border-color:var(--accent);color:var(--text);font-weight:600;}
-.attendance-matrix-toolbar input[type="month"]{width:152px;}
-.attendance-matrix-toolbar select[name="period"]{width:108px;}
-.attendance-matrix-toolbar select[name="location"]{max-width:210px;}
-.attendance-matrix-toolbar select[name="department"],.attendance-matrix-toolbar select[name="position"]{max-width:170px;}
-.attendance-filter-fields{display:contents;}
-.attendance-preparation .attendance-filter-toggle,.attendance-mobile-tools{display:none;}
+.attendance-preparation .attendance-matrix-toolbar{display:grid;grid-template-columns:auto minmax(180px,1fr) auto auto auto;gap:8px;padding:10px;align-items:center;}
+.attendance-period-controls{display:flex;gap:8px;flex-wrap:wrap;min-width:0;}
+.attendance-period-controls input[type="month"]{width:152px;}
+.attendance-period-controls select[name="period"]{width:108px;min-width:108px;field-sizing:fixed;}
+.attendance-period-controls input[type="date"]{width:145px;}
+.attendance-preparation .attendance-matrix-toolbar .searchbox{min-width:0;width:100%;max-width:none;}
+.attendance-preparation .attendance-filter-toggle{display:inline-flex;white-space:nowrap;}
+.attendance-filter-toggle[aria-expanded="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
+.attendance-filter-fields{display:none;grid-column:1/-1;min-width:0;}
+.attendance-filter-fields[data-open="true"]{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;align-items:end;gap:10px;padding-top:10px;border-top:1px solid var(--border);}
+.attendance-filter-fields>label{display:flex;flex-direction:column;gap:6px;min-width:0;font-size:12px;color:var(--muted);}
+.attendance-preparation .attendance-filter-fields select{field-sizing:fixed;min-width:0;width:100%;max-width:100%;}
+.attendance-mobile-tools{display:none;}
 .attendance-brushes{display:flex;gap:6px;flex-wrap:wrap;}
 .attendance-brush{font:inherit;font-size:12px;font-weight:600;min-height:34px;cursor:pointer;padding:6px 14px;border:1px solid var(--border);border-radius:18px;background:var(--surface,#fff);color:var(--text);}
 .attendance-brush[aria-pressed="true"]{background:var(--accent,#6446eb);border-color:var(--accent,#6446eb);color:#fff;}
 .attendance-brush:focus-visible,.attendance-view-tabs>button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
-.attendance-paint-toolbar select[name="duty"]{max-width:190px;font-size:12px;}
+.attendance-paint-toolbar select[name="duty"]{max-width:340px;font-size:12px;}
 .attendance-roster-count{margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap;}
-.attendance-preparation .searchbox input{width:100%;padding-left:32px;}
-.attendance-tools{position:relative;}
-.attendance-tools summary{display:flex;align-items:center;justify-content:center;cursor:pointer;min-height:36px;padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:#fff;font-size:13px;}
-.attendance-tools>div{position:absolute;top:100%;right:0;z-index:8;display:flex;flex-direction:column;align-items:stretch;gap:6px;padding:8px;min-width:235px;max-width:calc(100vw - 40px);background:#fff;border:1px solid var(--border);border-radius:6px;box-shadow:var(--shadow-md);max-height:65dvh;overflow:auto;}
+.attendance-preparation .searchbox input{width:100%;padding-left:0;}
+.attendance-tools{position:relative;min-width:0;}
+.attendance-tools summary{display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;list-style:none;min-height:var(--workspace-control-height);padding:0 12px;border:1px solid var(--border);border-radius:var(--workspace-control-radius);background:var(--surface);font-size:var(--workspace-control-font);}
+.attendance-tools summary::-webkit-details-marker{display:none;}
+.attendance-tools[open] summary{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
+.attendance-tools>.attendance-tools-panel{position:absolute;top:calc(100% + 6px);right:0;z-index:12;width:280px;max-width:calc(100vw - 40px);padding:6px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow-md);max-height:min(480px,55dvh);overflow:auto;}
+.attendance-tools-header{display:none;}
+.attendance-tools-panel>section{padding:6px;display:flex;flex-direction:column;gap:2px;}
+.attendance-tools-panel>section+section{border-top:1px solid var(--border);}
+.attendance-tools-panel h4{margin:0 0 4px;padding:4px 6px;color:var(--muted);font-size:11px;font-weight:650;letter-spacing:.04em;text-transform:uppercase;}
+.attendance-preparation .attendance-tools-panel .btn{justify-content:flex-start;min-height:32px;width:100%;padding:6px;border:0;border-radius:5px;background:transparent;box-shadow:none;text-align:left;font-size:12px;font-weight:500;line-height:1.4;gap:8px;}
+.attendance-tools-panel .btn svg{flex:none;width:14px;height:14px;}
+.attendance-preparation .attendance-tools-panel .btn:hover:not(:disabled){background:var(--accent-soft);color:var(--accent);}
+.attendance-preparation .attendance-tools-panel [data-action="clear"]{color:var(--danger,#991b1b);}
+.attendance-menu-preference{display:flex;flex-direction:column;gap:6px;padding:4px 6px;font-size:12px;}
+.attendance-preparation .attendance-menu-preference select{width:100%;min-width:0;max-width:100%;field-sizing:fixed;font-size:12px;}
 .attendance-tools summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 .attendance-preparation select[name="brush"]{max-width:270px;}
 .attendance-matrix-viewport{flex:1;min-height:160px;min-width:0;overflow:auto;border:1px solid var(--border);background:#fff;overscroll-behavior:contain;}
@@ -75,6 +94,21 @@
 .att-duty input:not([type="checkbox"],[type="radio"]){height:var(--form-control-height);padding:0 var(--control-padding-inline);border:1px solid var(--border-strong);border-radius:var(--workspace-control-radius);font-size:var(--form-control-font);}
 .att-duty label:has(>input[type="checkbox"]){flex-direction:row;align-items:center;min-height:var(--selection-target-size);}
 
+@media(min-width:721px){
+  .attendance-tools>.attendance-tools-panel{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:520px;}
+  .attendance-tools-panel>section:nth-of-type(2){border-top:0;border-left:1px solid var(--border);}
+  .attendance-tools-panel>section:last-child{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}
+  .attendance-tools-panel>section:last-child h4{grid-column:1/-1;}
+}
+@media(max-width:1000px){
+  .attendance-preparation .attendance-matrix-toolbar{grid-template-columns:minmax(0,1fr) auto auto auto;}
+  .attendance-period-controls{grid-column:1/-1;}
+}
+@media(max-width:480px){
+  .attendance-preparation .attendance-matrix-toolbar{grid-template-columns:repeat(3,minmax(0,1fr));}
+  .attendance-matrix-toolbar>.searchbox{grid-column:1/-1;}
+  .attendance-matrix-toolbar>.btn,.attendance-tools summary{width:100%;}
+}
 @media(max-width:720px){
   .attendance-preparation{height:calc(100dvh - 125px);min-height:540px;}
   .attendance-preparation .btn,.attendance-preparation :is(input:not([type="checkbox"],[type="radio"],[type="hidden"],[type="file"],[type="range"],[type="color"]),select){min-height:44px;}
@@ -83,20 +117,20 @@
   .attendance-view-tabs>button{min-height:44px;}
   .attendance-paint-toolbar select[name="duty"]{max-width:100%;font-size:14px;}
   .attendance-paint-toolbar select[name="duty"]{display:none;}
-  .attendance-preparation .attendance-filter-toggle{display:inline-flex;}
-  .attendance-filter-fields{display:none;}
-  .attendance-filter-fields[data-open="true"]{display:flex;flex-basis:100%;gap:8px;order:2;}
-  .attendance-filter-fields select{width:calc(50% - 4px);min-width:0;}
-  .attendance-matrix-toolbar>[data-action="setup"],.attendance-matrix-toolbar>[data-action="filters-clear"]{display:none;}
-  .attendance-mobile-tools{display:flex;flex-direction:column;gap:6px;}
+  .attendance-filter-fields[data-open="true"]{grid-template-columns:1fr;}
+  .attendance-filter-fields>.btn{justify-self:start;}
+  .attendance-mobile-tools{display:block;}
   .attendance-brushes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;}
-  .attendance-matrix-toolbar input[type="month"],.attendance-matrix-toolbar select[name="period"]{flex:1;}
-  .attendance-matrix-toolbar select[name="location"]{max-width:none;flex-basis:100%;}
-  .attendance-matrix-toolbar select[name="department"],.attendance-matrix-toolbar select[name="position"]{max-width:100%;flex:1;}
+  .attendance-period-controls input[type="month"],.attendance-period-controls select[name="period"]{flex:1;min-width:0;width:auto;}
+  .attendance-period-controls input[type="date"]{flex:1 1 40%;min-width:0;}
   .attendance-preparation :is(input:not([type="checkbox"],[type="radio"],[type="hidden"],[type="file"],[type="range"],[type="color"]),select){font-size:16px;max-width:100%;}
-  .attendance-matrix-toolbar .searchbox{min-width:100%;}
   .attendance-preparation .data-toolbar .btn{width:auto;flex:0 0 auto;}
   .attendance-tools summary{min-height:44px;}
+  .attendance-tools>.attendance-tools-panel{position:fixed;top:auto;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));width:auto;max-width:none;max-height:min(480px,65dvh);}
+  .attendance-preparation .attendance-tools-panel .btn{min-height:44px;font-size:13px;}
+  .attendance-tools-header{display:flex;align-items:center;justify-content:space-between;padding:0 6px 4px;border-bottom:1px solid var(--border);font-size:13px;}
+  .attendance-preparation .attendance-tools-header .btn{width:auto;}
+  .attendance-preparation .attendance-menu-preference select{font-size:16px;}
   .attendance-paint-toolbar select{flex:1;min-width:150px;}
   .attendance-grid .attendance-frozen{min-width:150px;max-width:170px;}
   .attendance-grid th,.attendance-grid td{height:50px;}
@@ -105,4 +139,8 @@
   .attendance-matrix-footer input[name="reference"]{flex:1;min-width:150px;max-width:none;}
   .attendance-matrix-footer>.toolbar-spacer{display:none;}
   .attendance-matrix-footer>select,.attendance-matrix-footer>span,.attendance-matrix-footer>[data-action="prev"],.attendance-matrix-footer>[data-action="next"]{order:2;}
+}
+
+@media(pointer:coarse){
+  .attendance-preparation .attendance-tools-panel .btn{min-height:44px;}
 }

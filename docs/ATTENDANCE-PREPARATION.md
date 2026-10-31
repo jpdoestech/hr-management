@@ -4,6 +4,14 @@
 
 Attendance & KPIs opens directly into the attendance matrix: month, 1-15 / 16-End / full-month / custom cutoff controls, employee search, assignment location, department and position filters. Present, Absent, Leave, Day-off, AWOL/P and Late/UT are visible one-click transaction buttons. Weekday/date headers, frozen employee names and right-side totals keep encoding compact. Secondary controls and saved/custom cutoffs are under More; there is no mandatory create/open cutoff screen. The existing paginated record list, KPI reporting, supporting-document workflow and exports remain available through Records & KPIs.
 
+The query bar keeps period/search and Export visible. Filters discloses labeled
+assignment location, department and position controls, with a Clear filters
+action and Escape focus recovery. More groups Workspace, Encoding and Batch
+actions in a compact desktop popover and a scrollable phone bottom panel with
+Close. The same permissions, confirmation flows and actions apply in both
+layouts. Only saved-cutoff buttons use the cutoff-open handler; the filter
+panel's disclosure state is not a cutoff identifier.
+
 The implementation adapts the read-only `coop-sys` attendance interactions into this application's vanilla JavaScript modules. The employee-first roster follows [AMS](https://github.com/jpdoestech/ams): employee records supply the grid; dated schedules refine individual days. It does not import another application's framework, payroll permissions or database model.
 
 - `js/core/attendance-matrix.js`: transactions, duty/time validation, rectangle selection and draft undo/redo.
