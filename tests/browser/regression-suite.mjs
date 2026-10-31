@@ -187,6 +187,28 @@ async function lateEditor({w,d},basic){
   click(d,'[data-action="undo"]');assert(cell().textContent==='L 15 / UT 20'&&count().includes('0 changed'),'Undo lost saved entry');
   open();prefill();cancel();assert(count().includes('0 changed'),'Cancel changed saved entry');
 }
+async function replaceLegacyLate({w,d}){
+  await until(()=>d.querySelector('.attendance-grid'),'Attendance roster missing');
+  for(const [col,transaction] of ['Present','Day-off','Absent'].entries()){
+    const day=()=>d.querySelector(`.attendance-cell[data-row="0"][data-col="${col}"]`);
+    assert(day().textContent.includes('L 15 / UT 20'),'Legacy late entry missing');
+    click(d,`[data-brush="${transaction}"]`);key(w,day(),'Enter');
+    assert(day().getAttribute('aria-label').endsWith(transaction),'Replacement blocked: '+transaction);
+    assert(!day().textContent.includes('L 15'),'Replacement retained lost minutes');
+  }
+  assert(d.querySelector('.attendance-change-count').textContent.includes('3 changed'),'Corrections not staged');
+  input(w,d.querySelector('[name="reference"]'),'Synthetic mistaken Late/UT correction');click(d,'[data-action="save"]');
+  await until(()=>d.querySelector('.attendance-change-count').textContent.includes('0 changed'),'Corrections not saved');
+  for(const [col,transaction] of ['Present','Day-off','Absent'].entries()){
+    const day=d.querySelector(`.attendance-cell[data-row="0"][data-col="${col}"]`);
+    assert(day.getAttribute('aria-label').endsWith(transaction),'Saved replacement lost: '+transaction);
+    click(d,'[data-brush="Late/Undertime"]');key(w,d.querySelector(`.attendance-cell[data-row="0"][data-col="${col}"]`),'Enter');
+    assert(d.querySelector('#att_scheduledMinutes').value==='420','Correction lost scheduled minutes');
+    assert(d.querySelector('#att_lateMinutes').value==='0'&&d.querySelector('#att_undertimeMinutes').value==='0','Correction did not clear both losses');
+    click(d,'#attendance-minutes .modal-foot button[type="button"]');
+  }
+  assert(!d.querySelector('#fixture-notice').textContent.includes('valid scheduled'),'Legacy validation error shown');
+}
 async function rosterError({d}){
   await until(()=>d.querySelector('[data-action="reload"]'),'Roster error did not offer retry');
   assert(d.querySelector('.attendance-roster-count')?.textContent.includes('unavailable'),'Failed roster presented fake employee count');
@@ -254,6 +276,7 @@ export const CASES=[
   {id:'attendance-failure-retry',path:'/fixtures/attendance',run:attendance},
   {id:'attendance-late-times',path:'/fixtures/attendance',widths:[1440,390],run:ctx=>lateEditor(ctx,false)},
   {id:'attendance-late-minutes',path:'/fixtures/attendance?scenario=employee',widths:[1440,390],run:ctx=>lateEditor(ctx,true)},
+  {id:'attendance-replace-legacy-late',path:'/fixtures/attendance?scenario=legacy',widths:[1440,390],run:replaceLegacyLate},
   {id:'attendance-roster-error',path:'/fixtures/attendance?scenario=error',run:rosterError},
   {id:'attendance-refresh-loading',path:'/fixtures/attendance?scenario=slow',run:rosterSlow},
   {id:'zoom-equivalent-reflow',path:'/fixtures/ui?admin=1&filters=1',widths:[960],height:540},

@@ -79,3 +79,17 @@ test('employee attendance records reported minutes without converting them to ac
   assert.equal(input.segments,undefined);assert.equal(input.workedMinutes,undefined);
   for(const minutes of [{scheduledMinutes:0},{scheduledMinutes:1441},{lateMinutes:-1},{lateMinutes:1.5},{lateMinutes:481},{lateMinutes:300,undertimeMinutes:181}])assert.throws(()=>matrixInput(basic,'Late/Undertime',minutes),/minutes/);
 });
+
+
+test('legacy text scheduled minutes allow replacing Late/UT with ordinary transactions',()=>{
+  const basic=cell(undefined,{hash:'saved-hash',context:{basic:true,recordingReady:true,scheduledMinutes:480,hash:'employee-hash'},record:{scheduledMinutes:'420',lateMinutes:'15',undertimeMinutes:'20',status:'Present'}});
+  for(const transaction of ['Present','Day-off','Absent','Paid Leave','Unpaid Leave','AWOL/AWOP']){
+    const edit=matrixInput(basic,transaction);
+    assert.equal(edit.transaction,transaction);assert.equal(edit.scheduledMinutes,420);
+    assert.equal(edit.lateMinutes,0);assert.equal(edit.undertimeMinutes,0);
+    assert.equal(edit.expectedHash,'saved-hash');assert.equal(edit.sourceHash,'employee-hash');
+  }
+  for(const scheduledMinutes of ['', ' ', '420.5', 'invalid', '1e2', true]){
+    assert.throws(()=>matrixInput({...basic,record:{scheduledMinutes}},'Present'),/minutes/);
+  }
+});

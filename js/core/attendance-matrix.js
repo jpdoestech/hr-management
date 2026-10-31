@@ -66,7 +66,8 @@ export function matrixInput(cell,transaction,segments){
   if(cell?.context?.basic){
     if(!cell.context.recordingReady||cell.context.writable===false||cell.posted)throw Error('Attendance is outside employment dates, posted or outside your access.');
     if(!['Present','Absent','Paid Leave','Unpaid Leave','Day-off','AWOL/AWOP','Late/Undertime'].includes(transaction))throw Error('Premium duty requires a reviewed schedule and calendar.');
-    const scheduledMinutes=segments?.scheduledMinutes??cell.record?.scheduledMinutes??cell.context.scheduledMinutes;
+    const scheduled=segments?.scheduledMinutes??cell.record?.scheduledMinutes??cell.context.scheduledMinutes;
+    const scheduledMinutes=typeof scheduled==='string'&&/^\d{1,4}$/.test(scheduled)?Number(scheduled):scheduled;
     const lateMinutes=transaction==='Late/Undertime'?(segments?.lateMinutes??0):0,undertimeMinutes=transaction==='Late/Undertime'?(segments?.undertimeMinutes??0):0;
     if(![scheduledMinutes,lateMinutes,undertimeMinutes].every(Number.isInteger)||scheduledMinutes<(transaction==='Day-off'?0:1)||scheduledMinutes>1440||lateMinutes<0||undertimeMinutes<0||lateMinutes+undertimeMinutes>scheduledMinutes)throw Error('Enter valid scheduled, late and undertime minutes.');
     return {employeeId:cell.employeeId,workDate:cell.date,expectedHash:cell.hash||'',sourceHash:cell.context.hash,transaction,scheduledMinutes,lateMinutes,undertimeMinutes,

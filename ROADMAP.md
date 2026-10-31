@@ -1142,3 +1142,23 @@ ATT-20261030-EDIT — Preserve Late/UT edits (locally verified)
 - Publication: implementation `4eb3ec2` pushed to `origin/main`; remote
   `refs/heads/main` verified as `4eb3ec2206123a39db61e04d11d3bfeb9ff720bf`.
   The implementation commit includes Summary, Description and validation.
+
+
+ATT-20261031-CORRECT — Replace mistaken Late/UT entries (locally verified)
+
+- Reproduced the reported validation error with an existing employee-only
+  record containing scheduled minutes as text. Earlier tests covered numeric
+  values only. Safely normalize whole-minute text before existing validation;
+  malformed, fractional and out-of-range minutes remain rejected.
+- Present, Day-off, Absent, paid/unpaid Leave and AWOL/P replacements retain
+  scheduled minutes and clear both Late/UT values. Permissions, source/record
+  hashes, reviewed-duty rules and batch persistence are unchanged.
+- Updated matrix helper, full application import cache versions, unit/browser
+  regressions, synthetic legacy fixture and Attendance correction instructions.
+- Verification: new unit regression failed before the fix and passed after it;
+  lint, 424 tests, build, structural validation and diff checks passed.
+  Browser regression runner: 181/181 checks passed, including replacement and
+  mocked persistence checks at 1440px and 390px using synthetic saved records.
+- Deployment investigation: the live index served app.js?v=20261030-5 and the
+  previous editor patch on 2026-10-31; that patch did not address this text-minute
+  validation failure. No authenticated production records or writes were used.

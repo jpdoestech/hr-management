@@ -62,6 +62,12 @@ next-day flags; a day without actual segments starts from the reviewed schedule.
 Bulk edits still require compatible reviewed schedules and apply the first
 selected day's displayed values to the selected days when staged.
 
+To correct a mistaken Late/UT entry, choose Present, Day-off, Absent or another
+ordinary transaction, apply it to the same employee/date, then Save changes.
+This clears both late and undertime minutes and retains the scheduled-minute
+basis. Existing whole-minute text values (from older saved records) are accepted
+as numbers; malformed or fractional minute values remain invalid.
+
 Cancel and Close discard only changes in the open editor. Existing staged or
 saved attendance remains intact. Stage updates the local draft; Save changes
 persists the batch with its required reference and existing confirmation.

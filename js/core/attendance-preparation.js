@@ -1,4 +1,4 @@
-import {MATRIX_TRANSACTIONS,attendanceKey,cutoffDates,createMatrixDraft,matrixInput,compatibleTimeInputs,assumedTransaction,rectangleCells,matrixPeriod,matrixSummary} from './attendance-matrix.js?v=20261017-2';
+import {MATRIX_TRANSACTIONS,attendanceKey,cutoffDates,createMatrixDraft,matrixInput,compatibleTimeInputs,assumedTransaction,rectangleCells,matrixPeriod,matrixSummary} from './attendance-matrix.js?v=20261031-1';
 import {WAGE_DAY_TYPES} from './attendance-wage-rules.js';
 
 export function createAttendancePreparation(api){
