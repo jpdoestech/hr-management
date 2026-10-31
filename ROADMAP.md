@@ -1192,3 +1192,11 @@ UI-20261031-ATT-TOOLS — Compact Attendance Matrix controls (locally verified)
   New checks cover menu bounds/targets, desktop density, filter reset, nested
   filter clicks, Escape/focus, touch Close and paint-mode behavior. Existing
   Late/UT and mocked save checks pass. No production records or writes used.
+- Publication: implementation `c4bc66e0e1479bae38d862805da437257933e677`
+  pushed to `origin/main`; remote reference verified. Commit includes Summary,
+  Description and validation results.
+- Live verification: Vercel - strellas-hr reported deployment completed.
+  Cache-busted index, versioned attendance/workspace CSS, app.js and Attendance
+  preparation module all matched the tested local files after line-ending
+  normalization. Live index loads app.js?v=20261031-2. Authenticated production
+  records and live write operations were not accessed.
